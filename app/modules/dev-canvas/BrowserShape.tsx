@@ -319,6 +319,7 @@ export class BrowserShapeUtil extends BaseBoxShapeUtil<BrowserShape> {
 				height={shape.props.h}
 				rx={FRAME_CORNER_RADIUS}
 				ry={FRAME_CORNER_RADIUS}
+				stroke={frameStatus(shape.props.status).ink}
 			/>
 		)
 	}
@@ -651,13 +652,11 @@ function BrowserShapeView({ shape }: { shape: BrowserShape }) {
 											className="dev-browser-tooltip__positioner"
 											side="top"
 											sideOffset={8}
+											style={{
+												['--tooltip-ink' as string]: status.ink,
+											}}
 										>
-											<Tooltip.Popup
-												className="dev-browser-tooltip__popup"
-												style={{
-													['--tooltip-ink' as string]: status.ink,
-												}}
-											>
+											<Tooltip.Popup className="dev-browser-tooltip__popup">
 												<Tooltip.Arrow className="dev-browser-tooltip__arrow">
 													<svg
 														width="8"
