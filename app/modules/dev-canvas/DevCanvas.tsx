@@ -1,12 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { DialRoot, useDialKit } from 'dialkit'
 import { Tldraw, createShapeId } from 'tldraw'
 import type { Editor, TLComponents } from 'tldraw'
-import 'dialkit/styles.css'
 import 'tldraw/tldraw.css'
 import './dev-canvas.css'
 import {
-	DEFAULT_STATUS_ANIMATION,
 	BrowserShapeActionsProvider,
 	BrowserShapeUtil,
 	organizeBrowserShapes,
@@ -36,30 +33,6 @@ const tldrawComponents: TLComponents = {
 
 export function DevCanvas({ canvasId }: { canvasId: string }) {
 	const repository = useMemo(() => createLocalCanvasRepository(), [])
-	const statusAnimationDials = useDialKit(
-		'Frame status motion',
-		{
-			spring: DEFAULT_STATUS_ANIMATION.spring,
-			stagger: [DEFAULT_STATUS_ANIMATION.stagger, 0, 0.2, 0.005],
-			curve: [DEFAULT_STATUS_ANIMATION.curve, -120, 120, 1],
-			curveExponent: [DEFAULT_STATUS_ANIMATION.curveExponent, 0.5, 3, 0.05],
-			curveDelay: [DEFAULT_STATUS_ANIMATION.curveDelay, 0, 0.3, 0.005],
-			originX: [DEFAULT_STATUS_ANIMATION.originX, -40, 40, 1],
-			originOffset: [DEFAULT_STATUS_ANIMATION.originOffset, 0, 60, 1],
-			pillScale: [DEFAULT_STATUS_ANIMATION.pillScale, 0.5, 1, 0.01],
-			pillGap: [DEFAULT_STATUS_ANIMATION.pillGap, 0, 24, 1],
-			frameGap: [DEFAULT_STATUS_ANIMATION.frameGap, 0, 32, 1],
-		},
-		{
-			id: 'dev-canvas-frame-status-motion',
-			persist: true,
-		},
-	)
-	const statusAnimation = {
-		...statusAnimationDials,
-		spring:
-			statusAnimationDials.spring as typeof DEFAULT_STATUS_ANIMATION.spring,
-	}
 	const editorRef = useRef<Editor | null>(null)
 	const hasFramedInitialContent = useRef(false)
 	const [snapshot, setSnapshot] = useState<CanvasSnapshot | null>(null)
@@ -164,7 +137,6 @@ export function DevCanvas({ canvasId }: { canvasId: string }) {
 			value={{
 				remove: removeItem,
 				setStatus: setItemStatus,
-				statusAnimation,
 			}}
 		>
 			<main className="dev-canvas-shell">
@@ -315,7 +287,6 @@ export function DevCanvas({ canvasId }: { canvasId: string }) {
 						</code>
 					</div>
 				</aside>
-				<DialRoot position="bottom-right" theme="light" />
 			</main>
 		</BrowserShapeActionsProvider>
 	)

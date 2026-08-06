@@ -3,7 +3,6 @@ import {
 	createShapePropsMigrationIds,
 	createShapePropsMigrationSequence,
 } from '@tldraw/tlschema'
-import type { SpringConfig } from 'dialkit'
 import { AnimatePresence, motion } from 'motion/react'
 import {
 	createContext,
@@ -25,6 +24,7 @@ import type { Editor, TLBaseShape } from 'tldraw'
 import {
 	FRAME_STATUSES,
 	IconFullscreen,
+	IconMinimize,
 	IconOpenExternal,
 	IconTrash,
 	frameStatus,
@@ -51,39 +51,11 @@ export type BrowserShape = TLBaseShape<
 type BrowserShapeActions = {
 	remove(itemId: string): void
 	setStatus(itemId: string, status: CanvasItemStatus): void
-	statusAnimation: StatusAnimationSettings
-}
-
-export type StatusAnimationSettings = {
-	spring: SpringConfig
-	stagger: number
-	curve: number
-	curveExponent: number
-	curveDelay: number
-	originX: number
-	originOffset: number
-	pillScale: number
-	pillGap: number
-	frameGap: number
-}
-
-export const DEFAULT_STATUS_ANIMATION: StatusAnimationSettings = {
-	spring: { type: 'spring', visualDuration: 0.5, bounce: 0.28 },
-	stagger: 0.055,
-	curve: 56,
-	curveExponent: 1.7,
-	curveDelay: 0.08,
-	originX: 8,
-	originOffset: 12,
-	pillScale: 0.9,
-	pillGap: 2,
-	frameGap: 4,
 }
 
 const BrowserShapeActionsContext = createContext<BrowserShapeActions>({
 	remove() {},
 	setStatus() {},
-	statusAnimation: DEFAULT_STATUS_ANIMATION,
 })
 
 const FRAME_VERTICAL_CHROME = 28
@@ -99,6 +71,15 @@ const STATUS_PILL_RADIUS = 8
 const STATUS_PILL_STEP = 40
 const STATUS_PILL_CHROME_WIDTH = 40
 const STATUS_PILL_CHARACTER_WIDTH = 6.5
+const STATUS_PILL_MOTION = {
+	spring: { type: 'spring', visualDuration: 0.25, bounce: 0.3 },
+	curve: -55,
+	curveExponent: 1.85,
+	originOffset: 38,
+	initialScale: 0.5,
+	gap: 6,
+	frameGap: 6,
+} as const
 
 let statusPillMeasurementContext: CanvasRenderingContext2D | null
 
@@ -117,21 +98,6 @@ function measureStatusPillWidth(label: string) {
 	return (
 		STATUS_PILL_CHROME_WIDTH +
 		statusPillMeasurementContext.measureText(label).width
-	)
-}
-
-export function projectedRectangleRadius(
-	width: number,
-	height: number,
-	angle: number,
-	axisX: number,
-	axisY: number,
-) {
-	const localXProjection = Math.cos(angle) * axisX + Math.sin(angle) * axisY
-	const localYProjection = -Math.sin(angle) * axisX + Math.cos(angle) * axisY
-	return (
-		(width / 2) * Math.abs(localXProjection) +
-		(height / 2) * Math.abs(localYProjection)
 	)
 }
 
@@ -157,9 +123,8 @@ function roundedRectangleSupport(
 	}
 }
 
-export type StatusPillLayoutItem = {
+type StatusPillLayoutItem = {
 	distanceFromFrame: number
-	curveScale: number
 	finalRotate: number
 	angle: number
 	width: number
@@ -170,20 +135,14 @@ export type StatusPillLayoutItem = {
 	finalY: number
 }
 
-export function calculateStatusPillLayout(
-	widths: number[],
-	animation: Pick<
-		StatusAnimationSettings,
-		'curve' | 'curveExponent' | 'pillGap'
-	>,
-) {
+export function calculateStatusPillLayout(widths: number[]) {
 	const layout: StatusPillLayoutItem[] = widths.map((width, index) => {
 		const distanceFromFrame = widths.length - index
 		const curveScale = distanceFromFrame / widths.length
 		const curveSlope =
-			(animation.curve *
-				animation.curveExponent *
-				Math.pow(curveScale, animation.curveExponent - 1)) /
+			(STATUS_PILL_MOTION.curve *
+				STATUS_PILL_MOTION.curveExponent *
+				Math.pow(curveScale, STATUS_PILL_MOTION.curveExponent - 1)) /
 			(widths.length * STATUS_PILL_STEP)
 		const finalRotate = Math.atan(curveSlope) * (180 / Math.PI)
 		const angle = (finalRotate * Math.PI) / 180
@@ -197,7 +156,6 @@ export function calculateStatusPillLayout(
 		).y
 		return {
 			distanceFromFrame,
-			curveScale,
 			finalRotate,
 			angle,
 			width,
@@ -212,7 +170,11 @@ export function calculateStatusPillLayout(
 	const bottomItem = layout[bottomIndex]
 	if (bottomItem) {
 		bottomItem.finalX =
-			animation.curve * Math.pow(bottomItem.curveScale, animation.curveExponent)
+			STATUS_PILL_MOTION.curve *
+			Math.pow(
+				bottomItem.distanceFromFrame / widths.length,
+				STATUS_PILL_MOTION.curveExponent,
+			)
 		bottomItem.centerX = bottomItem.finalX + bottomItem.width / 2
 		bottomItem.centerY = STATUS_PILL_HEIGHT / 2 + bottomIndex * STATUS_PILL_STEP
 	}
@@ -239,14 +201,19 @@ export function calculateStatusPillLayout(
 			normalX,
 			normalY,
 		)
-		const gap = Math.max(0, animation.pillGap)
 		// The two support vectors reach the facing rounded edges. Adding
 		// gap * normal makes their closest points exactly `gap` pixels apart.
 		item.centerX =
-			lowerItem.centerX + itemSupport.x + lowerItemSupport.x + normalX * gap
+			lowerItem.centerX +
+			itemSupport.x +
+			lowerItemSupport.x +
+			normalX * STATUS_PILL_MOTION.gap
 		item.finalX = item.centerX - item.width / 2
 		item.centerY =
-			lowerItem.centerY + itemSupport.y + lowerItemSupport.y + normalY * gap
+			lowerItem.centerY +
+			itemSupport.y +
+			lowerItemSupport.y +
+			normalY * STATUS_PILL_MOTION.gap
 	}
 	for (let index = 0; index < layout.length; index += 1) {
 		const item = layout[index]
@@ -358,10 +325,7 @@ function BrowserShapeView({ shape }: { shape: BrowserShape }) {
 		if (!statusMenuOpen) return
 		const closeOnOutsidePointer = (event: PointerEvent) => {
 			const target = event.target as Node
-			const clickedDialKit =
-				target instanceof Element && target.closest('.dialkit-root')
 			if (
-				clickedDialKit ||
 				statusButtonRef.current?.contains(target) ||
 				statusMenuRef.current?.contains(target)
 			) {
@@ -466,13 +430,11 @@ function BrowserShapeView({ shape }: { shape: BrowserShape }) {
 	const status = frameStatus(shape.props.status)
 	const StatusIcon = status.icon
 	const chromeTitle = formatFrameChromeTitle(shortId, shape.props.title)
-	const animation = actions.statusAnimation
 	const availableStatuses = FRAME_STATUSES.filter(
 		(option) => option.id !== status.id,
 	)
 	const statusPillLayout = calculateStatusPillLayout(
 		availableStatuses.map((option) => measureStatusPillWidth(option.label)),
-		animation,
 	).map((layout, index) => ({
 		...layout,
 		option: availableStatuses[index]!,
@@ -480,7 +442,7 @@ function BrowserShapeView({ shape }: { shape: BrowserShape }) {
 	const rotatedBottomHalfHeight =
 		statusPillLayout.at(-1)?.verticalHalfExtent ?? STATUS_PILL_HEIGHT / 2
 	const statusFrameGap =
-		animation.frameGap +
+		STATUS_PILL_MOTION.frameGap +
 		Math.max(0, rotatedBottomHalfHeight - STATUS_PILL_HEIGHT / 2)
 
 	return (
@@ -509,7 +471,6 @@ function BrowserShapeView({ shape }: { shape: BrowserShape }) {
 								({
 									option,
 									distanceFromFrame,
-									curveScale,
 									finalX,
 									finalY,
 									finalRotate,
@@ -517,8 +478,7 @@ function BrowserShapeView({ shape }: { shape: BrowserShape }) {
 									const OptionIcon = option.icon
 									const startY =
 										distanceFromFrame * STATUS_PILL_STEP +
-										animation.originOffset
-									const delay = (distanceFromFrame - 1) * animation.stagger
+										STATUS_PILL_MOTION.originOffset
 									return (
 										<motion.button
 											key={option.id}
@@ -533,8 +493,7 @@ function BrowserShapeView({ shape }: { shape: BrowserShape }) {
 											}}
 											initial={{
 												opacity: 0,
-												scale: animation.pillScale,
-												x: animation.originX,
+												scale: STATUS_PILL_MOTION.initialScale,
 												y: startY,
 												rotate: 0,
 											}}
@@ -543,24 +502,17 @@ function BrowserShapeView({ shape }: { shape: BrowserShape }) {
 												scale: 1,
 												x: finalX,
 												y: finalY,
-												rotate: finalRotate,
+												rotate: [0, finalRotate],
 											}}
 											exit={{
 												opacity: 0,
-												scale: animation.pillScale,
-												x: animation.originX,
+												scale: STATUS_PILL_MOTION.initialScale,
 												y: startY,
 												rotate: 0,
 											}}
 											transition={{
-												x: {
-													...animation.spring,
-													delay: delay + animation.curveDelay * curveScale,
-												},
-												y: { ...animation.spring, delay },
-												rotate: { ...animation.spring, delay },
-												scale: { ...animation.spring, delay },
-												opacity: { duration: 0.12, delay },
+												...STATUS_PILL_MOTION.spring,
+												opacity: { duration: 0.12 },
 											}}
 											onClick={() => {
 												actions.setStatus(shape.props.itemId, option.id)
@@ -633,7 +585,7 @@ function BrowserShapeView({ shape }: { shape: BrowserShape }) {
 								type="button"
 								onClick={() => void toggleFullscreen()}
 							>
-								<IconFullscreen />
+								{fullscreen ? <IconMinimize /> : <IconFullscreen />}
 							</Tooltip.Trigger>
 							<Tooltip.Trigger
 								handle={actionTooltip}

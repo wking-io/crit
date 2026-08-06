@@ -1,11 +1,9 @@
 import { describe, expect, test } from 'vitest'
-import {
-	DEFAULT_STATUS_ANIMATION,
-	calculateStatusPillLayout,
-} from './BrowserShape'
+import { calculateStatusPillLayout } from './BrowserShape'
 
 const PILL_HEIGHT = 24
 const PILL_RADIUS = 8
+const PILL_GAP = 6
 
 type Vector = { x: number; y: number }
 
@@ -29,17 +27,23 @@ function roundedRectangleSupport(
 }
 
 describe('calculateStatusPillLayout', () => {
+	test('uses the final fixed leftward curve', () => {
+		const layout = calculateStatusPillLayout([150, 103, 94, 134])
+		const expectedTopRotation =
+			Math.atan((-55 * 1.85) / (layout.length * 40)) * (180 / Math.PI)
+		const expectedBottomX = -55 * Math.pow(1 / layout.length, 1.85)
+
+		expect(layout[0]!.finalRotate).toBeCloseTo(expectedTopRotation, 6)
+		expect(layout.at(-1)!.finalX).toBeCloseTo(expectedBottomX, 6)
+	})
+
 	test('keeps the rounded pill edges at one constant visual gap', () => {
-		const pillGap = DEFAULT_STATUS_ANIMATION.pillGap
-		const layout = calculateStatusPillLayout(
-			[
-				40 + 'Changes requested'.length * 6.5,
-				40 + 'In progress'.length * 6.5,
-				40 + 'Approved'.length * 6.5,
-				40 + 'Ready for review'.length * 6.5,
-			],
-			DEFAULT_STATUS_ANIMATION,
-		)
+		const layout = calculateStatusPillLayout([
+			40 + 'Changes requested'.length * 6.5,
+			40 + 'In progress'.length * 6.5,
+			40 + 'Approved'.length * 6.5,
+			40 + 'Ready for review'.length * 6.5,
+		])
 
 		for (let index = 0; index < layout.length - 1; index += 1) {
 			const upper = layout[index]!
@@ -73,16 +77,15 @@ describe('calculateStatusPillLayout', () => {
 				y: upper.centerY - lower.centerY - upperSupport.y - lowerSupport.y,
 			}
 
-			expect(edgeGap.x).toBeCloseTo(pillGap * normal.x, 6)
-			expect(edgeGap.y).toBeCloseTo(pillGap * normal.y, 6)
+			expect(edgeGap.x).toBeCloseTo(PILL_GAP * normal.x, 6)
+			expect(edgeGap.y).toBeCloseTo(PILL_GAP * normal.y, 6)
 		}
 	})
 
 	test('uses the rounded bottom edge for the gap above the frame', () => {
-		const [bottomPill] = calculateStatusPillLayout(
-			[40 + 'Ready for review'.length * 6.5],
-			DEFAULT_STATUS_ANIMATION,
-		)
+		const [bottomPill] = calculateStatusPillLayout([
+			40 + 'Ready for review'.length * 6.5,
+		])
 		expect(bottomPill).toBeDefined()
 
 		const downwardSupport = roundedRectangleSupport(

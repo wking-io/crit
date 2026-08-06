@@ -1,8 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import {
-	browserShapeMigrations,
-	projectedRectangleRadius,
-} from './BrowserShape'
+import { browserShapeMigrations } from './BrowserShape'
 
 describe('browser shape migrations', () => {
 	it('adds in-progress status to persisted shapes created before statuses existed', () => {
@@ -23,12 +20,4 @@ describe('browser shape migrations', () => {
 
 		expect(props.status).toBe('in-progress')
 	})
-
-	it('projects rotated pill bounds onto the curve tangent', () => {
-		expect(projectedRectangleRadius(100, 24, 0, 0, -1)).toBeCloseTo(12)
-		expect(projectedRectangleRadius(100, 24, Math.PI / 2, 0, -1)).toBeCloseTo(
-			50,
-		)
-	})
-
 })

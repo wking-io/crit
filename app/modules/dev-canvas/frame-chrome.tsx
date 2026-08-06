@@ -373,6 +373,61 @@ export function IconFullscreen(props: SVGProps<SVGSVGElement>) {
 	)
 }
 
+export function IconMinimize(props: SVGProps<SVGSVGElement>) {
+	return (
+		<svg
+			width="16"
+			height="16"
+			viewBox="0 0 18 18"
+			aria-hidden="true"
+			{...props}
+		>
+			<rect
+				x="3"
+				y="3"
+				width="12"
+				height="12"
+				rx="2"
+				fill="currentColor"
+				fillOpacity={ICON_OPACITY}
+				data-color="color-2"
+			/>
+			<path
+				d="M15.25 7.25H10.75V2.75"
+				fill="none"
+				stroke="currentColor"
+				strokeWidth="1"
+				strokeLinecap="round"
+				strokeLinejoin="round"
+			/>
+			<path
+				d="M10.75 7.25L15.25 2.75"
+				fill="none"
+				stroke="currentColor"
+				strokeWidth="1"
+				strokeLinecap="round"
+				strokeLinejoin="round"
+			/>
+			<path
+				d="M7.25 15.25V10.75H2.75"
+				fill="none"
+				stroke="currentColor"
+				strokeWidth="1"
+				strokeLinecap="round"
+				strokeLinejoin="round"
+			/>
+			<path
+				d="M7.25 10.75L2.75 15.25"
+				fill="none"
+				stroke="currentColor"
+				strokeWidth="1"
+				strokeLinecap="round"
+				strokeLinejoin="round"
+			/>
+		</svg>
+	)
+}
+
 export function IconTrash(props: SVGProps<SVGSVGElement>) {
 	return (
 		<svg

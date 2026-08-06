@@ -525,7 +525,8 @@
 }
 
 .dev-browser__identity:has(.dev-browser__mark:hover) .dev-browser__title-track,
-.dev-browser__identity:has(.dev-browser__mark:focus-visible) .dev-browser__title-track {
+.dev-browser__identity:has(.dev-browser__mark[aria-expanded='true'])
+	.dev-browser__title-track {
 	transform: translateY(-20px);
 }
 
