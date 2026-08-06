@@ -2,6 +2,8 @@ import {
 	applyCanvasCommand,
 	createCanvasDocument,
 	normalizeCanvasId,
+	normalizeItemTitle,
+	normalizeItemStatus,
 } from './model'
 import type {
 	CanvasCommand,
@@ -41,7 +43,11 @@ async function request(canvasId: string, command?: CanvasCommand) {
 	)
 	if (!response.ok)
 		throw new Error(`Canvas adapter returned ${response.status}.`)
-	return (await response.json()) as CanvasSnapshot
+	const snapshot = (await response.json()) as CanvasSnapshot
+	return {
+		...snapshot,
+		canvas: normalizeCanvasTitles(snapshot.canvas),
+	}
 }
 
 function readBrowserSnapshot(canvasId: string): CanvasSnapshot {
@@ -56,7 +62,7 @@ function readBrowserSnapshot(canvasId: string): CanvasSnapshot {
 				parsed.id === id &&
 				Array.isArray(parsed.items)
 			) {
-				canvas = parsed
+				canvas = normalizeCanvasTitles(parsed)
 			}
 		} catch {
 			// Invalid local data is ignored in favor of a fresh canvas.
@@ -70,9 +76,23 @@ function dispatchBrowserCommand(
 	command: CanvasCommand,
 ): CanvasSnapshot {
 	const snapshot = readBrowserSnapshot(canvasId)
-	const canvas = applyCanvasCommand(snapshot.canvas, command)
+	const canvas = normalizeCanvasTitles(
+		applyCanvasCommand(snapshot.canvas, command),
+	)
 	window.localStorage.setItem(storageKey(canvas.id), JSON.stringify(canvas))
 	return { ...snapshot, canvas }
+}
+
+function normalizeCanvasTitles(canvas: CanvasDocument): CanvasDocument {
+	let changed = false
+	const items = canvas.items.map((item) => {
+		const title = normalizeItemTitle(item.title)
+		const status = normalizeItemStatus(item.status)
+		if (title === item.title && status === item.status) return item
+		changed = true
+		return { ...item, title, status }
+	})
+	return changed ? { ...canvas, items } : canvas
 }
 
 function storageKey(canvasId: string) {

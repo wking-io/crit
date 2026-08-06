@@ -1,15 +1,23 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { DialRoot, useDialKit } from 'dialkit'
 import { Tldraw, createShapeId } from 'tldraw'
 import type { Editor, TLComponents } from 'tldraw'
+import 'dialkit/styles.css'
 import 'tldraw/tldraw.css'
 import './dev-canvas.css'
 import {
+	DEFAULT_STATUS_ANIMATION,
 	BrowserShapeActionsProvider,
 	BrowserShapeUtil,
 	organizeBrowserShapes,
 } from './BrowserShape'
 import type { BrowserShape } from './BrowserShape'
-import type { CanvasCommand, CanvasSnapshot, PortlessSource } from './model'
+import type {
+	CanvasCommand,
+	CanvasItemStatus,
+	CanvasSnapshot,
+	PortlessSource,
+} from './model'
 import { createLocalCanvasRepository } from './repository.client'
 
 const browserShapeUtils = [BrowserShapeUtil]
@@ -28,6 +36,30 @@ const tldrawComponents: TLComponents = {
 
 export function DevCanvas({ canvasId }: { canvasId: string }) {
 	const repository = useMemo(() => createLocalCanvasRepository(), [])
+	const statusAnimationDials = useDialKit(
+		'Frame status motion',
+		{
+			spring: DEFAULT_STATUS_ANIMATION.spring,
+			stagger: [DEFAULT_STATUS_ANIMATION.stagger, 0, 0.2, 0.005],
+			curve: [DEFAULT_STATUS_ANIMATION.curve, -120, 120, 1],
+			curveExponent: [DEFAULT_STATUS_ANIMATION.curveExponent, 0.5, 3, 0.05],
+			curveDelay: [DEFAULT_STATUS_ANIMATION.curveDelay, 0, 0.3, 0.005],
+			originX: [DEFAULT_STATUS_ANIMATION.originX, -40, 40, 1],
+			originOffset: [DEFAULT_STATUS_ANIMATION.originOffset, 0, 60, 1],
+			pillScale: [DEFAULT_STATUS_ANIMATION.pillScale, 0.5, 1, 0.01],
+			pillGap: [DEFAULT_STATUS_ANIMATION.pillGap, 0, 24, 1],
+			frameGap: [DEFAULT_STATUS_ANIMATION.frameGap, 0, 32, 1],
+		},
+		{
+			id: 'dev-canvas-frame-status-motion',
+			persist: true,
+		},
+	)
+	const statusAnimation = {
+		...statusAnimationDials,
+		spring:
+			statusAnimationDials.spring as typeof DEFAULT_STATUS_ANIMATION.spring,
+	}
 	const editorRef = useRef<Editor | null>(null)
 	const hasFramedInitialContent = useRef(false)
 	const [snapshot, setSnapshot] = useState<CanvasSnapshot | null>(null)
@@ -108,6 +140,13 @@ export function DevCanvas({ canvasId }: { canvasId: string }) {
 		[dispatch],
 	)
 
+	const setItemStatus = useCallback(
+		(itemId: string, status: CanvasItemStatus) => {
+			void dispatch({ type: 'set-status', itemId, status })
+		},
+		[dispatch],
+	)
+
 	const organizeFrames = useCallback(() => {
 		const editor = editorRef.current
 		if (!editor) return
@@ -121,7 +160,13 @@ export function DevCanvas({ canvasId }: { canvasId: string }) {
 		) ?? []
 
 	return (
-		<BrowserShapeActionsProvider value={{ remove: removeItem }}>
+		<BrowserShapeActionsProvider
+			value={{
+				remove: removeItem,
+				setStatus: setItemStatus,
+				statusAnimation,
+			}}
+		>
 			<main className="dev-canvas-shell">
 				<header className="dev-canvas-bar">
 					<div className="dev-canvas-brand">
@@ -270,6 +315,7 @@ export function DevCanvas({ canvasId }: { canvasId: string }) {
 						</code>
 					</div>
 				</aside>
+				<DialRoot position="bottom-right" theme="light" />
 			</main>
 		</BrowserShapeActionsProvider>
 	)
@@ -295,7 +341,8 @@ function syncCanvasShapes(editor: Editor, snapshot: CanvasSnapshot) {
 		if (
 			shape.props.url !== item.url ||
 			shape.props.title !== item.title ||
-			shape.props.source !== item.source
+			shape.props.source !== item.source ||
+			shape.props.status !== item.status
 		) {
 			editor.updateShape<BrowserShape>({
 				id: shape.id,
@@ -305,6 +352,7 @@ function syncCanvasShapes(editor: Editor, snapshot: CanvasSnapshot) {
 					title: item.title,
 					source: item.source,
 					itemId: item.id,
+					status: item.status,
 				},
 			})
 		}
@@ -327,6 +375,7 @@ function syncCanvasShapes(editor: Editor, snapshot: CanvasSnapshot) {
 				url: item.url,
 				title: item.title,
 				source: item.source,
+				status: item.status,
 			},
 		})
 		index += 1

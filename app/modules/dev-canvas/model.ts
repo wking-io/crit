@@ -1,10 +1,21 @@
 export const DEV_CANVAS_VERSION = 1 as const
 
+export const CANVAS_ITEM_STATUSES = [
+	'changes-requested',
+	'in-progress',
+	'archived',
+	'approved',
+	'ready-for-review',
+] as const
+
+export type CanvasItemStatus = (typeof CANVAS_ITEM_STATUSES)[number]
+
 export type CanvasItem = {
 	id: string
 	url: string
 	title: string
 	source: 'manual' | 'portless' | 'agent'
+	status: CanvasItemStatus
 	addedAt: string
 }
 
@@ -37,15 +48,18 @@ export type CanvasCommand =
 				url: string
 				title?: string
 				source?: CanvasItem['source']
+				status?: CanvasItemStatus
 			}>
 	  }
 	| { type: 'remove'; itemId: string }
+	| { type: 'set-status'; itemId: string; status: CanvasItemStatus }
 	| {
 			type: 'replace'
 			items: Array<{
 				url: string
 				title?: string
 				source?: CanvasItem['source']
+				status?: CanvasItemStatus
 			}>
 	  }
 	| { type: 'rename'; title: string }
@@ -80,7 +94,16 @@ export function applyCanvasCommand(
 			for (const input of command.items) {
 				const item = createCanvasItem(input, now)
 				const existing = byUrl.get(item.url)
-				byUrl.set(item.url, existing ? { ...existing, ...item } : item)
+				byUrl.set(
+					item.url,
+					existing
+						? {
+								...existing,
+								...item,
+								status: input.status ?? existing.status,
+							}
+						: item,
+				)
 			}
 			return { ...document, items: [...byUrl.values()], updatedAt: now }
 		}
@@ -88,6 +111,16 @@ export function applyCanvasCommand(
 			return {
 				...document,
 				items: document.items.filter((item) => item.id !== command.itemId),
+				updatedAt: now,
+			}
+		case 'set-status':
+			return {
+				...document,
+				items: document.items.map((item) =>
+					item.id === command.itemId
+						? { ...item, status: command.status }
+						: item,
+				),
 				updatedAt: now,
 			}
 		case 'replace':
@@ -156,6 +189,7 @@ function createCanvasItem(
 		url: string
 		title?: string
 		source?: CanvasItem['source']
+		status?: CanvasItemStatus
 	},
 	now: string,
 ): CanvasItem {
@@ -163,10 +197,22 @@ function createCanvasItem(
 	return {
 		id: createItemId(url),
 		url,
-		title: input.title?.trim() || titleFromUrl(url),
+		title: normalizeItemTitle(input.title?.trim() || titleFromUrl(url)),
 		source: input.source ?? 'manual',
+		status: input.status ?? 'in-progress',
 		addedAt: now,
 	}
+}
+
+/** Strip a leading short id like "A – " or "12 - " from frame titles. */
+export function normalizeItemTitle(title: string) {
+	return title.replace(/^[A-Za-z0-9]+\s*[–—-]\s+/, '').trim() || title.trim()
+}
+
+export function normalizeItemStatus(status: unknown): CanvasItemStatus {
+	return CANVAS_ITEM_STATUSES.includes(status as CanvasItemStatus)
+		? (status as CanvasItemStatus)
+		: 'in-progress'
 }
 
 function titleFromId(id: string) {

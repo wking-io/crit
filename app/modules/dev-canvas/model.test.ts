@@ -4,6 +4,7 @@ import {
 	createCanvasDocument,
 	matchesPortlessIteration,
 	normalizeCanvasId,
+	normalizeItemTitle,
 	normalizeUrl,
 } from './model'
 
@@ -17,13 +18,22 @@ describe('dev canvas model', () => {
 		)
 	})
 
+	it('strips leading letter/id and dash prefixes from titles', () => {
+		expect(normalizeItemTitle('A – Polyphonic Workbench')).toBe(
+			'Polyphonic Workbench',
+		)
+		expect(normalizeItemTitle('B - Synth')).toBe('Synth')
+		expect(normalizeItemTitle('12 — Checkout')).toBe('Checkout')
+		expect(normalizeItemTitle('Plain Title')).toBe('Plain Title')
+	})
+
 	it('adds by normalized URL without creating duplicates', () => {
 		const document = createCanvasDocument('checkout', '2026-01-01T00:00:00Z')
 		const first = applyCanvasCommand(
 			document,
 			{
 				type: 'add',
-				items: [{ url: 'app.localhost', title: 'First' }],
+				items: [{ url: 'app.localhost', title: 'A – First' }],
 			},
 			'2026-01-02T00:00:00Z',
 		)
@@ -37,7 +47,29 @@ describe('dev canvas model', () => {
 		)
 
 		expect(second.items).toHaveLength(1)
+		expect(first.items[0]?.title).toBe('First')
+		expect(first.items[0]?.status).toBe('in-progress')
 		expect(second.items[0]?.title).toBe('Latest')
+	})
+
+	it('persists status changes independently from frame titles', () => {
+		const added = applyCanvasCommand(createCanvasDocument('review'), {
+			type: 'add',
+			items: [{ url: 'app.localhost', title: 'Workbench' }],
+		})
+		const item = added.items[0]
+		if (!item) throw new Error('Expected a canvas item')
+
+		const reviewed = applyCanvasCommand(added, {
+			type: 'set-status',
+			itemId: item.id,
+			status: 'ready-for-review',
+		})
+
+		expect(reviewed.items[0]).toMatchObject({
+			title: 'Workbench',
+			status: 'ready-for-review',
+		})
 	})
 
 	it('finds a main app and every worktree-prefixed iteration', () => {
@@ -46,7 +78,7 @@ describe('dev canvas model', () => {
 		).toBe(true)
 		expect(
 			matchesPortlessIteration(
-				{ hostname: 'fix-mobile.checkout.localhost' },
+				{ hostname: 'feature-mobile.checkout.localhost' },
 				'checkout',
 			),
 		).toBe(true)

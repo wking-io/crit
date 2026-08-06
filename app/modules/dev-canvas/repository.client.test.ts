@@ -19,6 +19,7 @@ describe('local canvas repository', () => {
 						url: 'http://localhost:5173/synth?variant=A',
 						title: 'Iteration A',
 						source: 'agent' as const,
+						status: 'in-progress' as const,
 						addedAt: '2026-08-06T00:00:00.000Z',
 					},
 				],

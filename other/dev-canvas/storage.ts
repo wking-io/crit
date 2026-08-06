@@ -14,6 +14,8 @@ import {
 	createCanvasDocument,
 	createItemId,
 	normalizeCanvasId,
+	normalizeItemTitle,
+	normalizeItemStatus,
 } from '../../app/modules/dev-canvas/model'
 import type {
 	CanvasCommand,
@@ -86,11 +88,23 @@ async function readCanvas(directory: string, canvasId: string) {
 		if (!isCanvasDocument(parsed) || parsed.id !== id) {
 			throw new Error(`Invalid canvas document: ${filePath}`)
 		}
-		return parsed
+		return normalizeCanvasTitles(parsed)
 	} catch (error) {
 		if (isNodeError(error, 'ENOENT')) return createCanvasDocument(id)
 		throw error
 	}
+}
+
+function normalizeCanvasTitles(canvas: CanvasDocument): CanvasDocument {
+	let changed = false
+	const items = canvas.items.map((item) => {
+		const title = normalizeItemTitle(item.title)
+		const status = normalizeItemStatus(item.status)
+		if (title === item.title && status === item.status) return item
+		changed = true
+		return { ...item, title, status }
+	})
+	return changed ? { ...canvas, items } : canvas
 }
 
 async function writeCanvas(directory: string, document: CanvasDocument) {
