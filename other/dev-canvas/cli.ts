@@ -65,7 +65,7 @@ async function main(args: string[]) {
 			}
 			for (const canvas of canvases) {
 				console.log(
-					`${canvas.id.padEnd(24)} ${String(canvas.items.length).padStart(3)} iteration(s)`,
+					`${canvas.id.padEnd(24)} ${String(canvas.itemCount).padStart(3)} iteration(s)`,
 				)
 			}
 			return

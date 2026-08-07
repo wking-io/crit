@@ -14,18 +14,23 @@ import {
 	useState,
 } from 'react'
 import {
+	BaseBoxShapeTool,
 	BaseBoxShapeUtil,
 	HTMLContainer,
 	T,
 	stopEventPropagation,
 	useEditor,
+	useValue,
 } from 'tldraw'
-import type { Editor, TLBaseShape } from 'tldraw'
+import type { Editor, TLBaseShape, TLShape } from 'tldraw'
 import {
 	FRAME_STATUSES,
+	IconEditTitle,
 	IconFullscreen,
 	IconMinimize,
 	IconOpenExternal,
+	IconSaveTitle,
+	IconSnapshot,
 	IconTrash,
 	frameStatus,
 	formatFrameChromeTitle,
@@ -51,12 +56,24 @@ export type BrowserShape = TLBaseShape<
 type BrowserShapeActions = {
 	remove(itemId: string): void
 	setStatus(itemId: string, status: CanvasItemStatus): void
+	setTitle(itemId: string, title: string): void
+	snapshot(itemId: string): Promise<boolean>
+	commitDraft(shape: BrowserShape, url: string): Promise<boolean>
 }
 
 const BrowserShapeActionsContext = createContext<BrowserShapeActions>({
 	remove() {},
 	setStatus() {},
+	setTitle() {},
+	async snapshot() {
+		return false
+	},
+	async commitDraft() {
+		return false
+	},
 })
+
+export const BROWSER_FRAME_TOOL_ID = 'dev-browser-frame'
 
 const FRAME_VERTICAL_CHROME = 28
 const FRAME_ROW_GAP = 80
@@ -265,7 +282,7 @@ export class BrowserShapeUtil extends BaseBoxShapeUtil<BrowserShape> {
 			h: 580,
 			itemId: '',
 			url: 'about:blank',
-			title: 'New iteration',
+			title: 'Untitled',
 			source: 'manual',
 			status: 'in-progress',
 		}
@@ -292,17 +309,52 @@ export class BrowserShapeUtil extends BaseBoxShapeUtil<BrowserShape> {
 	}
 }
 
+export class BrowserFrameTool extends BaseBoxShapeTool {
+	static override id = BROWSER_FRAME_TOOL_ID
+	static override initial = 'idle'
+	override shapeType = BrowserShapeUtil.type
+
+	override onCreate(shape: TLShape | null) {
+		if (!shape || shape.type !== BrowserShapeUtil.type) return
+		const browserShape = shape as BrowserShape
+		this.editor.updateShape<BrowserShape>({
+			id: browserShape.id,
+			type: BrowserShapeUtil.type,
+			props: {
+				w: Math.max(360, browserShape.props.w),
+				h: Math.max(240, browserShape.props.h),
+			},
+		})
+		this.editor.setCurrentTool('select.idle')
+	}
+}
+
 function BrowserShapeView({ shape }: { shape: BrowserShape }) {
 	const actions = useContext(BrowserShapeActionsContext)
 	const editor = useEditor()
+	const isDraft = shape.props.itemId === ''
+	const isSnapshot = shape.props.source === 'snapshot'
+	const iframeIsInteractive = useValue(
+		'dev canvas iframe is interactive',
+		() => !isDraft && editor.getCurrentToolId() === 'select',
+		[editor, isDraft],
+	)
 	const frameRef = useRef<HTMLDivElement>(null)
 	const iframeRef = useRef<HTMLIFrameElement>(null)
 	const statusButtonRef = useRef<HTMLButtonElement>(null)
 	const statusMenuRef = useRef<HTMLDivElement>(null)
+	const titleEditorRef = useRef<HTMLDivElement>(null)
+	const titleInputRef = useRef<HTMLInputElement>(null)
 	const stopObservingHeight = useRef<null | (() => void)>(null)
 	const actionTooltip = useMemo(() => Tooltip.createHandle<string>(), [])
 	const [fullscreen, setFullscreen] = useState(false)
 	const [statusMenuOpen, setStatusMenuOpen] = useState(false)
+	const [titleEditing, setTitleEditing] = useState(false)
+	const [titleDraft, setTitleDraft] = useState(shape.props.title)
+	const [snapshotting, setSnapshotting] = useState(false)
+	const [draftUrl, setDraftUrl] = useState('')
+	const [draftError, setDraftError] = useState('')
+	const [draftSubmitting, setDraftSubmitting] = useState(false)
 	const [loadState, setLoadState] = useState<'loading' | 'loaded' | 'failed'>(
 		'loading',
 	)
@@ -344,16 +396,55 @@ function BrowserShapeView({ shape }: { shape: BrowserShape }) {
 		}
 	}, [statusMenuOpen])
 
+	const cancelTitleEdit = useCallback(() => {
+		setTitleDraft(shape.props.title)
+		setTitleEditing(false)
+	}, [shape.props.title])
+
+	const saveTitleEdit = useCallback(() => {
+		const title = titleDraft.trim()
+		if (title && title !== shape.props.title) {
+			actions.setTitle(shape.props.itemId, title)
+		}
+		setTitleEditing(false)
+	}, [actions, shape.props.itemId, shape.props.title, titleDraft])
+
+	useEffect(() => {
+		if (!titleEditing) return
+		titleInputRef.current?.focus()
+		titleInputRef.current?.select()
+
+		const cancelOnOutsidePointer = (event: PointerEvent) => {
+			const target = event.target
+			if (target instanceof Node && titleEditorRef.current?.contains(target)) {
+				return
+			}
+			cancelTitleEdit()
+		}
+		document.addEventListener('pointerdown', cancelOnOutsidePointer, true)
+		return () =>
+			document.removeEventListener('pointerdown', cancelOnOutsidePointer, true)
+	}, [cancelTitleEdit, titleEditing])
+
 	useEffect(() => {
 		stopObservingHeight.current?.()
 		stopObservingHeight.current = null
+		if (isDraft) return
 		setLoadState('loading')
 		setAutoSized(false)
 		const timeout = window.setTimeout(() => {
 			setLoadState((current) => (current === 'loading' ? 'failed' : current))
 		}, FRAME_LOAD_TIMEOUT)
 		return () => window.clearTimeout(timeout)
-	}, [shape.props.url])
+	}, [isDraft, shape.props.url])
+
+	useEffect(() => {
+		if (!isDraft) return
+		const animationFrame = window.requestAnimationFrame(() => {
+			frameRef.current?.querySelector<HTMLInputElement>('input')?.focus()
+		})
+		return () => window.cancelAnimationFrame(animationFrame)
+	}, [isDraft])
 
 	const applyDocumentHeight = useCallback(
 		(documentHeight: number) => {
@@ -444,6 +535,29 @@ function BrowserShapeView({ shape }: { shape: BrowserShape }) {
 	const statusFrameGap =
 		STATUS_PILL_MOTION.frameGap +
 		Math.max(0, rotatedBottomHalfHeight - STATUS_PILL_HEIGHT / 2)
+	const beginTitleEdit = () => {
+		setStatusMenuOpen(false)
+		setTitleDraft(shape.props.title)
+		setTitleEditing(true)
+	}
+	const submitDraft = async (event: React.FormEvent) => {
+		event.preventDefault()
+		event.stopPropagation()
+		if (!draftUrl.trim() || draftSubmitting) return
+		setDraftSubmitting(true)
+		setDraftError('')
+		const committed = await actions.commitDraft(shape, draftUrl)
+		if (!committed) {
+			setDraftSubmitting(false)
+			setDraftError('Could not add this URL.')
+		}
+	}
+	const takeSnapshot = async () => {
+		if (snapshotting || isDraft || isSnapshot) return
+		setSnapshotting(true)
+		await actions.snapshot(shape.props.itemId)
+		setSnapshotting(false)
+	}
 
 	return (
 		<HTMLContainer
@@ -462,11 +576,11 @@ function BrowserShapeView({ shape }: { shape: BrowserShape }) {
 				onPointerDown={stopEventPropagation}
 				style={{
 					bottom: `calc(100% + ${statusFrameGap}px)`,
-					pointerEvents: statusMenuOpen ? 'all' : 'none',
+					pointerEvents: !isDraft && statusMenuOpen ? 'all' : 'none',
 				}}
 			>
 				<AnimatePresence>
-					{statusMenuOpen
+					{!isDraft && statusMenuOpen
 						? statusPillLayout.map(
 								({
 									option,
@@ -479,6 +593,10 @@ function BrowserShapeView({ shape }: { shape: BrowserShape }) {
 									const startY =
 										distanceFromFrame * STATUS_PILL_STEP +
 										STATUS_PILL_MOTION.originOffset
+									const selectStatus = () => {
+										actions.setStatus(shape.props.itemId, option.id)
+										setStatusMenuOpen(false)
+									}
 									return (
 										<motion.button
 											key={option.id}
@@ -514,9 +632,15 @@ function BrowserShapeView({ shape }: { shape: BrowserShape }) {
 												...STATUS_PILL_MOTION.spring,
 												opacity: { duration: 0.12 },
 											}}
-											onClick={() => {
-												actions.setStatus(shape.props.itemId, option.id)
-												setStatusMenuOpen(false)
+											onPointerDown={(event) => {
+												event.currentTarget.setPointerCapture(event.pointerId)
+											}}
+											onPointerUp={(event) => {
+												if (!event.isPrimary || event.button !== 0) return
+												selectStatus()
+											}}
+											onClick={(event) => {
+												if (event.detail === 0) selectStatus()
 											}}
 										>
 											<OptionIcon />
@@ -549,16 +673,84 @@ function BrowserShapeView({ shape }: { shape: BrowserShape }) {
 							aria-label={`Status: ${status.label}. Change status`}
 							aria-haspopup="menu"
 							aria-expanded={statusMenuOpen}
+							disabled={isDraft}
 							onPointerDown={stopEventPropagation}
 							onClick={() => setStatusMenuOpen((open) => !open)}
 						>
 							<StatusIcon />
 						</button>
-						<span className="dev-browser__title-mask" title={chromeTitle}>
-							<span className="dev-browser__title-track">
-								<strong>{chromeTitle}</strong>
-								<strong>{status.label}</strong>
-							</span>
+						<span
+							className="dev-browser__title-mask"
+							data-editing={titleEditing || undefined}
+							title={titleEditing ? undefined : chromeTitle}
+						>
+							{isDraft ? (
+								<span className="dev-browser__draft-title">{chromeTitle}</span>
+							) : titleEditing ? (
+								<div
+									ref={titleEditorRef}
+									className="dev-browser__title-editor"
+									onPointerDown={stopEventPropagation}
+									onBlur={(event) => {
+										const nextFocus = event.relatedTarget
+										if (
+											nextFocus instanceof Node &&
+											event.currentTarget.contains(nextFocus)
+										) {
+											return
+										}
+										cancelTitleEdit()
+									}}
+								>
+									<span className="dev-browser__title-prefix">{shortId}:</span>
+									<span
+										className="dev-browser__title-input-sizer"
+										data-value={titleDraft || ' '}
+									>
+										<input
+											ref={titleInputRef}
+											aria-label="Frame title"
+											autoComplete="off"
+											spellCheck="false"
+											value={titleDraft}
+											onChange={(event) => setTitleDraft(event.target.value)}
+											onKeyDown={(event) => {
+												event.stopPropagation()
+												if (event.key === 'Enter') {
+													event.preventDefault()
+													saveTitleEdit()
+												}
+												if (event.key === 'Escape') {
+													event.preventDefault()
+													cancelTitleEdit()
+												}
+											}}
+										/>
+									</span>
+									<button
+										type="button"
+										className="dev-browser__title-save"
+										aria-label="Save frame title"
+										onClick={saveTitleEdit}
+									>
+										<IconSaveTitle />
+									</button>
+								</div>
+							) : (
+								<button
+									type="button"
+									className="dev-browser__title-trigger"
+									aria-label={`Edit frame title: ${shape.props.title}`}
+									onPointerDown={stopEventPropagation}
+									onClick={beginTitleEdit}
+								>
+									<span className="dev-browser__title-track">
+										<strong>{chromeTitle}</strong>
+										<strong>{status.label}</strong>
+									</span>
+									<IconEditTitle className="dev-browser__title-edit-icon" />
+								</button>
+							)}
 						</span>
 					</div>
 					<div
@@ -566,33 +758,66 @@ function BrowserShapeView({ shape }: { shape: BrowserShape }) {
 						onPointerDown={stopEventPropagation}
 					>
 						<Tooltip.Provider delay={450} closeDelay={80}>
-							<Tooltip.Trigger
-								handle={actionTooltip}
-								payload="Open in a new tab"
-								aria-label="Open in a new tab"
-								render={
-									<a href={shape.props.url} target="_blank" rel="noreferrer" />
-								}
-							>
-								<IconOpenExternal />
-							</Tooltip.Trigger>
-							<Tooltip.Trigger
-								handle={actionTooltip}
-								payload={fullscreen ? 'Collapse to canvas' : 'Enter fullscreen'}
-								aria-label={
-									fullscreen ? 'Collapse to canvas' : 'Enter fullscreen'
-								}
-								type="button"
-								onClick={() => void toggleFullscreen()}
-							>
-								{fullscreen ? <IconMinimize /> : <IconFullscreen />}
-							</Tooltip.Trigger>
+							{isDraft ? null : (
+								<>
+									{isSnapshot ? null : (
+										<Tooltip.Trigger
+											handle={actionTooltip}
+											payload={
+												snapshotting ? 'Taking snapshot…' : 'Take snapshot'
+											}
+											aria-label={
+												snapshotting ? 'Taking snapshot' : 'Take snapshot'
+											}
+											type="button"
+											disabled={snapshotting}
+											data-snapshotting={snapshotting || undefined}
+											onClick={() => void takeSnapshot()}
+										>
+											<IconSnapshot />
+										</Tooltip.Trigger>
+									)}
+									<Tooltip.Trigger
+										handle={actionTooltip}
+										payload="Open in a new tab"
+										aria-label="Open in a new tab"
+										render={
+											<a
+												href={shape.props.url}
+												target="_blank"
+												rel="noreferrer"
+											/>
+										}
+									>
+										<IconOpenExternal />
+									</Tooltip.Trigger>
+									<Tooltip.Trigger
+										handle={actionTooltip}
+										payload={
+											fullscreen ? 'Collapse to canvas' : 'Enter fullscreen'
+										}
+										aria-label={
+											fullscreen ? 'Collapse to canvas' : 'Enter fullscreen'
+										}
+										type="button"
+										onClick={() => void toggleFullscreen()}
+									>
+										{fullscreen ? <IconMinimize /> : <IconFullscreen />}
+									</Tooltip.Trigger>
+								</>
+							)}
 							<Tooltip.Trigger
 								handle={actionTooltip}
 								payload="Remove from canvas"
 								aria-label="Remove from canvas"
 								type="button"
-								onClick={() => actions.remove(shape.props.itemId)}
+								onClick={() => {
+									if (isDraft) {
+										editor.deleteShape(shape.id)
+									} else {
+										actions.remove(shape.props.itemId)
+									}
+								}}
 							>
 								<IconTrash />
 							</Tooltip.Trigger>
@@ -631,13 +856,51 @@ function BrowserShapeView({ shape }: { shape: BrowserShape }) {
 					</div>
 				</div>
 				<div className="dev-browser__viewport">
-					{loadState === 'loading' ? (
+					{isDraft ? (
+						<form
+							className="dev-browser__draft"
+							onSubmit={(event) => void submitDraft(event)}
+							onPointerDown={stopEventPropagation}
+							onKeyDown={(event) => {
+								event.stopPropagation()
+								if (event.key === 'Escape') {
+									event.preventDefault()
+									editor.deleteShape(shape.id)
+								}
+							}}
+						>
+							<label htmlFor={`dev-browser-url-${shape.id}`}>
+								Enter the URL for this frame
+							</label>
+							<div>
+								<input
+									id={`dev-browser-url-${shape.id}`}
+									type="text"
+									inputMode="url"
+									autoComplete="off"
+									placeholder="https://example.com"
+									value={draftUrl}
+									disabled={draftSubmitting}
+									onChange={(event) => setDraftUrl(event.target.value)}
+								/>
+								<button
+									type="submit"
+									disabled={!draftUrl.trim() || draftSubmitting}
+								>
+									{draftSubmitting ? 'Adding…' : 'Add frame'}
+								</button>
+							</div>
+							{draftError ? <span role="alert">{draftError}</span> : null}
+							<small>Press Escape to cancel</small>
+						</form>
+					) : null}
+					{!isDraft && loadState === 'loading' ? (
 						<div className="dev-browser__loading">
 							<span />
 							Loading {shape.props.title}
 						</div>
 					) : null}
-					{loadState === 'failed' ? (
+					{!isDraft && loadState === 'failed' ? (
 						<div
 							className="dev-browser__failure"
 							role="alert"
@@ -650,16 +913,22 @@ function BrowserShapeView({ shape }: { shape: BrowserShape }) {
 							</a>
 						</div>
 					) : null}
-					<iframe
-						ref={iframeRef}
-						src={shape.props.url}
-						title={shape.props.title}
-						onLoad={handleLoad}
-						onError={() => setLoadState('failed')}
-						scrolling={autoSized ? 'no' : 'auto'}
-						allow="clipboard-read; clipboard-write; fullscreen"
-						referrerPolicy="no-referrer"
-					/>
+					{isDraft ? null : (
+						<iframe
+							ref={iframeRef}
+							src={shape.props.url}
+							title={shape.props.title}
+							tabIndex={iframeIsInteractive ? 0 : -1}
+							onLoad={handleLoad}
+							onError={() => setLoadState('failed')}
+							scrolling={autoSized ? 'no' : 'auto'}
+							allow="clipboard-read; clipboard-write; fullscreen"
+							referrerPolicy="no-referrer"
+							style={{
+								pointerEvents: iframeIsInteractive ? 'auto' : 'none',
+							}}
+						/>
+					)}
 				</div>
 			</div>
 		</HTMLContainer>

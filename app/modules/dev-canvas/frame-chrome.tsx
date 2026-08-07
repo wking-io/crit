@@ -277,6 +277,95 @@ export function formatFrameChromeTitle(shortId: string, title: string) {
 	return `${shortId}: ${title}`
 }
 
+export function IconEditTitle(props: SVGProps<SVGSVGElement>) {
+	return (
+		<svg
+			width="16"
+			height="16"
+			viewBox="0 0 18 18"
+			aria-hidden="true"
+			{...props}
+		>
+			<path
+				d="m15.183,2.7433c-7.0051.4749-10.4978,6.0355-11.3685,8.7564.6849.5117,2.7655,1.4067,5.6085.8927,2.8429-.514,3.5521-2.6443,3.5513-3.6452,2.1538-1.3244,1.1104-3.3711,2.2087-6.0039Z"
+				fill="currentColor"
+				opacity=".3"
+			/>
+			<path
+				d="m2.75,15.25S4.062,3.729,15.25,2.75c-.56.976-.573,2.605-.946,4.239-.524,2.011-2.335,2.261-4.554,2.261"
+				fill="none"
+				stroke="currentColor"
+				strokeWidth="1"
+				strokeLinecap="round"
+				strokeLinejoin="round"
+			/>
+			<path
+				d="m12.974,8.731c-.4527,3.525-3.4373,4.0684-6.5358,3.5928"
+				fill="none"
+				stroke="currentColor"
+				strokeWidth="1"
+				strokeLinecap="round"
+				strokeLinejoin="round"
+			/>
+		</svg>
+	)
+}
+
+export function IconSaveTitle(props: SVGProps<SVGSVGElement>) {
+	return (
+		<svg
+			width="16"
+			height="16"
+			viewBox="0 0 18 18"
+			aria-hidden="true"
+			{...props}
+		>
+			<path
+				d="M2.75 9.75H13.25C14.355 9.75 15.25 8.855 15.25 7.75V3.75"
+				fill="none"
+				stroke="currentColor"
+				strokeWidth="1"
+				strokeLinecap="round"
+				strokeLinejoin="round"
+			/>
+			<path
+				d="M7 5.5L2.75 9.75L7 14"
+				fill="none"
+				stroke="currentColor"
+				strokeWidth="1"
+				strokeLinecap="round"
+				strokeLinejoin="round"
+			/>
+		</svg>
+	)
+}
+
+export function IconSnapshot(props: SVGProps<SVGSVGElement>) {
+	return (
+		<svg
+			width="16"
+			height="16"
+			viewBox="0 0 18 18"
+			aria-hidden="true"
+			{...props}
+		>
+			<path
+				d="M13.25 4.25H11.6L10.85 3H7.15L6.4 4.25H4.75C3.645 4.25 2.75 5.145 2.75 6.25V13.25C2.75 14.355 3.645 15.25 4.75 15.25H13.25C14.355 15.25 15.25 14.355 15.25 13.25V6.25C15.25 5.145 14.355 4.25 13.25 4.25Z"
+				fill="currentColor"
+				fillOpacity={ICON_OPACITY}
+			/>
+			<path
+				d="M13.25 4.25H11.6L10.85 3H7.15L6.4 4.25H4.75C3.645 4.25 2.75 5.145 2.75 6.25V13.25C2.75 14.355 3.645 15.25 4.75 15.25H13.25C14.355 15.25 15.25 14.355 15.25 13.25V6.25C15.25 5.145 14.355 4.25 13.25 4.25Z"
+				fill="none"
+				stroke="currentColor"
+				strokeLinecap="round"
+				strokeLinejoin="round"
+			/>
+			<circle cx="9" cy="9.75" r="2.5" fill="none" stroke="currentColor" />
+		</svg>
+	)
+}
+
 export function IconOpenExternal(props: SVGProps<SVGSVGElement>) {
 	return (
 		<svg

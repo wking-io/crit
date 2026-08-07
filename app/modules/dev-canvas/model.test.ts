@@ -16,6 +16,9 @@ describe('dev canvas model', () => {
 		expect(normalizeUrl('feature.app.localhost/path#section')).toBe(
 			'https://feature.app.localhost/path',
 		)
+		expect(
+			normalizeUrl('/__dev-canvas/snapshots/20260806210000-deadbeef#ignored'),
+		).toBe('/__dev-canvas/snapshots/20260806210000-deadbeef')
 	})
 
 	it('strips leading letter/id and dash prefixes from titles', () => {
@@ -70,6 +73,29 @@ describe('dev canvas model', () => {
 			title: 'Workbench',
 			status: 'ready-for-review',
 		})
+	})
+
+	it('renames a frame while preserving its generated short id separately', () => {
+		const added = applyCanvasCommand(createCanvasDocument('review'), {
+			type: 'add',
+			items: [{ url: 'app.localhost', title: 'Workbench' }],
+		})
+		const item = added.items[0]
+		if (!item) throw new Error('Expected a canvas item')
+
+		const renamed = applyCanvasCommand(added, {
+			type: 'set-item-title',
+			itemId: item.id,
+			title: '  Polished controls  ',
+		})
+		const unchanged = applyCanvasCommand(renamed, {
+			type: 'set-item-title',
+			itemId: item.id,
+			title: '   ',
+		})
+
+		expect(renamed.items[0]?.title).toBe('Polished controls')
+		expect(unchanged.items[0]?.title).toBe('Polished controls')
 	})
 
 	it('finds a main app and every worktree-prefixed iteration', () => {

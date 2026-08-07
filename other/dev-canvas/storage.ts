@@ -16,6 +16,8 @@ import {
 	normalizeCanvasId,
 	normalizeItemTitle,
 	normalizeItemStatus,
+	snapshotArtifactUrl,
+	summarizeCanvas,
 } from '../../app/modules/dev-canvas/model'
 import type {
 	CanvasCommand,
@@ -23,6 +25,8 @@ import type {
 	CanvasSnapshot,
 	PortlessSource,
 } from '../../app/modules/dev-canvas/model'
+import { createSnapshotArchive } from './snapshot-archive'
+import type { SnapshotArtifact } from './snapshot-archive'
 
 type PortlessRoute = {
 	hostname: string
@@ -32,8 +36,17 @@ type PortlessRoute = {
 	ngrokUrl?: string
 }
 
-export function createCanvasStorage(root: string) {
+type SnapshotArchive = {
+	capture(url: string): Promise<SnapshotArtifact>
+	read(artifactId: string): Promise<Buffer>
+}
+
+export function createCanvasStorage(
+	root: string,
+	options: { snapshotArchive?: SnapshotArchive } = {},
+) {
 	const canvasDirectory = path.join(root, '.dev-canvas', 'canvases')
+	const snapshotArchive = options.snapshotArchive ?? createSnapshotArchive(root)
 
 	return {
 		async read(canvasId: string): Promise<CanvasSnapshot> {
@@ -59,7 +72,7 @@ export function createCanvasStorage(root: string) {
 			}
 		},
 
-		async list(): Promise<CanvasDocument[]> {
+		async list() {
 			try {
 				const entries = await readdir(canvasDirectory)
 				const documents = await Promise.all(
@@ -69,13 +82,49 @@ export function createCanvasStorage(root: string) {
 							readCanvas(canvasDirectory, entry.slice(0, -'.json'.length)),
 						),
 				)
-				return documents.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+				return documents
+					.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+					.map(summarizeCanvas)
 			} catch (error) {
 				if (isNodeError(error, 'ENOENT')) return []
 				throw error
 			}
 		},
 
+		async snapshot(canvasId: string, itemId: string): Promise<CanvasSnapshot> {
+			const current = await readCanvas(canvasDirectory, canvasId)
+			const item = current.items.find((candidate) => candidate.id === itemId)
+			if (!item) throw new Error('Frame not found.')
+			if (item.source === 'snapshot') {
+				throw new Error('This frame is already a snapshot.')
+			}
+
+			const artifact = await snapshotArchive.capture(item.url)
+			const canvas = applyCanvasCommand(current, {
+				type: 'add',
+				items: [
+					{
+						url: snapshotArtifactUrl(artifact.id),
+						title: `${item.title} · Snapshot`,
+						source: 'snapshot',
+						status: 'archived',
+						snapshot: {
+							artifactId: artifact.id,
+							sourceUrl: artifact.sourceUrl,
+							capturedAt: artifact.capturedAt,
+						},
+					},
+				],
+			})
+			await writeCanvas(canvasDirectory, canvas)
+			return {
+				canvas,
+				sources: await readPortlessSources(),
+				mode: 'local-server',
+			}
+		},
+
+		readSnapshot: (artifactId: string) => snapshotArchive.read(artifactId),
 		readSources: readPortlessSources,
 	}
 }

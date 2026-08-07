@@ -74,6 +74,58 @@ describe('local canvas storage adapter', () => {
 
 		expect(snapshot.canvas.id).toBe('checkout-review')
 		expect(persisted.items).toHaveLength(1)
+		await expect(storage.list()).resolves.toEqual([
+			{
+				id: 'checkout-review',
+				title: 'Checkout Review',
+				itemCount: 1,
+				updatedAt: snapshot.canvas.updatedAt,
+			},
+		])
+	})
+
+	it('adds an immutable archived frame without replacing the live frame', async () => {
+		const root = await makeTemporaryDirectory()
+		const storage = createCanvasStorage(root, {
+			snapshotArchive: {
+				async capture(sourceUrl) {
+					return {
+						id: '20260806210000-deadbeef',
+						sourceUrl,
+						capturedAt: '2026-08-06T21:00:00.000Z',
+						sizeBytes: 512,
+					}
+				},
+				async read() {
+					return Buffer.from('<!doctype html>')
+				},
+			},
+		})
+		const live = await storage.dispatch('Review', {
+			type: 'add',
+			items: [{ url: 'http://app.localhost/', title: 'Workbench' }],
+		})
+		const item = live.canvas.items[0]
+		if (!item) throw new Error('Expected a live frame')
+
+		const captured = await storage.snapshot('review', item.id)
+
+		expect(captured.canvas.items).toHaveLength(2)
+		expect(captured.canvas.items[0]).toMatchObject({
+			url: 'http://app.localhost/',
+			source: 'manual',
+		})
+		expect(captured.canvas.items[1]).toMatchObject({
+			url: '/__dev-canvas/snapshots/20260806210000-deadbeef',
+			title: 'Workbench · Snapshot',
+			source: 'snapshot',
+			status: 'archived',
+			snapshot: {
+				artifactId: '20260806210000-deadbeef',
+				sourceUrl: 'http://app.localhost/',
+				capturedAt: '2026-08-06T21:00:00.000Z',
+			},
+		})
 	})
 })
 

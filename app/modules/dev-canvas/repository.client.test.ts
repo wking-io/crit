@@ -48,6 +48,77 @@ describe('local canvas repository', () => {
 		)
 		expect(fetch).toHaveBeenCalledTimes(2)
 	})
+
+	it('lists locally stored canvases when the adapter is unavailable', async () => {
+		const localStorage = createMemoryStorage()
+		localStorage.setItem(
+			'dev-canvas:document:review',
+			JSON.stringify({
+				version: 1,
+				id: 'review',
+				title: 'Review',
+				items: [],
+				updatedAt: '2026-08-06T00:00:00.000Z',
+			}),
+		)
+		vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Offline')))
+		vi.stubGlobal('window', { localStorage })
+
+		await expect(createLocalCanvasRepository().list()).resolves.toEqual([
+			{
+				id: 'review',
+				title: 'Review',
+				itemCount: 0,
+				updatedAt: '2026-08-06T00:00:00.000Z',
+			},
+		])
+	})
+
+	it('returns the server-resolved document title', async () => {
+		const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(
+			new Response(JSON.stringify({ title: 'Example document' }), {
+				status: 200,
+				headers: { 'Content-Type': 'application/json' },
+			}),
+		)
+		vi.stubGlobal('fetch', fetch)
+
+		await expect(
+			createLocalCanvasRepository().getUrlTitle('example.com'),
+		).resolves.toBe('Example document')
+		expect(fetch).toHaveBeenCalledWith(
+			'/__dev-canvas/api/metadata?url=https%3A%2F%2Fexample.com%2F',
+		)
+	})
+
+	it('captures a frame through the local snapshot adapter', async () => {
+		const snapshot = {
+			canvas: {
+				version: 1 as const,
+				id: 'review',
+				title: 'Review',
+				items: [],
+				updatedAt: '2026-08-06T00:00:00.000Z',
+			},
+			sources: [],
+			mode: 'local-server' as const,
+		}
+		const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(
+			new Response(JSON.stringify(snapshot), {
+				status: 200,
+				headers: { 'Content-Type': 'application/json' },
+			}),
+		)
+		vi.stubGlobal('fetch', fetch)
+
+		await expect(
+			createLocalCanvasRepository().snapshot('Review', 'url-live'),
+		).resolves.toEqual(snapshot)
+		expect(fetch).toHaveBeenCalledWith(
+			'/__dev-canvas/api/canvases/review/snapshots/url-live',
+			{ method: 'POST' },
+		)
+	})
 })
 
 function createMemoryStorage(): Storage {
