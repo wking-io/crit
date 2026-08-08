@@ -120,7 +120,9 @@ upload system; V1 still has no user-managed uploads.
 The React viewport supports infinite pan/zoom, Frame and Note drag/resize,
 review status, editable Notes, and attachment by dropping a Note onto a Frame.
 Dragging it away detaches it without changing its Canvas position. Attached
-Notes move with their Frame. Offscreen iframes are paused for performance.
+Notes move with their Frame. Frame toolbars retain a stable screen size while
+zooming and progressively hide title and secondary controls when space becomes
+tight. Offscreen iframes are paused for performance.
 
 Autosave is single-flight and stores pending semantic commands in IndexedDB for
 draft recovery. Vite file watching refreshes clean windows immediately after a

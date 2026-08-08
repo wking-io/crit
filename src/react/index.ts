@@ -27,4 +27,9 @@ export {
   type DraftJournalShape
 } from "../session/draft-journal.js"
 export { Crit, type CritProps } from "./crit.js"
-export { CanvasViewport, type CanvasViewportProps } from "./canvas-viewport.js"
+export {
+  CanvasViewport,
+  frameToolbarMode,
+  type CanvasViewportProps,
+  type FrameToolbarMode
+} from "./canvas-viewport.js"

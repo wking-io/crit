@@ -2,11 +2,20 @@ import { renderToStaticMarkup } from "react-dom/server"
 import { describe, expect, it } from "vitest"
 
 import { Crit } from "../../src/react/crit.js"
-import { CanvasViewport } from "../../src/react/canvas-viewport.js"
+import {
+  CanvasViewport,
+  frameToolbarMode
+} from "../../src/react/canvas-viewport.js"
 import { Canvas, CanvasCommand } from "../../src/core/index.js"
 import { Effect } from "effect"
 
 describe("Crit", () => {
+  it("uses explicit Frame toolbar breakpoints", () => {
+    expect(frameToolbarMode(800)).toBe("full")
+    expect(frameToolbarMode(519)).toBe("compact")
+    expect(frameToolbarMode(259)).toBe("minimal")
+  })
+
   it("renders its loading boundary with the default HTTP client", () => {
     const html = renderToStaticMarkup(<Crit canvasId="homepage" />)
 

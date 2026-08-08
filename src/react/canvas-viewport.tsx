@@ -38,6 +38,10 @@ const statusColors: Record<FrameStatus, string> = {
 
 type Camera = { readonly x: number; readonly y: number; readonly zoom: number }
 type Preview = Readonly<Record<string, CanvasGeometry>>
+export type FrameToolbarMode = "full" | "compact" | "minimal"
+
+export const frameToolbarMode = (visualWidth: number): FrameToolbarMode =>
+  visualWidth >= 520 ? "full" : visualWidth >= 260 ? "compact" : "minimal"
 
 export interface CanvasViewportProps {
   readonly document: CanvasDocument
@@ -348,6 +352,7 @@ export function CanvasViewport({
               key={item.id}
               frame={item}
               geometry={geometryOf(item)}
+              zoom={camera.zoom}
               iframeAllow={iframeAllow}
               {...(iframeSandbox === undefined ? {} : { iframeSandbox })}
               iframeVisible={intersectsViewport(
@@ -409,6 +414,7 @@ function FrameCard({
   iframeAllow,
   iframeSandbox,
   iframeVisible,
+  zoom,
   onMove,
   onRemove,
   onResize,
@@ -421,6 +427,7 @@ function FrameCard({
   readonly iframeAllow: string
   readonly iframeSandbox?: string
   readonly iframeVisible: boolean
+  readonly zoom: number
   readonly onMove: (event: ReactPointerEvent, item: CanvasFrame) => void
   readonly onRemove: () => void
   readonly onResize: (event: ReactPointerEvent, item: CanvasFrame) => void
@@ -429,6 +436,17 @@ function FrameCard({
   readonly onStatus: (status: FrameReviewStatus) => void
 }) {
   const [snapshotting, setSnapshotting] = useState(false)
+  const visualWidth = geometry.width * zoom
+  const toolbarMode = frameToolbarMode(visualWidth)
+  const world = (pixels: number) => pixels / zoom
+  const toolbarHeight = Math.min(geometry.height, world(36))
+  const controlStyle: CSSProperties = {
+    boxSizing: "border-box",
+    fontSize: world(12),
+    height: world(24),
+    lineHeight: `${world(16)}px`,
+    padding: `0 ${world(6)}px`
+  }
   const takeSnapshot = () => {
     if (onSnapshot === undefined || snapshotting) return
     setSnapshotting(true)
@@ -444,18 +462,45 @@ function FrameCard({
   return (
     <section style={{ ...itemStyle(geometry, frame.zIndex), background: "#fff", border: "1px solid #aeb5bf", borderRadius: 8, boxShadow: "0 12px 30px rgba(15,23,42,.12)", overflow: "hidden" }}>
       <header
+        data-toolbar-mode={toolbarMode}
         onPointerDown={(event) => onMove(event, frame)}
-        style={{ alignItems: "center", background: "#f8fafc", cursor: "move", display: "flex", gap: 8, height: 32, padding: "0 10px" }}
+        style={{
+          alignItems: "center",
+          background: "#f8fafc",
+          boxSizing: "border-box",
+          cursor: "move",
+          display: "flex",
+          fontSize: world(13),
+          gap: world(8),
+          height: toolbarHeight,
+          lineHeight: `${world(16)}px`,
+          padding: `0 ${world(10)}px`
+        }}
       >
-        <span style={{ background: statusColors[frame.status], borderRadius: 999, height: 8, width: 8 }} />
-        <strong style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{frame.title}</strong>
-        {frame.snapshot === undefined ? (
+        <span style={{ background: statusColors[frame.status], borderRadius: 999, flex: "0 0 auto", height: world(8), width: world(8) }} />
+        {toolbarMode === "full" ? (
+          <strong
+            title={frame.title}
+            style={{
+              flex: 1,
+              maxWidth: world(240),
+              minWidth: 0,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap"
+            }}
+          >
+            {frame.title}
+          </strong>
+        ) : null}
+        {frame.snapshot === undefined && toolbarMode !== "minimal" ? (
           <select
             aria-label={`Status for ${frame.title}`}
             onChange={(event) =>
               onStatus(event.currentTarget.value as FrameReviewStatus)
             }
             onPointerDown={(event) => event.stopPropagation()}
+            style={{ ...controlStyle, maxWidth: world(140) }}
             value={frame.status}
           >
             {(["in-progress", "approved", "changes-requested"] as const).map(
@@ -464,21 +509,44 @@ function FrameCard({
               )
             )}
           </select>
-        ) : <small>{statusLabels.archived}</small>}
-        {frame.snapshot === undefined && onSnapshot !== undefined ? (
+        ) : frame.snapshot !== undefined && toolbarMode !== "minimal" ? (
+          <small style={{ fontSize: world(12) }}>{statusLabels.archived}</small>
+        ) : null}
+        {frame.snapshot === undefined && onSnapshot !== undefined && toolbarMode === "full" ? (
           <button
             disabled={snapshotting}
             onClick={takeSnapshot}
             onPointerDown={(event) => event.stopPropagation()}
+            style={controlStyle}
             type="button"
           >
             {snapshotting ? "Archiving…" : "Take snapshot"}
           </button>
         ) : null}
-        <a href={frame.url} onPointerDown={(event) => event.stopPropagation()} rel="noreferrer" target="_blank">↗</a>
-        <button aria-label={`Delete ${frame.title}`} onClick={onRemove} onPointerDown={(event) => event.stopPropagation()} type="button">×</button>
+        <span style={{ flex: 1 }} />
+        {toolbarMode !== "minimal" ? (
+          <a
+            aria-label={`Open ${frame.title}`}
+            href={frame.url}
+            onPointerDown={(event) => event.stopPropagation()}
+            rel="noreferrer"
+            style={{ fontSize: world(14), lineHeight: `${world(20)}px` }}
+            target="_blank"
+          >
+            ↗
+          </a>
+        ) : null}
+        <button
+          aria-label={`Delete ${frame.title}`}
+          onClick={onRemove}
+          onPointerDown={(event) => event.stopPropagation()}
+          style={controlStyle}
+          type="button"
+        >
+          ×
+        </button>
       </header>
-      <div style={{ height: "calc(100% - 32px)", position: "relative" }}>
+      <div style={{ height: `calc(100% - ${toolbarHeight}px)`, position: "relative" }}>
         {iframeVisible ? (
           <iframe
             allow={iframeAllow}
