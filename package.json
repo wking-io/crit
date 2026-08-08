@@ -4,6 +4,9 @@
   "description": "A local-first canvas for arranging and assessing live web iterations.",
   "type": "module",
   "sideEffects": false,
+  "bin": {
+    "crit": "./dist/cli.js"
+  },
   "files": [
     "dist",
     "skills",
@@ -11,6 +14,10 @@
     "ARCHITECTURE.md"
   ],
   "exports": {
+    ".": {
+      "types": "./dist/core/index.d.ts",
+      "import": "./dist/core/index.js"
+    },
     "./core": {
       "types": "./dist/core/index.d.ts",
       "import": "./dist/core/index.js"
@@ -18,6 +25,7 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
+    "prepack": "npm run build",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
