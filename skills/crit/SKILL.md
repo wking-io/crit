@@ -45,10 +45,12 @@ array to `apply`:
 - `SetFrameStatus`: `id` and `status`.
 - `MoveFrame`: `id`, `x`, and `y`.
 - `ResizeFrame`: `id`, positive `width`, and positive `height`.
+- `BringFrameToFront` and `SendFrameToBack`: `id`.
 - `RemoveFrame`: `id`; this also removes Notes attached to the Frame.
 - `AddNote`: `id`, `text`, `x`, and `y`, with optional `width` and `height`.
 - `UpdateNote`: `id`, `expectedText`, and replacement `text`.
 - `MoveNote`, `ResizeNote`, `AttachNote`, `DetachNote`, and `RemoveNote`.
+- `BringNoteToFront` and `SendNoteToBack`: `id`.
 
 ## Editing rules
 

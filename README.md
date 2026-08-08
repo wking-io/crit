@@ -94,7 +94,8 @@ npx @riff-refine/crit snapshot checkout-review candidate --json
 The command schema includes Frame operations (`AddFrame`, `UpdateFrame`,
 `SetFrameStatus`, `MoveFrame`, `ResizeFrame`, `RemoveFrame`) and Note operations
 (`AddNote`, `UpdateNote`, `MoveNote`, `ResizeNote`, `AttachNote`, `DetachNote`,
-`RemoveNote`). Related commands commit as one batch. Per-Canvas filesystem locks
+`RemoveNote`). Frames and Notes also expose `Bring…ToFront` and `Send…ToBack`
+commands against one shared stacking order. Related commands commit as one batch. Per-Canvas filesystem locks
 serialize local writers against the latest revision, so unrelated agent and
 browser edits merge without manual revision wiring.
 
@@ -122,7 +123,8 @@ review status, editable Notes, and attachment by dropping a Note onto a Frame.
 Dragging it away detaches it without changing its Canvas position. Attached
 Notes move with their Frame. Frame toolbars retain a stable screen size while
 zooming and progressively hide title and secondary controls when space becomes
-tight. Offscreen iframes are paused for performance.
+tight. Frame and Note headers include send-to-back and bring-to-front controls.
+Offscreen iframes are paused for performance.
 
 Autosave is single-flight and stores pending semantic commands in IndexedDB for
 draft recovery. Vite file watching refreshes clean windows immediately after a

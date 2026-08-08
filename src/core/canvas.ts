@@ -369,6 +369,13 @@ const nextZIndex = (state: CanvasState) =>
     ...state.notes.map((note) => note.zIndex)
   ) + 1
 
+const previousZIndex = (state: CanvasState) =>
+  Math.min(
+    0,
+    ...state.frames.map((frame) => frame.zIndex),
+    ...state.notes.map((note) => note.zIndex)
+  ) - 1
+
 const apply = (
   canvas: Canvas,
   ...commands: ReadonlyArray<CanvasCommandInput>
@@ -544,6 +551,8 @@ const apply = (
               command._tag === "UpdateFrame" ||
               command._tag === "MoveFrame" ||
               command._tag === "ResizeFrame" ||
+              command._tag === "BringFrameToFront" ||
+              command._tag === "SendFrameToBack" ||
               command._tag === "RemoveFrame"
             ) {
               const index = frameAt(command.id)
@@ -629,7 +638,7 @@ const apply = (
                     }
                   }
                 })
-              } else {
+              } else if (command._tag === "ResizeFrame") {
                 draft.frames[index] = {
                   ...frame,
                   geometry: {
@@ -637,6 +646,14 @@ const apply = (
                     width: command.width,
                     height: command.height
                   }
+                }
+              } else {
+                draft.frames[index] = {
+                  ...frame,
+                  zIndex:
+                    command._tag === "BringFrameToFront"
+                      ? nextZIndex(draft)
+                      : previousZIndex(draft)
                 }
               }
               markFrame(command.id)
@@ -667,6 +684,10 @@ const apply = (
                   height: command.height
                 }
               }
+            } else if (command._tag === "BringNoteToFront") {
+              draft.notes[index] = { ...note, zIndex: nextZIndex(draft) }
+            } else if (command._tag === "SendNoteToBack") {
+              draft.notes[index] = { ...note, zIndex: previousZIndex(draft) }
             } else if (command._tag === "AttachNote") {
               frameAt(command.frameId)
               draft.notes[index] = { ...note, attachedTo: command.frameId }

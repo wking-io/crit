@@ -106,6 +106,18 @@ export const ResizeFrameCommand = Schema.TaggedStruct("ResizeFrame", {
 })
 export type ResizeFrameCommand = typeof ResizeFrameCommand.Type
 
+export const BringFrameToFrontCommand = Schema.TaggedStruct(
+  "BringFrameToFront",
+  { id: Schema.String }
+)
+export type BringFrameToFrontCommand = typeof BringFrameToFrontCommand.Type
+
+export const SendFrameToBackCommand = Schema.TaggedStruct(
+  "SendFrameToBack",
+  { id: Schema.String }
+)
+export type SendFrameToBackCommand = typeof SendFrameToBackCommand.Type
+
 export const AddNoteCommand = Schema.TaggedStruct("AddNote", {
   id: Schema.String,
   text: Schema.String,
@@ -136,6 +148,18 @@ export const ResizeNoteCommand = Schema.TaggedStruct("ResizeNote", {
   height: PositiveDimension
 })
 export type ResizeNoteCommand = typeof ResizeNoteCommand.Type
+
+export const BringNoteToFrontCommand = Schema.TaggedStruct(
+  "BringNoteToFront",
+  { id: Schema.String }
+)
+export type BringNoteToFrontCommand = typeof BringNoteToFrontCommand.Type
+
+export const SendNoteToBackCommand = Schema.TaggedStruct(
+  "SendNoteToBack",
+  { id: Schema.String }
+)
+export type SendNoteToBackCommand = typeof SendNoteToBackCommand.Type
 
 export const AttachNoteCommand = Schema.TaggedStruct("AttachNote", {
   id: Schema.String,
@@ -242,6 +266,16 @@ const resizeFrame = (input: ResizeFrameInput): ResizeFrameCommand => ({
   ...input
 })
 
+export type OrderFrameInput = { readonly id: string }
+
+const bringFrameToFront = (
+  input: OrderFrameInput
+): BringFrameToFrontCommand => ({ _tag: "BringFrameToFront", ...input })
+
+const sendFrameToBack = (
+  input: OrderFrameInput
+): SendFrameToBackCommand => ({ _tag: "SendFrameToBack", ...input })
+
 export type AddNoteInput = {
   readonly id: string
   readonly text: string
@@ -294,6 +328,16 @@ const resizeNote = (input: ResizeNoteInput): ResizeNoteCommand => ({
   ...input
 })
 
+export type OrderNoteInput = { readonly id: string }
+
+const bringNoteToFront = (
+  input: OrderNoteInput
+): BringNoteToFrontCommand => ({ _tag: "BringNoteToFront", ...input })
+
+const sendNoteToBack = (
+  input: OrderNoteInput
+): SendNoteToBackCommand => ({ _tag: "SendNoteToBack", ...input })
+
 export type AttachNoteInput = {
   readonly id: string
   readonly frameId: string
@@ -326,10 +370,14 @@ export const CanvasCommandSchema = Schema.Union([
   RemoveFrameCommand,
   MoveFrameCommand,
   ResizeFrameCommand,
+  BringFrameToFrontCommand,
+  SendFrameToBackCommand,
   AddNoteCommand,
   UpdateNoteCommand,
   MoveNoteCommand,
   ResizeNoteCommand,
+  BringNoteToFrontCommand,
+  SendNoteToBackCommand,
   AttachNoteCommand,
   DetachNoteCommand,
   RemoveNoteCommand
@@ -344,10 +392,14 @@ export const CanvasCommand = {
   RemoveFrame: RemoveFrameCommand,
   MoveFrame: MoveFrameCommand,
   ResizeFrame: ResizeFrameCommand,
+  BringFrameToFront: BringFrameToFrontCommand,
+  SendFrameToBack: SendFrameToBackCommand,
   AddNote: AddNoteCommand,
   UpdateNote: UpdateNoteCommand,
   MoveNote: MoveNoteCommand,
   ResizeNote: ResizeNoteCommand,
+  BringNoteToFront: BringNoteToFrontCommand,
+  SendNoteToBack: SendNoteToBackCommand,
   AttachNote: AttachNoteCommand,
   DetachNote: DetachNoteCommand,
   RemoveNote: RemoveNoteCommand,
@@ -358,10 +410,14 @@ export const CanvasCommand = {
   removeFrame,
   moveFrame,
   resizeFrame,
+  bringFrameToFront,
+  sendFrameToBack,
   addNote,
   updateNote,
   moveNote,
   resizeNote,
+  bringNoteToFront,
+  sendNoteToBack,
   attachNote,
   detachNote,
   removeNote

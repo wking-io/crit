@@ -359,12 +359,18 @@ export function CanvasViewport({
                 geometryOf(item), camera, viewport.width, viewport.height
               )}
               onMove={startMove}
+              onBringToFront={() =>
+                run(CanvasCommand.bringFrameToFront({ id: item.id }))
+              }
               onRemove={() => run(CanvasCommand.removeFrame({ id: item.id }))}
               onResize={startResize}
               {...(snapshotFrame === undefined
                 ? {}
                 : { onSnapshot: () => snapshotFrame(item.id) })}
               onSnapshotError={(cause) => onCommandError?.(messageOf(cause))}
+              onSendToBack={() =>
+                run(CanvasCommand.sendFrameToBack({ id: item.id }))
+              }
               onStatus={(status) =>
                 run(CanvasCommand.setFrameStatus({ id: item.id, status }))
               }
@@ -374,9 +380,15 @@ export function CanvasViewport({
               key={item.id}
               note={item}
               geometry={geometryOf(item)}
+              onBringToFront={() =>
+                run(CanvasCommand.bringNoteToFront({ id: item.id }))
+              }
               onMove={startMove}
               onRemove={() => run(CanvasCommand.removeNote({ id: item.id }))}
               onResize={startResize}
+              onSendToBack={() =>
+                run(CanvasCommand.sendNoteToBack({ id: item.id }))
+              }
               onText={(expectedText, text) =>
                 run(CanvasCommand.updateNote({ id: item.id, expectedText, text }))
               }
@@ -415,11 +427,13 @@ function FrameCard({
   iframeSandbox,
   iframeVisible,
   zoom,
+  onBringToFront,
   onMove,
   onRemove,
   onResize,
   onSnapshot,
   onSnapshotError,
+  onSendToBack,
   onStatus
 }: {
   readonly frame: CanvasFrame
@@ -428,11 +442,13 @@ function FrameCard({
   readonly iframeSandbox?: string
   readonly iframeVisible: boolean
   readonly zoom: number
+  readonly onBringToFront: () => void
   readonly onMove: (event: ReactPointerEvent, item: CanvasFrame) => void
   readonly onRemove: () => void
   readonly onResize: (event: ReactPointerEvent, item: CanvasFrame) => void
   readonly onSnapshot?: () => Effect.Effect<unknown, unknown>
   readonly onSnapshotError: (cause: unknown) => void
+  readonly onSendToBack: () => void
   readonly onStatus: (status: FrameReviewStatus) => void
 }) {
   const [snapshotting, setSnapshotting] = useState(false)
@@ -525,6 +541,14 @@ function FrameCard({
         ) : null}
         <span style={{ flex: 1 }} />
         {toolbarMode !== "minimal" ? (
+          <OrderControls
+            label={frame.title}
+            onBringToFront={onBringToFront}
+            onSendToBack={onSendToBack}
+            style={controlStyle}
+          />
+        ) : null}
+        {toolbarMode !== "minimal" ? (
           <a
             aria-label={`Open ${frame.title}`}
             href={frame.url}
@@ -566,16 +590,20 @@ function FrameCard({
 function NoteCard({
   note,
   geometry,
+  onBringToFront,
   onMove,
   onRemove,
   onResize,
+  onSendToBack,
   onText
 }: {
   readonly note: CanvasNote
   readonly geometry: CanvasGeometry
+  readonly onBringToFront: () => void
   readonly onMove: (event: ReactPointerEvent, item: CanvasNote) => void
   readonly onRemove: () => void
   readonly onResize: (event: ReactPointerEvent, item: CanvasNote) => void
+  readonly onSendToBack: () => void
   readonly onText: (expectedText: string, text: string) => void
 }) {
   const [text, setText] = useState(note.text)
@@ -587,7 +615,14 @@ function NoteCard({
         style={{ alignItems: "center", cursor: "move", display: "flex", height: 28, justifyContent: "space-between", padding: "0 8px" }}
       >
         <small>{note.attachedTo === null ? "Note" : `Attached to ${note.attachedTo}`}</small>
-        <button aria-label="Delete note" onClick={onRemove} onPointerDown={(event) => event.stopPropagation()} type="button">×</button>
+        <span style={{ display: "flex", gap: 4 }}>
+          <OrderControls
+            label="note"
+            onBringToFront={onBringToFront}
+            onSendToBack={onSendToBack}
+          />
+          <button aria-label="Delete note" onClick={onRemove} onPointerDown={(event) => event.stopPropagation()} type="button">×</button>
+        </span>
       </header>
       <textarea
         aria-label="Note"
@@ -598,6 +633,43 @@ function NoteCard({
       />
       <ResizeHandle onPointerDown={(event) => onResize(event, note)} />
     </article>
+  )
+}
+
+function OrderControls({
+  label,
+  onBringToFront,
+  onSendToBack,
+  style
+}: {
+  readonly label: string
+  readonly onBringToFront: () => void
+  readonly onSendToBack: () => void
+  readonly style?: CSSProperties
+}) {
+  return (
+    <span style={{ display: "flex", flex: "0 0 auto", gap: style === undefined ? 4 : 0 }}>
+      <button
+        aria-label={`Send ${label} to back`}
+        onClick={onSendToBack}
+        onPointerDown={(event) => event.stopPropagation()}
+        style={style}
+        title="Send to back"
+        type="button"
+      >
+        ⇩
+      </button>
+      <button
+        aria-label={`Bring ${label} to front`}
+        onClick={onBringToFront}
+        onPointerDown={(event) => event.stopPropagation()}
+        style={style}
+        title="Bring to front"
+        type="button"
+      >
+        ⇧
+      </button>
+    </span>
   )
 }
 

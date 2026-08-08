@@ -48,6 +48,10 @@ describe("Crit", () => {
     expect(html).toContain("Approved")
     expect(html).toContain("Attached to candidate")
     expect(html).toContain("Tighten spacing")
+    expect(html).toContain("Send Candidate to back")
+    expect(html).toContain("Bring Candidate to front")
+    expect(html).toContain("Send note to back")
+    expect(html).toContain("Bring note to front")
   })
 
   it("offers snapshot capture for live Frames", async () => {
