@@ -15,6 +15,7 @@ import {
 } from "../discovery/index.js"
 import { CritInitFailed, CritInitializer } from "../init/project-initializer.js"
 import { CritRuntime } from "../runtime/crit-runtime.js"
+import { SnapshotService } from "../runtime/snapshot-service.js"
 import { PACKAGE_VERSION } from "../version.js"
 
 class InvalidCliInput extends Schema.TaggedError<InvalidCliInput>()(
@@ -404,6 +405,49 @@ const openCommand = Command.make(
     })
 ).pipe(Command.withDescription("Read a Crit Canvas and its Frames"))
 
+const snapshotCommand = Command.make(
+  "snapshot",
+  {
+    canvas: Argument.string("canvas"),
+    frame: Argument.string("frame"),
+    json: Flag.boolean("json")
+  },
+  ({ canvas, frame, json }) =>
+    Effect.gen(function*() {
+      const snapshots = Option.getOrUndefined(
+        yield* Effect.serviceOption(SnapshotService)
+      )
+      if (snapshots === undefined) {
+        return yield* new InvalidCliInput({
+          detail: "Snapshot capture is unavailable in this Crit runtime"
+        })
+      }
+      const document = yield* snapshots.snapshotFrame(canvas, frame)
+      const archived = document.frames.at(-1)
+      if (
+        archived?.snapshot === undefined ||
+        archived.provenance.sourceId !== frame
+      ) {
+        return yield* new InvalidCliInput({
+          detail: `Snapshot capture did not add an archived Frame for ${frame}`
+        })
+      }
+      const output = json
+        ? JSON.stringify({
+            schemaVersion: 1,
+            command: "snapshot",
+            canvasId: canvas,
+            frame: archived
+          })
+        : `Archived Frame "${frame}" as "${archived.id}" (${archived.snapshot.sizeBytes} bytes).`
+      yield* writeStdout(`${output}\n`)
+    })
+).pipe(
+  Command.withDescription(
+    "Capture a live Frame as an immutable self-contained HTML archive"
+  )
+)
+
 export const critCommand = Command.make("crit").pipe(
   Command.withDescription("Arrange and assess live web iterations"),
   Command.withSubcommands([
@@ -412,6 +456,7 @@ export const critCommand = Command.make("crit").pipe(
     applyCommand,
     createCommand,
     addCommand,
+    snapshotCommand,
     listCommand,
     openCommand
   ])

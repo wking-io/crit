@@ -4,6 +4,7 @@ import {
   CanvasCommandSchema,
   FrameDisplay,
   FrameProvenance,
+  FrameSnapshot,
   FrameStatus,
   type CanvasCommand as CanvasCommandInput
 } from "./canvas-command.js"
@@ -37,7 +38,8 @@ export const CanvasFrame = Schema.Struct({
   provenance: FrameProvenance,
   display: FrameDisplay,
   geometry: CanvasGeometry,
-  zIndex: Schema.Finite.check(Schema.isInt())
+  zIndex: Schema.Finite.check(Schema.isInt()),
+  snapshot: Schema.optional(FrameSnapshot)
 })
 export type CanvasFrame = typeof CanvasFrame.Type
 
@@ -70,7 +72,8 @@ export const CanvasSummary = Schema.Struct({
   statuses: Schema.Struct({
     inProgress: NonNegativeInteger,
     approved: NonNegativeInteger,
-    changesRequested: NonNegativeInteger
+    changesRequested: NonNegativeInteger,
+    archived: NonNegativeInteger
   })
 })
 export type CanvasSummary = typeof CanvasSummary.Type
@@ -121,6 +124,9 @@ export class CanvasCommandFailed extends Schema.TaggedError<CanvasCommandFailed>
       Schema.Literal("duplicate-note"),
       Schema.Literal("note-not-found"),
       Schema.Literal("note-conflict"),
+      Schema.Literal("snapshot-source-changed"),
+      Schema.Literal("snapshot-source-invalid"),
+      Schema.Literal("snapshot-frame-immutable"),
       Schema.Literal("invalid-canvas"),
       Schema.Literal("apply-failed")
     ]),
@@ -213,6 +219,17 @@ const validateDocument = (document: CanvasDocument) => {
   for (const frame of document.frames) {
     if (frame.id.trim().length === 0) throw new Error("Frame IDs cannot be empty")
     if (ids.has(frame.id)) throw new Error(`Duplicate Canvas item ID: ${frame.id}`)
+    if (frame.snapshot === undefined) {
+      if (frame.status === "archived" || frame.provenance.kind === "snapshot") {
+        throw new Error(`Live Frame ${frame.id} cannot be archived or use snapshot provenance`)
+      }
+    } else if (
+      frame.status !== "archived" ||
+      frame.provenance.kind !== "snapshot" ||
+      frame.provenance.sourceId.trim().length === 0
+    ) {
+      throw new Error(`Snapshot Frame ${frame.id} has inconsistent archive metadata`)
+    }
     ids.add(frame.id)
   }
   for (const note of document.notes) {
@@ -293,12 +310,14 @@ const summarize = (canvas: Canvas): CanvasSummary => {
   const statuses = {
     inProgress: 0,
     approved: 0,
-    changesRequested: 0
+    changesRequested: 0,
+    archived: 0
   }
   for (const frame of state.frames) {
     if (frame.status === "in-progress") statuses.inProgress += 1
     if (frame.status === "approved") statuses.approved += 1
     if (frame.status === "changes-requested") statuses.changesRequested += 1
+    if (frame.status === "archived") statuses.archived += 1
   }
   return {
     id: state.id,
@@ -416,6 +435,12 @@ const apply = (
                   detail: `Canvas item already exists: ${command.id}`
                 })
               }
+              if (command.provenance.kind === "snapshot") {
+                throw new CanvasCommandFailed({
+                  reason: "snapshot-source-invalid",
+                  detail: "Snapshot Frames must be created by AddSnapshotFrame"
+                })
+              }
               const frameNumber = draft.frames.length
               draft.frames.push({
                 id: command.id,
@@ -431,6 +456,58 @@ const apply = (
                   height: 800
                 },
                 zIndex: nextZIndex(draft)
+              })
+              markFrame(command.id)
+              continue
+            }
+
+            if (command._tag === "AddSnapshotFrame") {
+              if (
+                draft.frames.some((frame) => frame.id === command.id) ||
+                draft.notes.some((note) => note.id === command.id)
+              ) {
+                throw new CanvasCommandFailed({
+                  reason: "duplicate-frame",
+                  detail: `Canvas item already exists: ${command.id}`
+                })
+              }
+              const source = draft.frames.find(
+                (frame) => frame.id === command.sourceFrameId
+              )
+              if (source === undefined || source.snapshot !== undefined) {
+                throw new CanvasCommandFailed({
+                  reason: "snapshot-source-invalid",
+                  detail: `Snapshot source must be a live Frame: ${command.sourceFrameId}`
+                })
+              }
+              if (source.url !== command.expectedSourceUrl) {
+                throw new CanvasCommandFailed({
+                  reason: "snapshot-source-changed",
+                  detail: `Frame ${command.sourceFrameId} changed URL while its snapshot was captured`
+                })
+              }
+              if (command.artifact.sourceUrl !== command.expectedSourceUrl) {
+                throw new CanvasCommandFailed({
+                  reason: "snapshot-source-invalid",
+                  detail: "Snapshot artifact source URL does not match the captured Frame URL"
+                })
+              }
+              draft.frames.push({
+                id: command.id,
+                url: command.url,
+                title: `${source.title} · Snapshot`,
+                status: "archived",
+                provenance: {
+                  kind: "snapshot",
+                  sourceId: source.id
+                },
+                display: source.display,
+                geometry: {
+                  ...source.geometry,
+                  x: source.geometry.x + source.geometry.width + 40
+                },
+                zIndex: nextZIndex(draft),
+                snapshot: command.artifact
               })
               markFrame(command.id)
               continue
@@ -471,6 +548,30 @@ const apply = (
             ) {
               const index = frameAt(command.id)
               const frame = draft.frames[index]!
+
+              if (
+                frame.snapshot !== undefined &&
+                (command._tag === "SetFrameStatus" ||
+                  (command._tag === "UpdateFrame" &&
+                    (command.changes.url !== undefined ||
+                      command.changes.status !== undefined ||
+                      command.changes.provenance !== undefined)))
+              ) {
+                throw new CanvasCommandFailed({
+                  reason: "snapshot-frame-immutable",
+                  detail: `Snapshot Frame content is immutable: ${frame.id}`
+                })
+              }
+
+              if (
+                command._tag === "UpdateFrame" &&
+                command.changes.provenance?.kind === "snapshot"
+              ) {
+                throw new CanvasCommandFailed({
+                  reason: "snapshot-source-invalid",
+                  detail: "Live Frames cannot use snapshot provenance"
+                })
+              }
               if (command._tag === "RemoveFrame") {
                 draft.frames.splice(index, 1)
                 const attached = draft.notes.filter(

@@ -9,6 +9,8 @@ import { ChildProcessSpawner } from "effect/unstable/process"
 import { runCrit } from "../../src/cli/command.js"
 import { FileSystemCanvasRepository } from "../../src/node/file-system-canvas-repository.js"
 import { CritRuntimeLive } from "../../src/runtime/crit-runtime.js"
+import { SnapshotArchive } from "../../src/runtime/snapshot-archive.js"
+import { SnapshotServiceLive } from "../../src/runtime/snapshot-service.js"
 
 describe("crit Canvas workflows", () => {
   let root = ""
@@ -26,6 +28,21 @@ describe("crit Canvas workflows", () => {
   it.effect("adds URLs, lists Canvases, and opens a semantic Canvas view", () => {
     const storeLayer = FileSystemCanvasRepository.layer({ root })
     const runtimeLayer = CritRuntimeLive.pipe(Layer.provide(storeLayer))
+    const snapshotLayer = SnapshotServiceLive.pipe(
+      Layer.provide(storeLayer),
+      Layer.provide(
+        Layer.succeed(SnapshotArchive, {
+          capture: (sourceUrl) =>
+            Effect.succeed({
+              artifactId: "20260808120000-deadbeef",
+              sourceUrl,
+              capturedAt: "2026-08-08T12:00:00.000Z",
+              sizeBytes: 512
+            }),
+          read: () => Effect.die("unused")
+        })
+      )
+    )
     const cliLayer = Layer.mergeAll(
       FileSystem.layerNoop({}),
       Path.layer,
@@ -54,7 +71,8 @@ describe("crit Canvas workflows", () => {
         ChildProcessSpawner.make(() => Effect.die("unused"))
       ),
       storeLayer,
-      runtimeLayer
+      runtimeLayer,
+      snapshotLayer
     )
 
     return Effect.gen(function*() {
@@ -78,6 +96,15 @@ describe("crit Canvas workflows", () => {
 
       yield* runCrit(["open", "review", "--json"])
       const opened = JSON.parse(stdout.join(""))
+      stdout = []
+
+      yield* runCrit([
+        "snapshot",
+        "review",
+        added.frames[0].id,
+        "--json"
+      ])
+      const snapshotted = JSON.parse(stdout.join(""))
 
       expect(added).toMatchObject({
         schemaVersion: 1,
@@ -106,7 +133,8 @@ describe("crit Canvas workflows", () => {
             statuses: {
               inProgress: 0,
               approved: 0,
-              changesRequested: 0
+              changesRequested: 0,
+              archived: 0
             }
           },
           {
@@ -118,7 +146,8 @@ describe("crit Canvas workflows", () => {
             statuses: {
               inProgress: 2,
               approved: 0,
-              changesRequested: 0
+              changesRequested: 0,
+              archived: 0
             }
           }
         ]
@@ -129,6 +158,23 @@ describe("crit Canvas workflows", () => {
         canvas: added.mutation.canvas,
         frames: added.frames,
         notes: []
+      })
+      expect(snapshotted).toMatchObject({
+        schemaVersion: 1,
+        command: "snapshot",
+        canvasId: "review",
+        frame: {
+          id: "snapshot-20260808120000-deadbeef",
+          status: "archived",
+          provenance: {
+            kind: "snapshot",
+            sourceId: added.frames[0].id
+          },
+          snapshot: {
+            sourceUrl: "https://checkout.localhost/v1",
+            sizeBytes: 512
+          }
+        }
       })
     }).pipe(Effect.provide(cliLayer))
   })
@@ -232,7 +278,8 @@ describe("crit Canvas workflows", () => {
             statuses: {
               inProgress: 0,
               approved: 1,
-              changesRequested: 0
+              changesRequested: 0,
+              archived: 0
             }
           }
         },

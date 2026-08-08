@@ -1,7 +1,8 @@
 # Crit
 
 Crit is a local-first infinite canvas for arranging live web iterations as
-Frames and reviewing them with plain-text Notes. It is designed for one person
+Frames, preserving important versions as immutable snapshots, and reviewing
+them with plain-text Notes. It is designed for one person
 working with multiple local browser windows and agents, with no collaboration
 server or canvas framework to configure.
 
@@ -87,6 +88,7 @@ npx @riff-refine/crit open checkout-review --json
 npx @riff-refine/crit apply checkout-review \
   '[{"_tag":"SetFrameStatus","id":"candidate","status":"approved"}]' \
   --json
+npx @riff-refine/crit snapshot checkout-review candidate --json
 ```
 
 The command schema includes Frame operations (`AddFrame`, `UpdateFrame`,
@@ -98,6 +100,20 @@ browser edits merge without manual revision wiring.
 
 Canvas Documents live under `.crit/canvases`. Use Crit commands and interfaces
 instead of editing those files directly.
+
+## Frame snapshots
+
+Choose **Take snapshot** on a live Frame, or run `crit snapshot <canvas> <frame>`.
+Crit fetches that Frame's current page, bundles and minifies its HTML, CSS, and
+JavaScript, inlines fetched resources, and stores one immutable HTML artifact in
+`.crit/snapshots`. The live Frame remains in place and a separate archived Frame
+is added beside it, with its source URL, capture time, artifact ID, and size.
+
+The Vite plugin serves artifacts under `/__crit/snapshots/<artifact-id>` with
+immutable cache headers. Capture currently supports HTTP and HTTPS Frames and
+limits an individual fetched resource to 12 MiB, the final artifact to 30 MiB,
+and capture requests to 60 seconds. This is page preservation, not an asset
+upload system; V1 still has no user-managed uploads.
 
 ## Browser behavior
 
@@ -122,8 +138,8 @@ Iframe capabilities are configurable:
 ```
 
 Pass `draftJournal={false}` to disable recovery, a custom `CritClientShape` for
-another local HTTP host, or `onSession` to access `dispatch`, `flush`, and
-`refresh` directly.
+another local HTTP host, or `onSession` to access `dispatch`, `flush`, `refresh`,
+and `snapshotFrame` directly.
 
 Headless consumers can import the Effect v4 domain engine:
 

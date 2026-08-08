@@ -5,7 +5,7 @@ import {
   CanvasCommandFailed,
   CanvasDocumentTooLarge,
   FrameDisplay,
-  FrameStatus,
+  FrameReviewStatus,
   type CanvasCommand as CanvasCommandInput,
   type FrameSummary
 } from "../core/index.js"
@@ -34,7 +34,7 @@ export const CritManifestFrame = Schema.Struct({
   id: Schema.String,
   url: Schema.String,
   title: Schema.String,
-  status: Schema.optional(FrameStatus),
+  status: Schema.optional(FrameReviewStatus),
   display: Schema.optional(FrameDisplay),
   geometry: Schema.optional(CritManifestGeometry)
 })

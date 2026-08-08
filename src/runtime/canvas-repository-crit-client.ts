@@ -20,14 +20,27 @@ import {
   type CanvasRepositoryError,
   type CanvasRepositoryShape
 } from "./canvas-repository.js"
+import {
+  SnapshotCaptureFailed,
+  SnapshotStorageFailed
+} from "./snapshot-archive.js"
+import type {
+  SnapshotFrameError,
+  SnapshotServiceShape
+} from "./snapshot-service.js"
 
 export interface CanvasRepositoryCritClientOptions {
   readonly createIfMissing?: boolean
   readonly title?: (id: string) => string
+  readonly snapshotFrame?: SnapshotServiceShape["snapshotFrame"]
 }
 
 const toClientError = (
-  cause: CanvasRepositoryError | CanvasCommandFailed | CanvasDocumentTooLarge
+  cause:
+    | CanvasRepositoryError
+    | CanvasCommandFailed
+    | CanvasDocumentTooLarge
+    | SnapshotFrameError
 ): CritClientError => {
   if (cause instanceof CanvasCommandFailed) {
     return new CritClientCommandFailed({
@@ -58,6 +71,20 @@ const toClientError = (
       detail: cause.detail
     })
   }
+  if (cause instanceof SnapshotCaptureFailed) {
+    return new CritClientUnavailable({
+      operation: "snapshot",
+      id: "unknown",
+      detail: cause.detail
+    })
+  }
+  if (cause instanceof SnapshotStorageFailed) {
+    return new CritClientUnavailable({
+      operation: cause.operation,
+      id: "unknown",
+      detail: cause.detail
+    })
+  }
   return new CritClientUnavailable({
     operation: "create",
     id: cause.id,
@@ -84,6 +111,29 @@ const make = (
         )
       )
 
+  const mapForId = (id: string, cause: Parameters<typeof toClientError>[0]) => {
+    const mapped = toClientError(cause)
+    if (mapped.id !== "unknown") return mapped
+    if (mapped instanceof CritClientCommandFailed) {
+      return new CritClientCommandFailed({
+        id,
+        reason: mapped.reason,
+        detail: mapped.detail
+      })
+    }
+    if (mapped instanceof CritClientInvalidDocument) {
+      return new CritClientInvalidDocument({ id, detail: mapped.detail })
+    }
+    if (mapped instanceof CritClientNotFound) {
+      return new CritClientNotFound({ id })
+    }
+    return new CritClientUnavailable({
+      operation: mapped.operation,
+      id,
+      detail: mapped.detail
+    })
+  }
+
   return {
     load: (id) =>
       documents.load(id).pipe(
@@ -95,19 +145,16 @@ const make = (
     apply: (id, commands) =>
       documents.apply(id, commands).pipe(
         Effect.map((mutation) => mutation.document),
-        Effect.mapError((cause) => {
-          const mapped = toClientError(cause)
-          return mapped instanceof CritClientCommandFailed && mapped.id === "unknown"
-            ? new CritClientCommandFailed({
-                id,
-                reason: mapped.reason,
-                detail: mapped.detail
-              })
-            : mapped instanceof CritClientInvalidDocument && mapped.id === "unknown"
-              ? new CritClientInvalidDocument({ id, detail: mapped.detail })
-            : mapped
+        Effect.mapError((cause) => mapForId(id, cause))
+      ),
+    ...(options.snapshotFrame === undefined
+      ? {}
+      : {
+          snapshot: (id: string, frameId: string) =>
+            options.snapshotFrame!(id, frameId).pipe(
+              Effect.mapError((cause) => mapForId(id, cause))
+            )
         })
-      )
   }
 }
 

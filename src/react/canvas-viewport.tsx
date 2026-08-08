@@ -18,19 +18,22 @@ import {
   type CanvasGeometry,
   type CanvasNote,
   type CanvasCommand as CanvasCommandValue,
+  type FrameReviewStatus,
   type FrameStatus
 } from "../core/index.js"
 
 const statusLabels: Record<FrameStatus, string> = {
   "in-progress": "In progress",
   approved: "Approved",
-  "changes-requested": "Changes requested"
+  "changes-requested": "Changes requested",
+  archived: "Archived"
 }
 
 const statusColors: Record<FrameStatus, string> = {
   "in-progress": "#2563eb",
   approved: "#16803a",
-  "changes-requested": "#c2410c"
+  "changes-requested": "#c2410c",
+  archived: "#64748b"
 }
 
 type Camera = { readonly x: number; readonly y: number; readonly zoom: number }
@@ -44,6 +47,9 @@ export interface CanvasViewportProps {
   readonly iframeAllow?: string
   readonly iframeSandbox?: string
   readonly onCommandError?: (message: string) => void
+  readonly snapshotFrame?: (
+    frameId: string
+  ) => Effect.Effect<unknown, unknown>
 }
 
 const itemStyle = (geometry: CanvasGeometry, zIndex: number): CSSProperties => ({
@@ -93,7 +99,8 @@ export function CanvasViewport({
   dispatch,
   iframeAllow = "clipboard-read; clipboard-write; fullscreen",
   iframeSandbox,
-  onCommandError
+  onCommandError,
+  snapshotFrame
 }: CanvasViewportProps) {
   const rootRef = useRef<HTMLDivElement>(null)
   const [camera, setCamera] = useState<Camera>({ x: 40, y: 40, zoom: 0.65 })
@@ -349,6 +356,10 @@ export function CanvasViewport({
               onMove={startMove}
               onRemove={() => run(CanvasCommand.removeFrame({ id: item.id }))}
               onResize={startResize}
+              {...(snapshotFrame === undefined
+                ? {}
+                : { onSnapshot: () => snapshotFrame(item.id) })}
+              onSnapshotError={(cause) => onCommandError?.(messageOf(cause))}
               onStatus={(status) =>
                 run(CanvasCommand.setFrameStatus({ id: item.id, status }))
               }
@@ -401,6 +412,8 @@ function FrameCard({
   onMove,
   onRemove,
   onResize,
+  onSnapshot,
+  onSnapshotError,
   onStatus
 }: {
   readonly frame: CanvasFrame
@@ -411,8 +424,23 @@ function FrameCard({
   readonly onMove: (event: ReactPointerEvent, item: CanvasFrame) => void
   readonly onRemove: () => void
   readonly onResize: (event: ReactPointerEvent, item: CanvasFrame) => void
-  readonly onStatus: (status: FrameStatus) => void
+  readonly onSnapshot?: () => Effect.Effect<unknown, unknown>
+  readonly onSnapshotError: (cause: unknown) => void
+  readonly onStatus: (status: FrameReviewStatus) => void
 }) {
+  const [snapshotting, setSnapshotting] = useState(false)
+  const takeSnapshot = () => {
+    if (onSnapshot === undefined || snapshotting) return
+    setSnapshotting(true)
+    Effect.runFork(
+      onSnapshot().pipe(
+        Effect.tapError((cause) => Effect.sync(() => onSnapshotError(cause))),
+        Effect.ensuring(Effect.sync(() => setSnapshotting(false))),
+        Effect.catch(() => Effect.void)
+      )
+    )
+  }
+
   return (
     <section style={{ ...itemStyle(geometry, frame.zIndex), background: "#fff", border: "1px solid #aeb5bf", borderRadius: 8, boxShadow: "0 12px 30px rgba(15,23,42,.12)", overflow: "hidden" }}>
       <header
@@ -421,14 +449,32 @@ function FrameCard({
       >
         <span style={{ background: statusColors[frame.status], borderRadius: 999, height: 8, width: 8 }} />
         <strong style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{frame.title}</strong>
-        <select
-          aria-label={`Status for ${frame.title}`}
-          onChange={(event) => onStatus(event.currentTarget.value as FrameStatus)}
-          onPointerDown={(event) => event.stopPropagation()}
-          value={frame.status}
-        >
-          {Object.entries(statusLabels).map(([status, label]) => <option key={status} value={status}>{label}</option>)}
-        </select>
+        {frame.snapshot === undefined ? (
+          <select
+            aria-label={`Status for ${frame.title}`}
+            onChange={(event) =>
+              onStatus(event.currentTarget.value as FrameReviewStatus)
+            }
+            onPointerDown={(event) => event.stopPropagation()}
+            value={frame.status}
+          >
+            {(["in-progress", "approved", "changes-requested"] as const).map(
+              (status) => (
+                <option key={status} value={status}>{statusLabels[status]}</option>
+              )
+            )}
+          </select>
+        ) : <small>{statusLabels.archived}</small>}
+        {frame.snapshot === undefined && onSnapshot !== undefined ? (
+          <button
+            disabled={snapshotting}
+            onClick={takeSnapshot}
+            onPointerDown={(event) => event.stopPropagation()}
+            type="button"
+          >
+            {snapshotting ? "Archiving…" : "Take snapshot"}
+          </button>
+        ) : null}
         <a href={frame.url} onPointerDown={(event) => event.stopPropagation()} rel="noreferrer" target="_blank">↗</a>
         <button aria-label={`Delete ${frame.title}`} onClick={onRemove} onPointerDown={(event) => event.stopPropagation()} type="button">×</button>
       </header>

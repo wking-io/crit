@@ -40,4 +40,29 @@ describe("Crit", () => {
     expect(html).toContain("Attached to candidate")
     expect(html).toContain("Tighten spacing")
   })
+
+  it("offers snapshot capture for live Frames", async () => {
+    const canvas = Canvas.create({ id: "review", title: "Review" })
+    await Effect.runPromise(
+      Canvas.apply(
+        canvas,
+        CanvasCommand.addFrame({
+          id: "candidate",
+          url: "https://example.com/candidate",
+          title: "Candidate",
+          provenance: { kind: "manual", sourceId: "test" }
+        })
+      )
+    )
+
+    const html = renderToStaticMarkup(
+      <CanvasViewport
+        dispatch={() => Effect.void}
+        document={Canvas.export(canvas)}
+        snapshotFrame={() => Effect.void}
+      />
+    )
+
+    expect(html).toContain("Take snapshot")
+  })
 })

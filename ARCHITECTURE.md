@@ -13,10 +13,12 @@ revision, Frames, and Notes. Camera, selection, iframe state, and other viewport
 details are browser-session state and are never persisted.
 
 Frames own URL, title, review status, provenance, geometry, display policy, and
-stacking order. Notes own text, geometry, optional Frame attachment, and stacking
-order. Attached Notes use absolute Canvas coordinates; moving their Frame moves
-them by the same delta, and detaching preserves their position. Removing a Frame
-also removes its attached Notes.
+stacking order. An archived Frame additionally owns immutable snapshot metadata:
+artifact ID, original URL, capture time, and byte size. Notes own text, geometry,
+optional Frame attachment, and stacking order. Attached Notes use absolute
+Canvas coordinates; moving their Frame moves them by the same delta, and
+detaching preserves their position. Removing a Frame also removes its attached
+Notes.
 
 Every mutation is an atomic semantic command batch. The core applies a batch to
 a draft and publishes it only if every command succeeds. Conflicts are expressed
@@ -30,6 +32,14 @@ one JSON document per Canvas under `.crit/canvases`, acquires a per-Canvas lock,
 loads the latest revision, applies the command batch, increments the revision,
 and atomically renames the result into place. Browser and CLI agent writes use
 this exact path, so concurrent local writers do not race through separate models.
+
+`SnapshotArchive` is a separate binary-artifact boundary. Its filesystem adapter
+captures a live HTTP(S) page, bundles and minifies HTML/CSS/JavaScript, inlines
+fetched resources, and atomically stores self-contained HTML under
+`.crit/snapshots`. `SnapshotService` coordinates capture with the repository by
+committing an `AddSnapshotFrame` command that checks the source Frame still has
+the URL that was captured. The live Frame is retained; its archived Frame points
+to the immutable artifact. Snapshot bytes do not bloat the Canvas Document.
 
 `CritRuntime` exposes creation, reads, summaries, and command application to CLI
 and discovery adapters. `CanvasSession` adds optimistic browser state,
@@ -45,10 +55,11 @@ Frame and Note movement and resizing, review status, note editing and
 attach/detach behavior. Offscreen iframes are not mounted, keeping the cost tied
 to visible work. The iframe `allow` and `sandbox` policies are configurable.
 
-The HTTP adapter supports `GET` for authoritative documents and `PATCH` for
-semantic command batches. Vite adapts it to local Connect middleware. The React
+The HTTP adapter supports `GET` for authoritative documents, `PATCH` for
+semantic command batches, and `POST` on a Frame snapshot route. Vite adapts it
+to local Connect middleware and serves immutable snapshot artifacts. The React
 component, Vite plugin, CLI, discovery manifest, and installed agent skill are
-thin adapters around the same core and repository boundaries.
+thin adapters around the same core, repository, and archive boundaries.
 
 Effect v4 owns schemas, typed failures, services, Layers, concurrency, and scoped
 lifecycle. Pure synchronous document transitions remain ordinary TypeScript.

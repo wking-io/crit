@@ -69,7 +69,8 @@ describe("CritRuntime.updateCanvas", () => {
           statuses: {
             inProgress: 1,
             approved: 0,
-            changesRequested: 0
+            changesRequested: 0,
+            archived: 0
           }
         }
       })

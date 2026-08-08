@@ -1,9 +1,15 @@
 import { Schema } from "effect"
 
-export const FrameStatus = Schema.Union([
+export const FrameReviewStatus = Schema.Union([
   Schema.Literal("in-progress"),
   Schema.Literal("approved"),
   Schema.Literal("changes-requested")
+])
+export type FrameReviewStatus = typeof FrameReviewStatus.Type
+
+export const FrameStatus = Schema.Union([
+  FrameReviewStatus,
+  Schema.Literal("archived")
 ])
 export type FrameStatus = typeof FrameStatus.Type
 
@@ -12,7 +18,8 @@ export const FrameProvenance = Schema.Struct({
     Schema.Literal("manual"),
     Schema.Literal("agent"),
     Schema.Literal("manifest"),
-    Schema.Literal("discovery")
+    Schema.Literal("discovery"),
+    Schema.Literal("snapshot")
   ]),
   sourceId: Schema.String
 })
@@ -30,14 +37,39 @@ export const AddFrameCommand = Schema.TaggedStruct("AddFrame", {
   id: Schema.String,
   url: Schema.String,
   title: Schema.String,
-  status: FrameStatus,
+  status: FrameReviewStatus,
   provenance: FrameProvenance
 })
 export type AddFrameCommand = typeof AddFrameCommand.Type
 
+export const FrameSnapshot = Schema.Struct({
+  artifactId: Schema.String.check(Schema.isPattern(/^[a-z0-9-]+$/)),
+  sourceUrl: Schema.String.check(Schema.isPattern(/^https?:\/\//)),
+  capturedAt: Schema.String.check(
+    Schema.isPattern(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/)
+  ),
+  sizeBytes: Schema.Finite.check(
+    Schema.isInt(),
+    Schema.isGreaterThanOrEqualTo(0)
+  )
+})
+export type FrameSnapshot = typeof FrameSnapshot.Type
+
+export const AddSnapshotFrameCommand = Schema.TaggedStruct(
+  "AddSnapshotFrame",
+  {
+    id: Schema.String,
+    sourceFrameId: Schema.String,
+    expectedSourceUrl: Schema.String,
+    url: Schema.String,
+    artifact: FrameSnapshot
+  }
+)
+export type AddSnapshotFrameCommand = typeof AddSnapshotFrameCommand.Type
+
 export const SetFrameStatusCommand = Schema.TaggedStruct("SetFrameStatus", {
   id: Schema.String,
-  status: FrameStatus
+  status: FrameReviewStatus
 })
 export type SetFrameStatusCommand = typeof SetFrameStatusCommand.Type
 
@@ -46,7 +78,7 @@ export const UpdateFrameCommand = Schema.TaggedStruct("UpdateFrame", {
   changes: Schema.Struct({
     url: Schema.optional(Schema.String),
     title: Schema.optional(Schema.String),
-    status: Schema.optional(FrameStatus),
+    status: Schema.optional(FrameReviewStatus),
     provenance: Schema.optional(FrameProvenance),
     display: Schema.optional(FrameDisplay)
   })
@@ -125,7 +157,7 @@ export type AddFrameInput = {
   readonly id: string
   readonly url: string
   readonly title: string
-  readonly status?: FrameStatus
+  readonly status?: FrameReviewStatus
   readonly provenance: FrameProvenance
 }
 
@@ -140,8 +172,23 @@ const addFrame = (input: AddFrameInput): AddFrameCommand => ({
 
 export type SetFrameStatusInput = {
   readonly id: string
-  readonly status: FrameStatus
+  readonly status: FrameReviewStatus
 }
+
+export type AddSnapshotFrameInput = {
+  readonly id: string
+  readonly sourceFrameId: string
+  readonly expectedSourceUrl: string
+  readonly url: string
+  readonly artifact: FrameSnapshot
+}
+
+const addSnapshotFrame = (
+  input: AddSnapshotFrameInput
+): AddSnapshotFrameCommand => ({
+  _tag: "AddSnapshotFrame",
+  ...input
+})
 
 const setFrameStatus = (input: SetFrameStatusInput): SetFrameStatusCommand => ({
   _tag: "SetFrameStatus",
@@ -153,7 +200,7 @@ export type UpdateFrameInput = {
   readonly changes: {
     readonly url?: string
     readonly title?: string
-    readonly status?: FrameStatus
+    readonly status?: FrameReviewStatus
     readonly provenance?: FrameProvenance
     readonly display?: FrameDisplay
   }
@@ -273,6 +320,7 @@ const removeNote = (input: RemoveNoteInput): RemoveNoteCommand => ({
 
 export const CanvasCommandSchema = Schema.Union([
   AddFrameCommand,
+  AddSnapshotFrameCommand,
   SetFrameStatusCommand,
   UpdateFrameCommand,
   RemoveFrameCommand,
@@ -290,6 +338,7 @@ export type CanvasCommand = typeof CanvasCommandSchema.Type
 
 export const CanvasCommand = {
   AddFrame: AddFrameCommand,
+  AddSnapshotFrame: AddSnapshotFrameCommand,
   SetFrameStatus: SetFrameStatusCommand,
   UpdateFrame: UpdateFrameCommand,
   RemoveFrame: RemoveFrameCommand,
@@ -303,6 +352,7 @@ export const CanvasCommand = {
   DetachNote: DetachNoteCommand,
   RemoveNote: RemoveNoteCommand,
   addFrame,
+  addSnapshotFrame,
   setFrameStatus,
   updateFrame,
   removeFrame,

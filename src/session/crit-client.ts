@@ -45,6 +45,10 @@ export interface CritClientShape {
     id: string,
     commands: ReadonlyArray<CanvasCommand>
   ) => Effect.Effect<CanvasDocument, CritClientError>
+  readonly snapshot?: (
+    canvasId: string,
+    frameId: string
+  ) => Effect.Effect<CanvasDocument, CritClientError>
 }
 
 export class CritClient extends Context.Service<CritClient, CritClientShape>()(

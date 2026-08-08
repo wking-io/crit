@@ -1,5 +1,9 @@
 export { FileSystemCanvasRepository } from "./file-system-canvas-repository.js"
 export {
+  FileSystemSnapshotArchive,
+  type FileSystemSnapshotArchiveOptions
+} from "./file-system-snapshot-archive.js"
+export {
   CanvasRepository,
   DocumentAlreadyExists,
   DocumentMalformed,
@@ -17,3 +21,20 @@ export {
   CanvasView,
   type CritRuntimeShape
 } from "../runtime/crit-runtime.js"
+export {
+  CRIT_SNAPSHOT_PATH,
+  SnapshotArchive,
+  SnapshotArtifact,
+  SnapshotCaptureFailed,
+  SnapshotNotFound,
+  SnapshotStorageFailed,
+  snapshotArtifactUrl,
+  type SnapshotArchiveError,
+  type SnapshotArchiveShape
+} from "../runtime/snapshot-archive.js"
+export {
+  SnapshotService,
+  SnapshotServiceLive,
+  type SnapshotFrameError,
+  type SnapshotServiceShape
+} from "../runtime/snapshot-service.js"

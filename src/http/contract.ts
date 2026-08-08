@@ -56,6 +56,13 @@ const stripTrailingSlash = (value: string) => value.replace(/\/+$/, "")
 export const critCanvasUrl = (apiPath: string, canvasId: string) =>
   `${stripTrailingSlash(apiPath)}/canvases/${encodeURIComponent(canvasId)}`
 
+export const critFrameSnapshotUrl = (
+  apiPath: string,
+  canvasId: string,
+  frameId: string
+) =>
+  `${critCanvasUrl(apiPath, canvasId)}/frames/${encodeURIComponent(frameId)}/snapshot`
+
 const pathnameFor = (request: Request) => {
   try {
     return new URL(request.url).pathname
@@ -153,16 +160,26 @@ const readApplyRequest = (request: Request, maxBodyBytes: number) =>
     )
   )
 
-const canvasIdFrom = (request: Request, apiPath: string) => {
+const canvasRouteFrom = (request: Request, apiPath: string) => {
   const prefix = `${stripTrailingSlash(apiPath)}/canvases/`
   const pathname = pathnameFor(request)
   if (!pathname.startsWith(prefix)) return undefined
-  const encoded = pathname.slice(prefix.length)
-  if (encoded.length === 0 || encoded.includes("/")) return ""
+  const segments = pathname.slice(prefix.length).split("/")
+  if (segments[0]?.length === 0) return { id: "" }
   try {
-    return decodeURIComponent(encoded)
+    const id = decodeURIComponent(segments[0]!)
+    if (segments.length === 1) return { id }
+    if (
+      segments.length === 4 &&
+      segments[1] === "frames" &&
+      segments[2]?.length !== 0 &&
+      segments[3] === "snapshot"
+    ) {
+      return { id, frameId: decodeURIComponent(segments[2]!) }
+    }
+    return { id: "" }
   } catch {
-    return ""
+    return { id: "" }
   }
 }
 
@@ -174,11 +191,39 @@ export const makeCritHttpHandler = (
   const maxBodyBytes = options.maxBodyBytes ?? MAX_CRIT_HTTP_BODY_BYTES
 
   return (request) => {
-    const id = canvasIdFrom(request, apiPath)
-    if (id === undefined) return Effect.succeed(null)
-    if (id.length === 0) {
+    const route = canvasRouteFrom(request, apiPath)
+    if (route === undefined) return Effect.succeed(null)
+    if (route.id.length === 0) {
       return Effect.succeed(
         json(400, errorBody("invalid-request", "A Canvas ID is required"))
+      )
+    }
+    const id = route.id
+
+    if (route.frameId !== undefined) {
+      if (request.method !== "POST") {
+        return Effect.succeed(
+          json(
+            405,
+            errorBody("method-not-allowed", "Only POST is supported", { id }),
+            { Allow: "POST" }
+          )
+        )
+      }
+      if (client.snapshot === undefined) {
+        return Effect.succeed(
+          clientErrorResponse(
+            new CritClientUnavailable({
+              operation: "snapshot",
+              id,
+              detail: "Snapshot capture is unavailable"
+            })
+          )
+        )
+      }
+      return client.snapshot(id, route.frameId).pipe(
+        Effect.map((document) => json(200, document)),
+        Effect.catch((cause) => Effect.succeed(clientErrorResponse(cause)))
       )
     }
 

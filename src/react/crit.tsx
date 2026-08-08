@@ -229,6 +229,7 @@ export function Crit({
       <CanvasViewport
         dispatch={session.dispatch}
         document={document}
+        snapshotFrame={session.snapshotFrame}
         {...(iframeAllow === undefined ? {} : { iframeAllow })}
         {...(iframeSandbox === undefined ? {} : { iframeSandbox })}
         {...(onCommandError === undefined ? {} : { onCommandError })}

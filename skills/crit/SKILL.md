@@ -16,6 +16,7 @@ npx @riff-refine/crit sync --from https://app.localhost --json
 npx @riff-refine/crit apply checkout-review '[{"_tag":"SetFrameStatus","id":"candidate","status":"approved"}]' --json
 npx @riff-refine/crit create checkout-review --title "Checkout review" --json
 npx @riff-refine/crit add checkout-review https://checkout.localhost --json
+npx @riff-refine/crit snapshot checkout-review candidate --json
 ```
 
 Open `/crit/checkout-review` in the host application after adding frames.
@@ -62,6 +63,9 @@ array to `apply`:
 - Attach Notes to their Frame when they should move together; detaching preserves
   their Canvas position.
 - Ask before replacing or discarding user-authored Canvas content.
+- Use `snapshot <canvas> <frame> --json` when the user asks to preserve the
+  current rendered version. Keep the live Frame; the command adds a separate
+  archived Frame and immutable artifact.
 
 ## Setup and diagnosis
 
@@ -71,6 +75,10 @@ default manifest, and this project skill. If discovery fails, verify that
 `GET /.well-known/crit.json` returns a manifest. If the editor cannot load,
 verify the Vite plugin is enabled and that `GET /__crit/api/canvases/<id>`
 returns a Canvas Document.
+
+Snapshot capture requires the local Vite plugin and a reachable HTTP(S) Frame.
+Artifacts live in `.crit/snapshots` and are served at
+`/__crit/snapshots/<artifact-id>`; do not edit or replace them directly.
 
 Crit V1 is local-only. Do not expose its local HTTP endpoints as a remote
 collaboration service.

@@ -22,7 +22,8 @@ describe("Canvas lifecycle", () => {
         statuses: {
           inProgress: 0,
           approved: 0,
-          changesRequested: 0
+          changesRequested: 0,
+          archived: 0
         }
       })
     }))

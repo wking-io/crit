@@ -185,4 +185,62 @@ describe("crit Vite plugin", () => {
       }
     ])
   })
+
+  it("captures and serves an immutable self-contained Frame snapshot", async () => {
+    await writeFile(
+      path.join(root, "index.html"),
+      '<!doctype html><html><head><link rel="stylesheet" href="/app.css"></head><body><main id="app">Snapshot fixture</main><script type="module" src="/app.js"></script></body></html>'
+    )
+    await writeFile(
+      path.join(root, "app.css"),
+      "#app { color: rgb(12, 34, 56); }"
+    )
+    await writeFile(
+      path.join(root, "app.js"),
+      'document.querySelector("#app").dataset.ready = "true"'
+    )
+    const origin = await start()
+    const client = HttpCritClient.make({ apiPath: `${origin}/__crit/api` })
+    await Effect.runPromise(client.load("review"))
+    await Effect.runPromise(
+      client.apply("review", [
+        CanvasCommand.addFrame({
+          id: "candidate",
+          url: `${origin}/`,
+          title: "Candidate",
+          provenance: { kind: "manual", sourceId: "test" }
+        })
+      ])
+    )
+
+    const saved = await Effect.runPromise(client.snapshot!("review", "candidate"))
+    const archived = saved.frames.at(-1)!
+    const response = await fetch(`${origin}${archived.url}`)
+    const html = await response.text()
+    const missingResponse = await fetch(`${origin}/__crit/snapshots/missing`)
+    const persisted = await readFile(
+      path.join(root, ".crit/snapshots", `${archived.snapshot!.artifactId}.html`),
+      "utf8"
+    )
+    const encodedCss = html.match(
+      /href="data:text\/css;charset=utf-8;base64,([^"]+)"/
+    )?.[1]
+
+    expect(archived).toMatchObject({
+      status: "archived",
+      provenance: { kind: "snapshot", sourceId: "candidate" },
+      snapshot: { sourceUrl: `${origin}/` }
+    })
+    expect(response.status).toBe(200)
+    expect(missingResponse.status).toBe(404)
+    expect(response.headers.get("cache-control")).toContain("immutable")
+    expect(html).toBe(persisted)
+    expect(html).toContain("Snapshot fixture")
+    expect(encodedCss).toBeDefined()
+    expect(Buffer.from(encodedCss!, "base64").toString("utf8")).toContain(
+      "#0c2238"
+    )
+    expect(html).not.toContain('href="/app.css"')
+    expect(html).not.toContain('src="/app.js"')
+  })
 })

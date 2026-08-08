@@ -18,9 +18,15 @@ import {
   makeCritHttpHandler
 } from "../http/contract.js"
 import { FileSystemCanvasRepository } from "../node/file-system-canvas-repository.js"
+import { FileSystemSnapshotArchive } from "../node/file-system-snapshot-archive.js"
 import { CanvasRepositoryCritClient } from "../runtime/canvas-repository-crit-client.js"
 import { CanvasRepository } from "../runtime/canvas-repository.js"
 import { CritRuntimeLive } from "../runtime/crit-runtime.js"
+import {
+  CRIT_SNAPSHOT_PATH,
+  SnapshotNotFound
+} from "../runtime/snapshot-archive.js"
+import { SnapshotService, SnapshotServiceLive } from "../runtime/snapshot-service.js"
 
 export interface CritVitePluginOptions {
   readonly enabled?: boolean
@@ -118,6 +124,13 @@ const requestedCanvasId = (
   }
 }
 
+const requestedSnapshotId = (request: IncomingMessage) => {
+  const pathname = requestPathname(request)
+  if (!pathname.startsWith(CRIT_SNAPSHOT_PATH)) return undefined
+  const artifactId = pathname.slice(CRIT_SNAPSHOT_PATH.length)
+  return /^[a-z0-9-]+$/.test(artifactId) ? artifactId : ""
+}
+
 export const crit = (options: CritVitePluginOptions = {}): Plugin => {
   const apiPath = options.apiPath ?? DEFAULT_CRIT_API_PATH
   const manifestPath = options.manifestPath ?? CRIT_MANIFEST_PATH
@@ -127,16 +140,27 @@ export const crit = (options: CritVitePluginOptions = {}): Plugin => {
   const configure = (server: CritViteServer) => {
     if (!enabled) return
     const documentLayer = FileSystemCanvasRepository.layer({ root: resolvedRoot })
+    const archiveLayer = FileSystemSnapshotArchive.layer({ root: resolvedRoot })
     const critRuntimeLayer = CritRuntimeLive.pipe(Layer.provide(documentLayer))
+    const snapshotServiceLayer = SnapshotServiceLive.pipe(
+      Layer.provide(Layer.mergeAll(documentLayer, archiveLayer))
+    )
     const runtime = ManagedRuntime.make(
-      Layer.mergeAll(documentLayer, critRuntimeLayer)
+      Layer.mergeAll(
+        documentLayer,
+        archiveLayer,
+        critRuntimeLayer,
+        snapshotServiceLayer
+      )
     )
     const services = runtime.runPromise(
-      Effect.all({ documents: CanvasRepository }).pipe(
-        Effect.map(({ documents }) => ({
+      Effect.all({ documents: CanvasRepository, snapshots: SnapshotService }).pipe(
+        Effect.map(({ documents, snapshots }) => ({
+          snapshots,
           handler: makeCritHttpHandler(
             CanvasRepositoryCritClient.make(documents, {
               createIfMissing: options.createIfMissing ?? true,
+              snapshotFrame: snapshots.snapshotFrame,
               ...(options.title === undefined ? {} : { title: options.title })
             }),
             { apiPath }
@@ -207,6 +231,41 @@ export const crit = (options: CritVitePluginOptions = {}): Plugin => {
     }
 
     server.middlewares.use((request, response, next) => {
+      const snapshotId = requestedSnapshotId(request)
+      if (snapshotId !== undefined) {
+        if (request.method !== "GET") {
+          response.setHeader("Allow", "GET")
+          sendJson(response, 405, {
+            error: { code: "method-not-allowed", message: "Use GET" }
+          })
+          return
+        }
+        if (snapshotId.length === 0) {
+          sendJson(response, 400, {
+            error: { code: "invalid-request", message: "Invalid snapshot artifact ID" }
+          })
+          return
+        }
+        void services
+          .then(({ snapshots }) => runtime.runPromise(snapshots.readArtifact(snapshotId)))
+          .then((artifact) => {
+            response.statusCode = 200
+            response.setHeader("Cache-Control", "public, max-age=31536000, immutable")
+            response.setHeader("Content-Type", "text/html; charset=utf-8")
+            response.setHeader("X-Content-Type-Options", "nosniff")
+            response.end(Buffer.from(artifact))
+          })
+          .catch((cause: unknown) => {
+            if (cause instanceof SnapshotNotFound) {
+              sendJson(response, 404, {
+                error: { code: "not-found", message: `Snapshot not found: ${snapshotId}` }
+              })
+              return
+            }
+            sendUnexpectedFailure(response, cause)
+          })
+        return
+      }
       if (requestPathname(request) === manifestPath) {
         if (request.method !== "GET") {
           response.setHeader("Allow", "GET")

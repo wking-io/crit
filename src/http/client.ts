@@ -12,6 +12,7 @@ import {
   CritHttpErrorBody,
   DEFAULT_CRIT_API_PATH,
   critCanvasUrl,
+  critFrameSnapshotUrl,
   decodeCanvasDocument,
   encodeApplyRequest
 } from "./contract.js"
@@ -31,7 +32,7 @@ const parseJson = (response: Response) =>
 const responseError = (
   response: Response,
   input: unknown,
-  operation: "load" | "apply",
+  operation: "load" | "apply" | "snapshot",
   id: string
 ): CritClientError => {
   const parsed = Schema.decodeUnknownOption(CritHttpErrorBody)(input)
@@ -70,12 +71,13 @@ const make = (options: HttpCritClientOptions = {}): CritClientShape => {
   const request = options.fetch ?? globalThis.fetch
 
   const execute = (
-    operation: "load" | "apply",
+    operation: "load" | "apply" | "snapshot",
     id: string,
-    init?: RequestInit
+    init?: RequestInit,
+    url = critCanvasUrl(apiPath, id)
   ) =>
     Effect.tryPromise({
-      try: () => request(critCanvasUrl(apiPath, id), init),
+      try: () => request(url, init),
       catch: (cause) =>
         new CritClientUnavailable({
           operation,
@@ -109,7 +111,11 @@ const make = (options: HttpCritClientOptions = {}): CritClientShape => {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(encodeApplyRequest(commands))
-      })
+      }),
+    snapshot: (canvasId, frameId) =>
+      execute("snapshot", canvasId, {
+        method: "POST"
+      }, critFrameSnapshotUrl(apiPath, canvasId, frameId))
   }
 }
 

@@ -23,6 +23,7 @@ import {
   CritClient,
   CritClientCommandFailed,
   CritClientInvalidDocument,
+  CritClientUnavailable,
   type CritClientError
 } from "./crit-client.js"
 import {
@@ -72,6 +73,9 @@ export interface CanvasSession {
   readonly flush: () => Effect.Effect<void, CritClientError>
   readonly refresh: () => Effect.Effect<boolean, CritClientError>
   readonly discardLocalChanges: () => Effect.Effect<void, CritClientError>
+  readonly snapshotFrame: (
+    frameId: string
+  ) => Effect.Effect<CanvasDocument, CritClientError>
 }
 
 export type CanvasSessionOptions = {
@@ -365,6 +369,42 @@ const open = (
       }))
     )
 
+    const snapshotFrame = (frameId: string) =>
+      Effect.gen(function*() {
+        if (client.snapshot === undefined) {
+          return yield* new CritClientUnavailable({
+            operation: "snapshot",
+            id: canvasId,
+            detail: "This Crit client does not provide snapshot capture"
+          })
+        }
+        yield* saveUntilClean
+        const saved = yield* client.snapshot(canvasId, frameId)
+        yield* documentLock.withPermit(
+          Effect.gen(function*() {
+            const rebased = yield* openCanvas(canvasId, saved)
+            if (pending.length > 0) {
+              yield* Canvas.apply(
+                rebased,
+                ...pending.flatMap((batch) => batch.commands)
+              ).pipe(Effect.mapError((cause) => invalidDocument(canvasId, cause)))
+            }
+            CanvasInternals.adoptDocument(canvas, rebased)
+            yield* Ref.set(revision, saved.revision)
+            yield* publishDocument
+            yield* SubscriptionRef.update(
+              state,
+              (current): CanvasSessionState => ({
+                ...current,
+                revision: saved.revision,
+                detail: null
+              })
+            )
+          })
+        )
+        return saved
+      })
+
     if (recoveryStatus === "recovered") {
       yield* Effect.forkIn(saveUntilClean.pipe(Effect.catch(() => Effect.void)), scope)
     }
@@ -428,7 +468,8 @@ const open = (
             ),
       flush: () => saveUntilClean,
       refresh: () => refresh,
-      discardLocalChanges: () => discardLocalChanges
+      discardLocalChanges: () => discardLocalChanges,
+      snapshotFrame
     }
   })
 

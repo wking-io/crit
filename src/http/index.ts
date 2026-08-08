@@ -5,6 +5,7 @@ export {
   DEFAULT_CRIT_API_PATH,
   MAX_CRIT_HTTP_BODY_BYTES,
   critCanvasUrl,
+  critFrameSnapshotUrl,
   isCritHttpRequest,
   makeCritHttpHandler,
   type CritHttpHandler,

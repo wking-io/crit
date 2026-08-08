@@ -40,7 +40,8 @@ describe("Canvas SetFrameStatus command", () => {
       expect(Canvas.summarize(reopened).statuses).toEqual({
         inProgress: 1,
         approved: 1,
-        changesRequested: 0
+        changesRequested: 0,
+        archived: 0
       })
     }))
 })
