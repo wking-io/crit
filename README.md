@@ -14,10 +14,10 @@ Initialize Crit in a Vite + React project:
 npx @riff-refine/crit init
 ```
 
-The initializer installs the package, adds the Vite plugin and React surface,
-creates a discovery manifest, ignores local `.crit/` data, and installs the Crit
-agent skill. React Router framework projects receive a `/crit/:canvasId?` route;
-other router setups get an explicit mount instruction.
+The initializer installs the package, adds the Vite plugin and reusable React
+surface, creates a discovery manifest, ignores local `.crit/` data, and installs
+the Crit agent skill. The Vite plugin serves `/crit/:canvasId?` directly, so the
+editor works without modifying or depending on the host application's router.
 
 Or configure it directly:
 
@@ -41,7 +41,8 @@ export function ReviewCanvas() {
 
 The plugin is active only during Vite serve and preview. It can be gated with
 `crit({ enabled: mode !== "production" })`. A missing Canvas is created on first
-load by default; use `createIfMissing: false` to require explicit creation.
+load by default; use `createIfMissing: false` to require explicit creation. The
+automatic editor route can be moved or disabled with `editorPath`.
 
 ## Discovery
 

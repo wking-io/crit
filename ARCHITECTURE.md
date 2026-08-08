@@ -57,7 +57,8 @@ to visible work. The iframe `allow` and `sandbox` policies are configurable.
 
 The HTTP adapter supports `GET` for authoritative documents, `PATCH` for
 semantic command batches, and `POST` on a Frame snapshot route. Vite adapts it
-to local Connect middleware and serves immutable snapshot artifacts. The React
+to local Connect middleware, owns the router-independent Crit editor route, and
+serves immutable snapshot artifacts. The React
 component, Vite plugin, CLI, discovery manifest, and installed agent skill are
 thin adapters around the same core, repository, and archive boundaries.
 

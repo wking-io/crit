@@ -81,9 +81,7 @@ export default [
     const firstSnapshot = {
       packageJson: await read(root, "package.json"),
       vite: await read(root, "vite.config.ts"),
-      routes: await read(root, "app/routes.ts"),
       component: await read(root, "app/components/crit-canvas.tsx"),
-      route: await read(root, "app/routes/crit.tsx"),
       skill: await read(root, ".agents/skills/crit/SKILL.md"),
       manifest: await read(root, "crit.manifest.json"),
       gitignore: await read(root, ".gitignore")
@@ -104,11 +102,10 @@ export default [
       `import { crit as critPlugin } from "@riff-refine/crit/vite"`
     )
     expect(firstSnapshot.vite.match(/critPlugin\(\)/g)).toHaveLength(1)
-    expect(firstSnapshot.routes).toContain(
-      `route("crit/:canvasId?", "./routes/crit.tsx")`
-    )
     expect(firstSnapshot.component).toContain("<Crit canvasId={canvasId} />")
-    expect(firstSnapshot.route).toContain("useParams")
+    expect(await read(root, "app/routes.ts")).toContain(
+      `index("./routes/home.tsx")`
+    )
     expect(firstSnapshot.skill).toContain("name: crit")
     expect(JSON.parse(firstSnapshot.manifest)).toMatchObject({
       schemaVersion: 1,
@@ -132,16 +129,12 @@ export default [
               ? "package.json"
               : key === "vite"
                 ? "vite.config.ts"
-                : key === "routes"
-                  ? "app/routes.ts"
-                  : key === "component"
-                    ? "app/components/crit-canvas.tsx"
-                    : key === "route"
-                      ? "app/routes/crit.tsx"
-                    : key === "skill"
-                      ? ".agents/skills/crit/SKILL.md"
-                      : key === "manifest"
-                        ? "crit.manifest.json"
+                : key === "component"
+                  ? "app/components/crit-canvas.tsx"
+                  : key === "skill"
+                    ? ".agents/skills/crit/SKILL.md"
+                    : key === "manifest"
+                      ? "crit.manifest.json"
                       : ".gitignore"
           expect(await read(root, target)).toBe(value)
         })
@@ -149,7 +142,7 @@ export default [
     ).resolves.toBeDefined()
   })
 
-  it("creates the reusable surface without guessing a generic app's router", async () => {
+  it("creates the reusable surface without modifying a generic app's router", async () => {
     await write(
       root,
       "package.json",
@@ -175,9 +168,7 @@ export default defineConfig({})
     const result = await runInit(root)
 
     expect(result.project).toBe("vite-react")
-    expect(result.warnings).toEqual([
-      "Mount src/components/crit-canvas.tsx in the project's router; automatic route registration currently supports React Router framework projects."
-    ])
+    expect(result.warnings).toEqual([])
     expect(await read(root, "src/components/crit-canvas.tsx")).toContain(
       "CritCanvas"
     )

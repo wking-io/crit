@@ -7,7 +7,6 @@ import { PACKAGE_VERSION } from "../version.js"
 
 const PACKAGE_NAME = "@riff-refine/crit"
 const VITE_IMPORT = "@riff-refine/crit/vite"
-const ROUTE_PATH = "crit/:canvasId?"
 
 export class CritInitFailed extends Schema.TaggedError<CritInitFailed>()(
   "CritInitFailed",
@@ -108,35 +107,6 @@ export const addCritToViteConfig = (source: string) => {
   return undefined
 }
 
-const addCritRoute = (source: string) => {
-  if (
-    source.includes(`"${ROUTE_PATH}"`) ||
-    source.includes(`'${ROUTE_PATH}'`) ||
-    source.includes("./routes/crit.tsx")
-  ) {
-    return source
-  }
-
-  let next = source
-  const importsRoute =
-    /import\s*\{[^}]*\broute\b[^}]*\}\s*from\s*['"]@react-router\/dev\/routes['"]/s.test(
-      next
-    )
-  if (!importsRoute) {
-    const quote = quoteFor(next)
-    next = `import { route } from ${quote}@react-router/dev/routes${quote}\n${next}`
-  }
-
-  const exportedRoutes = /export\s+default\s*\[/.exec(next)
-  if (exportedRoutes === null || exportedRoutes.index === undefined) {
-    return undefined
-  }
-  const insertion = exportedRoutes.index + exportedRoutes[0].length
-  const indentation = next.includes("\t") ? "\t" : "  "
-  const quote = quoteFor(next)
-  return `${next.slice(0, insertion)}\n${indentation}route(${quote}${ROUTE_PATH}${quote}, ${quote}./routes/crit.tsx${quote}),${next.slice(insertion)}`
-}
-
 const componentTemplate = `import { Crit } from "@riff-refine/crit"
 
 export interface CritCanvasProps {
@@ -149,16 +119,6 @@ export function CritCanvas({ canvasId = "default" }: CritCanvasProps) {
       <Crit canvasId={canvasId} />
     </main>
   )
-}
-`
-
-const routeTemplate = `import { useParams } from "react-router"
-
-import { CritCanvas } from "../components/crit-canvas"
-
-export default function CritRoute() {
-  const { canvasId } = useParams()
-  return <CritCanvas canvasId={canvasId ?? "default"} />
 }
 `
 
@@ -344,9 +304,6 @@ const init = (
     const isReactRouter = hasDependency(packageJson, "@react-router/dev")
     const warnings: Array<string> = []
     let appDirectory = "src"
-    let routeConfigPath: string | undefined
-    let routeConfigSource: string | undefined
-    let configuredRoutes: string | undefined
 
     if (isReactRouter) {
       const routerConfigNames = [
@@ -363,24 +320,6 @@ const init = (
         }
       }
       appDirectory = reactRouterAppDirectory(routerConfigSource)
-      routeConfigPath = path.join(root, appDirectory, "routes.ts")
-      if (yield* exists(routeConfigPath)) {
-        routeConfigSource = yield* read(routeConfigPath)
-        configuredRoutes = addCritRoute(routeConfigSource)
-        if (configuredRoutes === undefined) {
-          warnings.push(
-            `Register ${ROUTE_PATH} with ./${appDirectory}/routes/crit.tsx; the route config shape was not recognized.`
-          )
-        }
-      } else {
-        warnings.push(
-          `Register ${ROUTE_PATH} with ./${appDirectory}/routes/crit.tsx; no ${appDirectory}/routes.ts was found.`
-        )
-      }
-    } else {
-      warnings.push(
-        "Mount src/components/crit-canvas.tsx in the project's router; automatic route registration currently supports React Router framework projects."
-      )
     }
 
     const skillSourcePath = fileURLToPath(
@@ -450,18 +389,6 @@ const init = (
       "crit-canvas.tsx"
     )
     yield* planGenerated(componentPath, componentTemplate)
-
-    if (isReactRouter) {
-      const routePath = path.join(root, appDirectory, "routes", "crit.tsx")
-      yield* planGenerated(routePath, routeTemplate)
-      if (
-        routeConfigPath !== undefined &&
-        routeConfigSource !== undefined &&
-        configuredRoutes !== undefined
-      ) {
-        planManaged(routeConfigPath, routeConfigSource, configuredRoutes)
-      }
-    }
 
     const skillPath = path.join(root, ".agents", "skills", "crit", "SKILL.md")
     yield* planGenerated(skillPath, skillSource)

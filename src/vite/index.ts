@@ -1,8 +1,11 @@
+import { existsSync } from "node:fs"
 import { readFile } from "node:fs/promises"
 import type { IncomingHttpHeaders, IncomingMessage, ServerResponse } from "node:http"
 import path from "node:path"
 import { Readable } from "node:stream"
+import { fileURLToPath } from "node:url"
 
+import { build } from "esbuild"
 import { Effect, Layer, ManagedRuntime } from "effect"
 import type { Plugin, ViteDevServer } from "vite"
 
@@ -36,6 +39,7 @@ export interface CritVitePluginOptions {
   readonly title?: (canvasId: string) => string
   readonly manifest?: string | false
   readonly manifestPath?: string
+  readonly editorPath?: string | false
 }
 
 type CritViteServer = Pick<ViteDevServer, "middlewares" | "httpServer"> &
@@ -131,9 +135,91 @@ const requestedSnapshotId = (request: IncomingMessage) => {
   return /^[a-z0-9-]+$/.test(artifactId) ? artifactId : ""
 }
 
+const requestedEditorCanvasId = (
+  request: IncomingMessage,
+  editorPath: string | false
+) => {
+  if (editorPath === false) return undefined
+  const base = `/${editorPath.replace(/^\/+|\/+$/g, "")}`
+  const pathname = requestPathname(request).replace(/\/+$/, "") || "/"
+  if (pathname === base) return "default"
+  if (!pathname.startsWith(`${base}/`)) return undefined
+  const encoded = pathname.slice(base.length + 1)
+  if (encoded.length === 0 || encoded.includes("/")) return undefined
+  try {
+    return decodeURIComponent(encoded)
+  } catch {
+    return ""
+  }
+}
+
+const normalizedEditorPath = (editorPath: string) =>
+  `/${editorPath.replace(/^\/+|\/+$/g, "")}`
+
+const escapeHtml = (value: string) =>
+  value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+
+const editorHtml = (canvasId: string, editorAssetPath: string) => {
+  const escapedCanvasId = escapeHtml(canvasId)
+  return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Crit · ${escapedCanvasId}</title>
+    <style>html,body,#crit-root{height:100%;margin:0}</style>
+  </head>
+  <body data-crit-canvas-id="${escapedCanvasId}">
+    <div id="crit-root"></div>
+    <script type="module" src="${editorAssetPath}"></script>
+  </body>
+</html>`
+}
+
+const buildEditorBundle = async () => {
+  const javascriptEntry = fileURLToPath(
+    new URL("../react/index.js", import.meta.url)
+  )
+  const reactEntry = existsSync(javascriptEntry)
+    ? javascriptEntry
+    : javascriptEntry.replace(/\.js$/, ".ts")
+  const result = await build({
+    stdin: {
+      contents: `
+        import { createElement } from "react"
+        import { createRoot } from "react-dom/client"
+        import { Crit } from ${JSON.stringify(reactEntry)}
+        const canvasId = document.body.dataset.critCanvasId || "default"
+        createRoot(document.getElementById("crit-root")).render(
+          createElement(Crit, { canvasId })
+        )
+      `,
+      loader: "js",
+      resolveDir: path.dirname(reactEntry),
+      sourcefile: "crit-editor.js"
+    },
+    bundle: true,
+    format: "esm",
+    legalComments: "none",
+    logLevel: "silent",
+    minify: true,
+    platform: "browser",
+    target: ["es2020"],
+    write: false
+  })
+  const output = result.outputFiles?.[0]
+  if (output === undefined) throw new Error("Crit editor bundle is empty")
+  return output.text
+}
+
 export const crit = (options: CritVitePluginOptions = {}): Plugin => {
   const apiPath = options.apiPath ?? DEFAULT_CRIT_API_PATH
   const manifestPath = options.manifestPath ?? CRIT_MANIFEST_PATH
+  const editorPath = options.editorPath ?? "/crit"
   const enabled = options.enabled ?? true
   let resolvedRoot = options.root ?? process.cwd()
 
@@ -145,6 +231,12 @@ export const crit = (options: CritVitePluginOptions = {}): Plugin => {
     const snapshotServiceLayer = SnapshotServiceLive.pipe(
       Layer.provide(Layer.mergeAll(documentLayer, archiveLayer))
     )
+    const editorBase =
+      editorPath === false ? undefined : normalizedEditorPath(editorPath)
+    const editorAssetPath =
+      editorBase === undefined ? undefined : `${editorBase}/__assets/editor.js`
+    const editorBundle =
+      editorBase === undefined ? undefined : buildEditorBundle()
     const runtime = ManagedRuntime.make(
       Layer.mergeAll(
         documentLayer,
@@ -231,6 +323,50 @@ export const crit = (options: CritVitePluginOptions = {}): Plugin => {
     }
 
     server.middlewares.use((request, response, next) => {
+      if (
+        editorAssetPath !== undefined &&
+        requestPathname(request) === editorAssetPath
+      ) {
+        if (request.method !== "GET") {
+          response.setHeader("Allow", "GET")
+          sendJson(response, 405, {
+            error: { code: "method-not-allowed", message: "Use GET" }
+          })
+          return
+        }
+        void editorBundle!
+          .then((javascript) => {
+            response.statusCode = 200
+            response.setHeader("Cache-Control", "no-cache")
+            response.setHeader("Content-Type", "text/javascript; charset=utf-8")
+            response.setHeader("X-Content-Type-Options", "nosniff")
+            response.end(javascript)
+          })
+          .catch((cause: unknown) => sendUnexpectedFailure(response, cause))
+        return
+      }
+      const editorCanvasId = requestedEditorCanvasId(request, editorPath)
+      if (editorCanvasId !== undefined) {
+        if (request.method !== "GET") {
+          response.setHeader("Allow", "GET")
+          sendJson(response, 405, {
+            error: { code: "method-not-allowed", message: "Use GET" }
+          })
+          return
+        }
+        if (editorCanvasId.length === 0) {
+          sendJson(response, 400, {
+            error: { code: "invalid-request", message: "Invalid Canvas ID" }
+          })
+          return
+        }
+        response.statusCode = 200
+        response.setHeader("Cache-Control", "no-store")
+        response.setHeader("Content-Type", "text/html; charset=utf-8")
+        response.setHeader("X-Content-Type-Options", "nosniff")
+        response.end(editorHtml(editorCanvasId, editorAssetPath!))
+        return
+      }
       const snapshotId = requestedSnapshotId(request)
       if (snapshotId !== undefined) {
         if (request.method !== "GET") {

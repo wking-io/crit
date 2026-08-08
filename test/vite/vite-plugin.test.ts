@@ -56,6 +56,12 @@ describe("crit Vite plugin", () => {
   it("creates, loads, and applies commands to a real Canvas over HTTP", async () => {
     const origin = await start()
     const client = HttpCritClient.make({ apiPath: `${origin}/__crit/api` })
+    const editorResponse = await fetch(`${origin}/crit/homepage`)
+    const editorHtml = await editorResponse.text()
+    const editorBundleResponse = await fetch(
+      `${origin}/crit/__assets/editor.js`
+    )
+    const editorBundle = await editorBundleResponse.text()
 
     const initialLoads = await Promise.all(
       Array.from({ length: 8 }, () =>
@@ -109,6 +115,15 @@ describe("crit Vite plugin", () => {
       title: "homepage",
       revision: 0
     })
+    expect(editorResponse.status).toBe(200)
+    expect(editorResponse.headers.get("content-type")).toContain("text/html")
+    expect(editorHtml).toContain("<title>Crit · homepage</title>")
+    expect(editorHtml).toContain('src="/crit/__assets/editor.js"')
+    expect(editorBundleResponse.status).toBe(200)
+    expect(editorBundleResponse.headers.get("content-type")).toContain(
+      "text/javascript"
+    )
+    expect(editorBundle.length).toBeGreaterThan(10_000)
     expect(initialLoads).toHaveLength(8)
     expect(initialLoads.every((document) => document.revision === 0)).toBe(true)
     expect(saved.revision).toBe(1)
