@@ -70,3 +70,8 @@ default manifest, and this project skill. If discovery fails, verify that
 `GET /.well-known/crit.json` returns a manifest. If the editor cannot load,
 verify the Vite plugin is enabled and that `GET /__crit/api/canvases/<id>`
 returns a Canvas Document.
+
+For a deployed Cloudflare preview, verify `CRIT_ENABLED` gates the
+`makeCritCloudflareHandler` call, the `CRIT_DB` D1 binding exists, and the
+packaged Crit migration has been applied. Keep the gate off in production and
+fall through when the handler returns `null`.

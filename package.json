@@ -11,6 +11,7 @@
   },
   "files": [
     "dist",
+    "migrations",
     "skills",
     "README.md",
     "ARCHITECTURE.md"
@@ -31,6 +32,10 @@
     "./discovery": {
       "types": "./dist/discovery/index.d.ts",
       "import": "./dist/discovery/index.js"
+    },
+    "./cloudflare": {
+      "types": "./dist/cloudflare/index.d.ts",
+      "import": "./dist/cloudflare/index.js"
     },
     "./vite": {
       "types": "./dist/vite/index.d.ts",

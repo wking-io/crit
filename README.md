@@ -102,6 +102,67 @@ updates the tldraw record directly and follows the normal autosave path.
 The Vite adapter creates a missing Canvas on first load. Pass
 `crit({ createIfMissing: false })` when creation must remain explicit.
 
+For non-production Cloudflare deployments, use the same HTTP contract with a D1
+binding:
+
+```ts
+// worker.ts
+import { makeCritCloudflareHandler } from "@riff-refine/crit/cloudflare"
+import app from "./app"
+
+const crit = makeCritCloudflareHandler({ initializeSchema: false })
+
+export default {
+  async fetch(request, env, context) {
+    const response = await crit(request, {
+      database: env.CRIT_DB,
+      enabled: env.CRIT_ENABLED === "true"
+    })
+    return response ?? app.fetch(request, env, context)
+  }
+} satisfies ExportedHandler<Env>
+```
+
+`Env` and `ExportedHandler` should come from `wrangler types`; Crit accepts the
+generated D1 binding structurally and does not add Cloudflare runtime types to
+other consumers. Add a `CRIT_DB` D1 binding and a `CRIT_ENABLED` variable to
+`wrangler.jsonc`, setting the variable to `"false"` in production:
+
+```jsonc
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "app-preview",
+  "main": "worker.ts",
+  "compatibility_date": "2026-08-08",
+  "compatibility_flags": ["nodejs_compat"],
+  "vars": { "CRIT_ENABLED": "true" },
+  "d1_databases": [
+    {
+      "binding": "CRIT_DB",
+      "database_name": "crit-preview",
+      "database_id": "<DATABASE_ID>",
+      "migrations_dir": "migrations"
+    }
+  ]
+}
+```
+
+Copy the packaged migration into the configured directory, then apply it and
+regenerate binding types:
+
+```sh
+cp node_modules/@riff-refine/crit/migrations/0001_crit_canvases.sql migrations/
+npx wrangler d1 migrations apply crit-preview --local
+npx wrangler d1 migrations apply crit-preview --remote
+npx wrangler types
+```
+
+The handler returns `null` for disabled and non-Crit requests so the existing
+application remains in control. Schema initialization is enabled by default for
+zero-setup preview use and cached once per D1 binding; committed Wrangler
+migrations plus `initializeSchema: false` are preferred for repeatable
+deployments.
+
 `client` remains the transport seam. Pass a custom `CritClientShape` to target
 another HTTP runtime without changing editor ownership. Draft recovery
 uses IndexedDB by default and a tab-stable session ID; pass `draftJournal={false}`

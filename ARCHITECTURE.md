@@ -14,10 +14,18 @@ export, migration, validation, and summaries. Effect v4 owns schemas, typed
 failures, services, Layers, concurrency, and lifecycle. Synchronous in-memory
 document transitions remain pure TypeScript.
 
-Filesystem and D1 stores implement one `DocumentStore` contract. React owns a
-scoped optimistic `CanvasSession`. A Web Request/Response module owns the shared
-HTTP contract; Vite adapts it to Connect middleware and Cloudflare can adapt it
-to Workers later without changing the contract.
+Filesystem and D1 stores implement one `DocumentStore` contract. The D1 adapter
+uses conditional SQLite writes as the concurrency boundary and keeps its schema
+in a packaged, versionable migration. React owns a scoped optimistic
+`CanvasSession`. A Web Request/Response module owns the shared HTTP contract;
+Vite adapts it to Connect middleware and the Cloudflare adapter composes it into
+an existing Worker without owning the application's fallback response.
+
+Cloudflare bindings enter through a small structural interface rather than a
+runtime dependency. The request adapter receives the D1 binding per invocation,
+can be gated from deployment environment state, and returns `null` when disabled
+or when a request belongs to the host application. Its schema initialization
+cache is an optimization only; correctness remains in D1 and migrations.
 
 CLI and future agent integrations express changes as semantic Canvas commands.
 The Session persists validated Canvas Document envelopes with optimistic

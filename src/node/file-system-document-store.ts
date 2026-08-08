@@ -1,7 +1,7 @@
 import * as NodeServices from "@effect/platform-node/NodeServices"
 import { Effect, FileSystem, Layer, Path } from "effect"
 
-import { Canvas, type CanvasDocument } from "../core/index.js"
+import type { CanvasDocument } from "../core/index.js"
 import {
   DocumentAlreadyExists,
   DocumentConflict,
@@ -11,25 +11,10 @@ import {
   DocumentStore,
   type DocumentStoreShape
 } from "../runtime/document-store.js"
-
-const serialize = (document: CanvasDocument) => `${JSON.stringify(document)}\n`
-
-const canonicalize = (id: string, input: unknown) =>
-  Canvas.open(input).pipe(
-    Effect.map(Canvas.export),
-    Effect.mapError(
-      (cause) =>
-        new DocumentMalformed({
-          id,
-          detail:
-            cause._tag === "AssetUnsupported"
-              ? `Asset records are unsupported: ${cause.assetIds.join(", ")}`
-              : cause._tag === "CanvasDocumentTooLarge"
-                ? `Canvas Document is ${cause.actualBytes} bytes; maximum is ${cause.maxBytes}`
-                : cause.detail
-        })
-    )
-  )
+import {
+  canonicalizeDocument,
+  serializeDocument
+} from "../runtime/internal/document-codec.js"
 
 const storageFailure = (operation: string, id: string, cause: unknown) =>
   new DocumentStorageFailed({
@@ -64,13 +49,13 @@ const make = (root: string) =>
               detail: cause instanceof Error ? cause.message : String(cause)
             })
         })
-        return yield* canonicalize(id, input)
+        return yield* canonicalizeDocument(id, input)
       })
     }
 
     const create: DocumentStoreShape["create"] = (document) =>
       Effect.gen(function*() {
-        const canonical = yield* canonicalize(document.id, document)
+        const canonical = yield* canonicalizeDocument(document.id, document)
         yield* fs
           .makeDirectory(directory, { recursive: true })
           .pipe(Effect.mapError((cause) => storageFailure("create", document.id, cause)))
@@ -95,7 +80,7 @@ const make = (root: string) =>
           })
         }
         yield* fs
-          .writeFileString(filePath(document.id), serialize(canonical), {
+          .writeFileString(filePath(document.id), serializeDocument(canonical), {
             flag: "wx",
             mode: 0o600
           })
@@ -151,13 +136,13 @@ const make = (root: string) =>
           })
         }
 
-        const canonical = yield* canonicalize(id, document)
+        const canonical = yield* canonicalizeDocument(id, document)
         const next: CanvasDocument = {
           ...canonical,
           revision: current.revision + 1
         }
         yield* fs
-          .writeFileString(temporary, serialize(next), { mode: 0o600 })
+          .writeFileString(temporary, serializeDocument(next), { mode: 0o600 })
           .pipe(Effect.mapError((cause) => storageFailure("save", id, cause)))
         yield* fs
           .rename(temporary, target)
