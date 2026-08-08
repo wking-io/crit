@@ -1,5 +1,3 @@
-import type { Store } from "@tldraw/store"
-import type { TLRecord } from "@tldraw/tlschema"
 import {
   Duration,
   Effect,
@@ -12,18 +10,18 @@ import {
 } from "effect"
 
 import {
-  AssetUnsupported,
   Canvas,
   CanvasCommandFailed,
   CanvasDocumentTooLarge,
-  CanvasOpenFailed,
   type CanvasChange,
-  type CanvasCommand
+  type CanvasCommand,
+  type CanvasDocument,
+  type CanvasOpenFailed
 } from "../core/index.js"
 import { CanvasInternals } from "../core/canvas.js"
 import {
   CritClient,
-  CritClientConflict,
+  CritClientCommandFailed,
   CritClientInvalidDocument,
   type CritClientError
 } from "./crit-client.js"
@@ -66,13 +64,14 @@ export type CanvasSessionState = typeof CanvasSessionState.Type
 
 export interface CanvasSession {
   readonly state: SubscriptionRef.SubscriptionRef<CanvasSessionState>
-  readonly store: Store<TLRecord>
+  readonly document: SubscriptionRef.SubscriptionRef<CanvasDocument>
   readonly recoveryDraft: CanvasDraft | null
   readonly dispatch: (
     ...commands: ReadonlyArray<CanvasCommand>
   ) => Effect.Effect<CanvasChange, CanvasCommandFailed>
   readonly flush: () => Effect.Effect<void, CritClientError>
   readonly refresh: () => Effect.Effect<boolean, CritClientError>
+  readonly discardLocalChanges: () => Effect.Effect<void, CritClientError>
 }
 
 export type CanvasSessionOptions = {
@@ -82,13 +81,38 @@ export type CanvasSessionOptions = {
 }
 
 const openFailureDetail = (
-  cause: CanvasOpenFailed | AssetUnsupported | CanvasDocumentTooLarge
+  cause: CanvasOpenFailed | CanvasDocumentTooLarge
 ) =>
-  cause._tag === "AssetUnsupported"
-    ? `Asset records are unsupported: ${cause.assetIds.join(", ")}`
-    : cause._tag === "CanvasDocumentTooLarge"
-      ? `Canvas Document is ${cause.actualBytes} bytes; maximum is ${cause.maxBytes}`
-      : cause.detail
+  cause._tag === "CanvasDocumentTooLarge"
+    ? `Canvas Document is ${cause.actualBytes} bytes; maximum is ${cause.maxBytes}`
+    : cause.detail
+
+const invalidDocument = (canvasId: string, cause: unknown) =>
+  new CritClientInvalidDocument({
+    id: canvasId,
+    detail:
+      cause instanceof CanvasCommandFailed
+        ? cause.detail
+        : cause instanceof Error
+          ? cause.message
+          : String(cause)
+  })
+
+const openCanvas = (canvasId: string, document: CanvasDocument) =>
+  Canvas.open(document).pipe(
+    Effect.mapError(
+      (cause) =>
+        new CritClientInvalidDocument({
+          id: canvasId,
+          detail: openFailureDetail(cause)
+        })
+    )
+  )
+
+type PendingBatch = {
+  readonly mutation: number
+  readonly commands: ReadonlyArray<CanvasCommand>
+}
 
 const open = (
   canvasId: string,
@@ -110,75 +134,71 @@ const open = (
     if (journal !== undefined) {
       const loaded = yield* journal.load(canvasId, sessionId).pipe(
         Effect.map((draft) => ({ _tag: "Loaded" as const, draft })),
-        Effect.catch((cause) =>
-          Effect.succeed({ _tag: "Failed" as const, cause })
-        )
+        Effect.catch((cause) => Effect.succeed({ _tag: "Failed" as const, cause }))
       )
       if (loaded._tag === "Failed") {
         recoveryStatus = "unavailable"
         recoveryDetail = loaded.cause.detail
       } else if (Option.isSome(loaded.draft)) {
         recoveryDraft = loaded.draft.value
-        if (recoveryDraft.baseRevision === authoritative.revision) {
-          recoveryStatus = "recovered"
-        } else {
-          recoveryStatus = "conflict"
-          recoveryDetail = `Draft base revision ${recoveryDraft.baseRevision} does not match authoritative revision ${authoritative.revision}`
-        }
       }
     }
 
-    const document =
-      recoveryStatus === "recovered" && recoveryDraft !== null
-        ? recoveryDraft.document
-        : authoritative
-    const canvas = yield* Canvas.open(document).pipe(
-      Effect.mapError(
-        (cause) =>
-          new CritClientInvalidDocument({
-            id: canvasId,
-            detail: openFailureDetail(cause)
+    const canvas = yield* openCanvas(canvasId, authoritative)
+    let pending: Array<PendingBatch> = []
+    let initialMutation = 0
+    if (recoveryDraft !== null) {
+      const recovered = yield* Canvas.apply(canvas, ...recoveryDraft.commands).pipe(
+        Effect.as(true),
+        Effect.catch((cause) =>
+          Effect.sync(() => {
+            recoveryStatus = "conflict"
+            recoveryDetail = `Draft could not be replayed: ${cause.detail}`
+            return false
           })
+        )
       )
-    )
-    const store = CanvasInternals.store(canvas)
-    CanvasInternals.setRevision(canvas, authoritative.revision)
+      if (recovered) {
+        recoveryStatus = "recovered"
+        initialMutation = recoveryDraft.mutation
+        pending = [{ mutation: initialMutation, commands: recoveryDraft.commands }]
+      }
+    }
+
+    const exported = yield* Effect.try({
+      try: () => Canvas.export(canvas),
+      catch: (cause) => invalidDocument(canvasId, cause)
+    })
+    const document = yield* SubscriptionRef.make(exported)
     const revision = yield* Ref.make(authoritative.revision)
-    const initialMutation =
-      recoveryStatus === "recovered" && recoveryDraft !== null
-        ? recoveryDraft.mutation
-        : 0
     const mutation = yield* Ref.make(initialMutation)
     const confirmedMutation = yield* Ref.make(0)
+    const initialRecoveryStatus = recoveryStatus as CanvasSessionRecoveryStatus
     const state = yield* SubscriptionRef.make<CanvasSessionState>({
       canvasId,
       revision: authoritative.revision,
       mutation: initialMutation,
       confirmedMutation: 0,
       saveStatus:
-        recoveryStatus === "recovered"
+        initialRecoveryStatus === "recovered"
           ? "dirty"
-          : recoveryStatus === "conflict"
+          : initialRecoveryStatus === "conflict"
             ? "conflict"
             : "clean",
-      detail: recoveryStatus === "conflict" ? recoveryDetail : null,
-      recoveryStatus,
+      detail: initialRecoveryStatus === "conflict" ? recoveryDetail : null,
+      recoveryStatus: initialRecoveryStatus,
       recoveryDetail
     })
     const saveLock = yield* Semaphore.make(1)
     const documentLock = yield* Semaphore.make(1)
     const refreshLock = yield* Semaphore.make(1)
-    let dispatching = false
-    let localGeneration = 0
 
-    const exportDocument = Effect.try({
+    const publishDocument = Effect.try({
       try: () => Canvas.export(canvas),
-      catch: (cause) =>
-        new CritClientInvalidDocument({
-          id: canvasId,
-          detail: cause instanceof Error ? cause.message : String(cause)
-        })
-    })
+      catch: (cause) => invalidDocument(canvasId, cause)
+    }).pipe(
+      Effect.flatMap((snapshot) => SubscriptionRef.set(document, snapshot))
+    )
 
     const markJournalUnavailable = (cause: DraftJournalFailed) =>
       SubscriptionRef.update(state, (current): CanvasSessionState => ({
@@ -191,10 +211,9 @@ const open = (
       journal === undefined
         ? Effect.void
         : Effect.gen(function*() {
-            const currentMutation = yield* Ref.get(mutation)
-            const confirmed = yield* Ref.get(confirmedMutation)
-            if (currentMutation <= confirmed) return
-            const snapshot = yield* exportDocument
+            const batches = pending
+            if (batches.length === 0) return
+            const currentMutation = batches.at(-1)!.mutation
             const baseRevision = yield* Ref.get(revision)
             yield* journal
               .save({
@@ -203,150 +222,99 @@ const open = (
                 sessionId,
                 baseRevision,
                 mutation: currentMutation,
-                document: snapshot
+                commands: batches.flatMap((batch) => batch.commands)
               })
               .pipe(Effect.catch(markJournalUnavailable))
           })
 
     const saveUntilClean = saveLock.withPermit(
       Effect.gen(function*() {
-        while (true) {
-          const pendingMutation = yield* Ref.get(mutation)
-          const confirmed = yield* Ref.get(confirmedMutation)
-          if (pendingMutation <= confirmed) return
-
+        while (pending.length > 0) {
+          const sending = pending
+          const throughMutation = sending.at(-1)!.mutation
+          const commands = sending.flatMap((batch) => batch.commands)
           yield* SubscriptionRef.update(state, (current): CanvasSessionState => ({
             ...current,
             saveStatus: "saving",
             detail: null
           }))
-          const expectedRevision = yield* Ref.get(revision)
-          const snapshot = yield* exportDocument
           yield* writeLatestDraft
-          const saved = yield* client.save(snapshot, expectedRevision).pipe(
+          const saved = yield* client.apply(canvasId, commands).pipe(
             Effect.tapError((cause) =>
               SubscriptionRef.update(state, (current): CanvasSessionState => ({
                 ...current,
                 saveStatus:
-                  cause instanceof CritClientConflict ? "conflict" : "save-error",
+                  cause instanceof CritClientCommandFailed
+                    ? "conflict"
+                    : "save-error",
                 detail:
-                  cause instanceof CritClientConflict
-                    ? `Expected revision ${cause.expectedRevision}; current revision is ${cause.currentRevision}`
-                    : cause._tag === "CritClientNotFound"
+                  cause._tag === "CritClientNotFound"
                       ? `Canvas not found: ${cause.id}`
                       : cause.detail
               }))
             )
           )
 
-          CanvasInternals.setRevision(canvas, saved.revision)
-          yield* Ref.set(revision, saved.revision)
-          yield* Ref.set(confirmedMutation, pendingMutation)
+          yield* documentLock.withPermit(
+            Effect.gen(function*() {
+              pending = pending.filter((batch) => batch.mutation > throughMutation)
+              const rebased = yield* openCanvas(canvasId, saved)
+              if (pending.length > 0) {
+                yield* Canvas.apply(
+                  rebased,
+                  ...pending.flatMap((batch) => batch.commands)
+                ).pipe(Effect.mapError((cause) => invalidDocument(canvasId, cause)))
+              }
+              CanvasInternals.adoptDocument(canvas, rebased)
+              yield* Ref.set(revision, saved.revision)
+              yield* Ref.set(confirmedMutation, throughMutation)
+              yield* publishDocument
+              const latestMutation = yield* Ref.get(mutation)
+              yield* SubscriptionRef.update(
+                state,
+                (current): CanvasSessionState => ({
+                  ...current,
+                  revision: saved.revision,
+                  confirmedMutation: throughMutation,
+                  saveStatus:
+                    latestMutation === throughMutation ? "clean" : "dirty",
+                  detail: null
+                })
+              )
+            })
+          )
           if (journal !== undefined) {
             yield* journal
-              .clear(canvasId, sessionId, pendingMutation)
+              .clear(canvasId, sessionId, throughMutation)
               .pipe(Effect.catch(markJournalUnavailable))
           }
-          const latestMutation = yield* Ref.get(mutation)
-          yield* SubscriptionRef.update(state, (current): CanvasSessionState => ({
-            ...current,
-            revision: saved.revision,
-            confirmedMutation: pendingMutation,
-            saveStatus: latestMutation === pendingMutation ? "clean" : "dirty",
-            detail: null
-          }))
         }
       })
     )
 
-    const scheduleSave = (delay: Duration.Input | undefined) =>
+    const schedule = (effect: Effect.Effect<void, unknown>, delay: Duration.Input) =>
       Effect.forkIn(
-        (delay === undefined ? Effect.void : Effect.sleep(delay)).pipe(
-          Effect.andThen(saveUntilClean),
+        Effect.sleep(delay).pipe(
+          Effect.andThen(effect),
           Effect.catch(() => Effect.void)
         ),
         scope
       ).pipe(Effect.asVoid)
-
-    const scheduleDraft = (delay: Duration.Input | undefined) =>
-      Effect.forkIn(
-        (delay === undefined ? Effect.void : Effect.sleep(delay)).pipe(
-          Effect.andThen(writeLatestDraft),
-          Effect.catch(() => Effect.void)
-        ),
-        scope
-      ).pipe(Effect.asVoid)
-
-    const markDirty = (delay: Duration.Input | undefined) =>
-      Effect.gen(function*() {
-        const before = yield* SubscriptionRef.get(state)
-        const nextMutation = yield* Ref.updateAndGet(
-          mutation,
-          (current) => current + 1
-        )
-        yield* SubscriptionRef.update(state, (current): CanvasSessionState => ({
-          ...current,
-          mutation: nextMutation,
-          saveStatus:
-            current.saveStatus === "saving" || current.saveStatus === "conflict"
-              ? current.saveStatus
-              : "dirty",
-          detail: current.saveStatus === "conflict" ? current.detail : null
-        }))
-        if (before.saveStatus !== "conflict") {
-          yield* scheduleDraft(delay)
-          yield* scheduleSave(delay)
-        }
-      })
 
     const refresh = refreshLock.withPermit(
       Effect.gen(function*() {
-        const generation = localGeneration
-        const localMutation = yield* Ref.get(mutation)
-        const localConfirmedMutation = yield* Ref.get(confirmedMutation)
-        const localState = yield* SubscriptionRef.get(state)
-        if (
-          localMutation !== localConfirmedMutation ||
-          localState.saveStatus !== "clean"
-        ) {
-          return false
-        }
-
+        if (pending.length > 0) return false
         const localRevision = yield* Ref.get(revision)
         const remote = yield* client.load(canvasId)
         if (remote.revision <= localRevision) return false
-        const remoteCanvas = yield* Canvas.open(remote).pipe(
-          Effect.mapError(
-            (cause) =>
-              new CritClientInvalidDocument({
-                id: canvasId,
-                detail: openFailureDetail(cause)
-              })
-          )
-        )
+        const remoteCanvas = yield* openCanvas(canvasId, remote)
 
         return yield* documentLock.withPermit(
           Effect.gen(function*() {
-            const latestMutation = yield* Ref.get(mutation)
-            const latestConfirmedMutation = yield* Ref.get(confirmedMutation)
-            const latestState = yield* SubscriptionRef.get(state)
-            if (
-              localGeneration !== generation ||
-              latestMutation !== latestConfirmedMutation ||
-              latestState.saveStatus !== "clean"
-            ) {
-              return false
-            }
-
-            yield* Effect.try({
-              try: () => CanvasInternals.adoptDocument(canvas, remoteCanvas),
-              catch: (cause) =>
-                new CritClientInvalidDocument({
-                  id: canvasId,
-                  detail: cause instanceof Error ? cause.message : String(cause)
-                })
-            })
+            if (pending.length > 0) return false
+            CanvasInternals.adoptDocument(canvas, remoteCanvas)
             yield* Ref.set(revision, remote.revision)
+            yield* publishDocument
             yield* SubscriptionRef.update(
               state,
               (current): CanvasSessionState => ({
@@ -361,16 +329,45 @@ const open = (
       })
     )
 
-    const removeListener = store.listen(
-      () => {
-        localGeneration += 1
-        if (dispatching) return
-        Effect.runFork(markDirty(options.autosaveDelay ?? 100))
-      },
-      { source: "user", scope: "document" }
+    const discardLocalChanges = saveLock.withPermit(
+      documentLock.withPermit(Effect.gen(function*() {
+        const remote = yield* client.load(canvasId)
+        const remoteCanvas = yield* openCanvas(canvasId, remote)
+        pending = []
+        CanvasInternals.adoptDocument(canvas, remoteCanvas)
+        yield* Ref.set(revision, remote.revision)
+        const currentMutation = yield* Ref.get(mutation)
+        yield* Ref.set(confirmedMutation, currentMutation)
+        yield* publishDocument
+        if (journal !== undefined) {
+          yield* journal
+            .clear(canvasId, sessionId, currentMutation)
+            .pipe(Effect.catch(markJournalUnavailable))
+        }
+        yield* SubscriptionRef.update(
+          state,
+          (current): CanvasSessionState => ({
+            ...current,
+            revision: remote.revision,
+            confirmedMutation: currentMutation,
+            saveStatus: "clean",
+            detail: null,
+            recoveryStatus:
+              current.recoveryStatus === "unavailable"
+                ? "unavailable"
+                : "available",
+            recoveryDetail:
+              current.recoveryStatus === "unavailable"
+                ? current.recoveryDetail
+                : null
+          })
+        )
+      }))
     )
-    yield* Effect.addFinalizer(() => Effect.sync(removeListener))
-    if (recoveryStatus === "recovered") yield* scheduleSave(undefined)
+
+    if (recoveryStatus === "recovered") {
+      yield* Effect.forkIn(saveUntilClean.pipe(Effect.catch(() => Effect.void)), scope)
+    }
     if (options.refreshInterval !== false) {
       const interval = options.refreshInterval ?? 2_000
       yield* Effect.forkIn(
@@ -386,7 +383,7 @@ const open = (
 
     return {
       state,
-      store,
+      document,
       recoveryDraft,
       dispatch: (...commands) =>
         commands.length === 0
@@ -397,20 +394,41 @@ const open = (
               })
             )
           : documentLock.withPermit(
-              Effect.sync(() => {
-                dispatching = true
-              }).pipe(
-                Effect.andThen(Canvas.apply(canvas, ...commands)),
-                Effect.ensuring(
-                  Effect.sync(() => {
-                    dispatching = false
+              Effect.gen(function*() {
+                const change = yield* Canvas.apply(canvas, ...commands)
+                const nextMutation = yield* Ref.updateAndGet(
+                  mutation,
+                  (current) => current + 1
+                )
+                pending = [...pending, { mutation: nextMutation, commands }]
+                yield* publishDocument.pipe(
+                  Effect.mapError(
+                    (cause) =>
+                      new CanvasCommandFailed({
+                        reason: "apply-failed",
+                        detail: cause.detail
+                      })
+                  )
+                )
+                yield* SubscriptionRef.update(
+                  state,
+                  (current): CanvasSessionState => ({
+                    ...current,
+                    mutation: nextMutation,
+                    saveStatus:
+                      current.saveStatus === "saving" ? "saving" : "dirty",
+                    detail: null
                   })
-                ),
-                Effect.tap(() => markDirty(undefined))
-              )
+                )
+                const delay = options.autosaveDelay ?? 100
+                yield* schedule(writeLatestDraft, delay)
+                yield* schedule(saveUntilClean, delay)
+                return change
+              })
             ),
       flush: () => saveUntilClean,
-      refresh: () => refresh
+      refresh: () => refresh,
+      discardLocalChanges: () => discardLocalChanges
     }
   })
 

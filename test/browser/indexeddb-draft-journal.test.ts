@@ -2,7 +2,6 @@ import { IDBFactory } from "fake-indexeddb"
 import { describe, expect, it } from "@effect/vitest"
 import { Effect, Option } from "effect"
 
-import { Canvas } from "../../src/core/index.js"
 import { IndexedDbDraftJournal } from "../../src/browser/indexeddb-draft-journal.js"
 import {
   DraftJournal,
@@ -20,10 +19,7 @@ const draft = (
   sessionId,
   baseRevision,
   mutation,
-  document: {
-    ...Canvas.export(Canvas.create({ id: "review", title: "Review" })),
-    revision: baseRevision
-  }
+  commands: []
 })
 
 const putRawRecord = (

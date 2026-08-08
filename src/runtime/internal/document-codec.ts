@@ -1,7 +1,7 @@
 import { Effect } from "effect"
 
 import { Canvas, type CanvasDocument } from "../../core/index.js"
-import { DocumentMalformed } from "../document-store.js"
+import { DocumentMalformed } from "../canvas-repository.js"
 
 export const serializeDocument = (document: CanvasDocument) =>
   `${JSON.stringify(document)}\n`
@@ -14,12 +14,9 @@ export const canonicalizeDocument = (id: string, input: unknown) =>
         new DocumentMalformed({
           id,
           detail:
-            cause._tag === "AssetUnsupported"
-              ? `Asset records are unsupported: ${cause.assetIds.join(", ")}`
-              : cause._tag === "CanvasDocumentTooLarge"
+            cause._tag === "CanvasDocumentTooLarge"
                 ? `Canvas Document is ${cause.actualBytes} bytes; maximum is ${cause.maxBytes}`
                 : cause.detail
         })
     )
   )
-

@@ -1,7 +1,6 @@
 import { Effect, Schema } from "effect"
 
 import {
-  AssetUnsupported,
   CanvasCommand,
   CanvasCommandFailed,
   CanvasDocumentTooLarge,
@@ -11,11 +10,10 @@ import {
   type FrameSummary
 } from "../core/index.js"
 import {
-  DocumentConflict,
   DocumentMalformed,
   DocumentNotFound,
   DocumentStorageFailed
-} from "../runtime/document-store.js"
+} from "../runtime/canvas-repository.js"
 import {
   CritRuntime,
   type CritRuntimeShape
@@ -86,11 +84,9 @@ export type CritManifestSyncResult = {
 export type CritManifestSyncError =
   | CritManifestInvalid
   | DocumentNotFound
-  | DocumentConflict
   | DocumentMalformed
   | DocumentStorageFailed
   | CanvasCommandFailed
-  | AssetUnsupported
   | CanvasDocumentTooLarge
 
 export class CritManifestInvalid extends Schema.TaggedError<CritManifestInvalid>()(
@@ -198,8 +194,6 @@ const resolve = (
     return { ...manifest, canvases }
   })
 
-const shapeId = (id: string) => (id.startsWith("shape:") ? id : `shape:${id}`)
-
 const same = (left: unknown, right: unknown) =>
   JSON.stringify(left) === JSON.stringify(right)
 
@@ -216,7 +210,7 @@ const planFrameCommands = (
 
   for (const frame of canvas.frames) {
     const commandCountBefore = commands.length
-    const id = shapeId(frame.id)
+    const id = frame.id
     const existing = byId.get(id)
     const provenance = {
       kind: "manifest" as const,
@@ -332,8 +326,7 @@ const syncWith = (
   }
 
   const syncCanvas = (
-    canvas: ResolvedCritManifestCanvas,
-    attempt = 0
+    canvas: ResolvedCritManifestCanvas
   ): Effect.Effect<CritManifestCanvasSync, CritManifestSyncError> =>
     Effect.gen(function*() {
       let created = false
@@ -364,7 +357,6 @@ const syncWith = (
 
       const mutation = yield* runtime.updateCanvas({
         id: canvas.id,
-        expectedRevision: current.canvas.revision,
         commands: plan.commands
       })
       return {
@@ -375,11 +367,7 @@ const syncWith = (
         updatedFrameIds: plan.updatedFrameIds,
         unchangedFrameIds: plan.unchangedFrameIds
       }
-    }).pipe(
-      Effect.catchTag("DocumentConflict", (cause) =>
-        attempt < 2 ? syncCanvas(canvas, attempt + 1) : Effect.fail(cause)
-      )
-    )
+    })
 
   return Effect.forEach(selected, (canvas) => syncCanvas(canvas)).pipe(
     Effect.map(

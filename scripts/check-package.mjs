@@ -71,9 +71,8 @@ try {
     "dist/core/index.js",
     "dist/http/index.js",
     "dist/discovery/index.js",
-    "dist/cloudflare/index.js",
+    "dist/node/index.js",
     "dist/vite/index.js",
-    "migrations/0001_crit_canvases.sql",
     "skills/crit/SKILL.md"
   ]
   const missing = requiredFiles.filter((file) => !packagedFiles.has(file))
@@ -139,7 +138,7 @@ createRoot(document.getElementById("root")!).render(<Crit canvasId="package-smok
   ["@riff-refine/crit/core", "Canvas"],
   ["@riff-refine/crit/http", "makeCritHttpHandler"],
   ["@riff-refine/crit/discovery", "CritManifest"],
-  ["@riff-refine/crit/cloudflare", "makeCritCloudflareHandler"],
+  ["@riff-refine/crit/node", "FileSystemCanvasRepository"],
   ["@riff-refine/crit/vite", "crit"]
 ]
 

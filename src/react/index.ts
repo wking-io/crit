@@ -13,7 +13,7 @@ export {
 } from "../session/canvas-session.js"
 export {
   CritClient,
-  CritClientConflict,
+  CritClientCommandFailed,
   CritClientInvalidDocument,
   CritClientNotFound,
   CritClientUnavailable,
@@ -27,4 +27,4 @@ export {
   type DraftJournalShape
 } from "../session/draft-journal.js"
 export { Crit, type CritProps } from "./crit.js"
-export { CritFrameShapeUtil, isFrameInteractiveTool } from "./crit-frame.js"
+export { CanvasViewport, type CanvasViewportProps } from "./canvas-viewport.js"

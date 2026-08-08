@@ -27,13 +27,15 @@ describe("Canvas AddFrame command", () => {
 
       expect(change).toEqual({
         commandCount: 1,
-        changedFrameIds: ["shape:checkout-v1"]
+        changedFrameIds: ["checkout-v1"],
+        changedNoteIds: []
       })
       expect(Canvas.summarize(reopened)).toEqual({
         id: "checkout-iterations",
         title: "Checkout iterations",
         revision: 0,
         frameCount: 1,
+        noteCount: 0,
         statuses: {
           inProgress: 1,
           approved: 0,

@@ -1,6 +1,3 @@
-import { type Store, type StoreSnapshot } from "@tldraw/store"
-import { createShapeId, type TLRecord } from "@tldraw/tlschema"
-import { getIndexAbove, type IndexKey } from "@tldraw/utils"
 import { Effect, Schema } from "effect"
 
 import {
@@ -10,16 +7,13 @@ import {
   FrameStatus,
   type CanvasCommand as CanvasCommandInput
 } from "./canvas-command.js"
-import {
-  critSchema,
-  findAssetIds,
-  isCritFrame,
-  makePage,
-  makeStore,
-  type CritFrame
-} from "./internal/tldraw-schema.js"
 
 const CanvasTypeId: unique symbol = Symbol.for("@riff-refine/crit/Canvas")
+const PositiveDimension = Schema.Finite.check(Schema.isGreaterThan(0))
+const NonNegativeInteger = Schema.Finite.check(
+  Schema.isInt(),
+  Schema.isGreaterThanOrEqualTo(0)
+)
 
 export const MAX_CANVAS_DOCUMENT_BYTES = 10_000_000
 
@@ -27,53 +21,74 @@ export interface Canvas {
   readonly [CanvasTypeId]: typeof CanvasTypeId
 }
 
-export const CanvasDocument = Schema.Struct({
-  format: Schema.Literal("crit-canvas"),
-  version: Schema.Literal(1),
-  id: Schema.String,
-  title: Schema.String,
-  revision: Schema.Number,
-  document: Schema.Unknown
+export const CanvasGeometry = Schema.Struct({
+  x: Schema.Finite,
+  y: Schema.Finite,
+  width: PositiveDimension,
+  height: PositiveDimension
 })
+export type CanvasGeometry = typeof CanvasGeometry.Type
 
-export type CanvasDocument = typeof CanvasDocument.Type
-
-export const CanvasSummary = Schema.Struct({
-  id: Schema.String,
-  title: Schema.String,
-  revision: Schema.Number,
-  frameCount: Schema.Number,
-  statuses: Schema.Struct({
-    inProgress: Schema.Number,
-    approved: Schema.Number,
-    changesRequested: Schema.Number
-  })
-})
-
-export type CanvasSummary = typeof CanvasSummary.Type
-
-export const FrameSummary = Schema.Struct({
+export const CanvasFrame = Schema.Struct({
   id: Schema.String,
   url: Schema.String,
   title: Schema.String,
   status: FrameStatus,
   provenance: FrameProvenance,
   display: FrameDisplay,
-  geometry: Schema.Struct({
-    x: Schema.Finite,
-    y: Schema.Finite,
-    width: Schema.Finite,
-    height: Schema.Finite
+  geometry: CanvasGeometry,
+  zIndex: Schema.Finite.check(Schema.isInt())
+})
+export type CanvasFrame = typeof CanvasFrame.Type
+
+export const CanvasNote = Schema.Struct({
+  id: Schema.String,
+  text: Schema.String,
+  geometry: CanvasGeometry,
+  attachedTo: Schema.NullOr(Schema.String),
+  zIndex: Schema.Finite.check(Schema.isInt())
+})
+export type CanvasNote = typeof CanvasNote.Type
+
+export const CanvasDocument = Schema.Struct({
+  format: Schema.Literal("crit-canvas"),
+  version: Schema.Literal(1),
+  id: Schema.String,
+  title: Schema.String,
+  revision: NonNegativeInteger,
+  frames: Schema.Array(CanvasFrame),
+  notes: Schema.Array(CanvasNote)
+})
+export type CanvasDocument = typeof CanvasDocument.Type
+
+export const CanvasSummary = Schema.Struct({
+  id: Schema.String,
+  title: Schema.String,
+  revision: NonNegativeInteger,
+  frameCount: NonNegativeInteger,
+  noteCount: NonNegativeInteger,
+  statuses: Schema.Struct({
+    inProgress: NonNegativeInteger,
+    approved: NonNegativeInteger,
+    changesRequested: NonNegativeInteger
   })
 })
-export type FrameSummary = typeof FrameSummary.Type
+export type CanvasSummary = typeof CanvasSummary.Type
 
+export const FrameSummary = CanvasFrame
+export type FrameSummary = CanvasFrame
 export const FrameList = Schema.Array(FrameSummary)
 export type FrameList = typeof FrameList.Type
 
+export const NoteSummary = CanvasNote
+export type NoteSummary = CanvasNote
+export const NoteList = Schema.Array(NoteSummary)
+export type NoteList = typeof NoteList.Type
+
 export const CanvasChange = Schema.Struct({
-  commandCount: Schema.Number,
-  changedFrameIds: Schema.Array(Schema.String)
+  commandCount: NonNegativeInteger,
+  changedFrameIds: Schema.Array(Schema.String),
+  changedNoteIds: Schema.Array(Schema.String)
 })
 export type CanvasChange = typeof CanvasChange.Type
 
@@ -85,13 +100,6 @@ export class CanvasOpenFailed extends Schema.TaggedError<CanvasOpenFailed>()(
       Schema.Literal("invalid-document")
     ]),
     detail: Schema.String
-  }
-) {}
-
-export class AssetUnsupported extends Schema.TaggedError<AssetUnsupported>()(
-  "AssetUnsupported",
-  {
-    assetIds: Schema.Array(Schema.String)
   }
 ) {}
 
@@ -110,6 +118,9 @@ export class CanvasCommandFailed extends Schema.TaggedError<CanvasCommandFailed>
       Schema.Literal("invalid-command"),
       Schema.Literal("duplicate-frame"),
       Schema.Literal("frame-not-found"),
+      Schema.Literal("duplicate-note"),
+      Schema.Literal("note-not-found"),
+      Schema.Literal("note-conflict"),
       Schema.Literal("invalid-canvas"),
       Schema.Literal("apply-failed")
     ]),
@@ -122,14 +133,22 @@ export class FrameNotFound extends Schema.TaggedError<FrameNotFound>()(
   { id: Schema.String }
 ) {}
 
+export class NoteNotFound extends Schema.TaggedError<NoteNotFound>()(
+  "NoteNotFound",
+  { id: Schema.String }
+) {}
+
 type CanvasState = {
   readonly id: string
   title: string
   revision: number
-  readonly store: Store<TLRecord>
+  frames: Array<CanvasFrame>
+  notes: Array<CanvasNote>
 }
 
 const states = new WeakMap<object, CanvasState>()
+
+const clone = <A>(value: A): A => structuredClone(value)
 
 const makeCanvas = (state: CanvasState): Canvas => {
   const handle = Object.freeze({}) as Canvas
@@ -145,8 +164,17 @@ const stateOf = (canvas: Canvas): CanvasState => {
   return state
 }
 
+const documentOf = (state: CanvasState): CanvasDocument => ({
+  format: "crit-canvas",
+  version: 1,
+  id: state.id,
+  title: state.title,
+  revision: state.revision,
+  frames: clone(state.frames),
+  notes: clone(state.notes)
+})
+
 export const CanvasInternals = {
-  store: (canvas: Canvas) => stateOf(canvas).store,
   setRevision: (canvas: Canvas, revision: number) => {
     stateOf(canvas).revision = revision
   },
@@ -158,55 +186,21 @@ export const CanvasInternals = {
         `Cannot adopt Canvas ${source.id} into Canvas ${target.id}`
       )
     }
-    const snapshot = source.store.getStoreSnapshot("document")
-    const records = Object.values(snapshot.store)
-    const incomingIds = new Set(records.map((record) => record.id))
-    const removedIds = target.store
-      .allRecords()
-      .filter(
-        (record) =>
-          target.store.scopedTypes.document.has(record.typeName) &&
-          !incomingIds.has(record.id)
-      )
-      .map((record) => record.id)
-    target.store.mergeRemoteChanges(() => {
-      if (removedIds.length > 0) target.store.remove(removedIds)
-      if (records.length > 0) target.store.put(records)
-    })
     target.title = source.title
     target.revision = source.revision
+    target.frames = clone(source.frames)
+    target.notes = clone(source.notes)
   }
 } as const
 
-const create = (input: { readonly id: string; readonly title: string }): Canvas => {
-  const store = makeStore()
-  store.put([makePage(input.id, input.title)])
-  return makeCanvas({ ...input, revision: 0, store })
-}
-
-const openDocument = (document: CanvasDocument): Canvas => {
-  const snapshot = document.document as StoreSnapshot<TLRecord>
-  const assetIds = findAssetIds(snapshot)
-  if (assetIds.length > 0) throw new AssetUnsupported({ assetIds })
-
-  const migration = critSchema.migrateStoreSnapshot(snapshot)
-  if (migration.type !== "success") {
-    throw new Error(`tldraw migration failed: ${migration.reason}`)
-  }
-
-  const store = makeStore(critSchema, migration.value)
-  const pages = store.allRecords().filter((record) => record.typeName === "page")
-  if (pages.length !== 1) {
-    throw new Error(`Canvas must contain exactly one page; found ${pages.length}`)
-  }
-
-  return makeCanvas({
-    id: document.id,
-    title: document.title,
-    revision: document.revision,
-    store
+const create = (input: { readonly id: string; readonly title: string }): Canvas =>
+  makeCanvas({
+    id: input.id,
+    title: input.title,
+    revision: 0,
+    frames: [],
+    notes: []
   })
-}
 
 const encodedBytes = (input: unknown) => {
   const serialized = JSON.stringify(input)
@@ -214,12 +208,32 @@ const encodedBytes = (input: unknown) => {
   return new TextEncoder().encode(serialized).byteLength
 }
 
+const validateDocument = (document: CanvasDocument) => {
+  const ids = new Set<string>()
+  for (const frame of document.frames) {
+    if (frame.id.trim().length === 0) throw new Error("Frame IDs cannot be empty")
+    if (ids.has(frame.id)) throw new Error(`Duplicate Canvas item ID: ${frame.id}`)
+    ids.add(frame.id)
+  }
+  for (const note of document.notes) {
+    if (note.id.trim().length === 0) throw new Error("Note IDs cannot be empty")
+    if (ids.has(note.id)) throw new Error(`Duplicate Canvas item ID: ${note.id}`)
+    ids.add(note.id)
+    if (
+      note.attachedTo !== null &&
+      !document.frames.some((frame) => frame.id === note.attachedTo)
+    ) {
+      throw new Error(
+        `Note ${note.id} is attached to missing Frame ${note.attachedTo}`
+      )
+    }
+  }
+  return document
+}
+
 const open = (
   input: unknown
-): Effect.Effect<
-  Canvas,
-  CanvasOpenFailed | AssetUnsupported | CanvasDocumentTooLarge
-> =>
+): Effect.Effect<Canvas, CanvasOpenFailed | CanvasDocumentTooLarge> =>
   Effect.gen(function*() {
     const actualBytes = yield* Effect.try({
       try: () => encodedBytes(input),
@@ -245,32 +259,25 @@ const open = (
           })
       )
     )
-    return yield* Effect.try({
-      try: () => openDocument(document),
+    const validated = yield* Effect.try({
+      try: () => validateDocument(document),
       catch: (cause) =>
-        cause instanceof AssetUnsupported
-          ? cause
-          : new CanvasOpenFailed({
-              reason: "invalid-document",
-              detail: cause instanceof Error ? cause.message : String(cause)
-            })
+        new CanvasOpenFailed({
+          reason: "invalid-document",
+          detail: cause instanceof Error ? cause.message : String(cause)
+        })
+    })
+    return makeCanvas({
+      id: validated.id,
+      title: validated.title,
+      revision: validated.revision,
+      frames: clone(Array.from(validated.frames)),
+      notes: clone(Array.from(validated.notes))
     })
   })
 
 const exportCanvas = (canvas: Canvas): CanvasDocument => {
-  const state = stateOf(canvas)
-  const document = state.store.getStoreSnapshot("document")
-  const assetIds = findAssetIds(document)
-  if (assetIds.length > 0) throw new AssetUnsupported({ assetIds })
-
-  const exported: CanvasDocument = {
-    format: "crit-canvas",
-    version: 1,
-    id: state.id,
-    title: state.title,
-    revision: state.revision,
-    document
-  }
+  const exported = documentOf(stateOf(canvas))
   const actualBytes = encodedBytes(exported)
   if (actualBytes > MAX_CANVAS_DOCUMENT_BYTES) {
     throw new CanvasDocumentTooLarge({
@@ -288,77 +295,66 @@ const summarize = (canvas: Canvas): CanvasSummary => {
     approved: 0,
     changesRequested: 0
   }
-
-  let frameCount = 0
-  for (const record of state.store.allRecords()) {
-    if (!isCritFrame(record)) continue
-    frameCount += 1
-    switch (record.props.status) {
-      case "in-progress":
-        statuses.inProgress += 1
-        break
-      case "approved":
-        statuses.approved += 1
-        break
-      case "changes-requested":
-        statuses.changesRequested += 1
-        break
-    }
+  for (const frame of state.frames) {
+    if (frame.status === "in-progress") statuses.inProgress += 1
+    if (frame.status === "approved") statuses.approved += 1
+    if (frame.status === "changes-requested") statuses.changesRequested += 1
   }
-
   return {
     id: state.id,
     title: state.title,
     revision: state.revision,
-    frameCount,
+    frameCount: state.frames.length,
+    noteCount: state.notes.length,
     statuses
   }
 }
 
-const frameIdFrom = (id: string) =>
-  createShapeId(id.startsWith("shape:") ? id.slice("shape:".length) : id)
-
-const summarizeFrame = (record: CritFrame): FrameSummary => ({
-  id: record.id,
-  url: record.props.url,
-  title: record.props.title,
-  status: record.props.status,
-  provenance: record.props.provenance,
-  display: record.props.display,
-  geometry: {
-    x: record.x,
-    y: record.y,
-    width: record.props.w,
-    height: record.props.h
-  }
-})
+const ordered = <A extends { readonly id: string; readonly zIndex: number }>(
+  values: ReadonlyArray<A>
+) =>
+  [...values].sort(
+    (left, right) => left.zIndex - right.zIndex || left.id.localeCompare(right.id)
+  )
 
 const listFrames = (canvas: Canvas): FrameList =>
-  stateOf(canvas)
-    .store.allRecords()
-    .filter(isCritFrame)
-    .sort((left, right) => left.index.localeCompare(right.index))
-    .map(summarizeFrame)
+  clone(ordered(stateOf(canvas).frames))
+
+const listNotes = (canvas: Canvas): NoteList =>
+  clone(ordered(stateOf(canvas).notes))
 
 const getFrame = (
   canvas: Canvas,
   id: string
 ): Effect.Effect<FrameSummary, FrameNotFound> => {
-  const frameId = frameIdFrom(id)
-  const record = stateOf(canvas).store.get(frameId)
-  if (record === undefined || !isCritFrame(record)) {
-    return Effect.fail(new FrameNotFound({ id: frameId }))
-  }
-  return Effect.succeed(summarizeFrame(record))
+  const frame = stateOf(canvas).frames.find((candidate) => candidate.id === id)
+  return frame === undefined
+    ? Effect.fail(new FrameNotFound({ id }))
+    : Effect.succeed(clone(frame))
 }
+
+const getNote = (
+  canvas: Canvas,
+  id: string
+): Effect.Effect<NoteSummary, NoteNotFound> => {
+  const note = stateOf(canvas).notes.find((candidate) => candidate.id === id)
+  return note === undefined
+    ? Effect.fail(new NoteNotFound({ id }))
+    : Effect.succeed(clone(note))
+}
+
+const nextZIndex = (state: CanvasState) =>
+  Math.max(
+    0,
+    ...state.frames.map((frame) => frame.zIndex),
+    ...state.notes.map((note) => note.zIndex)
+  ) + 1
 
 const apply = (
   canvas: Canvas,
   ...commands: ReadonlyArray<CanvasCommandInput>
-): Effect.Effect<CanvasChange, CanvasCommandFailed> => {
-  const state = stateOf(canvas)
-
-  return Effect.forEach(commands, (command) =>
+): Effect.Effect<CanvasChange, CanvasCommandFailed> =>
+  Effect.forEach(commands, (command) =>
     Schema.decodeUnknownEffect(CanvasCommandSchema)(command).pipe(
       Effect.mapError(
         (cause) =>
@@ -372,145 +368,222 @@ const apply = (
     Effect.flatMap((decoded) =>
       Effect.try({
         try: () => {
-          const pages = state.store
-            .allRecords()
-            .filter((record) => record.typeName === "page")
-          if (pages.length !== 1) {
-            throw new CanvasCommandFailed({
-              reason: "invalid-canvas",
-              detail: `Canvas must contain exactly one page; found ${pages.length}`
-            })
+          const current = stateOf(canvas)
+          const draft: CanvasState = {
+            id: current.id,
+            title: current.title,
+            revision: current.revision,
+            frames: clone(current.frames),
+            notes: clone(current.notes)
           }
-          const page = pages[0]!
-          const existingFrames = state.store
-            .allRecords()
-            .filter(isCritFrame)
-            .sort((left, right) => left.index.localeCompare(right.index))
-          let index = existingFrames.at(-1)?.index ?? ("a0" as IndexKey)
-          let frameNumber = existingFrames.length
-          const planned = new Map<string, CritFrame>()
-          const removedIds = new Set<TLRecord["id"]>()
           const changedFrameIds: Array<string> = []
+          const changedNoteIds: Array<string> = []
+          const markFrame = (id: string) => {
+            if (!changedFrameIds.includes(id)) changedFrameIds.push(id)
+          }
+          const markNote = (id: string) => {
+            if (!changedNoteIds.includes(id)) changedNoteIds.push(id)
+          }
+          const frameAt = (id: string) => {
+            const index = draft.frames.findIndex((frame) => frame.id === id)
+            if (index < 0) {
+              throw new CanvasCommandFailed({
+                reason: "frame-not-found",
+                detail: `Frame not found: ${id}`
+              })
+            }
+            return index
+          }
+          const noteAt = (id: string) => {
+            const index = draft.notes.findIndex((note) => note.id === id)
+            if (index < 0) {
+              throw new CanvasCommandFailed({
+                reason: "note-not-found",
+                detail: `Note not found: ${id}`
+              })
+            }
+            return index
+          }
 
           for (const command of decoded) {
-            const frameId = frameIdFrom(command.id)
             if (command._tag === "AddFrame") {
-              if (state.store.has(frameId) || planned.has(frameId)) {
+              if (
+                draft.frames.some((frame) => frame.id === command.id) ||
+                draft.notes.some((note) => note.id === command.id)
+              ) {
                 throw new CanvasCommandFailed({
                   reason: "duplicate-frame",
-                  detail: `Frame already exists: ${frameId}`
+                  detail: `Canvas item already exists: ${command.id}`
                 })
               }
-              index = getIndexAbove(index)
-              const record = critSchema.types.shape.create({
-                id: frameId,
-                type: "crit-frame",
-                parentId: page.id,
-                index,
-                x: (frameNumber % 3) * 1240,
-                y: Math.floor(frameNumber / 3) * 840,
-                props: {
-                  w: 1200,
-                  h: 800,
-                  url: command.url,
-                  title: command.title,
-                  status: command.status,
-                  provenance: command.provenance,
-                  display: { heightMode: "viewport" }
-                }
-              }) as CritFrame
-              planned.set(frameId, record)
-              frameNumber += 1
-            } else {
-              const record = removedIds.has(frameId)
-                ? undefined
-                : (planned.get(frameId) ?? state.store.get(frameId))
-              if (record === undefined || !isCritFrame(record)) {
+              const frameNumber = draft.frames.length
+              draft.frames.push({
+                id: command.id,
+                url: command.url,
+                title: command.title,
+                status: command.status,
+                provenance: command.provenance,
+                display: { heightMode: "viewport" },
+                geometry: {
+                  x: (frameNumber % 3) * 1240,
+                  y: Math.floor(frameNumber / 3) * 840,
+                  width: 1200,
+                  height: 800
+                },
+                zIndex: nextZIndex(draft)
+              })
+              markFrame(command.id)
+              continue
+            }
+
+            if (command._tag === "AddNote") {
+              if (
+                draft.frames.some((frame) => frame.id === command.id) ||
+                draft.notes.some((note) => note.id === command.id)
+              ) {
                 throw new CanvasCommandFailed({
-                  reason: "frame-not-found",
-                  detail: `Frame not found: ${frameId}`
+                  reason: "duplicate-note",
+                  detail: `Canvas item already exists: ${command.id}`
                 })
               }
-              if (command._tag === "RemoveFrame") {
-                planned.delete(frameId)
-                const pending: Array<TLRecord["id"]> = [frameId]
-                const records = state.store.allRecords()
-                while (pending.length > 0) {
-                  const parentId = pending.pop()!
-                  if (removedIds.has(parentId)) continue
-                  removedIds.add(parentId)
-                  for (const child of records) {
-                    if (
-                      child.typeName === "shape" &&
-                      child.parentId === parentId
-                    ) {
-                      pending.push(child.id)
-                    }
-                  }
-                }
-              } else if (command._tag === "SetFrameStatus") {
-                planned.set(frameId, {
-                  ...record,
-                  props: { ...record.props, status: command.status }
-                })
-              } else if (command._tag === "MoveFrame") {
-                planned.set(frameId, {
-                  ...record,
+              draft.notes.push({
+                id: command.id,
+                text: command.text,
+                geometry: {
                   x: command.x,
-                  y: command.y
-                })
-              } else if (command._tag === "ResizeFrame") {
-                planned.set(frameId, {
-                  ...record,
-                  props: {
-                    ...record.props,
-                    w: command.width,
-                    h: command.height
+                  y: command.y,
+                  width: command.width,
+                  height: command.height
+                },
+                attachedTo: null,
+                zIndex: nextZIndex(draft)
+              })
+              markNote(command.id)
+              continue
+            }
+
+            if (
+              command._tag === "SetFrameStatus" ||
+              command._tag === "UpdateFrame" ||
+              command._tag === "MoveFrame" ||
+              command._tag === "ResizeFrame" ||
+              command._tag === "RemoveFrame"
+            ) {
+              const index = frameAt(command.id)
+              const frame = draft.frames[index]!
+              if (command._tag === "RemoveFrame") {
+                draft.frames.splice(index, 1)
+                const attached = draft.notes.filter(
+                  (note) => note.attachedTo === command.id
+                )
+                draft.notes = draft.notes.filter(
+                  (note) => note.attachedTo !== command.id
+                )
+                for (const note of attached) markNote(note.id)
+              } else if (command._tag === "SetFrameStatus") {
+                draft.frames[index] = { ...frame, status: command.status }
+              } else if (command._tag === "UpdateFrame") {
+                if (
+                  Object.values(command.changes).every(
+                    (value) => value === undefined
+                  )
+                ) {
+                  throw new CanvasCommandFailed({
+                    reason: "invalid-command",
+                    detail: `UpdateFrame requires at least one change: ${command.id}`
+                  })
+                }
+                draft.frames[index] = {
+                  ...frame,
+                  ...(command.changes.url === undefined
+                    ? {}
+                    : { url: command.changes.url }),
+                  ...(command.changes.title === undefined
+                    ? {}
+                    : { title: command.changes.title }),
+                  ...(command.changes.status === undefined
+                    ? {}
+                    : { status: command.changes.status }),
+                  ...(command.changes.provenance === undefined
+                    ? {}
+                    : { provenance: command.changes.provenance }),
+                  display: command.changes.display ?? frame.display
+                }
+              } else if (command._tag === "MoveFrame") {
+                const deltaX = command.x - frame.geometry.x
+                const deltaY = command.y - frame.geometry.y
+                draft.frames[index] = {
+                  ...frame,
+                  geometry: { ...frame.geometry, x: command.x, y: command.y }
+                }
+                draft.notes = draft.notes.map((note) => {
+                  if (note.attachedTo !== command.id) return note
+                  markNote(note.id)
+                  return {
+                    ...note,
+                    geometry: {
+                      ...note.geometry,
+                      x: note.geometry.x + deltaX,
+                      y: note.geometry.y + deltaY
+                    }
                   }
                 })
               } else {
-                const { changes } = command
-                if (Object.values(changes).every((value) => value === undefined)) {
-                  throw new CanvasCommandFailed({
-                    reason: "invalid-command",
-                    detail: `UpdateFrame requires at least one change: ${frameId}`
-                  })
-                }
-                planned.set(frameId, {
-                  ...record,
-                  props: {
-                    ...record.props,
-                    ...(changes.url === undefined ? {} : { url: changes.url }),
-                    ...(changes.title === undefined ? {} : { title: changes.title }),
-                    ...(changes.status === undefined ? {} : { status: changes.status }),
-                    ...(changes.provenance === undefined
-                      ? {}
-                      : { provenance: changes.provenance }),
-                    ...(changes.display === undefined
-                      ? {}
-                      : { display: changes.display })
+                draft.frames[index] = {
+                  ...frame,
+                  geometry: {
+                    ...frame.geometry,
+                    width: command.width,
+                    height: command.height
                   }
+                }
+              }
+              markFrame(command.id)
+              continue
+            }
+
+            const index = noteAt(command.id)
+            const note = draft.notes[index]!
+            if (command._tag === "UpdateNote") {
+              if (note.text !== command.expectedText) {
+                throw new CanvasCommandFailed({
+                  reason: "note-conflict",
+                  detail: `Note ${command.id} changed before this edit`
                 })
               }
+              draft.notes[index] = { ...note, text: command.text }
+            } else if (command._tag === "MoveNote") {
+              draft.notes[index] = {
+                ...note,
+                geometry: { ...note.geometry, x: command.x, y: command.y }
+              }
+            } else if (command._tag === "ResizeNote") {
+              draft.notes[index] = {
+                ...note,
+                geometry: {
+                  ...note.geometry,
+                  width: command.width,
+                  height: command.height
+                }
+              }
+            } else if (command._tag === "AttachNote") {
+              frameAt(command.frameId)
+              draft.notes[index] = { ...note, attachedTo: command.frameId }
+            } else if (command._tag === "DetachNote") {
+              draft.notes[index] = { ...note, attachedTo: null }
+            } else {
+              draft.notes.splice(index, 1)
             }
-            if (!changedFrameIds.includes(frameId)) changedFrameIds.push(frameId)
+            markNote(command.id)
           }
 
-          state.store.mergeRemoteChanges(() => {
-            if (planned.size > 0) {
-              state.store.put(Array.from(planned.values()))
-            }
-            const persistedRemovedIds = Array.from(removedIds).filter((id) =>
-              state.store.has(id)
-            )
-            if (persistedRemovedIds.length > 0) {
-              state.store.remove(persistedRemovedIds)
-            }
-          })
-
+          current.title = draft.title
+          current.frames = draft.frames
+          current.notes = draft.notes
           return {
             commandCount: decoded.length,
-            changedFrameIds
+            changedFrameIds,
+            changedNoteIds
           }
         },
         catch: (cause) =>
@@ -523,7 +596,6 @@ const apply = (
       })
     )
   )
-}
 
 export const Canvas = {
   create,
@@ -532,5 +604,7 @@ export const Canvas = {
   export: exportCanvas,
   summarize,
   listFrames,
-  getFrame
+  listNotes,
+  getFrame,
+  getNote
 } as const

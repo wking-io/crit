@@ -10,7 +10,7 @@ import { ChildProcessSpawner } from "effect/unstable/process"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 
 import { runCrit } from "../../src/cli/command.js"
-import { FileSystemDocumentStore } from "../../src/node/file-system-document-store.js"
+import { FileSystemCanvasRepository } from "../../src/node/file-system-canvas-repository.js"
 import { CritRuntimeLive } from "../../src/runtime/crit-runtime.js"
 
 describe("crit sync", () => {
@@ -68,7 +68,7 @@ describe("crit sync", () => {
   })
 
   it("discovers an app origin and creates its complete Canvas", async () => {
-    const storeLayer = FileSystemDocumentStore.layer({ root })
+    const storeLayer = FileSystemCanvasRepository.layer({ root })
     const runtimeLayer = CritRuntimeLive.pipe(Layer.provide(storeLayer))
     const cliLayer = Layer.mergeAll(
       NodeFileSystem.layer,
@@ -125,13 +125,13 @@ describe("crit sync", () => {
         {
           id: "checkout-review",
           action: "created",
-          addedFrameIds: ["shape:candidate"]
+          addedFrameIds: ["candidate"]
         }
       ]
     })
     expect(opened.frames).toMatchObject([
       {
-        id: "shape:candidate",
+        id: "candidate",
         url: `${origin}/candidate`,
         status: "approved"
       }

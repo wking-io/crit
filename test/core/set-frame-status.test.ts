@@ -34,7 +34,8 @@ describe("Canvas SetFrameStatus command", () => {
 
       expect(change).toEqual({
         commandCount: 1,
-        changedFrameIds: ["shape:checkout-v2"]
+        changedFrameIds: ["checkout-v2"],
+        changedNoteIds: []
       })
       expect(Canvas.summarize(reopened).statuses).toEqual({
         inProgress: 1,
@@ -43,4 +44,3 @@ describe("Canvas SetFrameStatus command", () => {
       })
     }))
 })
-

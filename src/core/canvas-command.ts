@@ -74,6 +74,53 @@ export const ResizeFrameCommand = Schema.TaggedStruct("ResizeFrame", {
 })
 export type ResizeFrameCommand = typeof ResizeFrameCommand.Type
 
+export const AddNoteCommand = Schema.TaggedStruct("AddNote", {
+  id: Schema.String,
+  text: Schema.String,
+  x: Schema.Finite,
+  y: Schema.Finite,
+  width: PositiveDimension,
+  height: PositiveDimension
+})
+export type AddNoteCommand = typeof AddNoteCommand.Type
+
+export const UpdateNoteCommand = Schema.TaggedStruct("UpdateNote", {
+  id: Schema.String,
+  expectedText: Schema.String,
+  text: Schema.String
+})
+export type UpdateNoteCommand = typeof UpdateNoteCommand.Type
+
+export const MoveNoteCommand = Schema.TaggedStruct("MoveNote", {
+  id: Schema.String,
+  x: Schema.Finite,
+  y: Schema.Finite
+})
+export type MoveNoteCommand = typeof MoveNoteCommand.Type
+
+export const ResizeNoteCommand = Schema.TaggedStruct("ResizeNote", {
+  id: Schema.String,
+  width: PositiveDimension,
+  height: PositiveDimension
+})
+export type ResizeNoteCommand = typeof ResizeNoteCommand.Type
+
+export const AttachNoteCommand = Schema.TaggedStruct("AttachNote", {
+  id: Schema.String,
+  frameId: Schema.String
+})
+export type AttachNoteCommand = typeof AttachNoteCommand.Type
+
+export const DetachNoteCommand = Schema.TaggedStruct("DetachNote", {
+  id: Schema.String
+})
+export type DetachNoteCommand = typeof DetachNoteCommand.Type
+
+export const RemoveNoteCommand = Schema.TaggedStruct("RemoveNote", {
+  id: Schema.String
+})
+export type RemoveNoteCommand = typeof RemoveNoteCommand.Type
+
 export type AddFrameInput = {
   readonly id: string
   readonly url: string
@@ -148,13 +195,96 @@ const resizeFrame = (input: ResizeFrameInput): ResizeFrameCommand => ({
   ...input
 })
 
+export type AddNoteInput = {
+  readonly id: string
+  readonly text: string
+  readonly x: number
+  readonly y: number
+  readonly width?: number
+  readonly height?: number
+}
+
+const addNote = (input: AddNoteInput): AddNoteCommand => ({
+  _tag: "AddNote",
+  id: input.id,
+  text: input.text,
+  x: input.x,
+  y: input.y,
+  width: input.width ?? 280,
+  height: input.height ?? 160
+})
+
+export type UpdateNoteInput = {
+  readonly id: string
+  readonly expectedText: string
+  readonly text: string
+}
+
+const updateNote = (input: UpdateNoteInput): UpdateNoteCommand => ({
+  _tag: "UpdateNote",
+  ...input
+})
+
+export type MoveNoteInput = {
+  readonly id: string
+  readonly x: number
+  readonly y: number
+}
+
+const moveNote = (input: MoveNoteInput): MoveNoteCommand => ({
+  _tag: "MoveNote",
+  ...input
+})
+
+export type ResizeNoteInput = {
+  readonly id: string
+  readonly width: number
+  readonly height: number
+}
+
+const resizeNote = (input: ResizeNoteInput): ResizeNoteCommand => ({
+  _tag: "ResizeNote",
+  ...input
+})
+
+export type AttachNoteInput = {
+  readonly id: string
+  readonly frameId: string
+}
+
+const attachNote = (input: AttachNoteInput): AttachNoteCommand => ({
+  _tag: "AttachNote",
+  ...input
+})
+
+export type DetachNoteInput = { readonly id: string }
+
+const detachNote = (input: DetachNoteInput): DetachNoteCommand => ({
+  _tag: "DetachNote",
+  ...input
+})
+
+export type RemoveNoteInput = { readonly id: string }
+
+const removeNote = (input: RemoveNoteInput): RemoveNoteCommand => ({
+  _tag: "RemoveNote",
+  ...input
+})
+
 export const CanvasCommandSchema = Schema.Union([
   AddFrameCommand,
   SetFrameStatusCommand,
   UpdateFrameCommand,
   RemoveFrameCommand,
   MoveFrameCommand,
-  ResizeFrameCommand
+  ResizeFrameCommand,
+  AddNoteCommand,
+  UpdateNoteCommand,
+  MoveNoteCommand,
+  ResizeNoteCommand,
+  AttachNoteCommand,
+  DetachNoteCommand,
+  RemoveNoteCommand
 ])
 export type CanvasCommand = typeof CanvasCommandSchema.Type
 
@@ -165,10 +295,24 @@ export const CanvasCommand = {
   RemoveFrame: RemoveFrameCommand,
   MoveFrame: MoveFrameCommand,
   ResizeFrame: ResizeFrameCommand,
+  AddNote: AddNoteCommand,
+  UpdateNote: UpdateNoteCommand,
+  MoveNote: MoveNoteCommand,
+  ResizeNote: ResizeNoteCommand,
+  AttachNote: AttachNoteCommand,
+  DetachNote: DetachNoteCommand,
+  RemoveNote: RemoveNoteCommand,
   addFrame,
   setFrameStatus,
   updateFrame,
   removeFrame,
   moveFrame,
-  resizeFrame
+  resizeFrame,
+  addNote,
+  updateNote,
+  moveNote,
+  resizeNote,
+  attachNote,
+  detachNote,
+  removeNote
 } as const

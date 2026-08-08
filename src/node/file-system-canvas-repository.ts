@@ -1,16 +1,22 @@
 import * as NodeServices from "@effect/platform-node/NodeServices"
+import { open as openFile } from "node:fs/promises"
 import { Effect, FileSystem, Layer, Path } from "effect"
 
-import type { CanvasDocument } from "../core/index.js"
+import {
+  Canvas,
+  CanvasCommandFailed,
+  CanvasDocumentTooLarge,
+  CanvasInternals,
+  type CanvasDocument
+} from "../core/canvas.js"
 import {
   DocumentAlreadyExists,
-  DocumentConflict,
   DocumentMalformed,
   DocumentNotFound,
   DocumentStorageFailed,
-  DocumentStore,
-  type DocumentStoreShape
-} from "../runtime/document-store.js"
+  CanvasRepository,
+  type CanvasRepositoryShape
+} from "../runtime/canvas-repository.js"
 import {
   canonicalizeDocument,
   serializeDocument
@@ -30,7 +36,7 @@ const make = (root: string) =>
     const directory = path.join(root, ".crit", "canvases")
     const filePath = (id: string) => path.join(directory, `${encodeURIComponent(id)}.json`)
 
-    const read: DocumentStoreShape["load"] = (id) => {
+    const read: CanvasRepositoryShape["load"] = (id) => {
       const target = filePath(id)
       return Effect.gen(function*() {
         const exists = yield* fs
@@ -53,7 +59,7 @@ const make = (root: string) =>
       })
     }
 
-    const create: DocumentStoreShape["create"] = (document) =>
+    const create: CanvasRepositoryShape["create"] = (document) =>
       Effect.gen(function*() {
         const canonical = yield* canonicalizeDocument(document.id, document)
         yield* fs
@@ -88,7 +94,7 @@ const make = (root: string) =>
         return canonical
       })
 
-    const list: DocumentStoreShape["list"] = () =>
+    const list: CanvasRepositoryShape["list"] = () =>
       Effect.gen(function*() {
         const exists = yield* fs
           .exists(directory)
@@ -120,50 +126,87 @@ const make = (root: string) =>
           .sort((left, right) => left.id.localeCompare(right.id))
       })
 
-    const save: DocumentStoreShape["save"] = (document, options) => {
-      const id = document.id
+    const apply: CanvasRepositoryShape["apply"] = (id, commands) => {
       const target = filePath(id)
       const lock = `${target}.lock`
       const temporary = `${target}.${process.pid}.${crypto.randomUUID()}.tmp`
 
-      const write = Effect.gen(function*() {
-        const current = yield* read(id)
-        if (current.revision !== options.expectedRevision) {
-          return yield* new DocumentConflict({
-            id,
-            expectedRevision: options.expectedRevision,
-            currentRevision: current.revision
-          })
-        }
+      const acquire = Effect.tryPromise({
+        try: async () => {
+          const deadline = Date.now() + 5_000
+          for (;;) {
+            try {
+              const handle = await openFile(lock, "wx", 0o600)
+              await handle.writeFile(`${process.pid}\n`)
+              await handle.close()
+              return
+            } catch (cause) {
+              if (
+                !(cause instanceof Error && "code" in cause && cause.code === "EEXIST") ||
+                Date.now() >= deadline
+              ) {
+                throw cause
+              }
+              await new Promise((resolve) => setTimeout(resolve, 10))
+            }
+          }
+        },
+        catch: (cause) => storageFailure("lock", id, cause)
+      })
 
-        const canonical = yield* canonicalizeDocument(id, document)
-        const next: CanvasDocument = {
-          ...canonical,
-          revision: current.revision + 1
-        }
+      const mutate = Effect.gen(function*() {
+        const current = yield* read(id)
+        const canvas = yield* Canvas.open(current).pipe(
+          Effect.mapError(
+            (cause) =>
+              new DocumentMalformed({
+                id,
+                detail:
+                  cause._tag === "CanvasOpenFailed"
+                    ? cause.detail
+                    : `Canvas Document is ${cause.actualBytes} bytes; maximum is ${cause.maxBytes}`
+              })
+          )
+        )
+        const change = yield* Canvas.apply(canvas, ...commands)
+        CanvasInternals.setRevision(canvas, current.revision + 1)
+        const next = yield* Effect.try({
+          try: () => Canvas.export(canvas),
+          catch: (cause) =>
+            cause instanceof CanvasDocumentTooLarge
+              ? cause
+              : storageFailure("apply", id, cause)
+        })
         yield* fs
           .writeFileString(temporary, serializeDocument(next), { mode: 0o600 })
-          .pipe(Effect.mapError((cause) => storageFailure("save", id, cause)))
+          .pipe(Effect.mapError((cause) => storageFailure("apply", id, cause)))
         yield* fs
           .rename(temporary, target)
-          .pipe(Effect.mapError((cause) => storageFailure("save", id, cause)))
-        return next
+          .pipe(Effect.mapError((cause) => storageFailure("apply", id, cause)))
+        return { document: next, change }
       }).pipe(Effect.ensuring(fs.remove(temporary).pipe(Effect.ignore)))
 
-      return fs.writeFileString(lock, `${process.pid}\n`, {
-        flag: "wx",
-        mode: 0o600
-      }).pipe(
-        Effect.mapError((cause) => storageFailure("lock", id, cause)),
-        Effect.andThen(write),
-        Effect.ensuring(fs.remove(lock).pipe(Effect.ignore))
+      if (commands.length === 0) {
+        return Effect.fail(
+          new CanvasCommandFailed({
+            reason: "invalid-command",
+            detail: "A durable Canvas update requires at least one command"
+          })
+        )
+      }
+
+      return read(id).pipe(
+        Effect.andThen(acquire),
+        Effect.andThen(
+          mutate.pipe(Effect.ensuring(fs.remove(lock).pipe(Effect.ignore)))
+        )
       )
     }
 
-    return { create, load: read, list, save } satisfies DocumentStoreShape
+    return { create, load: read, list, apply } satisfies CanvasRepositoryShape
   })
 
 const layer = (options: { readonly root: string }) =>
-  Layer.effect(DocumentStore, make(options.root)).pipe(Layer.provide(NodeServices.layer))
+  Layer.effect(CanvasRepository, make(options.root)).pipe(Layer.provide(NodeServices.layer))
 
-export const FileSystemDocumentStore = { layer } as const
+export const FileSystemCanvasRepository = { layer } as const

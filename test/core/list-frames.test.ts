@@ -34,22 +34,24 @@ describe("Canvas.listFrames", () => {
 
       expect(Canvas.listFrames(reopened)).toEqual([
         {
-          id: "shape:checkout-v1",
+          id: "checkout-v1",
           url: "https://checkout.localhost",
           title: "Checkout v1",
           status: "in-progress",
           provenance: { kind: "manifest", sourceId: "storefront:v1" },
           display: { heightMode: "viewport" },
-          geometry: { x: 600, y: 300, width: 1200, height: 800 }
+          geometry: { x: 600, y: 300, width: 1200, height: 800 },
+          zIndex: 1
         },
         {
-          id: "shape:checkout-v2",
+          id: "checkout-v2",
           url: "https://checkout.localhost",
           title: "Checkout v2",
           status: "approved",
           provenance: { kind: "agent", sourceId: "iteration-agent" },
           display: { heightMode: "fit-page" },
-          geometry: { x: 1240, y: 0, width: 1200, height: 800 }
+          geometry: { x: 1240, y: 0, width: 1200, height: 800 },
+          zIndex: 2
         }
       ])
     }))

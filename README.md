@@ -1,8 +1,11 @@
 # Crit
 
-Crit is a local-first React canvas for arranging and assessing live web
-iterations. It uses one tldraw Store as the live document, Effect v4 for typed
-runtime seams, single-flight autosave, and browser draft recovery.
+Crit is a local-first infinite canvas for arranging live web iterations as
+Frames and reviewing them with plain-text Notes. It is designed for one person
+working with multiple local browser windows and agents, with no collaboration
+server or canvas framework to configure.
+
+## Install
 
 Initialize Crit in a Vite + React project:
 
@@ -10,14 +13,38 @@ Initialize Crit in a Vite + React project:
 npx @riff-refine/crit init
 ```
 
-The initializer installs the package, updates Vite without replacing existing
-plugins, creates the React surface, adds `.crit/` to `.gitignore`, and installs
-the project agent skill. It also creates `crit.manifest.json` with a default
-Canvas containing the host application. React Router framework projects receive
-a registered `/crit/:canvasId?` route. Other routers get an explicit component
-mount instruction rather than a guessed mutation.
+The initializer installs the package, adds the Vite plugin and React surface,
+creates a discovery manifest, ignores local `.crit/` data, and installs the Crit
+agent skill. React Router framework projects receive a `/crit/:canvasId?` route;
+other router setups get an explicit mount instruction.
 
-Describe review Canvases without hard-coding the running origin:
+Or configure it directly:
+
+```ts
+// vite.config.ts
+import { defineConfig } from "vite"
+import { crit } from "@riff-refine/crit/vite"
+
+export default defineConfig({
+  plugins: [crit()]
+})
+```
+
+```tsx
+import { Crit } from "@riff-refine/crit"
+
+export function ReviewCanvas() {
+  return <Crit canvasId="homepage" />
+}
+```
+
+The plugin is active only during Vite serve and preview. It can be gated with
+`crit({ enabled: mode !== "production" })`. A missing Canvas is created on first
+load by default; use `createIfMissing: false` to require explicit creation.
+
+## Discovery
+
+Declare Frames without hard-coding the running origin:
 
 ```json
 {
@@ -40,151 +67,70 @@ Describe review Canvases without hard-coding the running origin:
 }
 ```
 
-The Vite adapter publishes the resolved document at
-`/.well-known/crit.json`. Opening `/crit/checkout-review` reconciles its Frames
-before the editor loads. Agents can perform the same idempotent reconciliation
-from a discovered app origin:
+Vite publishes the resolved manifest at `/.well-known/crit.json` and reconciles
+declared Frames before opening a Canvas. Agents can do the same:
 
 ```sh
 npx @riff-refine/crit sync --from https://storefront.localhost --json
 ```
 
-Agents can atomically apply every semantic Frame operation with optimistic
-revision checking:
+Manifest reconciliation is additive. Stable Frame IDs update in place; omitted
+Frames and attached Notes remain until explicitly removed.
+
+## Agent and CLI editing
+
+Agents can read and atomically edit the same files as open browser windows:
 
 ```sh
+npx @riff-refine/crit list --json
+npx @riff-refine/crit open checkout-review --json
 npx @riff-refine/crit apply checkout-review \
   '[{"_tag":"SetFrameStatus","id":"candidate","status":"approved"}]' \
-  --expected-revision 3 --json
+  --json
 ```
 
-The command accepts arrays containing `AddFrame`, `UpdateFrame`,
-`SetFrameStatus`, `MoveFrame`, `ResizeFrame`, and `RemoveFrame`. It returns the
-new revision and complete Frame summaries for follow-up work.
+The command schema includes Frame operations (`AddFrame`, `UpdateFrame`,
+`SetFrameStatus`, `MoveFrame`, `ResizeFrame`, `RemoveFrame`) and Note operations
+(`AddNote`, `UpdateNote`, `MoveNote`, `ResizeNote`, `AttachNote`, `DetachNote`,
+`RemoveNote`). Related commands commit as one batch. Per-Canvas filesystem locks
+serialize local writers against the latest revision, so unrelated agent and
+browser edits merge without manual revision wiring.
 
-Manifest reconciliation preserves Frame identity and never removes Frames or
-their annotations implicitly. New Frame status defaults to `in-progress`;
-omitted status, `display`, and `geometry` fields do not overwrite later review
-changes. Declare those fields when the manifest should continue to own them.
+Canvas Documents live under `.crit/canvases`. Use Crit commands and interfaces
+instead of editing those files directly.
 
-Add the Vite plugin. It owns the local HTTP adapter and stores Canvas Documents
-under `.crit/canvases`:
+## Browser behavior
 
-```ts
-// vite.config.ts
-import { defineConfig } from "vite"
-import { crit } from "@riff-refine/crit/vite"
+The React viewport supports infinite pan/zoom, Frame and Note drag/resize,
+review status, editable Notes, and attachment by dropping a Note onto a Frame.
+Dragging it away detaches it without changing its Canvas position. Attached
+Notes move with their Frame. Offscreen iframes are paused for performance.
 
-export default defineConfig({
-  plugins: [crit()]
-})
-```
+Autosave is single-flight and stores pending semantic commands in IndexedDB for
+draft recovery. Vite file watching refreshes clean windows immediately after a
+browser or agent write; a two-second poll remains a fallback. Dirty local work
+is never replaced by refresh. Use `refreshInterval={false}` to disable polling.
 
-The adapter runs only during Vite serve/preview. It can also be gated explicitly
-with `crit({ enabled: mode !== "production" })` from a functional Vite config.
-Use `manifest: false`, a custom manifest filename, or `manifestPath` to configure
-discovery publication.
-
-The React entry point then owns the editor lifecycle and required tldraw styles:
+Iframe capabilities are configurable:
 
 ```tsx
-import { Crit } from "@riff-refine/crit"
-
-export function ReviewCanvas() {
-  return <Crit canvasId="homepage" />
-}
+<Crit
+  canvasId="homepage"
+  iframeAllow="clipboard-read; clipboard-write; fullscreen"
+  iframeSandbox="allow-scripts allow-same-origin allow-forms"
+/>
 ```
 
-With the pointer tool selected, each Frame header includes a native status
-selector for marking it in progress, approved, or changes requested. The change
-updates the tldraw record directly and follows the normal autosave path.
+Pass `draftJournal={false}` to disable recovery, a custom `CritClientShape` for
+another local HTTP host, or `onSession` to access `dispatch`, `flush`, and
+`refresh` directly.
 
-The Vite adapter creates a missing Canvas on first load. Pass
-`crit({ createIfMissing: false })` when creation must remain explicit.
-
-For non-production Cloudflare deployments, use the same HTTP contract with a D1
-binding:
+Headless consumers can import the Effect v4 domain engine:
 
 ```ts
-// worker.ts
-import { makeCritCloudflareHandler } from "@riff-refine/crit/cloudflare"
-import app from "./app"
-
-const crit = makeCritCloudflareHandler({ initializeSchema: false })
-
-export default {
-  async fetch(request, env, context) {
-    const response = await crit(request, {
-      database: env.CRIT_DB,
-      enabled: env.CRIT_ENABLED === "true"
-    })
-    return response ?? app.fetch(request, env, context)
-  }
-} satisfies ExportedHandler<Env>
+import { Canvas, CanvasCommand } from "@riff-refine/crit/core"
 ```
 
-`Env` and `ExportedHandler` should come from `wrangler types`; Crit accepts the
-generated D1 binding structurally and does not add Cloudflare runtime types to
-other consumers. Add a `CRIT_DB` D1 binding and a `CRIT_ENABLED` variable to
-`wrangler.jsonc`, setting the variable to `"false"` in production:
-
-```jsonc
-{
-  "$schema": "./node_modules/wrangler/config-schema.json",
-  "name": "app-preview",
-  "main": "worker.ts",
-  "compatibility_date": "2026-08-08",
-  "compatibility_flags": ["nodejs_compat"],
-  "vars": { "CRIT_ENABLED": "true" },
-  "d1_databases": [
-    {
-      "binding": "CRIT_DB",
-      "database_name": "crit-preview",
-      "database_id": "<DATABASE_ID>",
-      "migrations_dir": "migrations"
-    }
-  ]
-}
-```
-
-Copy the packaged migration into the configured directory, then apply it and
-regenerate binding types:
-
-```sh
-cp node_modules/@riff-refine/crit/migrations/0001_crit_canvases.sql migrations/
-npx wrangler d1 migrations apply crit-preview --local
-npx wrangler d1 migrations apply crit-preview --remote
-npx wrangler types
-```
-
-The handler returns `null` for disabled and non-Crit requests so the existing
-application remains in control. Schema initialization is enabled by default for
-zero-setup preview use and cached once per D1 binding; committed Wrangler
-migrations plus `initializeSchema: false` are preferred for repeatable
-deployments.
-
-`client` remains the transport seam. Pass a custom `CritClientShape` to target
-another HTTP runtime without changing editor ownership. Draft recovery
-uses IndexedDB by default and a tab-stable session ID; pass `draftJournal={false}`
-to disable it or provide another journal implementation.
-
-Open editors check for newer revisions every two seconds. A clean Session adopts
-external agent changes into the existing tldraw Store; local dirty or in-flight
-work is never overwritten. Set `refreshInterval={false}` to disable polling or
-pass another Effect duration to tune it. `onSession` also exposes `refresh()`
-for explicit checks.
-
-Headless consumers can import the platform-neutral engine without React:
-
-```ts
-import { Canvas } from "@riff-refine/crit/core"
-```
-
-Use `--skip-install` when dependency installation is managed separately, and
-`--json` for machine-readable initialization results.
-
-Before publishing, run `npm run verify`. It typechecks and tests the source,
-then packs Crit and installs the tarball into an isolated consumer. The smoke
-check builds the React entry point, imports every runtime adapter, verifies the
-packaged migration and skill, and exercises the installed CLI. `npm publish`
-runs the same gate automatically.
+Before publishing, run `npm run verify`. It typechecks, tests, packs the module,
+installs it in an isolated consumer, builds the React entry point, imports every
+public adapter, and exercises the installed CLI.

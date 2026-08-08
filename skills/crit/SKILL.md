@@ -13,7 +13,7 @@ consume the result.
 ```sh
 npx @riff-refine/crit list --json
 npx @riff-refine/crit sync --from https://app.localhost --json
-npx @riff-refine/crit apply checkout-review '[{"_tag":"SetFrameStatus","id":"candidate","status":"approved"}]' --expected-revision 3 --json
+npx @riff-refine/crit apply checkout-review '[{"_tag":"SetFrameStatus","id":"candidate","status":"approved"}]' --json
 npx @riff-refine/crit create checkout-review --title "Checkout review" --json
 npx @riff-refine/crit add checkout-review https://checkout.localhost --json
 ```
@@ -30,8 +30,7 @@ Open `/crit/checkout-review` in the host application after adding frames.
 4. Otherwise keep only HTTP or HTTPS URLs that represent renderable iterations.
 5. Create the Canvas when needed, using a stable kebab-case ID.
 6. Run `open <canvas> --json` to read its current revision and Frames.
-7. Add all relevant URLs in one `add` command. Pass `--expected-revision` when
-   coordinating with another writer.
+7. Add all relevant URLs in one `add` command.
 8. Re-open the Canvas and report its URL, revision, and added Frames.
 
 ## Apply commands
@@ -45,21 +44,23 @@ array to `apply`:
 - `SetFrameStatus`: `id` and `status`.
 - `MoveFrame`: `id`, `x`, and `y`.
 - `ResizeFrame`: `id`, positive `width`, and positive `height`.
-- `RemoveFrame`: `id`; this also removes annotations parented to the Frame.
+- `RemoveFrame`: `id`; this also removes Notes attached to the Frame.
+- `AddNote`: `id`, `text`, `x`, and `y`, with optional `width` and `height`.
+- `UpdateNote`: `id`, `expectedText`, and replacement `text`.
+- `MoveNote`, `ResizeNote`, `AttachNote`, `DetachNote`, and `RemoveNote`.
 
 ## Editing rules
 
 - Use Crit commands and interfaces; never edit `.crit/canvases/*.json`.
-- Treat Canvas revision conflicts as a signal to re-open, reconcile, and retry.
 - Use one `apply` call for related `AddFrame`, `UpdateFrame`, `SetFrameStatus`,
-  `MoveFrame`, `ResizeFrame`, and `RemoveFrame` operations so they commit
-  atomically. Read the Canvas revision immediately before applying them.
+  `MoveFrame`, `ResizeFrame`, `RemoveFrame`, and Note operations so they commit
+  atomically.
 - Preserve Frame identity. Do not remove and recreate a Frame merely to change
   its status, title, URL, position, or size.
 - Treat manifest IDs as durable. Edit `crit.manifest.json` when a project-owned
   discovery declaration needs to change; sync never deletes absent Frames.
-- Keep annotations parented to their Frame when they should move together.
-- Do not create Asset records; Crit V1 supports live Frames and annotations.
+- Attach Notes to their Frame when they should move together; detaching preserves
+  their Canvas position.
 - Ask before replacing or discarding user-authored Canvas content.
 
 ## Setup and diagnosis
@@ -71,7 +72,5 @@ default manifest, and this project skill. If discovery fails, verify that
 verify the Vite plugin is enabled and that `GET /__crit/api/canvases/<id>`
 returns a Canvas Document.
 
-For a deployed Cloudflare preview, verify `CRIT_ENABLED` gates the
-`makeCritCloudflareHandler` call, the `CRIT_DB` D1 binding exists, and the
-packaged Crit migration has been applied. Keep the gate off in production and
-fall through when the handler returns `null`.
+Crit V1 is local-only. Do not expose its local HTTP endpoints as a remote
+collaboration service.

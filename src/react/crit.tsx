@@ -7,7 +7,6 @@ import {
   type Duration
 } from "effect"
 import {
-  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -15,17 +14,9 @@ import {
   type CSSProperties,
   type ReactNode
 } from "react"
-import {
-  Tldraw,
-  type Editor,
-  type TLComponents,
-  type TLOnMountHandler,
-  type TLStore,
-  type TLUiOverrides
-} from "tldraw"
-import "tldraw/tldraw.css"
 
 import { IndexedDbDraftJournal } from "../browser/indexeddb-draft-journal.js"
+import type { CanvasDocument } from "../core/index.js"
 import { HttpCritClient } from "../http/client.js"
 import {
   CanvasSession,
@@ -33,34 +24,8 @@ import {
   type CanvasSessionState
 } from "../session/canvas-session.js"
 import { CritClient, type CritClientShape } from "../session/crit-client.js"
-import {
-  DraftJournal,
-  type DraftJournalShape
-} from "../session/draft-journal.js"
-import { CritFrameShapeUtil } from "./crit-frame.js"
-
-const shapeUtils = [CritFrameShapeUtil]
-
-const defaultComponents: TLComponents = {
-  MainMenu: null,
-  PageMenu: null
-}
-
-const critUiOverrides: TLUiOverrides = {
-  tools(_editor, tools) {
-    delete tools.asset
-    delete tools.embed
-    delete tools.frame
-    return tools
-  }
-}
-
-const disabledExternalContentTypes = [
-  "files",
-  "file-replace",
-  "embed",
-  "url"
-] as const
+import { DraftJournal, type DraftJournalShape } from "../session/draft-journal.js"
+import { CanvasViewport } from "./canvas-viewport.js"
 
 const rootStyle: CSSProperties = {
   height: "100%",
@@ -87,16 +52,11 @@ const sessionIdForCanvas = (canvasId: string) => {
   try {
     const existing = globalThis.sessionStorage?.getItem(key)
     if (existing) return existing
-    const created =
-      typeof globalThis.crypto?.randomUUID === "function"
-        ? globalThis.crypto.randomUUID()
-        : `${Date.now()}-${Math.random().toString(36).slice(2)}`
+    const created = crypto.randomUUID()
     globalThis.sessionStorage?.setItem(key, created)
     return created
   } catch {
-    return typeof globalThis.crypto?.randomUUID === "function"
-      ? globalThis.crypto.randomUUID()
-      : `${Date.now()}-${Math.random().toString(36).slice(2)}`
+    return crypto.randomUUID()
   }
 }
 
@@ -108,15 +68,6 @@ const errorMessage = (cause: unknown) => {
   return String(cause)
 }
 
-const combineOverrides = (
-  overrides: TLUiOverrides | ReadonlyArray<TLUiOverrides> | undefined
-) =>
-  overrides === undefined
-    ? critUiOverrides
-    : Array.isArray(overrides)
-      ? [critUiOverrides, ...overrides]
-      : [critUiOverrides, overrides]
-
 export interface CritProps {
   readonly canvasId: string
   readonly client?: CritClientShape
@@ -127,12 +78,10 @@ export interface CritProps {
   readonly draftJournal?: DraftJournalShape | false
   readonly className?: string
   readonly style?: CSSProperties
-  readonly components?: TLComponents
-  readonly hideUi?: boolean
-  readonly licenseKey?: string
-  readonly overrides?: TLUiOverrides | ReadonlyArray<TLUiOverrides>
-  readonly onMount?: TLOnMountHandler
+  readonly iframeAllow?: string
+  readonly iframeSandbox?: string
   readonly onSession?: (session: CanvasSessionHandle) => void
+  readonly onCommandError?: (message: string) => void
   readonly loadingFallback?: ReactNode
   readonly errorFallback?: (message: string) => ReactNode
 }
@@ -147,17 +96,16 @@ export function Crit({
   draftJournal,
   className,
   style,
-  components,
-  hideUi,
-  licenseKey,
-  overrides,
-  onMount,
+  iframeAllow,
+  iframeSandbox,
   onSession,
+  onCommandError,
   loadingFallback,
   errorFallback
 }: CritProps) {
   const [session, setSession] = useState<CanvasSessionHandle | null>(null)
   const [sessionState, setSessionState] = useState<CanvasSessionState | null>(null)
+  const [document, setDocument] = useState<CanvasDocument | null>(null)
   const [error, setError] = useState<string | null>(null)
   const onSessionRef = useRef(onSession)
   onSessionRef.current = onSession
@@ -166,25 +114,12 @@ export function Crit({
     [canvasId, sessionId]
   )
   const resolvedClient = useMemo(
-    () =>
-      client ??
-      HttpCritClient.make(apiPath === undefined ? {} : { apiPath }),
+    () => client ?? HttpCritClient.make(apiPath === undefined ? {} : { apiPath }),
     [apiPath, client]
   )
   const resolvedJournal = useMemo(
-    () =>
-      draftJournal === false
-        ? undefined
-        : (draftJournal ?? IndexedDbDraftJournal.make()),
+    () => draftJournal === false ? undefined : (draftJournal ?? IndexedDbDraftJournal.make()),
     [draftJournal]
-  )
-  const resolvedComponents = useMemo(
-    () => ({ ...defaultComponents, ...components }),
-    [components]
-  )
-  const resolvedOverrides = useMemo(
-    () => combineOverrides(overrides),
-    [overrides]
   )
 
   useEffect(() => {
@@ -192,6 +127,7 @@ export function Crit({
     let cancelled = false
     setSession(null)
     setSessionState(null)
+    setDocument(null)
     setError(null)
 
     const sessionOptions = {
@@ -199,38 +135,40 @@ export function Crit({
       ...(autosaveDelay === undefined ? {} : { autosaveDelay }),
       ...(refreshInterval === undefined ? {} : { refreshInterval })
     }
-    let openSession = CanvasSession.open(canvasId, sessionOptions).pipe(
+    let opening = CanvasSession.open(canvasId, sessionOptions).pipe(
       Effect.provideService(CritClient, resolvedClient),
       Effect.provideService(Scope.Scope, scope)
     )
     if (resolvedJournal !== undefined) {
-      openSession = openSession.pipe(
-        Effect.provideService(DraftJournal, resolvedJournal)
-      )
+      opening = opening.pipe(Effect.provideService(DraftJournal, resolvedJournal))
     }
 
-    void Effect.runPromise(openSession).then(
+    void Effect.runPromise(opening).then(
       (opened) => {
         if (cancelled) return
         setSession(opened)
         setSessionState(opened.state.value)
+        setDocument(opened.document.value)
         onSessionRef.current?.(opened)
         Effect.runFork(
           Effect.forkIn(
-            SubscriptionRef.changes(opened.state).pipe(
-              Stream.runForEach((next) =>
-                Effect.sync(() => {
-                  if (!cancelled) setSessionState(next)
-                })
+            Effect.all([
+              SubscriptionRef.changes(opened.state).pipe(
+                Stream.runForEach((next) =>
+                  Effect.sync(() => !cancelled && setSessionState(next))
+                )
+              ),
+              SubscriptionRef.changes(opened.document).pipe(
+                Stream.runForEach((next) =>
+                  Effect.sync(() => !cancelled && setDocument(next))
+                )
               )
-            ),
+            ], { concurrency: "unbounded" }),
             scope
           )
         )
       },
-      (cause) => {
-        if (!cancelled) setError(errorMessage(cause))
-      }
+      (cause) => !cancelled && setError(errorMessage(cause))
     )
 
     return () => {
@@ -246,15 +184,29 @@ export function Crit({
     resolvedSessionId
   ])
 
-  const mountEditor = useCallback(
-    (editor: Editor) => {
-      for (const type of disabledExternalContentTypes) {
-        editor.registerExternalContentHandler(type, null)
+  useEffect(() => {
+    if (session === null) return
+    const hot = (import.meta as ImportMeta & {
+      readonly hot?: {
+        readonly on: (
+          event: string,
+          listener: (data: { readonly id?: string }) => void
+        ) => void
+        readonly off: (
+          event: string,
+          listener: (data: { readonly id?: string }) => void
+        ) => void
       }
-      return onMount?.(editor)
-    },
-    [onMount]
-  )
+    }).hot
+    if (hot === undefined) return
+    const refreshChangedCanvas = (data: { readonly id?: string }) => {
+      if (data.id === canvasId) {
+        Effect.runFork(session.refresh().pipe(Effect.catch(() => Effect.void)))
+      }
+    }
+    hot.on("crit:canvas-changed", refreshChangedCanvas)
+    return () => hot.off("crit:canvas-changed", refreshChangedCanvas)
+  }, [canvasId, session])
 
   if (error !== null) {
     return (
@@ -264,7 +216,7 @@ export function Crit({
     )
   }
 
-  if (session === null) {
+  if (session === null || document === null) {
     return (
       <div className={className} style={{ ...messageStyle, ...style }}>
         {loadingFallback ?? "Opening canvas…"}
@@ -274,18 +226,28 @@ export function Crit({
 
   return (
     <div className={className} style={{ ...rootStyle, ...style }}>
-      <Tldraw
-        components={resolvedComponents}
-        onMount={mountEditor}
-        overrides={resolvedOverrides}
-        shapeUtils={shapeUtils}
-        store={session.store as TLStore}
-        {...(hideUi === undefined ? {} : { hideUi })}
-        {...(licenseKey === undefined ? {} : { licenseKey })}
+      <CanvasViewport
+        dispatch={session.dispatch}
+        document={document}
+        {...(iframeAllow === undefined ? {} : { iframeAllow })}
+        {...(iframeSandbox === undefined ? {} : { iframeSandbox })}
+        {...(onCommandError === undefined ? {} : { onCommandError })}
       />
       {sessionState === null ? null : (
-        <div
+        <button
           aria-live="polite"
+          disabled={sessionState.saveStatus !== "conflict"}
+          onClick={() => {
+            if (sessionState.saveStatus === "conflict") {
+              Effect.runFork(
+                session.discardLocalChanges().pipe(
+                  Effect.catch((cause) =>
+                    Effect.sync(() => setError(errorMessage(cause)))
+                  )
+                )
+              )
+            }
+          }}
           style={{
             background: "rgba(15, 23, 42, 0.84)",
             borderRadius: 999,
@@ -293,19 +255,23 @@ export function Crit({
             color: "#ffffff",
             font: "500 11px/1 ui-sans-serif, system-ui, sans-serif",
             padding: "7px 9px",
-            pointerEvents: "none",
+            border: 0,
+            cursor:
+              sessionState.saveStatus === "conflict" ? "pointer" : "default",
             position: "absolute",
             right: 12,
             textTransform: "capitalize",
             zIndex: 400
           }}
           title={sessionState.detail ?? sessionState.recoveryDetail ?? undefined}
+          type="button"
         >
           {sessionState.saveStatus === "clean"
             ? "Saved"
             : sessionState.saveStatus.replace("-", " ")}
           {sessionState.recoveryStatus === "recovered" ? " · draft recovered" : ""}
-        </div>
+          {sessionState.saveStatus === "conflict" ? " · discard local changes" : ""}
+        </button>
       )}
     </div>
   )

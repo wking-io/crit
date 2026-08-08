@@ -1,53 +1,61 @@
 # Architecture
 
-Crit is one deep npm package with a no-configuration React/Vite path and narrow
-escape hatches for other runtimes.
+Crit is a local canvas for live web Frames and plain-text Notes. Its V1 design
+optimizes for one person working with multiple local browser windows and agents.
+It deliberately excludes remote collaboration, presence, CRDTs, authentication,
+freehand drawing, generic shapes, and asset upload.
 
-The Canvas Document is the only durable truth. It wraps a complete,
-schema-bearing tldraw document in a small Crit identity and revision envelope.
-Frames are validated `crit-frame` custom shapes; Annotations are ordinary
-non-Asset tldraw records. Session state such as camera, selection, active tool,
-and undo history is not durable.
+## Domain core
 
-The platform-neutral core owns Canvas creation, opening, semantic commands,
-export, migration, validation, and summaries. Effect v4 owns schemas, typed
-failures, services, Layers, concurrency, and lifecycle. Synchronous in-memory
-document transitions remain pure TypeScript.
+`Canvas` is the platform-neutral authority for the Canvas Document, validation,
+summaries, and semantic commands. The durable document contains only identity,
+revision, Frames, and Notes. Camera, selection, iframe state, and other viewport
+details are browser-session state and are never persisted.
 
-Filesystem and D1 stores implement one `DocumentStore` contract. The D1 adapter
-uses conditional SQLite writes as the concurrency boundary and keeps its schema
-in a packaged, versionable migration. React owns a scoped optimistic
-`CanvasSession`. A Web Request/Response module owns the shared HTTP contract;
-Vite adapts it to Connect middleware and the Cloudflare adapter composes it into
-an existing Worker without owning the application's fallback response.
+Frames own URL, title, review status, provenance, geometry, display policy, and
+stacking order. Notes own text, geometry, optional Frame attachment, and stacking
+order. Attached Notes use absolute Canvas coordinates; moving their Frame moves
+them by the same delta, and detaching preserves their position. Removing a Frame
+also removes its attached Notes.
 
-Cloudflare bindings enter through a small structural interface rather than a
-runtime dependency. The request adapter receives the D1 binding per invocation,
-can be gated from deployment environment state, and returns `null` when disabled
-or when a request belongs to the host application. Its schema initialization
-cache is an optimization only; correctness remains in D1 and migrations.
+Every mutation is an atomic semantic command batch. The core applies a batch to
+a draft and publishes it only if every command succeeds. Conflicts are expressed
+at the narrowest meaningful boundary: for example, `UpdateNote` includes the
+expected prior text, while unrelated commands can safely serialize.
 
-CLI and future agent integrations express changes as semantic Canvas commands.
-The Session persists validated Canvas Document envelopes with optimistic
-revision checks. Neither path edits raw storage records.
+## Local coordination
 
-The discovery module validates versioned manifests, resolves relative Frame
-locations, and reconciles them through `CritRuntime`. Its interface is shared by
-the Vite and CLI adapters. Reconciliation is additive: stable Frame identities
-are updated in place, while absent Frames and their annotations are preserved
-until an explicit removal command is issued.
+`CanvasRepository` is the durable boundary. The filesystem implementation stores
+one JSON document per Canvas under `.crit/canvases`, acquires a per-Canvas lock,
+loads the latest revision, applies the command batch, increments the revision,
+and atomically renames the result into place. Browser and CLI agent writes use
+this exact path, so concurrent local writers do not race through separate models.
 
-The Session owns convergence as well as persistence. It polls through the
-`CritClient` seam and adopts a newer Canvas Document only while local state is
-clean. Adoption replaces document-scoped records inside the existing tldraw
-Store, preserving mounted editor/session state. Dirty or racing local changes
-defer adoption and continue through the existing optimistic conflict path.
+`CritRuntime` exposes creation, reads, summaries, and command application to CLI
+and discovery adapters. `CanvasSession` adds optimistic browser state,
+single-flight autosave, semantic-command draft recovery, and revision adoption.
+The Vite plugin watches the Canvas directory and sends change hints to browser
+windows; polling remains a fallback. Notifications are only an optimization—the
+file and its revision are authoritative.
 
-`crit init` owns installation-time integration. It applies idempotent,
-recognizable transforms to Vite and React Router configuration, creates narrow
-host files, and preserves files whose contents it does not own. Router shapes
-it cannot recognize become explicit follow-up instructions instead of guessed
-edits.
+## UI and adapters
 
-V1 deliberately excludes Asset ingestion, real-time collaboration,
-authentication, and remote MCP mutation.
+`CanvasViewport` is a Crit-owned DOM viewport. It implements infinite pan/zoom,
+Frame and Note movement and resizing, review status, note editing and
+attach/detach behavior. Offscreen iframes are not mounted, keeping the cost tied
+to visible work. The iframe `allow` and `sandbox` policies are configurable.
+
+The HTTP adapter supports `GET` for authoritative documents and `PATCH` for
+semantic command batches. Vite adapts it to local Connect middleware. The React
+component, Vite plugin, CLI, discovery manifest, and installed agent skill are
+thin adapters around the same core and repository boundaries.
+
+Effect v4 owns schemas, typed failures, services, Layers, concurrency, and scoped
+lifecycle. Pure synchronous document transitions remain ordinary TypeScript.
+
+## Deferred extensions
+
+The command boundary can later support an MCP or codemod service without granting
+raw file mutation. The repository boundary can later gain another local adapter.
+Remote multi-user collaboration would be a separate architecture and is not
+implied by the V1 interfaces.

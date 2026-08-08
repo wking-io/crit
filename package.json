@@ -4,7 +4,7 @@
   "description": "A local-first canvas for arranging and assessing live web iterations.",
   "keywords": [
     "design-review",
-    "tldraw",
+    "infinite-canvas",
     "react",
     "vite",
     "effect"
@@ -18,15 +18,12 @@
     "url": "git+https://github.com/wking-io/crit.git"
   },
   "type": "module",
-  "sideEffects": [
-    "**/*.css"
-  ],
+  "sideEffects": false,
   "bin": {
     "crit": "dist/cli.js"
   },
   "files": [
     "dist",
-    "migrations",
     "skills",
     "README.md",
     "ARCHITECTURE.md"
@@ -48,9 +45,9 @@
       "types": "./dist/discovery/index.d.ts",
       "import": "./dist/discovery/index.js"
     },
-    "./cloudflare": {
-      "types": "./dist/cloudflare/index.d.ts",
-      "import": "./dist/cloudflare/index.js"
+    "./node": {
+      "types": "./dist/node/index.d.ts",
+      "import": "./dist/node/index.js"
     },
     "./vite": {
       "types": "./dist/vite/index.d.ts",
@@ -69,12 +66,7 @@
   },
   "dependencies": {
     "@effect/platform-node": "4.0.0-beta.105",
-    "@tldraw/store": "4.2.1",
-    "@tldraw/tlschema": "4.2.1",
-    "@tldraw/utils": "4.2.1",
-    "@tldraw/validate": "4.2.1",
-    "effect": "4.0.0-beta.105",
-    "tldraw": "4.2.1"
+    "effect": "4.0.0-beta.105"
   },
   "peerDependencies": {
     "react": ">=18 <20",

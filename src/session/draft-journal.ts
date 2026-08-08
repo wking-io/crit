@@ -1,6 +1,6 @@
 import { Context, Effect, Option, Schema } from "effect"
 
-import { CanvasDocument } from "../core/index.js"
+import { CanvasCommandSchema } from "../core/index.js"
 
 export const CanvasDraft = Schema.Struct({
   schemaVersion: Schema.Literal(1),
@@ -8,7 +8,7 @@ export const CanvasDraft = Schema.Struct({
   sessionId: Schema.String,
   baseRevision: Schema.Number,
   mutation: Schema.Number,
-  document: CanvasDocument
+  commands: Schema.Array(CanvasCommandSchema)
 })
 export type CanvasDraft = typeof CanvasDraft.Type
 

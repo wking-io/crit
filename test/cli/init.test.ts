@@ -8,7 +8,7 @@ import { ChildProcessSpawner } from "effect/unstable/process"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 
 import { runCrit } from "../../src/cli/command.js"
-import { FileSystemDocumentStore } from "../../src/node/file-system-document-store.js"
+import { FileSystemCanvasRepository } from "../../src/node/file-system-canvas-repository.js"
 import { CritRuntimeLive } from "../../src/runtime/crit-runtime.js"
 
 describe("crit init", () => {
@@ -44,7 +44,7 @@ export default defineConfig({})
   })
 
   it("exposes the initializer through the CLI with machine-readable output", async () => {
-    const storeLayer = FileSystemDocumentStore.layer({ root })
+    const storeLayer = FileSystemCanvasRepository.layer({ root })
     const runtimeLayer = CritRuntimeLive.pipe(Layer.provide(storeLayer))
     const cliLayer = Layer.mergeAll(
       NodeFileSystem.layer,

@@ -9,7 +9,7 @@ import {
   CritManifest,
   CritManifestInvalid
 } from "../../src/discovery/index.js"
-import { FileSystemDocumentStore } from "../../src/node/file-system-document-store.js"
+import { FileSystemCanvasRepository } from "../../src/node/file-system-canvas-repository.js"
 import {
   CritRuntime,
   CritRuntimeLive
@@ -74,7 +74,7 @@ describe("CritManifest", () => {
   })
 
   it("creates and idempotently reconciles manifest Frames through the runtime interface", async () => {
-    const storeLayer = FileSystemDocumentStore.layer({ root })
+    const storeLayer = FileSystemCanvasRepository.layer({ root })
     const runtimeLayer = CritRuntimeLive.pipe(Layer.provide(storeLayer))
     const resolved = await Effect.runPromise(
       CritManifest.resolve(input, { baseUrl: "https://iteration.localhost" })
@@ -164,20 +164,20 @@ describe("CritManifest", () => {
     expect(first.canvases[0]).toMatchObject({
       action: "created",
       revision: 1,
-      addedFrameIds: ["shape:current"]
+      addedFrameIds: ["current"]
     })
     expect(second.canvases[0]).toMatchObject({
       action: "unchanged",
       revision: 1,
-      unchangedFrameIds: ["shape:current"]
+      unchangedFrameIds: ["current"]
     })
     expect(third.sync.canvases[0]).toMatchObject({
       action: "updated",
       revision: 2,
-      updatedFrameIds: ["shape:current"]
+      updatedFrameIds: ["current"]
     })
     expect(third.canvas.frames[0]).toMatchObject({
-      id: "shape:current",
+      id: "current",
       url: "https://iteration.localhost/checkout/v2",
       status: "approved",
       provenance: {

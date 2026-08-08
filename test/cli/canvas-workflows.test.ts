@@ -7,7 +7,7 @@ import { Effect, FileSystem, Layer, Path, Sink, Stdio, Terminal } from "effect"
 import { ChildProcessSpawner } from "effect/unstable/process"
 
 import { runCrit } from "../../src/cli/command.js"
-import { FileSystemDocumentStore } from "../../src/node/file-system-document-store.js"
+import { FileSystemCanvasRepository } from "../../src/node/file-system-canvas-repository.js"
 import { CritRuntimeLive } from "../../src/runtime/crit-runtime.js"
 
 describe("crit Canvas workflows", () => {
@@ -24,7 +24,7 @@ describe("crit Canvas workflows", () => {
   })
 
   it.effect("adds URLs, lists Canvases, and opens a semantic Canvas view", () => {
-    const storeLayer = FileSystemDocumentStore.layer({ root })
+    const storeLayer = FileSystemCanvasRepository.layer({ root })
     const runtimeLayer = CritRuntimeLive.pipe(Layer.provide(storeLayer))
     const cliLayer = Layer.mergeAll(
       FileSystem.layerNoop({}),
@@ -67,8 +67,6 @@ describe("crit Canvas workflows", () => {
         "review",
         "checkout.localhost/v1#draft",
         "https://checkout.localhost/v2",
-        "--expected-revision",
-        "0",
         "--json"
       ])
       const added = JSON.parse(stdout.join(""))
@@ -87,7 +85,7 @@ describe("crit Canvas workflows", () => {
         mutation: {
           revision: 1,
           change: { commandCount: 2 },
-          canvas: { id: "review", revision: 1, frameCount: 2 }
+          canvas: { id: "review", revision: 1, frameCount: 2, noteCount: 0 }
         }
       })
       expect(added.frames).toHaveLength(2)
@@ -104,6 +102,7 @@ describe("crit Canvas workflows", () => {
             title: "Archive",
             revision: 0,
             frameCount: 0,
+            noteCount: 0,
             statuses: {
               inProgress: 0,
               approved: 0,
@@ -115,6 +114,7 @@ describe("crit Canvas workflows", () => {
             title: "Review",
             revision: 1,
             frameCount: 2,
+            noteCount: 0,
             statuses: {
               inProgress: 2,
               approved: 0,
@@ -127,13 +127,14 @@ describe("crit Canvas workflows", () => {
         schemaVersion: 1,
         command: "open",
         canvas: added.mutation.canvas,
-        frames: added.frames
+        frames: added.frames,
+        notes: []
       })
     }).pipe(Effect.provide(cliLayer))
   })
 
   it.effect("atomically exposes every semantic Frame edit to agents", () => {
-    const storeLayer = FileSystemDocumentStore.layer({ root })
+    const storeLayer = FileSystemCanvasRepository.layer({ root })
     const runtimeLayer = CritRuntimeLive.pipe(Layer.provide(storeLayer))
     const cliLayer = Layer.mergeAll(
       FileSystem.layerNoop({}),
@@ -214,8 +215,6 @@ describe("crit Canvas workflows", () => {
         "apply",
         "review",
         commands,
-        "--expected-revision",
-        "0",
         "--json"
       ])
       const output = JSON.parse(stdout.join(""))
@@ -229,6 +228,7 @@ describe("crit Canvas workflows", () => {
           canvas: {
             id: "review",
             frameCount: 1,
+            noteCount: 0,
             statuses: {
               inProgress: 0,
               approved: 1,
@@ -238,14 +238,15 @@ describe("crit Canvas workflows", () => {
         },
         frames: [
           {
-            id: "shape:candidate",
+            id: "candidate",
             url: "https://checkout.localhost/v2",
             title: "Checkout candidate v2",
             status: "approved",
             display: { heightMode: "fit-page" },
             geometry: { x: 120, y: 240, width: 1440, height: 900 }
           }
-        ]
+        ],
+        notes: []
       })
     }).pipe(Effect.provide(cliLayer))
   })

@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from "@effect/vitest"
 import { Effect, Layer } from "effect"
 
 import { Canvas, CanvasCommand } from "../../src/core/index.js"
-import { FileSystemDocumentStore } from "../../src/node/file-system-document-store.js"
+import { FileSystemCanvasRepository } from "../../src/node/file-system-canvas-repository.js"
 import { CritRuntime, CritRuntimeLive } from "../../src/runtime/crit-runtime.js"
 
 describe("CritRuntime.updateCanvas", () => {
@@ -20,8 +20,8 @@ describe("CritRuntime.updateCanvas", () => {
     await rm(root, { recursive: true, force: true })
   })
 
-  it.effect("persists a semantic command batch once and rejects a stale writer", () => {
-    const storeLayer = FileSystemDocumentStore.layer({ root })
+  it.effect("persists semantic command batches against the latest local revision", () => {
+    const storeLayer = FileSystemCanvasRepository.layer({ root })
     const runtimeLayer = CritRuntimeLive.pipe(Layer.provide(storeLayer))
 
     return Effect.gen(function*() {
@@ -30,7 +30,6 @@ describe("CritRuntime.updateCanvas", () => {
 
       const mutation = yield* runtime.updateCanvas({
         id: "review",
-        expectedRevision: 0,
         commands: [
           CanvasCommand.addFrame({
             id: "checkout-v1",
@@ -43,12 +42,8 @@ describe("CritRuntime.updateCanvas", () => {
       })
       const persisted = yield* runtime.readCanvas("review")
       const opened = yield* Canvas.open(persisted)
-      const beforeStaleWrite = Canvas.export(opened)
-
-      const staleFailure = yield* Effect.flip(
-        runtime.updateCanvas({
+      const rebased = yield* runtime.updateCanvas({
           id: "review",
-          expectedRevision: 0,
           commands: [
             CanvasCommand.updateFrame({
               id: "checkout-v1",
@@ -56,20 +51,21 @@ describe("CritRuntime.updateCanvas", () => {
             })
           ]
         })
-      )
       const afterStaleWrite = yield* runtime.readCanvas("review")
 
       expect(mutation).toEqual({
         revision: 1,
         change: {
           commandCount: 2,
-          changedFrameIds: ["shape:checkout-v1"]
+          changedFrameIds: ["checkout-v1"],
+          changedNoteIds: []
         },
         canvas: {
           id: "review",
           title: "Review",
           revision: 1,
           frameCount: 1,
+          noteCount: 0,
           statuses: {
             inProgress: 1,
             approved: 0,
@@ -83,18 +79,13 @@ describe("CritRuntime.updateCanvas", () => {
         width: 1200,
         height: 800
       })
-      expect(staleFailure).toMatchObject({
-        _tag: "DocumentConflict",
-        id: "review",
-        expectedRevision: 0,
-        currentRevision: 1
-      })
-      expect(afterStaleWrite).toEqual(beforeStaleWrite)
+      expect(rebased).toMatchObject({ revision: 2 })
+      expect(afterStaleWrite.frames[0]?.status).toBe("approved")
     }).pipe(Effect.provide(runtimeLayer))
   })
 
   it.effect("does not persist failed or empty command batches", () => {
-    const storeLayer = FileSystemDocumentStore.layer({ root })
+    const storeLayer = FileSystemCanvasRepository.layer({ root })
     const runtimeLayer = CritRuntimeLive.pipe(Layer.provide(storeLayer))
 
     return Effect.gen(function*() {
@@ -104,7 +95,6 @@ describe("CritRuntime.updateCanvas", () => {
       const commandFailure = yield* Effect.flip(
         runtime.updateCanvas({
           id: "review",
-          expectedRevision: 0,
           commands: [
             CanvasCommand.addFrame({
               id: "checkout-v1",
@@ -122,7 +112,6 @@ describe("CritRuntime.updateCanvas", () => {
       const emptyFailure = yield* Effect.flip(
         runtime.updateCanvas({
           id: "review",
-          expectedRevision: 0,
           commands: []
         })
       )

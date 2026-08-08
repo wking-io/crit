@@ -1,7 +1,7 @@
 import { Effect, Schema } from "effect"
 
 import {
-  CritClientConflict,
+  CritClientCommandFailed,
   CritClientInvalidDocument,
   CritClientNotFound,
   CritClientUnavailable,
@@ -13,7 +13,7 @@ import {
   DEFAULT_CRIT_API_PATH,
   critCanvasUrl,
   decodeCanvasDocument,
-  encodeSaveRequest
+  encodeApplyRequest
 } from "./contract.js"
 
 export interface HttpCritClientOptions {
@@ -31,22 +31,18 @@ const parseJson = (response: Response) =>
 const responseError = (
   response: Response,
   input: unknown,
-  operation: "load" | "save",
+  operation: "load" | "apply",
   id: string
 ): CritClientError => {
   const parsed = Schema.decodeUnknownOption(CritHttpErrorBody)(input)
   if (parsed._tag === "Some") {
     const body = parsed.value.error
     if (body.code === "not-found") return new CritClientNotFound({ id })
-    if (
-      body.code === "conflict" &&
-      body.expectedRevision !== undefined &&
-      body.currentRevision !== undefined
-    ) {
-      return new CritClientConflict({
+    if (body.code === "command-rejected") {
+      return new CritClientCommandFailed({
         id,
-        expectedRevision: body.expectedRevision,
-        currentRevision: body.currentRevision
+        reason: body.reason ?? "command-rejected",
+        detail: body.message
       })
     }
     if (
@@ -74,7 +70,7 @@ const make = (options: HttpCritClientOptions = {}): CritClientShape => {
   const request = options.fetch ?? globalThis.fetch
 
   const execute = (
-    operation: "load" | "save",
+    operation: "load" | "apply",
     id: string,
     init?: RequestInit
   ) =>
@@ -108,11 +104,11 @@ const make = (options: HttpCritClientOptions = {}): CritClientShape => {
 
   return {
     load: (id) => execute("load", id),
-    save: (document, expectedRevision) =>
-      execute("save", document.id, {
-        method: "PUT",
+    apply: (id, commands) =>
+      execute("apply", id, {
+        method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(encodeSaveRequest(document, expectedRevision))
+        body: JSON.stringify(encodeApplyRequest(commands))
       })
   }
 }

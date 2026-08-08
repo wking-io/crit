@@ -18,6 +18,7 @@ describe("Canvas lifecycle", () => {
         title: "Checkout iterations",
         revision: 0,
         frameCount: 0,
+        noteCount: 0,
         statuses: {
           inProgress: 0,
           approved: 0,
@@ -26,4 +27,3 @@ describe("Canvas lifecycle", () => {
       })
     }))
 })
-

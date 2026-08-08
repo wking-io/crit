@@ -1,12 +1,12 @@
 import { Effect, Schema } from "effect"
 
 import {
+  CanvasCommandSchema,
   CanvasDocument,
-  MAX_CANVAS_DOCUMENT_BYTES,
-  type CanvasDocument as CanvasDocumentValue
+  MAX_CANVAS_DOCUMENT_BYTES
 } from "../core/index.js"
 import {
-  CritClientConflict,
+  CritClientCommandFailed,
   CritClientInvalidDocument,
   CritClientNotFound,
   CritClientUnavailable,
@@ -17,18 +17,14 @@ import {
 export const DEFAULT_CRIT_API_PATH = "/__crit/api"
 export const MAX_CRIT_HTTP_BODY_BYTES = MAX_CANVAS_DOCUMENT_BYTES + 64_000
 
-export const CritHttpSaveRequest = Schema.Struct({
-  expectedRevision: Schema.Finite.check(
-    Schema.isInt(),
-    Schema.isGreaterThanOrEqualTo(0)
-  ),
-  document: CanvasDocument
+export const CritHttpApplyRequest = Schema.Struct({
+  commands: Schema.Array(CanvasCommandSchema)
 })
-export type CritHttpSaveRequest = typeof CritHttpSaveRequest.Type
+export type CritHttpApplyRequest = typeof CritHttpApplyRequest.Type
 
 export const CritHttpErrorCode = Schema.Union([
   Schema.Literal("not-found"),
-  Schema.Literal("conflict"),
+  Schema.Literal("command-rejected"),
   Schema.Literal("invalid-document"),
   Schema.Literal("unavailable"),
   Schema.Literal("invalid-request"),
@@ -41,8 +37,7 @@ export const CritHttpErrorBody = Schema.Struct({
     code: CritHttpErrorCode,
     message: Schema.String,
     id: Schema.optional(Schema.String),
-    expectedRevision: Schema.optional(Schema.Number),
-    currentRevision: Schema.optional(Schema.Number)
+    reason: Schema.optional(Schema.String)
   })
 })
 export type CritHttpErrorBody = typeof CritHttpErrorBody.Type
@@ -99,8 +94,7 @@ const errorBody = (
   message: string,
   details: {
     readonly id?: string
-    readonly expectedRevision?: number
-    readonly currentRevision?: number
+    readonly reason?: string
   } = {}
 ): CritHttpErrorBody => ({
   error: { code, message, ...details }
@@ -113,20 +107,19 @@ const clientErrorResponse = (cause: CritClientError) => {
       errorBody("not-found", `Canvas not found: ${cause.id}`, { id: cause.id })
     )
   }
-  if (cause instanceof CritClientConflict) {
-    return json(
-      409,
-      errorBody("conflict", "Canvas revision conflict", {
-        id: cause.id,
-        expectedRevision: cause.expectedRevision,
-        currentRevision: cause.currentRevision
-      })
-    )
-  }
   if (cause instanceof CritClientInvalidDocument) {
     return json(
       422,
       errorBody("invalid-document", cause.detail, { id: cause.id })
+    )
+  }
+  if (cause instanceof CritClientCommandFailed) {
+    return json(
+      409,
+      errorBody("command-rejected", cause.detail, {
+        id: cause.id,
+        reason: cause.reason
+      })
     )
   }
   return json(
@@ -135,7 +128,7 @@ const clientErrorResponse = (cause: CritClientError) => {
   )
 }
 
-const readSaveRequest = (request: Request, maxBodyBytes: number) =>
+const readApplyRequest = (request: Request, maxBodyBytes: number) =>
   Effect.tryPromise({
     try: () => request.arrayBuffer(),
     catch: (cause) =>
@@ -154,7 +147,7 @@ const readSaveRequest = (request: Request, maxBodyBytes: number) =>
         catch: () => new Error("Request body must be valid JSON")
       })
     ),
-    Effect.flatMap(Schema.decodeUnknownEffect(CritHttpSaveRequest)),
+    Effect.flatMap(Schema.decodeUnknownEffect(CritHttpApplyRequest)),
     Effect.mapError((cause) =>
       cause instanceof Error ? cause : new Error(String(cause))
     )
@@ -196,22 +189,18 @@ export const makeCritHttpHandler = (
       )
     }
 
-    if (request.method === "PUT") {
-      return readSaveRequest(request, maxBodyBytes).pipe(
+    if (request.method === "PATCH") {
+      return readApplyRequest(request, maxBodyBytes).pipe(
         Effect.flatMap((input) =>
-          input.document.id !== id
-            ? Effect.fail(
-                new Error(
-                  `Canvas ID ${input.document.id} does not match request path ${id}`
-                )
-              )
-            : client.save(input.document, input.expectedRevision)
+          input.commands.length === 0
+            ? Effect.fail(new Error("At least one Canvas command is required"))
+            : client.apply(id, input.commands)
         ),
         Effect.map((document) => json(200, document)),
         Effect.catch((cause) =>
           Effect.succeed(
             cause instanceof CritClientNotFound ||
-              cause instanceof CritClientConflict ||
+              cause instanceof CritClientCommandFailed ||
               cause instanceof CritClientInvalidDocument ||
               cause instanceof CritClientUnavailable
               ? clientErrorResponse(cause)
@@ -233,10 +222,10 @@ export const makeCritHttpHandler = (
     return Effect.succeed(
       json(
         405,
-        errorBody("method-not-allowed", "Only GET and PUT are supported", {
+        errorBody("method-not-allowed", "Only GET and PATCH are supported", {
           id
         }),
-        { Allow: "GET, PUT" }
+        { Allow: "GET, PATCH" }
       )
     )
   }
@@ -250,7 +239,6 @@ export const decodeCanvasDocument = (input: unknown, id: string) =>
     )
   )
 
-export const encodeSaveRequest = (
-  document: CanvasDocumentValue,
-  expectedRevision: number
-): CritHttpSaveRequest => ({ document, expectedRevision })
+export const encodeApplyRequest = (
+  commands: ReadonlyArray<typeof CanvasCommandSchema.Type>
+): CritHttpApplyRequest => ({ commands: [...commands] })

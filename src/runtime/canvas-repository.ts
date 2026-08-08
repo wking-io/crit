@@ -1,6 +1,12 @@
 import { Context, Effect, Schema } from "effect"
 
-import type { CanvasDocument } from "../core/index.js"
+import type {
+  CanvasChange,
+  CanvasCommand,
+  CanvasCommandFailed,
+  CanvasDocument,
+  CanvasDocumentTooLarge
+} from "../core/index.js"
 
 export class DocumentNotFound extends Schema.TaggedError<DocumentNotFound>()(
   "DocumentNotFound",
@@ -13,15 +19,6 @@ export class DocumentAlreadyExists extends Schema.TaggedError<DocumentAlreadyExi
   "DocumentAlreadyExists",
   {
     id: Schema.String,
-    currentRevision: Schema.Number
-  }
-) {}
-
-export class DocumentConflict extends Schema.TaggedError<DocumentConflict>()(
-  "DocumentConflict",
-  {
-    id: Schema.String,
-    expectedRevision: Schema.Number,
     currentRevision: Schema.Number
   }
 ) {}
@@ -43,14 +40,18 @@ export class DocumentStorageFailed extends Schema.TaggedError<DocumentStorageFai
   }
 ) {}
 
-export type DocumentStoreError =
+export type CanvasRepositoryError =
   | DocumentNotFound
   | DocumentAlreadyExists
-  | DocumentConflict
   | DocumentMalformed
   | DocumentStorageFailed
 
-export interface DocumentStoreShape {
+export interface CanvasRepositoryMutation {
+  readonly document: CanvasDocument
+  readonly change: CanvasChange
+}
+
+export interface CanvasRepositoryShape {
   readonly create: (
     document: CanvasDocument
   ) => Effect.Effect<CanvasDocument, DocumentAlreadyExists | DocumentMalformed | DocumentStorageFailed>
@@ -61,12 +62,19 @@ export interface DocumentStoreShape {
     ReadonlyArray<CanvasDocument>,
     DocumentMalformed | DocumentStorageFailed
   >
-  readonly save: (
-    document: CanvasDocument,
-    options: { readonly expectedRevision: number }
-  ) => Effect.Effect<CanvasDocument, DocumentNotFound | DocumentConflict | DocumentMalformed | DocumentStorageFailed>
+  readonly apply: (
+    id: string,
+    commands: ReadonlyArray<CanvasCommand>
+  ) => Effect.Effect<
+    CanvasRepositoryMutation,
+    | DocumentNotFound
+    | DocumentMalformed
+    | DocumentStorageFailed
+    | CanvasCommandFailed
+    | CanvasDocumentTooLarge
+  >
 }
 
-export class DocumentStore extends Context.Service<DocumentStore, DocumentStoreShape>()(
-  "@riff-refine/crit/DocumentStore"
+export class CanvasRepository extends Context.Service<CanvasRepository, CanvasRepositoryShape>()(
+  "@riff-refine/crit/CanvasRepository"
 ) {}

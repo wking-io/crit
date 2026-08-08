@@ -4,7 +4,7 @@ import path from "node:path"
 import { Readable } from "node:stream"
 
 import { Effect, Layer, ManagedRuntime } from "effect"
-import type { Plugin, PreviewServer, ViteDevServer } from "vite"
+import type { Plugin, ViteDevServer } from "vite"
 
 import {
   CRIT_MANIFEST_FILE,
@@ -17,9 +17,9 @@ import {
   isCritHttpRequest,
   makeCritHttpHandler
 } from "../http/contract.js"
-import { FileSystemDocumentStore } from "../node/file-system-document-store.js"
-import { DocumentStoreCritClient } from "../runtime/document-store-crit-client.js"
-import { DocumentStore } from "../runtime/document-store.js"
+import { FileSystemCanvasRepository } from "../node/file-system-canvas-repository.js"
+import { CanvasRepositoryCritClient } from "../runtime/canvas-repository-crit-client.js"
+import { CanvasRepository } from "../runtime/canvas-repository.js"
 import { CritRuntimeLive } from "../runtime/crit-runtime.js"
 
 export interface CritVitePluginOptions {
@@ -32,7 +32,8 @@ export interface CritVitePluginOptions {
   readonly manifestPath?: string
 }
 
-type CritViteServer = Pick<ViteDevServer, "middlewares" | "httpServer"> | PreviewServer
+type CritViteServer = Pick<ViteDevServer, "middlewares" | "httpServer"> &
+  Partial<Pick<ViteDevServer, "watcher" | "ws">>
 
 const webHeaders = (input: IncomingHttpHeaders) => {
   const headers = new Headers()
@@ -125,16 +126,16 @@ export const crit = (options: CritVitePluginOptions = {}): Plugin => {
 
   const configure = (server: CritViteServer) => {
     if (!enabled) return
-    const documentLayer = FileSystemDocumentStore.layer({ root: resolvedRoot })
+    const documentLayer = FileSystemCanvasRepository.layer({ root: resolvedRoot })
     const critRuntimeLayer = CritRuntimeLive.pipe(Layer.provide(documentLayer))
     const runtime = ManagedRuntime.make(
       Layer.mergeAll(documentLayer, critRuntimeLayer)
     )
     const services = runtime.runPromise(
-      Effect.all({ documents: DocumentStore }).pipe(
+      Effect.all({ documents: CanvasRepository }).pipe(
         Effect.map(({ documents }) => ({
           handler: makeCritHttpHandler(
-            DocumentStoreCritClient.make(documents, {
+            CanvasRepositoryCritClient.make(documents, {
               createIfMissing: options.createIfMissing ?? true,
               ...(options.title === undefined ? {} : { title: options.title })
             }),
@@ -143,6 +144,31 @@ export const crit = (options: CritVitePluginOptions = {}): Plugin => {
         }))
       )
     )
+
+    if (server.watcher !== undefined && server.ws !== undefined) {
+      const watcher = server.watcher
+      const ws = server.ws
+      const canvasesDirectory = path.join(resolvedRoot, ".crit", "canvases")
+      watcher.add(canvasesDirectory)
+      const notify = (changedPath: string) => {
+        if (path.dirname(changedPath) !== canvasesDirectory || !changedPath.endsWith(".json")) {
+          return
+        }
+        try {
+          ws.send({
+            type: "custom",
+            event: "crit:canvas-changed",
+            data: {
+              id: decodeURIComponent(path.basename(changedPath, ".json"))
+            }
+          })
+        } catch {
+          // A malformed filename is not a Canvas change.
+        }
+      }
+      watcher.on("add", notify)
+      watcher.on("change", notify)
+    }
 
     const loadManifest = async (
       request: IncomingMessage

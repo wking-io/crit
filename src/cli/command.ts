@@ -232,10 +232,9 @@ const applyCommand = Command.make(
   {
     id: Argument.string("canvas"),
     commands: Argument.string("commands"),
-    expectedRevision: Flag.integer("expected-revision").pipe(Flag.optional),
     json: Flag.boolean("json")
   },
-  ({ id, commands, expectedRevision, json }) =>
+  ({ id, commands, json }) =>
     Effect.gen(function*() {
       const runtime = yield* CritRuntime
       const decoded: ReadonlyArray<CanvasCommandInput> =
@@ -245,13 +244,8 @@ const applyCommand = Command.make(
           detail: "At least one Canvas command is required"
         })
       }
-      const current = yield* runtime.getCanvas(id)
       const mutation = yield* runtime.updateCanvas({
         id,
-        expectedRevision: Option.getOrElse(
-          expectedRevision,
-          () => current.canvas.revision
-        ),
         commands: decoded
       })
       const updated = yield* runtime.getCanvas(id)
@@ -260,14 +254,15 @@ const applyCommand = Command.make(
             schemaVersion: 1,
             command: "apply",
             mutation,
-            frames: updated.frames
+            frames: updated.frames,
+            notes: updated.notes
           })
         : `Applied ${decoded.length} command(s) to "${updated.canvas.title}" at revision ${mutation.revision}.`
       yield* writeStdout(`${output}\n`)
     })
 ).pipe(
   Command.withDescription(
-    "Atomically apply semantic AddFrame, UpdateFrame, SetFrameStatus, MoveFrame, ResizeFrame, and RemoveFrame commands"
+    "Atomically apply semantic Frame and Note commands"
   )
 )
 
@@ -325,11 +320,11 @@ const allocateFrameId = (used: Set<string>, url: string) => {
   const base = frameIdBase(url)
   let id = base
   let suffix = 2
-  while (used.has(`shape:${id}`)) {
+  while (used.has(id)) {
     id = `${base}-${suffix}`
     suffix += 1
   }
-  used.add(`shape:${id}`)
+  used.add(id)
   return id
 }
 
@@ -338,10 +333,9 @@ const addCommand = Command.make(
   {
     id: Argument.string("canvas"),
     urls: Argument.string("url").pipe(Argument.variadic({ min: 1 })),
-    expectedRevision: Flag.integer("expected-revision").pipe(Flag.optional),
     json: Flag.boolean("json")
   },
-  ({ id, urls, expectedRevision, json }) =>
+  ({ id, urls, json }) =>
     Effect.gen(function*() {
       const runtime = yield* CritRuntime
       const current = yield* runtime.getCanvas(id)
@@ -357,10 +351,6 @@ const addCommand = Command.make(
       )
       const mutation = yield* runtime.updateCanvas({
         id,
-        expectedRevision: Option.getOrElse(
-          expectedRevision,
-          () => current.canvas.revision
-        ),
         commands
       })
       const updated = yield* runtime.getCanvas(id)

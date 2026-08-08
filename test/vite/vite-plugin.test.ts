@@ -9,8 +9,11 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import { createServer, type ViteDevServer } from "vite"
 
 import { HttpCritClient } from "../../src/http/client.js"
-import { Canvas } from "../../src/core/index.js"
-import { CritClientConflict, CritClientNotFound } from "../../src/session/crit-client.js"
+import { Canvas, CanvasCommand } from "../../src/core/index.js"
+import {
+  CritClientCommandFailed,
+  CritClientNotFound
+} from "../../src/session/crit-client.js"
 import { crit } from "../../src/vite/index.js"
 
 describe("crit Vite plugin", () => {
@@ -50,7 +53,7 @@ describe("crit Vite plugin", () => {
     return `http://127.0.0.1:${address.port}`
   }
 
-  it("creates, loads, and conditionally saves a real Canvas over HTTP", async () => {
+  it("creates, loads, and applies commands to a real Canvas over HTTP", async () => {
     const origin = await start()
     const client = HttpCritClient.make({ apiPath: `${origin}/__crit/api` })
 
@@ -60,22 +63,38 @@ describe("crit Vite plugin", () => {
       )
     )
     const initial = initialLoads[0]!
-    const saved = await Effect.runPromise(client.save(initial, 0))
-    const stale = await Effect.runPromise(
-      Effect.flip(client.save(initial, 0))
-    )
+    const saved = await Effect.runPromise(client.apply("homepage", [
+      CanvasCommand.addNote({ id: "note", text: "Review this", x: 10, y: 20 })
+    ]))
+    const second = await Effect.runPromise(client.apply("homepage", [
+      CanvasCommand.moveNote({ id: "note", x: 30, y: 40 })
+    ]))
+    const updated = await Effect.runPromise(client.apply("homepage", [
+      CanvasCommand.updateNote({
+        id: "note",
+        expectedText: "Review this",
+        text: "Agent updated this"
+      })
+    ]))
+    const stale = await Effect.runPromise(Effect.flip(client.apply("homepage", [
+      CanvasCommand.updateNote({
+        id: "note",
+        expectedText: "Review this",
+        text: "Browser updated this"
+      })
+    ])))
     const loaded = await Effect.runPromise(client.load("homepage"))
     const persisted = JSON.parse(
       await readFile(path.join(root, ".crit/canvases/homepage.json"), "utf8")
     ) as { revision: number }
     const methodResponse = await fetch(
       `${origin}/__crit/api/canvases/homepage`,
-      { method: "POST" }
+      { method: "PUT" }
     )
     const invalidResponse = await fetch(
       `${origin}/__crit/api/canvases/homepage`,
       {
-        method: "PUT",
+        method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: "{}"
       }
@@ -93,16 +112,14 @@ describe("crit Vite plugin", () => {
     expect(initialLoads).toHaveLength(8)
     expect(initialLoads.every((document) => document.revision === 0)).toBe(true)
     expect(saved.revision).toBe(1)
-    expect(stale).toBeInstanceOf(CritClientConflict)
-    expect(stale).toMatchObject({
-      id: "homepage",
-      expectedRevision: 0,
-      currentRevision: 1
-    })
-    expect(loaded.revision).toBe(1)
-    expect(persisted.revision).toBe(1)
+    expect(second.revision).toBe(2)
+    expect(updated.revision).toBe(3)
+    expect(stale).toBeInstanceOf(CritClientCommandFailed)
+    expect(stale).toMatchObject({ reason: "note-conflict" })
+    expect(loaded.revision).toBe(3)
+    expect(persisted.revision).toBe(3)
     expect(methodResponse.status).toBe(405)
-    expect(methodResponse.headers.get("allow")).toBe("GET, PUT")
+    expect(methodResponse.headers.get("allow")).toBe("GET, PATCH")
     expect(invalidResponse.status).toBe(400)
     expect(invalidBody.error.code).toBe("invalid-request")
   })
@@ -157,7 +174,7 @@ describe("crit Vite plugin", () => {
     expect(second.revision).toBe(1)
     expect(Canvas.listFrames(canvas)).toMatchObject([
       {
-        id: "shape:app",
+        id: "app",
         url: `${origin}/checkout`,
         title: "Checkout",
         status: "changes-requested",

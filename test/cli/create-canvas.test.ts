@@ -7,9 +7,9 @@ import { Effect, FileSystem, Layer, Path, Sink, Stdio, Terminal } from "effect"
 import { ChildProcessSpawner } from "effect/unstable/process"
 
 import { runCrit } from "../../src/cli/command.js"
-import { FileSystemDocumentStore } from "../../src/node/file-system-document-store.js"
+import { FileSystemCanvasRepository } from "../../src/node/file-system-canvas-repository.js"
 import { CritRuntime, CritRuntimeLive } from "../../src/runtime/crit-runtime.js"
-import { DocumentStore } from "../../src/runtime/document-store.js"
+import { CanvasRepository } from "../../src/runtime/canvas-repository.js"
 
 describe("crit create", () => {
   let root = ""
@@ -25,7 +25,7 @@ describe("crit create", () => {
   })
 
   it.effect("creates a Canvas and reports a versioned JSON result", () => {
-    const storeLayer = FileSystemDocumentStore.layer({ root })
+    const storeLayer = FileSystemCanvasRepository.layer({ root })
     const runtimeLayer = CritRuntimeLive.pipe(Layer.provide(storeLayer))
     const cliLayer = Layer.mergeAll(
       FileSystem.layerNoop({}),
@@ -65,7 +65,7 @@ describe("crit create", () => {
         "--json"
       ])
 
-      const store = yield* DocumentStore
+      const store = yield* CanvasRepository
       const runtime = yield* CritRuntime
       const persisted = yield* store.load("checkout-iterations")
 
@@ -77,6 +77,7 @@ describe("crit create", () => {
           title: "Checkout iterations",
           revision: 0,
           frameCount: 0,
+          noteCount: 0,
           statuses: {
             inProgress: 0,
             approved: 0,

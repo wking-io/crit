@@ -5,10 +5,10 @@ import * as NodeServices from "@effect/platform-node/NodeServices"
 import { Effect, Layer } from "effect"
 
 import { runCrit } from "./cli/command.js"
-import { FileSystemDocumentStore } from "./node/file-system-document-store.js"
+import { FileSystemCanvasRepository } from "./node/file-system-canvas-repository.js"
 import { CritRuntimeLive } from "./runtime/crit-runtime.js"
 
-const documentStoreLayer = FileSystemDocumentStore.layer({ root: process.cwd() })
+const documentStoreLayer = FileSystemCanvasRepository.layer({ root: process.cwd() })
 const runtimeLayer = CritRuntimeLive.pipe(Layer.provide(documentStoreLayer))
 const mainLayer = Layer.mergeAll(NodeServices.layer, runtimeLayer)
 

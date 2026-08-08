@@ -1,8 +1,12 @@
 import { Effect } from "effect"
 
-import { Canvas } from "../core/index.js"
 import {
-  CritClientConflict,
+  Canvas,
+  CanvasCommandFailed,
+  CanvasDocumentTooLarge
+} from "../core/index.js"
+import {
+  CritClientCommandFailed,
   CritClientInvalidDocument,
   CritClientNotFound,
   CritClientUnavailable,
@@ -10,29 +14,36 @@ import {
   type CritClientShape
 } from "../session/crit-client.js"
 import {
-  DocumentConflict,
   DocumentMalformed,
   DocumentNotFound,
   DocumentStorageFailed,
-  type DocumentStoreError,
-  type DocumentStoreShape
-} from "./document-store.js"
+  type CanvasRepositoryError,
+  type CanvasRepositoryShape
+} from "./canvas-repository.js"
 
-export interface DocumentStoreCritClientOptions {
+export interface CanvasRepositoryCritClientOptions {
   readonly createIfMissing?: boolean
   readonly title?: (id: string) => string
 }
 
-const toClientError = (cause: DocumentStoreError): CritClientError => {
+const toClientError = (
+  cause: CanvasRepositoryError | CanvasCommandFailed | CanvasDocumentTooLarge
+): CritClientError => {
+  if (cause instanceof CanvasCommandFailed) {
+    return new CritClientCommandFailed({
+      id: "unknown",
+      reason: cause.reason,
+      detail: cause.detail
+    })
+  }
+  if (cause instanceof CanvasDocumentTooLarge) {
+    return new CritClientInvalidDocument({
+      id: "unknown",
+      detail: `Canvas Document is ${cause.actualBytes} bytes; maximum is ${cause.maxBytes}`
+    })
+  }
   if (cause instanceof DocumentNotFound) {
     return new CritClientNotFound({ id: cause.id })
-  }
-  if (cause instanceof DocumentConflict) {
-    return new CritClientConflict({
-      id: cause.id,
-      expectedRevision: cause.expectedRevision,
-      currentRevision: cause.currentRevision
-    })
   }
   if (cause instanceof DocumentMalformed) {
     return new CritClientInvalidDocument({
@@ -55,8 +66,8 @@ const toClientError = (cause: DocumentStoreError): CritClientError => {
 }
 
 const make = (
-  documents: DocumentStoreShape,
-  options: DocumentStoreCritClientOptions = {}
+  documents: CanvasRepositoryShape,
+  options: CanvasRepositoryCritClientOptions = {}
 ): CritClientShape => {
   const createIfMissing = options.createIfMissing ?? false
   const title = options.title ?? ((id: string) => id)
@@ -81,11 +92,23 @@ const make = (
         ),
         Effect.mapError(toClientError)
       ),
-    save: (document, expectedRevision) =>
-      documents
-        .save(document, { expectedRevision })
-        .pipe(Effect.mapError(toClientError))
+    apply: (id, commands) =>
+      documents.apply(id, commands).pipe(
+        Effect.map((mutation) => mutation.document),
+        Effect.mapError((cause) => {
+          const mapped = toClientError(cause)
+          return mapped instanceof CritClientCommandFailed && mapped.id === "unknown"
+            ? new CritClientCommandFailed({
+                id,
+                reason: mapped.reason,
+                detail: mapped.detail
+              })
+            : mapped instanceof CritClientInvalidDocument && mapped.id === "unknown"
+              ? new CritClientInvalidDocument({ id, detail: mapped.detail })
+            : mapped
+        })
+      )
   }
 }
 
-export const DocumentStoreCritClient = { make } as const
+export const CanvasRepositoryCritClient = { make } as const

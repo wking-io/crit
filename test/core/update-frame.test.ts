@@ -36,7 +36,8 @@ describe("Canvas UpdateFrame command", () => {
 
       expect(change).toEqual({
         commandCount: 1,
-        changedFrameIds: [frameId]
+        changedFrameIds: [frameId],
+        changedNoteIds: []
       })
       expect(frame).toEqual({
         id: frameId,
@@ -45,7 +46,8 @@ describe("Canvas UpdateFrame command", () => {
         status: "approved",
         provenance: { kind: "agent", sourceId: "refinement-agent" },
         display: { heightMode: "fit-page" },
-        geometry: { x: 0, y: 0, width: 1200, height: 800 }
+        geometry: { x: 0, y: 0, width: 1200, height: 800 },
+        zIndex: 1
       })
     }))
 
