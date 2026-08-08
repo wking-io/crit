@@ -2,7 +2,19 @@
 
 Crit is a local-first React canvas for arranging and assessing live web
 iterations. It uses one tldraw Store as the live document, Effect v4 for typed
-runtime boundaries, single-flight autosave, and browser draft recovery.
+runtime seams, single-flight autosave, and browser draft recovery.
+
+Initialize Crit in a Vite + React project:
+
+```sh
+npx @riff-refine/crit init
+```
+
+The initializer installs the package, updates Vite without replacing existing
+plugins, creates the React surface, adds `.crit/` to `.gitignore`, and installs
+the project agent skill. React Router framework projects also receive a
+registered `/crit/:canvasId?` route. Other routers get an explicit component
+mount instruction rather than a guessed mutation.
 
 Add the Vite plugin. It owns the local HTTP adapter and stores Canvas Documents
 under `.crit/canvases`:
@@ -44,8 +56,5 @@ Headless consumers can import the platform-neutral engine without React:
 import { Canvas } from "@riff-refine/crit/core"
 ```
 
-The eventual installation golden path is:
-
-```sh
-npx @riff-refine/crit init
-```
+Use `--skip-install` when dependency installation is managed separately, and
+`--json` for machine-readable initialization results.

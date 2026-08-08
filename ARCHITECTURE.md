@@ -23,5 +23,11 @@ CLI and future agent integrations express changes as semantic Canvas commands.
 The Session persists validated Canvas Document envelopes with optimistic
 revision checks. Neither path edits raw storage records.
 
+`crit init` owns installation-time integration. It applies idempotent,
+recognizable transforms to Vite and React Router configuration, creates narrow
+host files, and preserves files whose contents it does not own. Router shapes
+it cannot recognize become explicit follow-up instructions instead of guessed
+edits.
+
 V1 deliberately excludes Asset ingestion, real-time collaboration,
 authentication, and remote MCP mutation.

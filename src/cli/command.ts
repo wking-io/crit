@@ -1,8 +1,11 @@
 import { Effect, Option, Schema, Stdio, Stream } from "effect"
 import { Argument, Command, Flag } from "effect/unstable/cli"
+import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 
 import { CanvasCommand } from "../core/index.js"
+import { CritInitFailed, CritInitializer } from "../init/project-initializer.js"
 import { CritRuntime } from "../runtime/crit-runtime.js"
+import { PACKAGE_VERSION } from "../version.js"
 
 class InvalidCliInput extends Schema.TaggedError<InvalidCliInput>()(
   "InvalidCliInput",
@@ -14,6 +17,63 @@ const writeStdout = (value: string) =>
     const stdio = yield* Stdio.Stdio
     yield* Stream.run(Stream.make(value), stdio.stdout())
   })
+
+const initCommand = Command.make(
+  "init",
+  {
+    root: Flag.directory("root").pipe(Flag.withDefault(".")),
+    skipInstall: Flag.boolean("skip-install"),
+    json: Flag.boolean("json")
+  },
+  ({ root, skipInstall, json }) =>
+    Effect.gen(function*() {
+      const result = yield* CritInitializer.init({ root })
+      let installed = false
+      if (!skipInstall) {
+        const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
+        const exitCode = yield* spawner
+          .exitCode(
+            ChildProcess.make(result.install.command, result.install.args, {
+              cwd: result.install.cwd,
+              stdout: "inherit",
+              stderr: "inherit"
+            })
+          )
+          .pipe(
+            Effect.mapError(
+              (cause) =>
+                new CritInitFailed({
+                  operation: "install",
+                  path: result.root,
+                  detail: String(cause)
+                })
+            )
+          )
+        if (Number(exitCode) !== 0) {
+          return yield* new CritInitFailed({
+            operation: "install",
+            path: result.root,
+            detail: `${result.install.command} ${result.install.args.join(" ")} exited with code ${Number(exitCode)}`
+          })
+        }
+        installed = true
+      }
+
+      const output = json
+        ? JSON.stringify({ ...result, installed })
+        : [
+            `Initialized Crit in ${result.root}.`,
+            ...result.actions.map(
+              (action) => `  ${action.status.padEnd(9)} ${action.path}`
+            ),
+            ...result.warnings.map((warning) => `  warning   ${warning}`),
+            skipInstall
+              ? `  next      ${result.install.command} ${result.install.args.join(" ")}`
+              : "Crit dependencies are installed."
+          ].join("\n")
+      yield* writeStdout(`${output}\n`)
+    })
+).pipe(Command.withDescription("Configure Crit in a Vite + React project"))
 
 const createCommand = Command.make(
   "create",
@@ -160,8 +220,14 @@ const openCommand = Command.make(
 
 export const critCommand = Command.make("crit").pipe(
   Command.withDescription("Arrange and assess live web iterations"),
-  Command.withSubcommands([createCommand, addCommand, listCommand, openCommand])
+  Command.withSubcommands([
+    initCommand,
+    createCommand,
+    addCommand,
+    listCommand,
+    openCommand
+  ])
 )
 
 export const runCrit = (args: ReadonlyArray<string>) =>
-  Command.runWith(critCommand, { version: "0.0.0" })(args)
+  Command.runWith(critCommand, { version: PACKAGE_VERSION })(args)
