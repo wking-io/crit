@@ -25,6 +25,7 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
+    "postbuild": "node scripts/mark-executable.mjs",
     "prepack": "npm run build",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit"
