@@ -18,6 +18,8 @@ import {
 
 const CanvasTypeId: unique symbol = Symbol.for("@riff-refine/crit/Canvas")
 
+export const MAX_CANVAS_DOCUMENT_BYTES = 10_000_000
+
 export interface Canvas {
   readonly [CanvasTypeId]: typeof CanvasTypeId
 }
@@ -68,6 +70,14 @@ export class AssetUnsupported extends Schema.TaggedError<AssetUnsupported>()(
   "AssetUnsupported",
   {
     assetIds: Schema.Array(Schema.String)
+  }
+) {}
+
+export class CanvasDocumentTooLarge extends Schema.TaggedError<CanvasDocumentTooLarge>()(
+  "CanvasDocumentTooLarge",
+  {
+    actualBytes: Schema.Number,
+    maxBytes: Schema.Number
   }
 ) {}
 
@@ -138,30 +148,54 @@ const openDocument = (document: CanvasDocument): Canvas => {
   })
 }
 
+const encodedBytes = (input: unknown) => {
+  const serialized = JSON.stringify(input)
+  if (serialized === undefined) throw new TypeError("Value is not JSON serializable")
+  return new TextEncoder().encode(serialized).byteLength
+}
+
 const open = (
   input: unknown
-): Effect.Effect<Canvas, CanvasOpenFailed | AssetUnsupported> =>
-  Schema.decodeUnknownEffect(CanvasDocument)(input).pipe(
-    Effect.mapError(
-      (cause) =>
+): Effect.Effect<
+  Canvas,
+  CanvasOpenFailed | AssetUnsupported | CanvasDocumentTooLarge
+> =>
+  Effect.gen(function*() {
+    const actualBytes = yield* Effect.try({
+      try: () => encodedBytes(input),
+      catch: (cause) =>
         new CanvasOpenFailed({
           reason: "invalid-envelope",
-          detail: String(cause)
+          detail: cause instanceof Error ? cause.message : String(cause)
         })
-    ),
-    Effect.flatMap((document) =>
-      Effect.try({
-        try: () => openDocument(document),
-        catch: (cause) =>
-          cause instanceof AssetUnsupported
-            ? cause
-            : new CanvasOpenFailed({
-                reason: "invalid-document",
-                detail: cause instanceof Error ? cause.message : String(cause)
-              })
+    })
+    if (actualBytes > MAX_CANVAS_DOCUMENT_BYTES) {
+      return yield* new CanvasDocumentTooLarge({
+        actualBytes,
+        maxBytes: MAX_CANVAS_DOCUMENT_BYTES
       })
+    }
+
+    const document = yield* Schema.decodeUnknownEffect(CanvasDocument)(input).pipe(
+      Effect.mapError(
+        (cause) =>
+          new CanvasOpenFailed({
+            reason: "invalid-envelope",
+            detail: String(cause)
+          })
+      )
     )
-  )
+    return yield* Effect.try({
+      try: () => openDocument(document),
+      catch: (cause) =>
+        cause instanceof AssetUnsupported
+          ? cause
+          : new CanvasOpenFailed({
+              reason: "invalid-document",
+              detail: cause instanceof Error ? cause.message : String(cause)
+            })
+    })
+  })
 
 const exportCanvas = (canvas: Canvas): CanvasDocument => {
   const state = stateOf(canvas)
@@ -169,7 +203,7 @@ const exportCanvas = (canvas: Canvas): CanvasDocument => {
   const assetIds = findAssetIds(document)
   if (assetIds.length > 0) throw new AssetUnsupported({ assetIds })
 
-  return {
+  const exported: CanvasDocument = {
     format: "crit-canvas",
     version: 1,
     id: state.id,
@@ -177,6 +211,14 @@ const exportCanvas = (canvas: Canvas): CanvasDocument => {
     revision: state.revision,
     document
   }
+  const actualBytes = encodedBytes(exported)
+  if (actualBytes > MAX_CANVAS_DOCUMENT_BYTES) {
+    throw new CanvasDocumentTooLarge({
+      actualBytes,
+      maxBytes: MAX_CANVAS_DOCUMENT_BYTES
+    })
+  }
+  return exported
 }
 
 const summarize = (canvas: Canvas): CanvasSummary => {

@@ -3,9 +3,11 @@ export {
   Canvas,
   CanvasChange,
   CanvasCommandFailed,
+  CanvasDocumentTooLarge,
   CanvasDocument,
   CanvasOpenFailed,
   CanvasSummary,
+  MAX_CANVAS_DOCUMENT_BYTES,
   type Canvas as CanvasHandle
 } from "./canvas.js"
 export {

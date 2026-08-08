@@ -24,7 +24,9 @@ const canonicalize = (id: string, input: unknown) =>
           detail:
             cause._tag === "AssetUnsupported"
               ? `Asset records are unsupported: ${cause.assetIds.join(", ")}`
-              : cause.detail
+              : cause._tag === "CanvasDocumentTooLarge"
+                ? `Canvas Document is ${cause.actualBytes} bytes; maximum is ${cause.maxBytes}`
+                : cause.detail
         })
     )
   )
