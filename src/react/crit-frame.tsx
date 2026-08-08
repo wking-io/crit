@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, type ChangeEvent } from "react"
 import {
   BaseBoxShapeUtil,
   HTMLContainer,
@@ -19,7 +19,7 @@ import {
   critFrameMigrations,
   critFrameProps
 } from "../core/internal/tldraw-schema.js"
-import type { CritFrame } from "../core/index.js"
+import type { CritFrame, FrameStatus } from "../core/index.js"
 
 export const isFrameInteractiveTool = (toolId: string) => toolId === "select"
 
@@ -47,12 +47,19 @@ const frameRootStyle = {
 function CritFrameView({ shape }: { readonly shape: CritFrame }) {
   const editor = useEditor()
   const [loadFailed, setLoadFailed] = useState(false)
-  const iframeIsInteractive = useValue(
-    "Crit frame iframe interaction",
+  const frameIsInteractive = useValue(
+    "Crit frame interaction",
     () => isFrameInteractiveTool(editor.getCurrentToolId()),
     [editor]
   )
   const statusColor = statusColors[shape.props.status]
+  const changeStatus = (event: ChangeEvent<HTMLSelectElement>) => {
+    editor.updateShape<CritFrame>({
+      id: shape.id,
+      type: shape.type,
+      props: { status: event.currentTarget.value as FrameStatus }
+    })
+  }
 
   return (
     <HTMLContainer
@@ -100,9 +107,38 @@ function CritFrameView({ shape }: { readonly shape: CritFrame }) {
         >
           {shape.props.title}
         </strong>
-        <span style={{ color: statusColor, flex: "0 0 auto" }}>
-          {statusLabels[shape.props.status]}
-        </span>
+        <select
+          aria-label={`Status for ${shape.props.title}`}
+          disabled={!frameIsInteractive}
+          onChange={changeStatus}
+          onPointerDown={stopEventPropagation}
+          style={{
+            appearance: "auto",
+            background: "transparent",
+            border: 0,
+            color: statusColor,
+            cursor: frameIsInteractive ? "pointer" : "default",
+            flex: "0 0 auto",
+            font: "inherit",
+            fontWeight: 600,
+            maxWidth: 150,
+            opacity: frameIsInteractive ? 1 : 0.72,
+            padding: "2px 0",
+            pointerEvents: frameIsInteractive ? "auto" : "none"
+          }}
+          title={
+            frameIsInteractive
+              ? "Change review status"
+              : "Select the pointer tool to change status"
+          }
+          value={shape.props.status}
+        >
+          {Object.entries(statusLabels).map(([status, label]) => (
+            <option key={status} value={status}>
+              {label}
+            </option>
+          ))}
+        </select>
         <a
           aria-label={`Open ${shape.props.title} in a new tab`}
           href={shape.props.url}
@@ -148,13 +184,13 @@ function CritFrameView({ shape }: { readonly shape: CritFrame }) {
           onError={() => setLoadFailed(true)}
           referrerPolicy="no-referrer"
           src={shape.props.url}
-          tabIndex={iframeIsInteractive ? 0 : -1}
+          tabIndex={frameIsInteractive ? 0 : -1}
           title={shape.props.title}
           style={{
             border: 0,
             display: loadFailed ? "none" : "block",
             height: "100%",
-            pointerEvents: iframeIsInteractive ? "auto" : "none",
+            pointerEvents: frameIsInteractive ? "auto" : "none",
             width: "100%"
           }}
         />

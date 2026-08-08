@@ -95,6 +95,10 @@ export function ReviewCanvas() {
 }
 ```
 
+With the pointer tool selected, each Frame header includes a native status
+selector for marking it in progress, approved, or changes requested. The change
+updates the tldraw record directly and follows the normal autosave path.
+
 The Vite adapter creates a missing Canvas on first load. Pass
 `crit({ createIfMissing: false })` when creation must remain explicit.
 
