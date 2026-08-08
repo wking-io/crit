@@ -125,7 +125,7 @@ export class FrameNotFound extends Schema.TaggedError<FrameNotFound>()(
 type CanvasState = {
   readonly id: string
   readonly title: string
-  readonly revision: number
+  revision: number
   readonly store: Store<TLRecord>
 }
 
@@ -144,6 +144,13 @@ const stateOf = (canvas: Canvas): CanvasState => {
   }
   return state
 }
+
+export const CanvasInternals = {
+  store: (canvas: Canvas) => stateOf(canvas).store,
+  setRevision: (canvas: Canvas, revision: number) => {
+    stateOf(canvas).revision = revision
+  }
+} as const
 
 const create = (input: { readonly id: string; readonly title: string }): Canvas => {
   const store = makeStore()
