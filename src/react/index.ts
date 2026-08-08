@@ -1,6 +1,10 @@
 export * from "../core/index.js"
 export { IndexedDbDraftJournal } from "../browser/indexeddb-draft-journal.js"
 export {
+  AgentActivityStatus,
+  type AgentActivityStatus as AgentActivityStatusValue
+} from "../runtime/agent-activity.js"
+export {
   HttpCritClient,
   type HttpCritClientOptions
 } from "../http/client.js"

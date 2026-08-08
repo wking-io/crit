@@ -48,6 +48,15 @@ The Vite plugin watches the Canvas directory and sends change hints to browser
 windows; polling remains a fallback. Notifications are only an optimization—the
 file and its revision are authoritative.
 
+`AgentActivityStore` is a separate ephemeral coordination boundary. Its
+filesystem adapter writes renewable, automatically expiring signals under
+`.crit/activity`; those files never enter the Canvas Document or revision
+history. The CLI emits short pulses for Canvas work and exposes an explicit
+renew/clear command for longer sessions. Browser sessions read the signal through
+the HTTP adapter, show activity without implying remote presence, and tighten
+revision polling from two seconds to 500 ms while an agent is active. Vite file
+events remain the immediate path.
+
 ## UI and adapters
 
 `CanvasViewport` is a Crit-owned DOM viewport. It implements infinite pan/zoom,
@@ -55,8 +64,8 @@ Frame and Note movement and resizing, review status, note editing and
 attach/detach behavior. Offscreen iframes are not mounted, keeping the cost tied
 to visible work. The iframe `allow` and `sandbox` policies are configurable.
 
-The HTTP adapter supports `GET` for authoritative documents, `PATCH` for
-semantic command batches, and `POST` on a Frame snapshot route. Vite adapts it
+The HTTP adapter supports `GET` for authoritative documents and agent activity,
+`PATCH` for semantic command batches, and `POST` on a Frame snapshot route. Vite adapts it
 to local Connect middleware, owns the router-independent Crit editor route, and
 serves immutable snapshot artifacts. The React
 component, Vite plugin, CLI, discovery manifest, and installed agent skill are

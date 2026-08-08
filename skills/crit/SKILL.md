@@ -17,6 +17,7 @@ npx @riff-refine/crit apply checkout-review '[{"_tag":"SetFrameStatus","id":"can
 npx @riff-refine/crit create checkout-review --title "Checkout review" --json
 npx @riff-refine/crit add checkout-review https://checkout.localhost --json
 npx @riff-refine/crit snapshot checkout-review candidate --json
+npx @riff-refine/crit activity checkout-review --for 120 --detail "Refining checkout" --json
 ```
 
 Open `/crit/checkout-review` in the host application after adding frames.
@@ -54,6 +55,10 @@ array to `apply`:
 
 ## Editing rules
 
+- Before a task that may take longer than a normal command, signal activity with
+  `activity <canvas> --for <seconds> --detail <work> --json`. Renew it before it
+  expires, and run `activity <canvas> --clear --json` when the work ends. Normal
+  Canvas CLI commands already emit a short pulse.
 - Use Crit commands and interfaces; never edit `.crit/canvases/*.json`.
 - Use one `apply` call for related `AddFrame`, `UpdateFrame`, `SetFrameStatus`,
   `MoveFrame`, `ResizeFrame`, `RemoveFrame`, and Note operations so they commit
@@ -74,8 +79,9 @@ array to `apply`:
 ## Setup and diagnosis
 
 Run `npx @riff-refine/crit init` when Crit is not configured. The initializer
-installs the Vite adapter, React surface, route where supported, ignore rule,
-default manifest, and this project skill. If discovery fails, verify that
+installs the Vite adapter, reusable React surface, ignore rule, default manifest,
+and this project skill. The Vite plugin owns `/crit/:canvasId?`, independent of
+the host router. If discovery fails, verify that
 `GET /.well-known/crit.json` returns a manifest. If the editor cannot load,
 verify the Vite plugin is enabled and that `GET /__crit/api/canvases/<id>`
 returns a Canvas Document.

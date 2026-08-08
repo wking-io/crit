@@ -13,6 +13,7 @@ import {
   type CritClientError,
   type CritClientShape
 } from "../session/crit-client.js"
+import { AgentActivityStatus } from "../runtime/agent-activity.js"
 
 export const DEFAULT_CRIT_API_PATH = "/__crit/api"
 export const MAX_CRIT_HTTP_BODY_BYTES = MAX_CANVAS_DOCUMENT_BYTES + 64_000
@@ -62,6 +63,9 @@ export const critFrameSnapshotUrl = (
   frameId: string
 ) =>
   `${critCanvasUrl(apiPath, canvasId)}/frames/${encodeURIComponent(frameId)}/snapshot`
+
+export const critCanvasActivityUrl = (apiPath: string, canvasId: string) =>
+  `${critCanvasUrl(apiPath, canvasId)}/activity`
 
 const pathnameFor = (request: Request) => {
   try {
@@ -169,6 +173,9 @@ const canvasRouteFrom = (request: Request, apiPath: string) => {
   try {
     const id = decodeURIComponent(segments[0]!)
     if (segments.length === 1) return { id }
+    if (segments.length === 2 && segments[1] === "activity") {
+      return { id, activity: true as const }
+    }
     if (
       segments.length === 4 &&
       segments[1] === "frames" &&
@@ -199,6 +206,33 @@ export const makeCritHttpHandler = (
       )
     }
     const id = route.id
+
+    if (route.activity === true) {
+      if (request.method !== "GET") {
+        return Effect.succeed(
+          json(
+            405,
+            errorBody("method-not-allowed", "Only GET is supported", { id }),
+            { Allow: "GET" }
+          )
+        )
+      }
+      if (client.activity === undefined) {
+        return Effect.succeed(
+          clientErrorResponse(
+            new CritClientUnavailable({
+              operation: "activity",
+              id,
+              detail: "Agent activity is unavailable"
+            })
+          )
+        )
+      }
+      return client.activity(id).pipe(
+        Effect.map((activity) => json(200, activity)),
+        Effect.catch((cause) => Effect.succeed(clientErrorResponse(cause)))
+      )
+    }
 
     if (route.frameId !== undefined) {
       if (request.method !== "POST") {
@@ -278,6 +312,14 @@ export const makeCritHttpHandler = (
 
 export const decodeCanvasDocument = (input: unknown, id: string) =>
   Schema.decodeUnknownEffect(CanvasDocument)(input).pipe(
+    Effect.mapError(
+      (cause) =>
+        new CritClientInvalidDocument({ id, detail: String(cause) })
+    )
+  )
+
+export const decodeAgentActivity = (input: unknown, id: string) =>
+  Schema.decodeUnknownEffect(AgentActivityStatus)(input).pipe(
     Effect.mapError(
       (cause) =>
         new CritClientInvalidDocument({ id, detail: String(cause) })

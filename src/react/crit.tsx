@@ -205,7 +205,18 @@ export function Crit({
       }
     }
     hot.on("crit:canvas-changed", refreshChangedCanvas)
-    return () => hot.off("crit:canvas-changed", refreshChangedCanvas)
+    const refreshActivity = (data: { readonly id?: string }) => {
+      if (data.id === canvasId) {
+        Effect.runFork(
+          session.refreshAgentActivity().pipe(Effect.catch(() => Effect.void))
+        )
+      }
+    }
+    hot.on("crit:agent-activity", refreshActivity)
+    return () => {
+      hot.off("crit:canvas-changed", refreshChangedCanvas)
+      hot.off("crit:agent-activity", refreshActivity)
+    }
   }, [canvasId, session])
 
   if (error !== null) {
@@ -234,6 +245,40 @@ export function Crit({
         {...(iframeSandbox === undefined ? {} : { iframeSandbox })}
         {...(onCommandError === undefined ? {} : { onCommandError })}
       />
+      {sessionState?.agentActivity.active ? (
+        <div
+          aria-live="polite"
+          role="status"
+          style={{
+            alignItems: "center",
+            background: "rgba(88, 28, 135, 0.92)",
+            borderRadius: 999,
+            color: "#ffffff",
+            display: "flex",
+            font: "600 12px/1 ui-sans-serif, system-ui, sans-serif",
+            gap: 7,
+            padding: "8px 11px",
+            position: "absolute",
+            right: 12,
+            top: 12,
+            zIndex: 400
+          }}
+          title={sessionState.agentActivity.activeUntil ?? undefined}
+        >
+          <span
+            style={{
+              background: "#c4b5fd",
+              borderRadius: 999,
+              height: 8,
+              width: 8
+            }}
+          />
+          Agent working
+          {sessionState.agentActivity.detail === null
+            ? ""
+            : ` · ${sessionState.agentActivity.detail}`}
+        </div>
+      ) : null}
       {sessionState === null ? null : (
         <button
           aria-live="polite"

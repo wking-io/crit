@@ -20,6 +20,7 @@ import {
   type CanvasRepositoryError,
   type CanvasRepositoryShape
 } from "./canvas-repository.js"
+import type { AgentActivityStoreShape } from "./agent-activity.js"
 import {
   SnapshotCaptureFailed,
   SnapshotStorageFailed
@@ -33,6 +34,7 @@ export interface CanvasRepositoryCritClientOptions {
   readonly createIfMissing?: boolean
   readonly title?: (id: string) => string
   readonly snapshotFrame?: SnapshotServiceShape["snapshotFrame"]
+  readonly loadAgentActivity?: AgentActivityStoreShape["read"]
 }
 
 const toClientError = (
@@ -153,6 +155,21 @@ const make = (
           snapshot: (id: string, frameId: string) =>
             options.snapshotFrame!(id, frameId).pipe(
               Effect.mapError((cause) => mapForId(id, cause))
+            )
+        }),
+    ...(options.loadAgentActivity === undefined
+      ? {}
+      : {
+          activity: (id: string) =>
+            options.loadAgentActivity!(id).pipe(
+              Effect.mapError(
+                (cause) =>
+                  new CritClientUnavailable({
+                    operation: "activity",
+                    id,
+                    detail: cause.detail
+                  })
+              )
             )
         })
   }

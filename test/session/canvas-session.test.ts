@@ -13,6 +13,37 @@ const applyTo = (stored: ReturnType<typeof Canvas.export>, commands: ReadonlyArr
   }).pipe(Effect.orDie)
 
 describe("CanvasSession", () => {
+  it.effect("surfaces renewable agent activity independently of Canvas revisions", () =>
+    Effect.scoped(
+      Effect.gen(function*() {
+        const stored = Canvas.export(Canvas.create({ id: "review", title: "Review" }))
+        const client: CritClientShape = {
+          load: () => Effect.succeed(stored),
+          apply: () => Effect.succeed(stored),
+          activity: (canvasId) => Effect.succeed({
+            schemaVersion: 1,
+            canvasId,
+            active: true,
+            updatedAt: "2026-08-08T12:00:00.000Z",
+            activeUntil: "2026-08-08T12:02:00.000Z",
+            detail: "Refining checkout"
+          })
+        }
+        const session = yield* CanvasSession.open("review", {
+          refreshInterval: false
+        }).pipe(Effect.provide(Layer.succeed(CritClient, client)))
+
+        expect(yield* session.refreshAgentActivity()).toBe(true)
+        expect(yield* SubscriptionRef.get(session.state)).toMatchObject({
+          revision: 0,
+          agentActivity: {
+            active: true,
+            detail: "Refining checkout"
+          }
+        })
+      })
+    ))
+
   it.effect("coalesces edits made during an in-flight command batch", () =>
     Effect.scoped(
       Effect.gen(function*() {

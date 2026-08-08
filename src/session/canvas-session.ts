@@ -20,6 +20,10 @@ import {
 } from "../core/index.js"
 import { CanvasInternals } from "../core/canvas.js"
 import {
+  AgentActivityStatus,
+  type AgentActivityStatus as AgentActivityStatusValue
+} from "../runtime/agent-activity.js"
+import {
   CritClient,
   CritClientCommandFailed,
   CritClientInvalidDocument,
@@ -59,7 +63,8 @@ export const CanvasSessionState = Schema.Struct({
   saveStatus: CanvasSessionSaveStatus,
   detail: Schema.NullOr(Schema.String),
   recoveryStatus: CanvasSessionRecoveryStatus,
-  recoveryDetail: Schema.NullOr(Schema.String)
+  recoveryDetail: Schema.NullOr(Schema.String),
+  agentActivity: AgentActivityStatus
 })
 export type CanvasSessionState = typeof CanvasSessionState.Type
 
@@ -76,6 +81,7 @@ export interface CanvasSession {
   readonly snapshotFrame: (
     frameId: string
   ) => Effect.Effect<CanvasDocument, CritClientError>
+  readonly refreshAgentActivity: () => Effect.Effect<boolean, CritClientError>
 }
 
 export type CanvasSessionOptions = {
@@ -191,7 +197,15 @@ const open = (
             : "clean",
       detail: initialRecoveryStatus === "conflict" ? recoveryDetail : null,
       recoveryStatus: initialRecoveryStatus,
-      recoveryDetail
+      recoveryDetail,
+      agentActivity: {
+        schemaVersion: 1,
+        canvasId,
+        active: false,
+        updatedAt: null,
+        activeUntil: null,
+        detail: null
+      }
     })
     const saveLock = yield* Semaphore.make(1)
     const documentLock = yield* Semaphore.make(1)
@@ -333,6 +347,22 @@ const open = (
       })
     )
 
+    const refreshAgentActivity = () =>
+      client.activity === undefined
+        ? Effect.succeed(false)
+        : client.activity(canvasId).pipe(
+            Effect.tap((activity: AgentActivityStatusValue) =>
+              SubscriptionRef.update(
+                state,
+                (current): CanvasSessionState => ({
+                  ...current,
+                  agentActivity: activity
+                })
+              )
+            ),
+            Effect.map((activity) => activity.active)
+          )
+
     const discardLocalChanges = saveLock.withPermit(
       documentLock.withPermit(Effect.gen(function*() {
         const remote = yield* client.load(canvasId)
@@ -408,12 +438,19 @@ const open = (
     if (recoveryStatus === "recovered") {
       yield* Effect.forkIn(saveUntilClean.pipe(Effect.catch(() => Effect.void)), scope)
     }
+    yield* Effect.forkIn(
+      refreshAgentActivity().pipe(Effect.catch(() => Effect.void)),
+      scope
+    )
     if (options.refreshInterval !== false) {
       const interval = options.refreshInterval ?? 2_000
       yield* Effect.forkIn(
         Effect.gen(function*() {
           while (true) {
-            yield* Effect.sleep(interval)
+            const agentActive = yield* refreshAgentActivity().pipe(
+              Effect.catch(() => Effect.succeed(false))
+            )
+            yield* Effect.sleep(agentActive ? 500 : interval)
             yield* refresh.pipe(Effect.catch(() => Effect.void))
           }
         }),
@@ -469,7 +506,8 @@ const open = (
       flush: () => saveUntilClean,
       refresh: () => refresh,
       discardLocalChanges: () => discardLocalChanges,
-      snapshotFrame
+      snapshotFrame,
+      refreshAgentActivity
     }
   })
 

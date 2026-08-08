@@ -1,5 +1,9 @@
 export { FileSystemCanvasRepository } from "./file-system-canvas-repository.js"
 export {
+  FileSystemAgentActivity,
+  type FileSystemAgentActivityOptions
+} from "./file-system-agent-activity.js"
+export {
   FileSystemSnapshotArchive,
   type FileSystemSnapshotArchiveOptions
 } from "./file-system-snapshot-archive.js"
@@ -21,6 +25,13 @@ export {
   CanvasView,
   type CritRuntimeShape
 } from "../runtime/crit-runtime.js"
+export {
+  AgentActivityFailed,
+  AgentActivityStatus,
+  AgentActivityStore,
+  type AgentActivityStoreShape,
+  type SignalAgentActivityInput
+} from "../runtime/agent-activity.js"
 export {
   CRIT_SNAPSHOT_PATH,
   SnapshotArchive,

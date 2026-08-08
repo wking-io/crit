@@ -7,6 +7,7 @@ import { Effect, FileSystem, Layer, Path, Sink, Stdio, Terminal } from "effect"
 import { ChildProcessSpawner } from "effect/unstable/process"
 
 import { runCrit } from "../../src/cli/command.js"
+import { FileSystemAgentActivity } from "../../src/node/file-system-agent-activity.js"
 import { FileSystemCanvasRepository } from "../../src/node/file-system-canvas-repository.js"
 import { CritRuntimeLive } from "../../src/runtime/crit-runtime.js"
 import { SnapshotArchive } from "../../src/runtime/snapshot-archive.js"
@@ -28,6 +29,7 @@ describe("crit Canvas workflows", () => {
   it.effect("adds URLs, lists Canvases, and opens a semantic Canvas view", () => {
     const storeLayer = FileSystemCanvasRepository.layer({ root })
     const runtimeLayer = CritRuntimeLive.pipe(Layer.provide(storeLayer))
+    const activityLayer = FileSystemAgentActivity.layer({ root })
     const snapshotLayer = SnapshotServiceLive.pipe(
       Layer.provide(storeLayer),
       Layer.provide(
@@ -72,7 +74,8 @@ describe("crit Canvas workflows", () => {
       ),
       storeLayer,
       runtimeLayer,
-      snapshotLayer
+      snapshotLayer,
+      activityLayer
     )
 
     return Effect.gen(function*() {
@@ -105,6 +108,18 @@ describe("crit Canvas workflows", () => {
         "--json"
       ])
       const snapshotted = JSON.parse(stdout.join(""))
+      stdout = []
+
+      yield* runCrit([
+        "activity",
+        "review",
+        "--for",
+        "120",
+        "--detail",
+        "Implementing checkout",
+        "--json"
+      ])
+      const activity = JSON.parse(stdout.join(""))
 
       expect(added).toMatchObject({
         schemaVersion: 1,
@@ -176,6 +191,15 @@ describe("crit Canvas workflows", () => {
             sourceUrl: "https://checkout.localhost/v1",
             sizeBytes: 512
           }
+        }
+      })
+      expect(activity).toMatchObject({
+        schemaVersion: 1,
+        command: "activity",
+        activity: {
+          canvasId: "review",
+          active: true,
+          detail: "Implementing checkout"
         }
       })
     }).pipe(Effect.provide(cliLayer))

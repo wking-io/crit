@@ -21,10 +21,12 @@ import {
   makeCritHttpHandler
 } from "../http/contract.js"
 import { FileSystemCanvasRepository } from "../node/file-system-canvas-repository.js"
+import { FileSystemAgentActivity } from "../node/file-system-agent-activity.js"
 import { FileSystemSnapshotArchive } from "../node/file-system-snapshot-archive.js"
 import { CanvasRepositoryCritClient } from "../runtime/canvas-repository-crit-client.js"
 import { CanvasRepository } from "../runtime/canvas-repository.js"
 import { CritRuntimeLive } from "../runtime/crit-runtime.js"
+import { AgentActivityStore } from "../runtime/agent-activity.js"
 import {
   CRIT_SNAPSHOT_PATH,
   SnapshotNotFound
@@ -226,6 +228,7 @@ export const crit = (options: CritVitePluginOptions = {}): Plugin => {
   const configure = (server: CritViteServer) => {
     if (!enabled) return
     const documentLayer = FileSystemCanvasRepository.layer({ root: resolvedRoot })
+    const agentActivityLayer = FileSystemAgentActivity.layer({ root: resolvedRoot })
     const archiveLayer = FileSystemSnapshotArchive.layer({ root: resolvedRoot })
     const critRuntimeLayer = CritRuntimeLive.pipe(Layer.provide(documentLayer))
     const snapshotServiceLayer = SnapshotServiceLive.pipe(
@@ -240,18 +243,24 @@ export const crit = (options: CritVitePluginOptions = {}): Plugin => {
     const runtime = ManagedRuntime.make(
       Layer.mergeAll(
         documentLayer,
+        agentActivityLayer,
         archiveLayer,
         critRuntimeLayer,
         snapshotServiceLayer
       )
     )
     const services = runtime.runPromise(
-      Effect.all({ documents: CanvasRepository, snapshots: SnapshotService }).pipe(
-        Effect.map(({ documents, snapshots }) => ({
+      Effect.all({
+        activity: AgentActivityStore,
+        documents: CanvasRepository,
+        snapshots: SnapshotService
+      }).pipe(
+        Effect.map(({ activity, documents, snapshots }) => ({
           snapshots,
           handler: makeCritHttpHandler(
             CanvasRepositoryCritClient.make(documents, {
               createIfMissing: options.createIfMissing ?? true,
+              loadAgentActivity: activity.read,
               snapshotFrame: snapshots.snapshotFrame,
               ...(options.title === undefined ? {} : { title: options.title })
             }),
@@ -265,7 +274,9 @@ export const crit = (options: CritVitePluginOptions = {}): Plugin => {
       const watcher = server.watcher
       const ws = server.ws
       const canvasesDirectory = path.join(resolvedRoot, ".crit", "canvases")
+      const activityDirectory = path.join(resolvedRoot, ".crit", "activity")
       watcher.add(canvasesDirectory)
+      watcher.add(activityDirectory)
       const notify = (changedPath: string) => {
         if (path.dirname(changedPath) !== canvasesDirectory || !changedPath.endsWith(".json")) {
           return
@@ -284,6 +295,27 @@ export const crit = (options: CritVitePluginOptions = {}): Plugin => {
       }
       watcher.on("add", notify)
       watcher.on("change", notify)
+      const notifyActivity = (changedPath: string) => {
+        if (
+          path.dirname(changedPath) !== activityDirectory ||
+          !changedPath.endsWith(".json")
+        ) {
+          return
+        }
+        try {
+          ws.send({
+            type: "custom",
+            event: "crit:agent-activity",
+            data: {
+              id: decodeURIComponent(path.basename(changedPath, ".json"))
+            }
+          })
+        } catch {
+          // A malformed filename is not an activity change.
+        }
+      }
+      watcher.on("add", notifyActivity)
+      watcher.on("change", notifyActivity)
     }
 
     const loadManifest = async (

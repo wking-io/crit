@@ -1,6 +1,7 @@
 import { Context, Effect, Schema } from "effect"
 
 import type { CanvasCommand, CanvasDocument } from "../core/index.js"
+import type { AgentActivityStatus } from "../runtime/agent-activity.js"
 
 export class CritClientNotFound extends Schema.TaggedError<CritClientNotFound>()(
   "CritClientNotFound",
@@ -49,6 +50,9 @@ export interface CritClientShape {
     canvasId: string,
     frameId: string
   ) => Effect.Effect<CanvasDocument, CritClientError>
+  readonly activity?: (
+    canvasId: string
+  ) => Effect.Effect<AgentActivityStatus, CritClientError>
 }
 
 export class CritClient extends Context.Service<CritClient, CritClientShape>()(

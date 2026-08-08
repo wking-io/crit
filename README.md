@@ -90,6 +90,8 @@ npx @riff-refine/crit apply checkout-review \
   '[{"_tag":"SetFrameStatus","id":"candidate","status":"approved"}]' \
   --json
 npx @riff-refine/crit snapshot checkout-review candidate --json
+npx @riff-refine/crit activity checkout-review \
+  --for 120 --detail "Refining checkout" --json
 ```
 
 The command schema includes Frame operations (`AddFrame`, `UpdateFrame`,
@@ -102,6 +104,14 @@ browser edits merge without manual revision wiring.
 
 Canvas Documents live under `.crit/canvases`. Use Crit commands and interfaces
 instead of editing those files directly.
+
+CLI commands that work on a Canvas automatically publish a short local activity
+pulse. Before a longer task, agents can renew that signal with `crit activity
+<canvas> --for <seconds> --detail <work>` and clear it with `--clear`. Open
+editors show a purple **Agent working** indicator, and poll authoritative Canvas
+revisions every 500 ms while the signal is active instead of the normal
+two-second fallback. Activity files under `.crit/activity` expire automatically;
+they are coordination hints, not Canvas history or durable presence.
 
 ## Frame snapshots
 
@@ -135,7 +145,8 @@ separate immutable state.
 Autosave is single-flight and stores pending semantic commands in IndexedDB for
 draft recovery. Vite file watching refreshes clean windows immediately after a
 browser or agent write; a two-second poll remains a fallback. Dirty local work
-is never replaced by refresh. Use `refreshInterval={false}` to disable polling.
+is never replaced by refresh. Active agent sessions temporarily tighten that
+fallback to 500 ms. Use `refreshInterval={false}` to disable polling.
 
 Iframe capabilities are configurable:
 

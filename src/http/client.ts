@@ -11,8 +11,10 @@ import {
 import {
   CritHttpErrorBody,
   DEFAULT_CRIT_API_PATH,
+  critCanvasActivityUrl,
   critCanvasUrl,
   critFrameSnapshotUrl,
+  decodeAgentActivity,
   decodeCanvasDocument,
   encodeApplyRequest
 } from "./contract.js"
@@ -32,7 +34,7 @@ const parseJson = (response: Response) =>
 const responseError = (
   response: Response,
   input: unknown,
-  operation: "load" | "apply" | "snapshot",
+  operation: "load" | "apply" | "snapshot" | "activity",
   id: string
 ): CritClientError => {
   const parsed = Schema.decodeUnknownOption(CritHttpErrorBody)(input)
@@ -71,7 +73,7 @@ const make = (options: HttpCritClientOptions = {}): CritClientShape => {
   const request = options.fetch ?? globalThis.fetch
 
   const execute = (
-    operation: "load" | "apply" | "snapshot",
+    operation: "load" | "apply" | "snapshot" | "activity",
     id: string,
     init?: RequestInit,
     url = critCanvasUrl(apiPath, id)
@@ -115,7 +117,37 @@ const make = (options: HttpCritClientOptions = {}): CritClientShape => {
     snapshot: (canvasId, frameId) =>
       execute("snapshot", canvasId, {
         method: "POST"
-      }, critFrameSnapshotUrl(apiPath, canvasId, frameId))
+      }, critFrameSnapshotUrl(apiPath, canvasId, frameId)),
+    activity: (canvasId) =>
+      Effect.tryPromise({
+        try: () => request(critCanvasActivityUrl(apiPath, canvasId)),
+        catch: (cause) =>
+          new CritClientUnavailable({
+            operation: "activity",
+            id: canvasId,
+            detail: cause instanceof Error ? cause.message : String(cause)
+          })
+      }).pipe(
+        Effect.flatMap((response) =>
+          parseJson(response).pipe(
+            Effect.mapError(
+              (cause) =>
+                new CritClientUnavailable({
+                  operation: "activity",
+                  id: canvasId,
+                  detail: cause.message
+                })
+            ),
+            Effect.flatMap((body) =>
+              response.ok
+                ? decodeAgentActivity(body, canvasId)
+                : Effect.fail(
+                    responseError(response, body, "activity", canvasId)
+                  )
+            )
+          )
+        )
+      )
   }
 }
 

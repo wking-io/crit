@@ -23,3 +23,7 @@ Crit is a local-first tool for arranging and assessing live web iterations.
 **Canvas Repository**: The local persistence boundary that serializes semantic command batches under a per-Canvas filesystem lock.
 
 **Canvas Session**: One browser window's optimistic view, autosave queue, draft recovery, and adoption of authoritative revisions.
+
+**Agent Activity**: A renewable, automatically expiring local coordination hint that an agent is working on a Canvas. It is not durable Canvas state, revision history, or remote-user presence.
+
+**Agent Activity Store**: The ephemeral persistence boundary for Agent Activity. The filesystem adapter stores signals under `.crit/activity` separately from Canvas Documents.

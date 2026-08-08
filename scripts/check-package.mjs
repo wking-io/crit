@@ -139,6 +139,7 @@ createRoot(document.getElementById("root")!).render(<Crit canvasId="package-smok
   ["@riff-refine/crit/http", "makeCritHttpHandler"],
   ["@riff-refine/crit/discovery", "CritManifest"],
   ["@riff-refine/crit/node", "FileSystemCanvasRepository"],
+  ["@riff-refine/crit/node", "FileSystemAgentActivity"],
   ["@riff-refine/crit/node", "FileSystemSnapshotArchive"],
   ["@riff-refine/crit/vite", "crit"]
 ]
@@ -161,7 +162,7 @@ for (const [specifier, name] of checks) {
     ["--help"],
     { cwd: consumer }
   )
-  for (const command of ["init", "sync", "apply", "create", "add", "snapshot", "list", "open"]) {
+  for (const command of ["init", "sync", "apply", "create", "add", "snapshot", "activity", "list", "open"]) {
     if (!new RegExp(`^  ${command}\\s`, "m").test(help.stdout)) {
       throw new Error(`Installed CLI help is missing the ${command} command`)
     }

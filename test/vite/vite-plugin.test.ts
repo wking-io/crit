@@ -10,6 +10,7 @@ import { createServer, type ViteDevServer } from "vite"
 
 import { HttpCritClient } from "../../src/http/client.js"
 import { Canvas, CanvasCommand } from "../../src/core/index.js"
+import { FileSystemAgentActivity } from "../../src/node/file-system-agent-activity.js"
 import {
   CritClientCommandFailed,
   CritClientNotFound
@@ -62,6 +63,13 @@ describe("crit Vite plugin", () => {
       `${origin}/crit/__assets/editor.js`
     )
     const editorBundle = await editorBundleResponse.text()
+    const activityStore = FileSystemAgentActivity.make({ root })
+    await Effect.runPromise(activityStore.signal({
+      canvasId: "homepage",
+      activeForSeconds: 120,
+      detail: "Agent is arranging Frames"
+    }))
+    const activity = await Effect.runPromise(client.activity!("homepage"))
 
     const initialLoads = await Promise.all(
       Array.from({ length: 8 }, () =>
@@ -124,6 +132,11 @@ describe("crit Vite plugin", () => {
       "text/javascript"
     )
     expect(editorBundle.length).toBeGreaterThan(10_000)
+    expect(activity).toMatchObject({
+      canvasId: "homepage",
+      active: true,
+      detail: "Agent is arranging Frames"
+    })
     expect(initialLoads).toHaveLength(8)
     expect(initialLoads.every((document) => document.revision === 0)).toBe(true)
     expect(saved.revision).toBe(1)

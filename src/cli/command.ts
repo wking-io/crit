@@ -15,6 +15,7 @@ import {
 } from "../discovery/index.js"
 import { CritInitFailed, CritInitializer } from "../init/project-initializer.js"
 import { CritRuntime } from "../runtime/crit-runtime.js"
+import { AgentActivityStore } from "../runtime/agent-activity.js"
 import { SnapshotService } from "../runtime/snapshot-service.js"
 import { PACKAGE_VERSION } from "../version.js"
 
@@ -28,6 +29,23 @@ const writeStdout = (value: string) =>
     const stdio = yield* Stdio.Stdio
     yield* Stream.run(Stream.make(value), stdio.stdout())
   })
+
+const pulseAgentActivity = (
+  canvasId: string,
+  detail: string,
+  activeForSeconds = 20
+) =>
+  Effect.serviceOption(AgentActivityStore).pipe(
+    Effect.flatMap(
+      Option.match({
+        onNone: () => Effect.void,
+        onSome: (activity) =>
+          activity
+            .signal({ canvasId, activeForSeconds, detail })
+            .pipe(Effect.catch(() => Effect.void), Effect.asVoid)
+      })
+    )
+  )
 
 const parseJson = (source: string, contents: string) =>
   Effect.try({
@@ -238,6 +256,7 @@ const applyCommand = Command.make(
   ({ id, commands, json }) =>
     Effect.gen(function*() {
       const runtime = yield* CritRuntime
+      yield* pulseAgentActivity(id, "Applying Canvas edits")
       const decoded: ReadonlyArray<CanvasCommandInput> =
         yield* decodeCanvasCommands(commands)
       if (decoded.length === 0) {
@@ -278,6 +297,7 @@ const createCommand = Command.make(
     Effect.gen(function*() {
       const runtime = yield* CritRuntime
       const canvas = yield* runtime.createCanvas({ id, title })
+      yield* pulseAgentActivity(id, "Created Canvas")
       const output = json
         ? JSON.stringify({
             schemaVersion: 1,
@@ -339,6 +359,7 @@ const addCommand = Command.make(
   ({ id, urls, json }) =>
     Effect.gen(function*() {
       const runtime = yield* CritRuntime
+      yield* pulseAgentActivity(id, "Adding Frames")
       const current = yield* runtime.getCanvas(id)
       const usedIds = new Set(current.frames.map((frame) => frame.id))
       const normalized = yield* Effect.forEach(urls, normalizeUrl)
@@ -397,6 +418,7 @@ const openCommand = Command.make(
   ({ id, json }) =>
     Effect.gen(function*() {
       const runtime = yield* CritRuntime
+      yield* pulseAgentActivity(id, "Reading Canvas")
       const view = yield* runtime.getCanvas(id)
       const output = json
         ? JSON.stringify({ schemaVersion: 1, command: "open", ...view })
@@ -422,6 +444,7 @@ const snapshotCommand = Command.make(
           detail: "Snapshot capture is unavailable in this Crit runtime"
         })
       }
+      yield* pulseAgentActivity(canvas, "Capturing Frame snapshot", 120)
       const document = yield* snapshots.snapshotFrame(canvas, frame)
       const archived = document.frames.at(-1)
       if (
@@ -448,6 +471,48 @@ const snapshotCommand = Command.make(
   )
 )
 
+const activityCommand = Command.make(
+  "activity",
+  {
+    canvas: Argument.string("canvas"),
+    activeForSeconds: Flag.integer("for").pipe(Flag.withDefault(120)),
+    clear: Flag.boolean("clear"),
+    detail: Flag.string("detail").pipe(Flag.optional),
+    json: Flag.boolean("json")
+  },
+  ({ canvas, activeForSeconds, clear, detail, json }) =>
+    Effect.gen(function*() {
+      const activity = Option.getOrUndefined(
+        yield* Effect.serviceOption(AgentActivityStore)
+      )
+      if (activity === undefined) {
+        return yield* new InvalidCliInput({
+          detail: "Agent activity is unavailable in this Crit runtime"
+        })
+      }
+      const status = clear
+        ? yield* activity.clear(canvas)
+        : yield* activity.signal({
+            canvasId: canvas,
+            activeForSeconds,
+            ...Option.match(detail, {
+              onNone: () => ({}),
+              onSome: (value) => ({ detail: value })
+            })
+          })
+      const output = json
+        ? JSON.stringify({ schemaVersion: 1, command: "activity", activity: status })
+        : status.active
+          ? `Agent activity is visible on "${canvas}" until ${status.activeUntil}.`
+          : `Agent activity cleared for "${canvas}".`
+      yield* writeStdout(`${output}\n`)
+    })
+).pipe(
+  Command.withDescription(
+    "Signal or clear renewable local agent activity for a Canvas"
+  )
+)
+
 export const critCommand = Command.make("crit").pipe(
   Command.withDescription("Arrange and assess live web iterations"),
   Command.withSubcommands([
@@ -457,6 +522,7 @@ export const critCommand = Command.make("crit").pipe(
     createCommand,
     addCommand,
     snapshotCommand,
+    activityCommand,
     listCommand,
     openCommand
   ])
