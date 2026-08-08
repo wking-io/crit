@@ -7,6 +7,7 @@ import {
   CanvasCommandFailed,
   CanvasCommandSchema,
   CanvasDocumentTooLarge,
+  FrameList,
   CanvasSummary,
   type CanvasCommand,
   type CanvasDocument,
@@ -37,6 +38,12 @@ export const CanvasMutationResult = Schema.Struct({
   canvas: CanvasSummary
 })
 export type CanvasMutationResult = typeof CanvasMutationResult.Type
+
+export const CanvasView = Schema.Struct({
+  canvas: CanvasSummary,
+  frames: FrameList
+})
+export type CanvasView = typeof CanvasView.Type
 
 const malformedDetail = (
   cause: CanvasOpenFailed | AssetUnsupported | CanvasDocumentTooLarge
@@ -84,6 +91,16 @@ export interface CritRuntimeShape {
     CanvasDocument,
     DocumentNotFound | DocumentMalformed | DocumentStorageFailed
   >
+  readonly getCanvas: (
+    id: string
+  ) => Effect.Effect<
+    CanvasView,
+    DocumentNotFound | DocumentMalformed | DocumentStorageFailed
+  >
+  readonly listCanvases: () => Effect.Effect<
+    ReadonlyArray<CanvasSummary>,
+    DocumentMalformed | DocumentStorageFailed
+  >
   readonly updateCanvas: (
     input: UpdateCanvasInput
   ) => Effect.Effect<
@@ -113,6 +130,23 @@ export const CritRuntimeLive = Layer.effect(
         return documents.create(Canvas.export(canvas)).pipe(Effect.as(Canvas.summarize(canvas)))
       },
       readCanvas: documents.load,
+      getCanvas: (id) =>
+        Effect.gen(function*() {
+          const document = yield* documents.load(id)
+          const canvas = yield* openStoredCanvas(document)
+          return {
+            canvas: Canvas.summarize(canvas),
+            frames: Canvas.listFrames(canvas)
+          }
+        }),
+      listCanvases: () =>
+        documents.list().pipe(
+          Effect.flatMap((stored) =>
+            Effect.forEach(stored, (document) =>
+              openStoredCanvas(document).pipe(Effect.map(Canvas.summarize))
+            )
+          )
+        ),
       updateCanvas: (input) =>
         Effect.gen(function*() {
           if (input.commands.length === 0) {

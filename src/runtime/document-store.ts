@@ -57,6 +57,10 @@ export interface DocumentStoreShape {
   readonly load: (
     id: string
   ) => Effect.Effect<CanvasDocument, DocumentNotFound | DocumentMalformed | DocumentStorageFailed>
+  readonly list: () => Effect.Effect<
+    ReadonlyArray<CanvasDocument>,
+    DocumentMalformed | DocumentStorageFailed
+  >
   readonly save: (
     document: CanvasDocument,
     options: { readonly expectedRevision: number }
@@ -66,4 +70,3 @@ export interface DocumentStoreShape {
 export class DocumentStore extends Context.Service<DocumentStore, DocumentStoreShape>()(
   "@riff-refine/crit/DocumentStore"
 ) {}
-

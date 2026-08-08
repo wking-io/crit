@@ -103,6 +103,38 @@ const make = (root: string) =>
         return canonical
       })
 
+    const list: DocumentStoreShape["list"] = () =>
+      Effect.gen(function*() {
+        const exists = yield* fs
+          .exists(directory)
+          .pipe(Effect.mapError((cause) => storageFailure("list", "*", cause)))
+        if (!exists) return []
+
+        const entries = yield* fs
+          .readDirectory(directory)
+          .pipe(Effect.mapError((cause) => storageFailure("list", "*", cause)))
+        const ids = yield* Effect.forEach(
+          entries.filter((entry) => entry.endsWith(".json")),
+          (entry) =>
+            Effect.try({
+              try: () => decodeURIComponent(entry.slice(0, -".json".length)),
+              catch: (cause) =>
+                new DocumentMalformed({
+                  id: entry,
+                  detail: cause instanceof Error ? cause.message : String(cause)
+                })
+            })
+        )
+        const documents = yield* Effect.forEach(ids, (id) =>
+          read(id).pipe(
+            Effect.catchTag("DocumentNotFound", () => Effect.succeed(undefined))
+          )
+        )
+        return documents
+          .filter((document): document is CanvasDocument => document !== undefined)
+          .sort((left, right) => left.id.localeCompare(right.id))
+      })
+
     const save: DocumentStoreShape["save"] = (document, options) => {
       const id = document.id
       const target = filePath(id)
@@ -143,7 +175,7 @@ const make = (root: string) =>
       )
     }
 
-    return { create, load: read, save } satisfies DocumentStoreShape
+    return { create, load: read, list, save } satisfies DocumentStoreShape
   })
 
 const layer = (options: { readonly root: string }) =>
