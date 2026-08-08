@@ -3,6 +3,7 @@ import type { TLRecord } from "@tldraw/tlschema"
 import {
   Duration,
   Effect,
+  Option,
   Ref,
   Schema,
   Semaphore,
@@ -26,6 +27,12 @@ import {
   CritClientInvalidDocument,
   type CritClientError
 } from "./crit-client.js"
+import {
+  DraftJournal,
+  type CanvasDraft,
+  type DraftJournalFailed,
+  type DraftJournalShape
+} from "./draft-journal.js"
 
 export const CanvasSessionSaveStatus = Schema.Union([
   Schema.Literal("clean"),
@@ -36,19 +43,31 @@ export const CanvasSessionSaveStatus = Schema.Union([
 ])
 export type CanvasSessionSaveStatus = typeof CanvasSessionSaveStatus.Type
 
+export const CanvasSessionRecoveryStatus = Schema.Union([
+  Schema.Literal("available"),
+  Schema.Literal("unavailable"),
+  Schema.Literal("recovered"),
+  Schema.Literal("conflict")
+])
+export type CanvasSessionRecoveryStatus =
+  typeof CanvasSessionRecoveryStatus.Type
+
 export const CanvasSessionState = Schema.Struct({
   canvasId: Schema.String,
   revision: Schema.Number,
   mutation: Schema.Number,
   confirmedMutation: Schema.Number,
   saveStatus: CanvasSessionSaveStatus,
-  detail: Schema.NullOr(Schema.String)
+  detail: Schema.NullOr(Schema.String),
+  recoveryStatus: CanvasSessionRecoveryStatus,
+  recoveryDetail: Schema.NullOr(Schema.String)
 })
 export type CanvasSessionState = typeof CanvasSessionState.Type
 
 export interface CanvasSession {
   readonly state: SubscriptionRef.SubscriptionRef<CanvasSessionState>
   readonly store: Store<TLRecord>
+  readonly recoveryDraft: CanvasDraft | null
   readonly dispatch: (
     ...commands: ReadonlyArray<CanvasCommand>
   ) => Effect.Effect<CanvasChange, CanvasCommandFailed>
@@ -57,6 +76,7 @@ export interface CanvasSession {
 
 export type CanvasSessionOptions = {
   readonly autosaveDelay?: Duration.Input
+  readonly sessionId?: string
 }
 
 const openFailureDetail = (
@@ -75,7 +95,41 @@ const open = (
   Effect.gen(function*() {
     const client = yield* CritClient
     const scope = yield* Effect.scope
-    const document = yield* client.load(canvasId)
+    const authoritative = yield* client.load(canvasId)
+    const journalOption = yield* Effect.serviceOption(DraftJournal)
+    const journal: DraftJournalShape | undefined = Option.getOrUndefined(journalOption)
+    const sessionId = options.sessionId ?? crypto.randomUUID()
+    let recoveryDraft: CanvasDraft | null = null
+    let recoveryStatus: CanvasSessionRecoveryStatus =
+      journal === undefined ? "unavailable" : "available"
+    let recoveryDetail: string | null =
+      journal === undefined ? "Draft recovery is unavailable" : null
+
+    if (journal !== undefined) {
+      const loaded = yield* journal.load(canvasId, sessionId).pipe(
+        Effect.map((draft) => ({ _tag: "Loaded" as const, draft })),
+        Effect.catch((cause) =>
+          Effect.succeed({ _tag: "Failed" as const, cause })
+        )
+      )
+      if (loaded._tag === "Failed") {
+        recoveryStatus = "unavailable"
+        recoveryDetail = loaded.cause.detail
+      } else if (Option.isSome(loaded.draft)) {
+        recoveryDraft = loaded.draft.value
+        if (recoveryDraft.baseRevision === authoritative.revision) {
+          recoveryStatus = "recovered"
+        } else {
+          recoveryStatus = "conflict"
+          recoveryDetail = `Draft base revision ${recoveryDraft.baseRevision} does not match authoritative revision ${authoritative.revision}`
+        }
+      }
+    }
+
+    const document =
+      recoveryStatus === "recovered" && recoveryDraft !== null
+        ? recoveryDraft.document
+        : authoritative
     const canvas = yield* Canvas.open(document).pipe(
       Effect.mapError(
         (cause) =>
@@ -86,16 +140,28 @@ const open = (
       )
     )
     const store = CanvasInternals.store(canvas)
-    const revision = yield* Ref.make(document.revision)
-    const mutation = yield* Ref.make(0)
+    CanvasInternals.setRevision(canvas, authoritative.revision)
+    const revision = yield* Ref.make(authoritative.revision)
+    const initialMutation =
+      recoveryStatus === "recovered" && recoveryDraft !== null
+        ? recoveryDraft.mutation
+        : 0
+    const mutation = yield* Ref.make(initialMutation)
     const confirmedMutation = yield* Ref.make(0)
     const state = yield* SubscriptionRef.make<CanvasSessionState>({
       canvasId,
-      revision: document.revision,
-      mutation: 0,
+      revision: authoritative.revision,
+      mutation: initialMutation,
       confirmedMutation: 0,
-      saveStatus: "clean",
-      detail: null
+      saveStatus:
+        recoveryStatus === "recovered"
+          ? "dirty"
+          : recoveryStatus === "conflict"
+            ? "conflict"
+            : "clean",
+      detail: recoveryStatus === "conflict" ? recoveryDetail : null,
+      recoveryStatus,
+      recoveryDetail
     })
     const saveLock = yield* Semaphore.make(1)
     const dispatchLock = yield* Semaphore.make(1)
@@ -109,6 +175,34 @@ const open = (
           detail: cause instanceof Error ? cause.message : String(cause)
         })
     })
+
+    const markJournalUnavailable = (cause: DraftJournalFailed) =>
+      SubscriptionRef.update(state, (current): CanvasSessionState => ({
+        ...current,
+        recoveryStatus: "unavailable",
+        recoveryDetail: cause.detail
+      }))
+
+    const writeLatestDraft =
+      journal === undefined
+        ? Effect.void
+        : Effect.gen(function*() {
+            const currentMutation = yield* Ref.get(mutation)
+            const confirmed = yield* Ref.get(confirmedMutation)
+            if (currentMutation <= confirmed) return
+            const snapshot = yield* exportDocument
+            const baseRevision = yield* Ref.get(revision)
+            yield* journal
+              .save({
+                schemaVersion: 1,
+                canvasId,
+                sessionId,
+                baseRevision,
+                mutation: currentMutation,
+                document: snapshot
+              })
+              .pipe(Effect.catch(markJournalUnavailable))
+          })
 
     const saveUntilClean = saveLock.withPermit(
       Effect.gen(function*() {
@@ -124,6 +218,7 @@ const open = (
           }))
           const expectedRevision = yield* Ref.get(revision)
           const snapshot = yield* exportDocument
+          yield* writeLatestDraft
           const saved = yield* client.save(snapshot, expectedRevision).pipe(
             Effect.tapError((cause) =>
               SubscriptionRef.update(state, (current): CanvasSessionState => ({
@@ -143,6 +238,11 @@ const open = (
           CanvasInternals.setRevision(canvas, saved.revision)
           yield* Ref.set(revision, saved.revision)
           yield* Ref.set(confirmedMutation, pendingMutation)
+          if (journal !== undefined) {
+            yield* journal
+              .clear(canvasId, sessionId, pendingMutation)
+              .pipe(Effect.catch(markJournalUnavailable))
+          }
           const latestMutation = yield* Ref.get(mutation)
           yield* SubscriptionRef.update(state, (current): CanvasSessionState => ({
             ...current,
@@ -164,6 +264,15 @@ const open = (
         scope
       ).pipe(Effect.asVoid)
 
+    const scheduleDraft = (delay: Duration.Input | undefined) =>
+      Effect.forkIn(
+        (delay === undefined ? Effect.void : Effect.sleep(delay)).pipe(
+          Effect.andThen(writeLatestDraft),
+          Effect.catch(() => Effect.void)
+        ),
+        scope
+      ).pipe(Effect.asVoid)
+
     const markDirty = (delay: Duration.Input | undefined) =>
       Effect.gen(function*() {
         const before = yield* SubscriptionRef.get(state)
@@ -180,7 +289,10 @@ const open = (
               : "dirty",
           detail: current.saveStatus === "conflict" ? current.detail : null
         }))
-        if (before.saveStatus !== "conflict") yield* scheduleSave(delay)
+        if (before.saveStatus !== "conflict") {
+          yield* scheduleDraft(delay)
+          yield* scheduleSave(delay)
+        }
       })
 
     const removeListener = store.listen(
@@ -191,10 +303,12 @@ const open = (
       { source: "user", scope: "document" }
     )
     yield* Effect.addFinalizer(() => Effect.sync(removeListener))
+    if (recoveryStatus === "recovered") yield* scheduleSave(undefined)
 
     return {
       state,
       store,
+      recoveryDraft,
       dispatch: (...commands) =>
         commands.length === 0
           ? Effect.fail(

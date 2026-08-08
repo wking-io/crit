@@ -1,0 +1,41 @@
+import { Context, Effect, Option, Schema } from "effect"
+
+import { CanvasDocument } from "../core/index.js"
+
+export const CanvasDraft = Schema.Struct({
+  schemaVersion: Schema.Literal(1),
+  canvasId: Schema.String,
+  sessionId: Schema.String,
+  baseRevision: Schema.Number,
+  mutation: Schema.Number,
+  document: CanvasDocument
+})
+export type CanvasDraft = typeof CanvasDraft.Type
+
+export class DraftJournalFailed extends Schema.TaggedError<DraftJournalFailed>()(
+  "DraftJournalFailed",
+  {
+    operation: Schema.String,
+    canvasId: Schema.String,
+    detail: Schema.String
+  }
+) {}
+
+export interface DraftJournalShape {
+  readonly load: (
+    canvasId: string,
+    sessionId: string
+  ) => Effect.Effect<Option.Option<CanvasDraft>, DraftJournalFailed>
+  readonly save: (
+    draft: CanvasDraft
+  ) => Effect.Effect<void, DraftJournalFailed>
+  readonly clear: (
+    canvasId: string,
+    sessionId: string,
+    throughMutation: number
+  ) => Effect.Effect<void, DraftJournalFailed>
+}
+
+export class DraftJournal extends Context.Service<DraftJournal, DraftJournalShape>()(
+  "@riff-refine/crit/DraftJournal"
+) {}

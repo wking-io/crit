@@ -81,7 +81,9 @@ describe("CanvasSession autosave", () => {
           mutation: 2,
           confirmedMutation: 2,
           saveStatus: "clean",
-          detail: null
+          detail: null,
+          recoveryStatus: "unavailable",
+          recoveryDetail: "Draft recovery is unavailable"
         })
         expect(Canvas.listFrames(persisted).map((frame) => frame.id)).toEqual([
           "shape:checkout-v1",
@@ -152,7 +154,9 @@ describe("CanvasSession autosave", () => {
           mutation: 2,
           confirmedMutation: 0,
           saveStatus: "conflict",
-          detail: "Expected revision 0; current revision is 1"
+          detail: "Expected revision 0; current revision is 1",
+          recoveryStatus: "unavailable",
+          recoveryDetail: "Draft recovery is unavailable"
         })
       })
     ))
