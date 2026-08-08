@@ -1,0 +1,46 @@
+import { describe, expect, it } from "@effect/vitest"
+import { Effect } from "effect"
+
+import { Canvas, CanvasCommand } from "../../src/core/index.js"
+
+describe("Canvas SetFrameStatus command", () => {
+  it.effect("changes the review status without changing Frame identity", () =>
+    Effect.gen(function*() {
+      const canvas = Canvas.create({ id: "review", title: "Review" })
+      yield* Canvas.apply(
+        canvas,
+        CanvasCommand.addFrame({
+          id: "checkout-v1",
+          url: "https://checkout.localhost/v1",
+          title: "Checkout v1",
+          provenance: { kind: "agent", sourceId: "iteration-agent" }
+        }),
+        CanvasCommand.addFrame({
+          id: "checkout-v2",
+          url: "https://checkout.localhost/v2",
+          title: "Checkout v2",
+          provenance: { kind: "agent", sourceId: "iteration-agent" }
+        })
+      )
+
+      const change = yield* Canvas.apply(
+        canvas,
+        CanvasCommand.setFrameStatus({
+          id: "checkout-v2",
+          status: "approved"
+        })
+      )
+      const reopened = yield* Canvas.open(Canvas.export(canvas))
+
+      expect(change).toEqual({
+        commandCount: 1,
+        changedFrameIds: ["shape:checkout-v2"]
+      })
+      expect(Canvas.summarize(reopened).statuses).toEqual({
+        inProgress: 1,
+        approved: 1,
+        changesRequested: 0
+      })
+    }))
+})
+
