@@ -182,3 +182,9 @@ import { Canvas } from "@riff-refine/crit/core"
 
 Use `--skip-install` when dependency installation is managed separately, and
 `--json` for machine-readable initialization results.
+
+Before publishing, run `npm run verify`. It typechecks and tests the source,
+then packs Crit and installs the tarball into an isolated consumer. The smoke
+check builds the React entry point, imports every runtime adapter, verifies the
+packaged migration and skill, and exercises the installed CLI. `npm publish`
+runs the same gate automatically.
