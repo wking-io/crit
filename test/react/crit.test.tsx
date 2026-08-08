@@ -33,6 +33,13 @@ describe("Crit", () => {
         status: "approved",
         provenance: { kind: "manual", sourceId: "test" }
       }),
+      CanvasCommand.addFrame({
+        id: "ready",
+        url: "https://example.com/ready",
+        title: "Ready candidate",
+        status: "ready-for-review",
+        provenance: { kind: "manual", sourceId: "test" }
+      }),
       CanvasCommand.addNote({ id: "feedback", text: "Tighten spacing", x: 40, y: 50 }),
       CanvasCommand.attachNote({ id: "feedback", frameId: "candidate" })
     ))
@@ -46,6 +53,8 @@ describe("Crit", () => {
 
     expect(html).toContain("Candidate")
     expect(html).toContain("Approved")
+    expect(html).toContain("Ready for review")
+    expect(html).toContain('data-frame-status="ready-for-review"')
     expect(html).toContain("Attached to candidate")
     expect(html).toContain("Tighten spacing")
     expect(html).toContain("Send Candidate to back")

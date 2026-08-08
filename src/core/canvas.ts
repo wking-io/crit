@@ -71,6 +71,7 @@ export const CanvasSummary = Schema.Struct({
   noteCount: NonNegativeInteger,
   statuses: Schema.Struct({
     inProgress: NonNegativeInteger,
+    readyForReview: NonNegativeInteger,
     approved: NonNegativeInteger,
     changesRequested: NonNegativeInteger,
     archived: NonNegativeInteger
@@ -309,12 +310,14 @@ const summarize = (canvas: Canvas): CanvasSummary => {
   const state = stateOf(canvas)
   const statuses = {
     inProgress: 0,
+    readyForReview: 0,
     approved: 0,
     changesRequested: 0,
     archived: 0
   }
   for (const frame of state.frames) {
     if (frame.status === "in-progress") statuses.inProgress += 1
+    if (frame.status === "ready-for-review") statuses.readyForReview += 1
     if (frame.status === "approved") statuses.approved += 1
     if (frame.status === "changes-requested") statuses.changesRequested += 1
     if (frame.status === "archived") statuses.archived += 1

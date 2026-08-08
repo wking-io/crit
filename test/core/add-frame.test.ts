@@ -38,6 +38,7 @@ describe("Canvas AddFrame command", () => {
         noteCount: 0,
         statuses: {
           inProgress: 1,
+          readyForReview: 0,
           approved: 0,
           changesRequested: 0,
           archived: 0

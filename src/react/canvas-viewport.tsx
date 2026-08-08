@@ -24,6 +24,7 @@ import {
 
 const statusLabels: Record<FrameStatus, string> = {
   "in-progress": "In progress",
+  "ready-for-review": "Ready for review",
   approved: "Approved",
   "changes-requested": "Changes requested",
   archived: "Archived"
@@ -31,6 +32,7 @@ const statusLabels: Record<FrameStatus, string> = {
 
 const statusColors: Record<FrameStatus, string> = {
   "in-progress": "#2563eb",
+  "ready-for-review": "#7c3aed",
   approved: "#16803a",
   "changes-requested": "#c2410c",
   archived: "#64748b"
@@ -476,13 +478,30 @@ function FrameCard({
   }
 
   return (
-    <section style={{ ...itemStyle(geometry, frame.zIndex), background: "#fff", border: "1px solid #aeb5bf", borderRadius: 8, boxShadow: "0 12px 30px rgba(15,23,42,.12)", overflow: "hidden" }}>
+    <section
+      data-frame-status={frame.status}
+      style={{
+        ...itemStyle(geometry, frame.zIndex),
+        background: "#fff",
+        border:
+          frame.status === "ready-for-review"
+            ? `2px solid ${statusColors[frame.status]}`
+            : "1px solid #aeb5bf",
+        borderRadius: 8,
+        boxShadow:
+          frame.status === "ready-for-review"
+            ? "0 12px 34px rgba(124,58,237,.22)"
+            : "0 12px 30px rgba(15,23,42,.12)",
+        overflow: "hidden"
+      }}
+    >
       <header
         data-toolbar-mode={toolbarMode}
         onPointerDown={(event) => onMove(event, frame)}
         style={{
           alignItems: "center",
-          background: "#f8fafc",
+          background:
+            frame.status === "ready-for-review" ? "#f5f3ff" : "#f8fafc",
           boxSizing: "border-box",
           cursor: "move",
           display: "flex",
@@ -519,7 +538,7 @@ function FrameCard({
             style={{ ...controlStyle, maxWidth: world(140) }}
             value={frame.status}
           >
-            {(["in-progress", "approved", "changes-requested"] as const).map(
+            {(["in-progress", "ready-for-review", "approved", "changes-requested"] as const).map(
               (status) => (
                 <option key={status} value={status}>{statusLabels[status]}</option>
               )

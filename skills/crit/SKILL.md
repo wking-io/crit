@@ -65,6 +65,8 @@ array to `apply`:
 - Attach Notes to their Frame when they should move together; detaching preserves
   their Canvas position.
 - Ask before replacing or discarding user-authored Canvas content.
+- Use `ready-for-review` when an implementation is complete and waiting for a
+  person to assess it; use `approved` only after that assessment.
 - Use `snapshot <canvas> <frame> --json` when the user asks to preserve the
   current rendered version. Keep the live Frame; the command adds a separate
   archived Frame and immutable artifact.

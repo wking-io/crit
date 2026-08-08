@@ -126,6 +126,11 @@ zooming and progressively hide title and secondary controls when space becomes
 tight. Frame and Note headers include send-to-back and bring-to-front controls.
 Offscreen iframes are paused for performance.
 
+Live Frame review states are **In progress**, **Ready for review**, **Approved**,
+and **Changes requested**. Ready-for-review Frames receive a distinct purple
+border, header treatment, and status indicator; archived snapshots remain a
+separate immutable state.
+
 Autosave is single-flight and stores pending semantic commands in IndexedDB for
 draft recovery. Vite file watching refreshes clean windows immediately after a
 browser or agent write; a two-second poll remains a fallback. Dirty local work

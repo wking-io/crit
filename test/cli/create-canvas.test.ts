@@ -80,6 +80,7 @@ describe("crit create", () => {
           noteCount: 0,
           statuses: {
             inProgress: 0,
+            readyForReview: 0,
             approved: 0,
             changesRequested: 0,
             archived: 0

@@ -27,7 +27,7 @@ describe("Canvas SetFrameStatus command", () => {
         canvas,
         CanvasCommand.setFrameStatus({
           id: "checkout-v2",
-          status: "approved"
+          status: "ready-for-review"
         })
       )
       const reopened = yield* Canvas.open(Canvas.export(canvas))
@@ -39,7 +39,8 @@ describe("Canvas SetFrameStatus command", () => {
       })
       expect(Canvas.summarize(reopened).statuses).toEqual({
         inProgress: 1,
-        approved: 1,
+        readyForReview: 1,
+        approved: 0,
         changesRequested: 0,
         archived: 0
       })

@@ -132,6 +132,7 @@ describe("crit Canvas workflows", () => {
             noteCount: 0,
             statuses: {
               inProgress: 0,
+              readyForReview: 0,
               approved: 0,
               changesRequested: 0,
               archived: 0
@@ -145,6 +146,7 @@ describe("crit Canvas workflows", () => {
             noteCount: 0,
             statuses: {
               inProgress: 2,
+              readyForReview: 0,
               approved: 0,
               changesRequested: 0,
               archived: 0
@@ -277,6 +279,7 @@ describe("crit Canvas workflows", () => {
             noteCount: 0,
             statuses: {
               inProgress: 0,
+              readyForReview: 0,
               approved: 1,
               changesRequested: 0,
               archived: 0

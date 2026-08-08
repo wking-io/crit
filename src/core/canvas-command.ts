@@ -2,6 +2,7 @@ import { Schema } from "effect"
 
 export const FrameReviewStatus = Schema.Union([
   Schema.Literal("in-progress"),
+  Schema.Literal("ready-for-review"),
   Schema.Literal("approved"),
   Schema.Literal("changes-requested")
 ])
