@@ -2,7 +2,11 @@ import { Effect, FileSystem, Option, Path, Schema, Stdio, Stream } from "effect"
 import { Argument, Command, Flag } from "effect/unstable/cli"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 
-import { CanvasCommand } from "../core/index.js"
+import {
+  CanvasCommand,
+  CanvasCommandSchema,
+  type CanvasCommand as CanvasCommandInput
+} from "../core/index.js"
 import {
   CRIT_MANIFEST_FILE,
   CRIT_MANIFEST_PATH,
@@ -207,6 +211,66 @@ const syncCommand = Command.make(
   )
 )
 
+const decodeCanvasCommands = (input: string) =>
+  Effect.try({
+    try: () => JSON.parse(input) as unknown,
+    catch: (cause) =>
+      new InvalidCliInput({
+        detail: `Commands must be valid JSON: ${cause instanceof Error ? cause.message : String(cause)}`
+      })
+  }).pipe(
+    Effect.flatMap(Schema.decodeUnknownEffect(Schema.Array(CanvasCommandSchema))),
+    Effect.mapError((cause) =>
+      cause instanceof InvalidCliInput
+        ? cause
+        : new InvalidCliInput({ detail: `Invalid Canvas commands: ${String(cause)}` })
+    )
+  )
+
+const applyCommand = Command.make(
+  "apply",
+  {
+    id: Argument.string("canvas"),
+    commands: Argument.string("commands"),
+    expectedRevision: Flag.integer("expected-revision").pipe(Flag.optional),
+    json: Flag.boolean("json")
+  },
+  ({ id, commands, expectedRevision, json }) =>
+    Effect.gen(function*() {
+      const runtime = yield* CritRuntime
+      const decoded: ReadonlyArray<CanvasCommandInput> =
+        yield* decodeCanvasCommands(commands)
+      if (decoded.length === 0) {
+        return yield* new InvalidCliInput({
+          detail: "At least one Canvas command is required"
+        })
+      }
+      const current = yield* runtime.getCanvas(id)
+      const mutation = yield* runtime.updateCanvas({
+        id,
+        expectedRevision: Option.getOrElse(
+          expectedRevision,
+          () => current.canvas.revision
+        ),
+        commands: decoded
+      })
+      const updated = yield* runtime.getCanvas(id)
+      const output = json
+        ? JSON.stringify({
+            schemaVersion: 1,
+            command: "apply",
+            mutation,
+            frames: updated.frames
+          })
+        : `Applied ${decoded.length} command(s) to "${updated.canvas.title}" at revision ${mutation.revision}.`
+      yield* writeStdout(`${output}\n`)
+    })
+).pipe(
+  Command.withDescription(
+    "Atomically apply semantic AddFrame, UpdateFrame, SetFrameStatus, MoveFrame, ResizeFrame, and RemoveFrame commands"
+  )
+)
+
 const createCommand = Command.make(
   "create",
   {
@@ -355,6 +419,7 @@ export const critCommand = Command.make("crit").pipe(
   Command.withSubcommands([
     initCommand,
     syncCommand,
+    applyCommand,
     createCommand,
     addCommand,
     listCommand,

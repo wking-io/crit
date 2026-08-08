@@ -189,8 +189,7 @@ const manifestTemplate = (packageJson: PackageJson) => {
             {
               id: "app",
               url: "/",
-              title: projectName,
-              status: "in-progress"
+              title: projectName
             }
           ]
         }

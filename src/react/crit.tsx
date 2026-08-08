@@ -122,6 +122,7 @@ export interface CritProps {
   readonly client?: CritClientShape
   readonly apiPath?: string
   readonly autosaveDelay?: Duration.Input
+  readonly refreshInterval?: Duration.Input | false
   readonly sessionId?: string
   readonly draftJournal?: DraftJournalShape | false
   readonly className?: string
@@ -141,6 +142,7 @@ export function Crit({
   client,
   apiPath,
   autosaveDelay,
+  refreshInterval,
   sessionId,
   draftJournal,
   className,
@@ -192,10 +194,11 @@ export function Crit({
     setSessionState(null)
     setError(null)
 
-    const sessionOptions =
-      autosaveDelay === undefined
-        ? { sessionId: resolvedSessionId }
-        : { autosaveDelay, sessionId: resolvedSessionId }
+    const sessionOptions = {
+      sessionId: resolvedSessionId,
+      ...(autosaveDelay === undefined ? {} : { autosaveDelay }),
+      ...(refreshInterval === undefined ? {} : { refreshInterval })
+    }
     let openSession = CanvasSession.open(canvasId, sessionOptions).pipe(
       Effect.provideService(CritClient, resolvedClient),
       Effect.provideService(Scope.Scope, scope)
@@ -237,6 +240,7 @@ export function Crit({
   }, [
     autosaveDelay,
     canvasId,
+    refreshInterval,
     resolvedClient,
     resolvedJournal,
     resolvedSessionId

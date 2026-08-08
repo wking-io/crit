@@ -116,7 +116,7 @@ export default [
       canvases: [
         {
           id: "default",
-          frames: [{ id: "app", url: "/", status: "in-progress" }]
+          frames: [{ id: "app", url: "/" }]
         }
       ]
     })

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "@effect/vitest"
-import { Deferred, Effect, Layer, SubscriptionRef } from "effect"
+import { createShapeId } from "@tldraw/tlschema"
+import { Deferred, Effect, Fiber, Layer, SubscriptionRef } from "effect"
 
 import { Canvas, CanvasCommand, type CanvasDocument } from "../../src/core/index.js"
 import {
@@ -158,6 +159,178 @@ describe("CanvasSession autosave", () => {
           recoveryStatus: "unavailable",
           recoveryDetail: "Draft recovery is unavailable"
         })
+      })
+    ))
+
+  it.effect("adopts a newer external revision while the Session is clean", () =>
+    Effect.scoped(
+      Effect.gen(function*() {
+        let stored = Canvas.export(
+          Canvas.create({ id: "review", title: "Review" })
+        )
+        let loadCount = 0
+        const client: CritClientShape = {
+          load: () => {
+            loadCount += 1
+            return Effect.succeed(stored)
+          },
+          save: (document, expectedRevision) => {
+            stored = { ...document, revision: expectedRevision + 1 }
+            return Effect.succeed(stored)
+          }
+        }
+        const session = yield* CanvasSession.open("review", {
+          refreshInterval: false
+        }).pipe(Effect.provide(Layer.succeed(CritClient, client)))
+        const originalStore = session.store
+
+        const external = yield* Canvas.open(stored)
+        yield* Canvas.apply(
+          external,
+          CanvasCommand.addFrame({
+            id: "agent-candidate",
+            url: "https://checkout.localhost/agent",
+            title: "Agent candidate",
+            status: "approved",
+            provenance: { kind: "agent", sourceId: "codex" }
+          })
+        )
+        stored = { ...Canvas.export(external), revision: 1 }
+
+        const adopted = yield* session.refresh()
+        const unchanged = yield* session.refresh()
+        const state = yield* SubscriptionRef.get(session.state)
+        const frame = session.store.get(createShapeId("agent-candidate"))
+
+        expect(adopted).toBe(true)
+        expect(unchanged).toBe(false)
+        expect(session.store).toBe(originalStore)
+        expect(frame).toMatchObject({
+          type: "crit-frame",
+          props: {
+            url: "https://checkout.localhost/agent",
+            status: "approved"
+          }
+        })
+        expect(state).toMatchObject({
+          revision: 1,
+          mutation: 0,
+          confirmedMutation: 0,
+          saveStatus: "clean"
+        })
+        expect(loadCount).toBe(3)
+      })
+    ))
+
+  it.effect("defers external adoption while local edits are dirty", () =>
+    Effect.scoped(
+      Effect.gen(function*() {
+        let stored = Canvas.export(
+          Canvas.create({ id: "review", title: "Review" })
+        )
+        let loadCount = 0
+        const client: CritClientShape = {
+          load: () => {
+            loadCount += 1
+            return Effect.succeed(stored)
+          },
+          save: (document, expectedRevision) =>
+            Effect.succeed({ ...document, revision: expectedRevision + 1 })
+        }
+        const session = yield* CanvasSession.open("review", {
+          autosaveDelay: "1 hour",
+          refreshInterval: false
+        }).pipe(Effect.provide(Layer.succeed(CritClient, client)))
+        yield* session.dispatch(
+          CanvasCommand.addFrame({
+            id: "local-draft",
+            url: "https://checkout.localhost/local",
+            title: "Local draft",
+            provenance: { kind: "manual", sourceId: "browser" }
+          })
+        )
+
+        const external = yield* Canvas.open(stored)
+        yield* Canvas.apply(
+          external,
+          CanvasCommand.addFrame({
+            id: "agent-candidate",
+            url: "https://checkout.localhost/agent",
+            title: "Agent candidate",
+            provenance: { kind: "agent", sourceId: "codex" }
+          })
+        )
+        stored = { ...Canvas.export(external), revision: 1 }
+
+        const adopted = yield* session.refresh()
+        const state = yield* SubscriptionRef.get(session.state)
+
+        expect(adopted).toBe(false)
+        expect(loadCount).toBe(1)
+        expect(session.store.get(createShapeId("local-draft"))).toBeDefined()
+        expect(session.store.get(createShapeId("agent-candidate"))).toBeUndefined()
+        expect(state).toMatchObject({
+          revision: 0,
+          mutation: 1,
+          confirmedMutation: 0,
+          saveStatus: "dirty"
+        })
+      })
+    ))
+
+  it.effect("does not adopt a revision when a local edit races the refresh", () =>
+    Effect.scoped(
+      Effect.gen(function*() {
+        const initial = Canvas.export(
+          Canvas.create({ id: "review", title: "Review" })
+        )
+        const external = yield* Canvas.open(initial)
+        yield* Canvas.apply(
+          external,
+          CanvasCommand.addFrame({
+            id: "agent-candidate",
+            url: "https://checkout.localhost/agent",
+            title: "Agent candidate",
+            provenance: { kind: "agent", sourceId: "codex" }
+          })
+        )
+        const remote = { ...Canvas.export(external), revision: 1 }
+        const refreshStarted = yield* Deferred.make<void>()
+        const releaseRefresh = yield* Deferred.make<void>()
+        let loadCount = 0
+        const client: CritClientShape = {
+          load: () =>
+            Effect.gen(function*() {
+              loadCount += 1
+              if (loadCount === 1) return initial
+              yield* Deferred.succeed(refreshStarted, undefined)
+              yield* Deferred.await(releaseRefresh)
+              return remote
+            }),
+          save: (document, expectedRevision) =>
+            Effect.succeed({ ...document, revision: expectedRevision + 1 })
+        }
+        const session = yield* CanvasSession.open("review", {
+          autosaveDelay: "1 hour",
+          refreshInterval: false
+        }).pipe(Effect.provide(Layer.succeed(CritClient, client)))
+
+        const refreshFiber = yield* Effect.forkChild(session.refresh())
+        yield* Deferred.await(refreshStarted)
+        yield* session.dispatch(
+          CanvasCommand.addFrame({
+            id: "local-draft",
+            url: "https://checkout.localhost/local",
+            title: "Local draft",
+            provenance: { kind: "manual", sourceId: "browser" }
+          })
+        )
+        yield* Deferred.succeed(releaseRefresh, undefined)
+        const adopted = yield* Fiber.join(refreshFiber)
+
+        expect(adopted).toBe(false)
+        expect(session.store.get(createShapeId("local-draft"))).toBeDefined()
+        expect(session.store.get(createShapeId("agent-candidate"))).toBeUndefined()
       })
     ))
 })

@@ -49,6 +49,19 @@ from a discovered app origin:
 npx @riff-refine/crit sync --from https://storefront.localhost --json
 ```
 
+Agents can atomically apply every semantic Frame operation with optimistic
+revision checking:
+
+```sh
+npx @riff-refine/crit apply checkout-review \
+  '[{"_tag":"SetFrameStatus","id":"candidate","status":"approved"}]' \
+  --expected-revision 3 --json
+```
+
+The command accepts arrays containing `AddFrame`, `UpdateFrame`,
+`SetFrameStatus`, `MoveFrame`, `ResizeFrame`, and `RemoveFrame`. It returns the
+new revision and complete Frame summaries for follow-up work.
+
 Manifest reconciliation preserves Frame identity and never removes Frames or
 their annotations implicitly. New Frame status defaults to `in-progress`;
 omitted status, `display`, and `geometry` fields do not overwrite later review
@@ -89,6 +102,12 @@ The Vite adapter creates a missing Canvas on first load. Pass
 another HTTP runtime without changing editor ownership. Draft recovery
 uses IndexedDB by default and a tab-stable session ID; pass `draftJournal={false}`
 to disable it or provide another journal implementation.
+
+Open editors check for newer revisions every two seconds. A clean Session adopts
+external agent changes into the existing tldraw Store; local dirty or in-flight
+work is never overwritten. Set `refreshInterval={false}` to disable polling or
+pass another Effect duration to tune it. `onSession` also exposes `refresh()`
+for explicit checks.
 
 Headless consumers can import the platform-neutral engine without React:
 

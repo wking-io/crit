@@ -72,10 +72,12 @@ export interface CanvasSession {
     ...commands: ReadonlyArray<CanvasCommand>
   ) => Effect.Effect<CanvasChange, CanvasCommandFailed>
   readonly flush: () => Effect.Effect<void, CritClientError>
+  readonly refresh: () => Effect.Effect<boolean, CritClientError>
 }
 
 export type CanvasSessionOptions = {
   readonly autosaveDelay?: Duration.Input
+  readonly refreshInterval?: Duration.Input | false
   readonly sessionId?: string
 }
 
@@ -164,8 +166,10 @@ const open = (
       recoveryDetail
     })
     const saveLock = yield* Semaphore.make(1)
-    const dispatchLock = yield* Semaphore.make(1)
+    const documentLock = yield* Semaphore.make(1)
+    const refreshLock = yield* Semaphore.make(1)
     let dispatching = false
+    let localGeneration = 0
 
     const exportDocument = Effect.try({
       try: () => Canvas.export(canvas),
@@ -295,8 +299,71 @@ const open = (
         }
       })
 
+    const refresh = refreshLock.withPermit(
+      Effect.gen(function*() {
+        const generation = localGeneration
+        const localMutation = yield* Ref.get(mutation)
+        const localConfirmedMutation = yield* Ref.get(confirmedMutation)
+        const localState = yield* SubscriptionRef.get(state)
+        if (
+          localMutation !== localConfirmedMutation ||
+          localState.saveStatus !== "clean"
+        ) {
+          return false
+        }
+
+        const localRevision = yield* Ref.get(revision)
+        const remote = yield* client.load(canvasId)
+        if (remote.revision <= localRevision) return false
+        const remoteCanvas = yield* Canvas.open(remote).pipe(
+          Effect.mapError(
+            (cause) =>
+              new CritClientInvalidDocument({
+                id: canvasId,
+                detail: openFailureDetail(cause)
+              })
+          )
+        )
+
+        return yield* documentLock.withPermit(
+          Effect.gen(function*() {
+            const latestMutation = yield* Ref.get(mutation)
+            const latestConfirmedMutation = yield* Ref.get(confirmedMutation)
+            const latestState = yield* SubscriptionRef.get(state)
+            if (
+              localGeneration !== generation ||
+              latestMutation !== latestConfirmedMutation ||
+              latestState.saveStatus !== "clean"
+            ) {
+              return false
+            }
+
+            yield* Effect.try({
+              try: () => CanvasInternals.adoptDocument(canvas, remoteCanvas),
+              catch: (cause) =>
+                new CritClientInvalidDocument({
+                  id: canvasId,
+                  detail: cause instanceof Error ? cause.message : String(cause)
+                })
+            })
+            yield* Ref.set(revision, remote.revision)
+            yield* SubscriptionRef.update(
+              state,
+              (current): CanvasSessionState => ({
+                ...current,
+                revision: remote.revision,
+                detail: null
+              })
+            )
+            return true
+          })
+        )
+      })
+    )
+
     const removeListener = store.listen(
       () => {
+        localGeneration += 1
         if (dispatching) return
         Effect.runFork(markDirty(options.autosaveDelay ?? 100))
       },
@@ -304,6 +371,18 @@ const open = (
     )
     yield* Effect.addFinalizer(() => Effect.sync(removeListener))
     if (recoveryStatus === "recovered") yield* scheduleSave(undefined)
+    if (options.refreshInterval !== false) {
+      const interval = options.refreshInterval ?? 2_000
+      yield* Effect.forkIn(
+        Effect.gen(function*() {
+          while (true) {
+            yield* Effect.sleep(interval)
+            yield* refresh.pipe(Effect.catch(() => Effect.void))
+          }
+        }),
+        scope
+      )
+    }
 
     return {
       state,
@@ -317,7 +396,7 @@ const open = (
                 detail: "A Canvas Session dispatch requires at least one command"
               })
             )
-          : dispatchLock.withPermit(
+          : documentLock.withPermit(
               Effect.sync(() => {
                 dispatching = true
               }).pipe(
@@ -330,7 +409,8 @@ const open = (
                 Effect.tap(() => markDirty(undefined))
               )
             ),
-      flush: () => saveUntilClean
+      flush: () => saveUntilClean,
+      refresh: () => refresh
     }
   })
 

@@ -13,6 +13,7 @@ consume the result.
 ```sh
 npx @riff-refine/crit list --json
 npx @riff-refine/crit sync --from https://app.localhost --json
+npx @riff-refine/crit apply checkout-review '[{"_tag":"SetFrameStatus","id":"candidate","status":"approved"}]' --expected-revision 3 --json
 npx @riff-refine/crit create checkout-review --title "Checkout review" --json
 npx @riff-refine/crit add checkout-review https://checkout.localhost --json
 ```
@@ -33,10 +34,26 @@ Open `/crit/checkout-review` in the host application after adding frames.
    coordinating with another writer.
 8. Re-open the Canvas and report its URL, revision, and added Frames.
 
+## Apply commands
+
+Use Frame IDs returned by `open --json`. Submit related operations as one JSON
+array to `apply`:
+
+- `AddFrame`: `id`, `url`, `title`, `status`, and `provenance`.
+- `UpdateFrame`: `id` plus non-empty `changes` containing URL, title, status,
+  provenance, or `display`.
+- `SetFrameStatus`: `id` and `status`.
+- `MoveFrame`: `id`, `x`, and `y`.
+- `ResizeFrame`: `id`, positive `width`, and positive `height`.
+- `RemoveFrame`: `id`; this also removes annotations parented to the Frame.
+
 ## Editing rules
 
 - Use Crit commands and interfaces; never edit `.crit/canvases/*.json`.
 - Treat Canvas revision conflicts as a signal to re-open, reconcile, and retry.
+- Use one `apply` call for related `AddFrame`, `UpdateFrame`, `SetFrameStatus`,
+  `MoveFrame`, `ResizeFrame`, and `RemoveFrame` operations so they commit
+  atomically. Read the Canvas revision immediately before applying them.
 - Preserve Frame identity. Do not remove and recreate a Frame merely to change
   its status, title, URL, position, or size.
 - Treat manifest IDs as durable. Edit `crit.manifest.json` when a project-owned

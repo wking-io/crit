@@ -29,6 +29,12 @@ the Vite and CLI adapters. Reconciliation is additive: stable Frame identities
 are updated in place, while absent Frames and their annotations are preserved
 until an explicit removal command is issued.
 
+The Session owns convergence as well as persistence. It polls through the
+`CritClient` seam and adopts a newer Canvas Document only while local state is
+clean. Adoption replaces document-scoped records inside the existing tldraw
+Store, preserving mounted editor/session state. Dirty or racing local changes
+defer adoption and continue through the existing optimistic conflict path.
+
 `crit init` owns installation-time integration. It applies idempotent,
 recognizable transforms to Vite and React Router configuration, creates narrow
 host files, and preserves files whose contents it does not own. Router shapes

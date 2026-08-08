@@ -124,7 +124,7 @@ export class FrameNotFound extends Schema.TaggedError<FrameNotFound>()(
 
 type CanvasState = {
   readonly id: string
-  readonly title: string
+  title: string
   revision: number
   readonly store: Store<TLRecord>
 }
@@ -149,6 +149,32 @@ export const CanvasInternals = {
   store: (canvas: Canvas) => stateOf(canvas).store,
   setRevision: (canvas: Canvas, revision: number) => {
     stateOf(canvas).revision = revision
+  },
+  adoptDocument: (canvas: Canvas, incoming: Canvas) => {
+    const target = stateOf(canvas)
+    const source = stateOf(incoming)
+    if (target.id !== source.id) {
+      throw new TypeError(
+        `Cannot adopt Canvas ${source.id} into Canvas ${target.id}`
+      )
+    }
+    const snapshot = source.store.getStoreSnapshot("document")
+    const records = Object.values(snapshot.store)
+    const incomingIds = new Set(records.map((record) => record.id))
+    const removedIds = target.store
+      .allRecords()
+      .filter(
+        (record) =>
+          target.store.scopedTypes.document.has(record.typeName) &&
+          !incomingIds.has(record.id)
+      )
+      .map((record) => record.id)
+    target.store.mergeRemoteChanges(() => {
+      if (removedIds.length > 0) target.store.remove(removedIds)
+      if (records.length > 0) target.store.put(records)
+    })
+    target.title = source.title
+    target.revision = source.revision
   }
 } as const
 

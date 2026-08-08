@@ -131,4 +131,122 @@ describe("crit Canvas workflows", () => {
       })
     }).pipe(Effect.provide(cliLayer))
   })
+
+  it.effect("atomically exposes every semantic Frame edit to agents", () => {
+    const storeLayer = FileSystemDocumentStore.layer({ root })
+    const runtimeLayer = CritRuntimeLive.pipe(Layer.provide(storeLayer))
+    const cliLayer = Layer.mergeAll(
+      FileSystem.layerNoop({}),
+      Path.layer,
+      Stdio.layerTest({
+        stdout: () =>
+          Sink.forEach((chunk: string | Uint8Array) =>
+            Effect.sync(() => {
+              stdout.push(
+                typeof chunk === "string" ? chunk : new TextDecoder().decode(chunk)
+              )
+            })
+          )
+      }),
+      Layer.succeed(
+        Terminal.Terminal,
+        Terminal.make({
+          columns: Effect.succeed(80),
+          rows: Effect.succeed(24),
+          readInput: Effect.die("unused"),
+          readLine: Effect.die("unused"),
+          display: () => Effect.void
+        })
+      ),
+      Layer.succeed(
+        ChildProcessSpawner.ChildProcessSpawner,
+        ChildProcessSpawner.make(() => Effect.die("unused"))
+      ),
+      storeLayer,
+      runtimeLayer
+    )
+
+    return Effect.gen(function*() {
+      yield* runCrit(["create", "review", "--title", "Review", "--json"])
+      stdout = []
+      const commands = JSON.stringify([
+        {
+          _tag: "AddFrame",
+          id: "candidate",
+          url: "https://checkout.localhost/v1",
+          title: "Checkout candidate",
+          status: "in-progress",
+          provenance: { kind: "agent", sourceId: "codex" }
+        },
+        {
+          _tag: "UpdateFrame",
+          id: "candidate",
+          changes: {
+            url: "https://checkout.localhost/v2",
+            title: "Checkout candidate v2",
+            display: { heightMode: "fit-page" }
+          }
+        },
+        {
+          _tag: "SetFrameStatus",
+          id: "candidate",
+          status: "approved"
+        },
+        { _tag: "MoveFrame", id: "candidate", x: 120, y: 240 },
+        {
+          _tag: "ResizeFrame",
+          id: "candidate",
+          width: 1440,
+          height: 900
+        },
+        {
+          _tag: "AddFrame",
+          id: "discarded",
+          url: "https://checkout.localhost/discarded",
+          title: "Discarded",
+          status: "changes-requested",
+          provenance: { kind: "agent", sourceId: "codex" }
+        },
+        { _tag: "RemoveFrame", id: "discarded" }
+      ])
+
+      yield* runCrit([
+        "apply",
+        "review",
+        commands,
+        "--expected-revision",
+        "0",
+        "--json"
+      ])
+      const output = JSON.parse(stdout.join(""))
+
+      expect(output).toMatchObject({
+        schemaVersion: 1,
+        command: "apply",
+        mutation: {
+          revision: 1,
+          change: { commandCount: 7 },
+          canvas: {
+            id: "review",
+            frameCount: 1,
+            statuses: {
+              inProgress: 0,
+              approved: 1,
+              changesRequested: 0
+            }
+          }
+        },
+        frames: [
+          {
+            id: "shape:candidate",
+            url: "https://checkout.localhost/v2",
+            title: "Checkout candidate v2",
+            status: "approved",
+            display: { heightMode: "fit-page" },
+            geometry: { x: 120, y: 240, width: 1440, height: 900 }
+          }
+        ]
+      })
+    }).pipe(Effect.provide(cliLayer))
+  })
 })
