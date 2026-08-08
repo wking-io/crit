@@ -68,6 +68,9 @@ export const FrameSummary = Schema.Struct({
 })
 export type FrameSummary = typeof FrameSummary.Type
 
+export const FrameList = Schema.Array(FrameSummary)
+export type FrameList = typeof FrameList.Type
+
 export const CanvasChange = Schema.Struct({
   commandCount: Schema.Number,
   changedFrameIds: Schema.Array(Schema.String)
@@ -282,6 +285,28 @@ const summarize = (canvas: Canvas): CanvasSummary => {
 const frameIdFrom = (id: string) =>
   createShapeId(id.startsWith("shape:") ? id.slice("shape:".length) : id)
 
+const summarizeFrame = (record: CritFrame): FrameSummary => ({
+  id: record.id,
+  url: record.props.url,
+  title: record.props.title,
+  status: record.props.status,
+  provenance: record.props.provenance,
+  display: record.props.display,
+  geometry: {
+    x: record.x,
+    y: record.y,
+    width: record.props.w,
+    height: record.props.h
+  }
+})
+
+const listFrames = (canvas: Canvas): FrameList =>
+  stateOf(canvas)
+    .store.allRecords()
+    .filter(isCritFrame)
+    .sort((left, right) => left.index.localeCompare(right.index))
+    .map(summarizeFrame)
+
 const getFrame = (
   canvas: Canvas,
   id: string
@@ -291,20 +316,7 @@ const getFrame = (
   if (record === undefined || !isCritFrame(record)) {
     return Effect.fail(new FrameNotFound({ id: frameId }))
   }
-  return Effect.succeed({
-    id: record.id,
-    url: record.props.url,
-    title: record.props.title,
-    status: record.props.status,
-    provenance: record.props.provenance,
-    display: record.props.display,
-    geometry: {
-      x: record.x,
-      y: record.y,
-      width: record.props.w,
-      height: record.props.h
-    }
-  })
+  return Effect.succeed(summarizeFrame(record))
 }
 
 const apply = (
@@ -486,5 +498,6 @@ export const Canvas = {
   apply,
   export: exportCanvas,
   summarize,
+  listFrames,
   getFrame
 } as const

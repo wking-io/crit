@@ -5,6 +5,7 @@ export {
   CanvasCommandFailed,
   CanvasDocumentTooLarge,
   CanvasDocument,
+  FrameList,
   FrameNotFound,
   FrameSummary,
   CanvasOpenFailed,
