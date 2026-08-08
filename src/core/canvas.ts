@@ -332,6 +332,7 @@ const apply = (
           let index = existingFrames.at(-1)?.index ?? ("a0" as IndexKey)
           let frameNumber = existingFrames.length
           const planned = new Map<string, CritFrame>()
+          const removedIds = new Set<TLRecord["id"]>()
           const changedFrameIds: Array<string> = []
 
           for (const command of decoded) {
@@ -364,14 +365,33 @@ const apply = (
               planned.set(frameId, record)
               frameNumber += 1
             } else {
-              const record = planned.get(frameId) ?? state.store.get(frameId)
+              const record = removedIds.has(frameId)
+                ? undefined
+                : (planned.get(frameId) ?? state.store.get(frameId))
               if (record === undefined || !isCritFrame(record)) {
                 throw new CanvasCommandFailed({
                   reason: "frame-not-found",
                   detail: `Frame not found: ${frameId}`
                 })
               }
-              if (command._tag === "SetFrameStatus") {
+              if (command._tag === "RemoveFrame") {
+                planned.delete(frameId)
+                const pending: Array<TLRecord["id"]> = [frameId]
+                const records = state.store.allRecords()
+                while (pending.length > 0) {
+                  const parentId = pending.pop()!
+                  if (removedIds.has(parentId)) continue
+                  removedIds.add(parentId)
+                  for (const child of records) {
+                    if (
+                      child.typeName === "shape" &&
+                      child.parentId === parentId
+                    ) {
+                      pending.push(child.id)
+                    }
+                  }
+                }
+              } else if (command._tag === "SetFrameStatus") {
                 planned.set(frameId, {
                   ...record,
                   props: { ...record.props, status: command.status }
@@ -404,7 +424,17 @@ const apply = (
             if (!changedFrameIds.includes(frameId)) changedFrameIds.push(frameId)
           }
 
-          state.store.put(Array.from(planned.values()))
+          state.store.mergeRemoteChanges(() => {
+            if (planned.size > 0) {
+              state.store.put(Array.from(planned.values()))
+            }
+            const persistedRemovedIds = Array.from(removedIds).filter((id) =>
+              state.store.has(id)
+            )
+            if (persistedRemovedIds.length > 0) {
+              state.store.remove(persistedRemovedIds)
+            }
+          })
 
           return {
             commandCount: decoded.length,

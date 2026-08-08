@@ -53,6 +53,11 @@ export const UpdateFrameCommand = Schema.TaggedStruct("UpdateFrame", {
 })
 export type UpdateFrameCommand = typeof UpdateFrameCommand.Type
 
+export const RemoveFrameCommand = Schema.TaggedStruct("RemoveFrame", {
+  id: Schema.String
+})
+export type RemoveFrameCommand = typeof RemoveFrameCommand.Type
+
 export type AddFrameInput = {
   readonly id: string
   readonly url: string
@@ -96,10 +101,20 @@ const updateFrame = (input: UpdateFrameInput): UpdateFrameCommand => ({
   ...input
 })
 
+export type RemoveFrameInput = {
+  readonly id: string
+}
+
+const removeFrame = (input: RemoveFrameInput): RemoveFrameCommand => ({
+  _tag: "RemoveFrame",
+  ...input
+})
+
 export const CanvasCommandSchema = Schema.Union([
   AddFrameCommand,
   SetFrameStatusCommand,
-  UpdateFrameCommand
+  UpdateFrameCommand,
+  RemoveFrameCommand
 ])
 export type CanvasCommand = typeof CanvasCommandSchema.Type
 
@@ -107,7 +122,9 @@ export const CanvasCommand = {
   AddFrame: AddFrameCommand,
   SetFrameStatus: SetFrameStatusCommand,
   UpdateFrame: UpdateFrameCommand,
+  RemoveFrame: RemoveFrameCommand,
   addFrame,
   setFrameStatus,
-  updateFrame
+  updateFrame,
+  removeFrame
 } as const
