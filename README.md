@@ -12,9 +12,47 @@ npx @riff-refine/crit init
 
 The initializer installs the package, updates Vite without replacing existing
 plugins, creates the React surface, adds `.crit/` to `.gitignore`, and installs
-the project agent skill. React Router framework projects also receive a
-registered `/crit/:canvasId?` route. Other routers get an explicit component
+the project agent skill. It also creates `crit.manifest.json` with a default
+Canvas containing the host application. React Router framework projects receive
+a registered `/crit/:canvasId?` route. Other routers get an explicit component
 mount instruction rather than a guessed mutation.
+
+Describe review Canvases without hard-coding the running origin:
+
+```json
+{
+  "schemaVersion": 1,
+  "id": "storefront",
+  "canvases": [
+    {
+      "id": "checkout-review",
+      "title": "Checkout review",
+      "frames": [
+        {
+          "id": "candidate",
+          "url": "/checkout",
+          "title": "Checkout candidate",
+          "status": "in-progress"
+        }
+      ]
+    }
+  ]
+}
+```
+
+The Vite adapter publishes the resolved document at
+`/.well-known/crit.json`. Opening `/crit/checkout-review` reconciles its Frames
+before the editor loads. Agents can perform the same idempotent reconciliation
+from a discovered app origin:
+
+```sh
+npx @riff-refine/crit sync --from https://storefront.localhost --json
+```
+
+Manifest reconciliation preserves Frame identity and never removes Frames or
+their annotations implicitly. New Frame status defaults to `in-progress`;
+omitted status, `display`, and `geometry` fields do not overwrite later review
+changes. Declare those fields when the manifest should continue to own them.
 
 Add the Vite plugin. It owns the local HTTP adapter and stores Canvas Documents
 under `.crit/canvases`:
@@ -31,6 +69,8 @@ export default defineConfig({
 
 The adapter runs only during Vite serve/preview. It can also be gated explicitly
 with `crit({ enabled: mode !== "production" })` from a functional Vite config.
+Use `manifest: false`, a custom manifest filename, or `manifestPath` to configure
+discovery publication.
 
 The React entry point then owns the editor lifecycle and required tldraw styles:
 

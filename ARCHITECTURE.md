@@ -23,6 +23,12 @@ CLI and future agent integrations express changes as semantic Canvas commands.
 The Session persists validated Canvas Document envelopes with optimistic
 revision checks. Neither path edits raw storage records.
 
+The discovery module validates versioned manifests, resolves relative Frame
+locations, and reconciles them through `CritRuntime`. Its interface is shared by
+the Vite and CLI adapters. Reconciliation is additive: stable Frame identities
+are updated in place, while absent Frames and their annotations are preserved
+until an explicit removal command is issued.
+
 `crit init` owns installation-time integration. It applies idempotent,
 recognizable transforms to Vite and React Router configuration, creates narrow
 host files, and preserves files whose contents it does not own. Router shapes

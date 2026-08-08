@@ -1,8 +1,14 @@
-import { Effect, Option, Schema, Stdio, Stream } from "effect"
+import { Effect, FileSystem, Option, Path, Schema, Stdio, Stream } from "effect"
 import { Argument, Command, Flag } from "effect/unstable/cli"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 
 import { CanvasCommand } from "../core/index.js"
+import {
+  CRIT_MANIFEST_FILE,
+  CRIT_MANIFEST_PATH,
+  CritManifest,
+  CritManifestInvalid
+} from "../discovery/index.js"
 import { CritInitFailed, CritInitializer } from "../init/project-initializer.js"
 import { CritRuntime } from "../runtime/crit-runtime.js"
 import { PACKAGE_VERSION } from "../version.js"
@@ -16,6 +22,97 @@ const writeStdout = (value: string) =>
   Effect.gen(function*() {
     const stdio = yield* Stdio.Stdio
     yield* Stream.run(Stream.make(value), stdio.stdout())
+  })
+
+const parseJson = (source: string, contents: string) =>
+  Effect.try({
+    try: () => JSON.parse(contents) as unknown,
+    catch: (cause) =>
+      new CritManifestInvalid({
+        source,
+        detail: cause instanceof Error ? cause.message : String(cause)
+      })
+  })
+
+const isAbsoluteHttpUrl = (value: string) => {
+  try {
+    const url = new URL(value)
+    return url.protocol === "http:" || url.protocol === "https:"
+  } catch {
+    return false
+  }
+}
+
+const loadManifest = (
+  source: string,
+  baseUrl: Option.Option<string>
+) =>
+  Effect.gen(function*() {
+    if (isAbsoluteHttpUrl(source)) {
+      const requested = new URL(source)
+      if (
+        requested.pathname === "/" &&
+        requested.search.length === 0 &&
+        requested.hash.length === 0
+      ) {
+        requested.pathname = CRIT_MANIFEST_PATH
+      }
+      const response = yield* Effect.tryPromise({
+        try: () =>
+          fetch(requested, {
+            headers: { Accept: "application/json" },
+            signal: AbortSignal.timeout(5_000)
+          }),
+        catch: (cause) =>
+          new CritManifestInvalid({
+            source: requested.toString(),
+            detail: cause instanceof Error ? cause.message : String(cause)
+          })
+      })
+      if (!response.ok) {
+        return yield* new CritManifestInvalid({
+          source: requested.toString(),
+          detail: `Manifest request failed with status ${response.status}`
+        })
+      }
+      const input = yield* Effect.tryPromise({
+        try: () => response.json() as Promise<unknown>,
+        catch: (cause) =>
+          new CritManifestInvalid({
+            source: requested.toString(),
+            detail: cause instanceof Error ? cause.message : String(cause)
+          })
+      })
+      return yield* CritManifest.resolve(input, {
+        baseUrl: requested.toString(),
+        source: requested.toString()
+      })
+    }
+
+    const fs = yield* FileSystem.FileSystem
+    const path = yield* Path.Path
+    const target = path.resolve(source)
+    const contents = yield* fs.readFileString(target).pipe(
+      Effect.mapError(
+        (cause) =>
+          new CritManifestInvalid({ source: target, detail: String(cause) })
+      )
+    )
+    const input = yield* parseJson(target, contents)
+    const decoded = yield* CritManifest.decode(input, target)
+    const relativeFrame = decoded.canvases
+      .flatMap((canvas) => canvas.frames)
+      .find((frame) => !isAbsoluteHttpUrl(frame.url))
+    if (relativeFrame !== undefined && Option.isNone(baseUrl)) {
+      return yield* new CritManifestInvalid({
+        source: target,
+        detail: `Frame ${relativeFrame.id} uses a relative URL; pass --base-url or sync from a running app origin`
+      })
+    }
+    return yield* CritManifest.resolve(decoded, {
+      baseUrl: Option.getOrElse(baseUrl, () => "http://crit.invalid/"),
+      source: target
+    })
   })
 
 const initCommand = Command.make(
@@ -74,6 +171,41 @@ const initCommand = Command.make(
       yield* writeStdout(`${output}\n`)
     })
 ).pipe(Command.withDescription("Configure Crit in a Vite + React project"))
+
+const syncCommand = Command.make(
+  "sync",
+  {
+    source: Flag.string("from").pipe(Flag.withDefault(CRIT_MANIFEST_FILE)),
+    baseUrl: Flag.string("base-url").pipe(Flag.optional),
+    canvas: Flag.string("canvas").pipe(Flag.optional),
+    json: Flag.boolean("json")
+  },
+  ({ source, baseUrl, canvas, json }) =>
+    Effect.gen(function*() {
+      const manifest = yield* loadManifest(source, baseUrl)
+      const result = yield* CritManifest.sync(
+        manifest,
+        Option.match(canvas, {
+          onNone: () => ({}),
+          onSome: (canvasId) => ({ canvasId })
+        })
+      )
+      const output = json
+        ? JSON.stringify({ ...result, command: "sync", source })
+        : [
+            `Synced manifest "${result.manifestId}".`,
+            ...result.canvases.map(
+              (item) =>
+                `  ${item.action.padEnd(9)} ${item.id}  r${item.revision}  +${item.addedFrameIds.length} ~${item.updatedFrameIds.length}`
+            )
+          ].join("\n")
+      yield* writeStdout(`${output}\n`)
+    })
+).pipe(
+  Command.withDescription(
+    "Discover manifest Frames and reconcile them into local Canvases"
+  )
+)
 
 const createCommand = Command.make(
   "create",
@@ -222,6 +354,7 @@ export const critCommand = Command.make("crit").pipe(
   Command.withDescription("Arrange and assess live web iterations"),
   Command.withSubcommands([
     initCommand,
+    syncCommand,
     createCommand,
     addCommand,
     listCommand,

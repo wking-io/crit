@@ -85,6 +85,7 @@ export default [
       component: await read(root, "app/components/crit-canvas.tsx"),
       route: await read(root, "app/routes/crit.tsx"),
       skill: await read(root, ".agents/skills/crit/SKILL.md"),
+      manifest: await read(root, "crit.manifest.json"),
       gitignore: await read(root, ".gitignore")
     }
     const second = await runInit(root)
@@ -109,6 +110,16 @@ export default [
     expect(firstSnapshot.component).toContain("<Crit canvasId={canvasId} />")
     expect(firstSnapshot.route).toContain("useParams")
     expect(firstSnapshot.skill).toContain("name: crit")
+    expect(JSON.parse(firstSnapshot.manifest)).toMatchObject({
+      schemaVersion: 1,
+      id: "review-app",
+      canvases: [
+        {
+          id: "default",
+          frames: [{ id: "app", url: "/", status: "in-progress" }]
+        }
+      ]
+    })
     expect(firstSnapshot.gitignore).toBe("node_modules/\n.crit/\n")
     expect(
       second.actions.filter((action) => action.status !== "unchanged")
@@ -127,9 +138,11 @@ export default [
                     ? "app/components/crit-canvas.tsx"
                     : key === "route"
                       ? "app/routes/crit.tsx"
-                      : key === "skill"
-                        ? ".agents/skills/crit/SKILL.md"
-                        : ".gitignore"
+                    : key === "skill"
+                      ? ".agents/skills/crit/SKILL.md"
+                      : key === "manifest"
+                        ? "crit.manifest.json"
+                      : ".gitignore"
           expect(await read(root, target)).toBe(value)
         })
       )

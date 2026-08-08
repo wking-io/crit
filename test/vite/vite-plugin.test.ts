@@ -1,4 +1,4 @@
-import { readFile, rm, mkdtemp } from "node:fs/promises"
+import { readFile, rm, mkdtemp, writeFile } from "node:fs/promises"
 import { createServer as createHttpServer, type Server } from "node:http"
 import type { AddressInfo } from "node:net"
 import { tmpdir } from "node:os"
@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import { createServer, type ViteDevServer } from "vite"
 
 import { HttpCritClient } from "../../src/http/client.js"
+import { Canvas } from "../../src/core/index.js"
 import { CritClientConflict, CritClientNotFound } from "../../src/session/crit-client.js"
 import { crit } from "../../src/vite/index.js"
 
@@ -116,5 +117,55 @@ describe("crit Vite plugin", () => {
 
     expect(failure).toBeInstanceOf(CritClientNotFound)
     expect(failure).toMatchObject({ id: "missing" })
+  })
+
+  it("serves and reconciles the project discovery manifest", async () => {
+    await writeFile(
+      path.join(root, "crit.manifest.json"),
+      JSON.stringify({
+        schemaVersion: 1,
+        id: "storefront",
+        canvases: [
+          {
+            id: "default",
+            title: "Storefront review",
+            frames: [
+              {
+                id: "app",
+                url: "/checkout",
+                title: "Checkout",
+                status: "changes-requested"
+              }
+            ]
+          }
+        ]
+      })
+    )
+    const origin = await start()
+    const manifestResponse = await fetch(`${origin}/.well-known/crit.json`)
+    const manifest = await manifestResponse.json() as {
+      canvases: Array<{ frames: Array<{ url: string }> }>
+    }
+    const client = HttpCritClient.make({ apiPath: `${origin}/__crit/api` })
+    const first = await Effect.runPromise(client.load("default"))
+    const second = await Effect.runPromise(client.load("default"))
+    const canvas = await Effect.runPromise(Canvas.open(second))
+
+    expect(manifestResponse.status).toBe(200)
+    expect(manifest.canvases[0]?.frames[0]?.url).toBe(`${origin}/checkout`)
+    expect(first.revision).toBe(1)
+    expect(second.revision).toBe(1)
+    expect(Canvas.listFrames(canvas)).toMatchObject([
+      {
+        id: "shape:app",
+        url: `${origin}/checkout`,
+        title: "Checkout",
+        status: "changes-requested",
+        provenance: {
+          kind: "manifest",
+          sourceId: "storefront:default:app"
+        }
+      }
+    ])
   })
 })

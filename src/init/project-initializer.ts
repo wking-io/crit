@@ -2,6 +2,7 @@ import { fileURLToPath } from "node:url"
 
 import { Effect, FileSystem, Path, Schema } from "effect"
 
+import { CRIT_MANIFEST_FILE } from "../discovery/index.js"
 import { PACKAGE_VERSION } from "../version.js"
 
 const PACKAGE_NAME = "@riff-refine/crit"
@@ -168,6 +169,37 @@ export default defineConfig({
   plugins: [critPlugin()]
 })
 `
+
+const manifestTemplate = (packageJson: PackageJson) => {
+  const projectName = packageJson.name?.trim() || "app"
+  const manifestId =
+    projectName
+      .toLowerCase()
+      .replace(/[^a-z0-9._-]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "app"
+  return `${JSON.stringify(
+    {
+      schemaVersion: 1,
+      id: manifestId,
+      canvases: [
+        {
+          id: "default",
+          title: "Default review",
+          frames: [
+            {
+              id: "app",
+              url: "/",
+              title: projectName,
+              status: "in-progress"
+            }
+          ]
+        }
+      ]
+    },
+    null,
+    2
+  )}\n`
+}
 
 const hasDependency = (packageJson: PackageJson, name: string) =>
   packageJson.dependencies?.[name] !== undefined ||
@@ -434,6 +466,9 @@ const init = (
 
     const skillPath = path.join(root, ".agents", "skills", "crit", "SKILL.md")
     yield* planGenerated(skillPath, skillSource)
+
+    const manifestPath = path.join(root, CRIT_MANIFEST_FILE)
+    yield* planGenerated(manifestPath, manifestTemplate(packageJson))
 
     for (const [target, content] of writes) {
       yield* fs
