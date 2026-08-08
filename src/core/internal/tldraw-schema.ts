@@ -13,9 +13,13 @@ import {
 import type { IndexKey } from "@tldraw/utils"
 import { T } from "@tldraw/validate"
 
-const frameStatuses = ["in-progress", "approved", "changes-requested"] as const
+export const frameStatuses = [
+  "in-progress",
+  "approved",
+  "changes-requested"
+] as const
 
-type CritFrameProps = {
+export type CritFrameProps = {
   readonly w: number
   readonly h: number
   readonly url: string
@@ -37,7 +41,7 @@ const frameVersions = createShapePropsMigrationIds("crit-frame", {
   AddDisplay: 2
 })
 
-const frameMigrations = createShapePropsMigrationSequence({
+export const critFrameMigrations = createShapePropsMigrationSequence({
   sequence: [
     {
       id: frameVersions.AddProvenance,
@@ -60,6 +64,21 @@ const frameMigrations = createShapePropsMigrationSequence({
   ]
 })
 
+export const critFrameProps = {
+  w: T.number,
+  h: T.number,
+  url: T.string,
+  title: T.string,
+  status: T.literalEnum(...frameStatuses),
+  provenance: T.object({
+    kind: T.literalEnum("manual", "agent", "manifest", "discovery"),
+    sourceId: T.string
+  }),
+  display: T.object({
+    heightMode: T.literalEnum("viewport", "fit-page")
+  })
+}
+
 const annotationShapeSchemas = {
   arrow: defaultShapeSchemas.arrow,
   draw: defaultShapeSchemas.draw,
@@ -75,21 +94,8 @@ export const critSchema = createTLSchema({
   shapes: {
     ...annotationShapeSchemas,
     "crit-frame": {
-      props: {
-        w: T.number,
-        h: T.number,
-        url: T.string,
-        title: T.string,
-        status: T.literalEnum(...frameStatuses),
-        provenance: T.object({
-          kind: T.literalEnum("manual", "agent", "manifest", "discovery"),
-          sourceId: T.string
-        }),
-        display: T.object({
-          heightMode: T.literalEnum("viewport", "fit-page")
-        })
-      },
-      migrations: frameMigrations
+      props: critFrameProps,
+      migrations: critFrameMigrations
     }
   }
 })

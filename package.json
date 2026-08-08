@@ -3,7 +3,9 @@
   "version": "0.0.0",
   "description": "A local-first canvas for arranging and assessing live web iterations.",
   "type": "module",
-  "sideEffects": false,
+  "sideEffects": [
+    "**/*.css"
+  ],
   "bin": {
     "crit": "./dist/cli.js"
   },
@@ -15,8 +17,8 @@
   ],
   "exports": {
     ".": {
-      "types": "./dist/core/index.d.ts",
-      "import": "./dist/core/index.js"
+      "types": "./dist/react/index.d.ts",
+      "import": "./dist/react/index.js"
     },
     "./core": {
       "types": "./dist/core/index.d.ts",
@@ -36,28 +38,21 @@
     "@tldraw/tlschema": "4.2.1",
     "@tldraw/utils": "4.2.1",
     "@tldraw/validate": "4.2.1",
-    "effect": "4.0.0-beta.105"
+    "effect": "4.0.0-beta.105",
+    "tldraw": "4.2.1"
   },
   "peerDependencies": {
     "react": ">=18 <20",
-    "react-dom": ">=18 <20",
-    "tldraw": "4.2.1"
-  },
-  "peerDependenciesMeta": {
-    "react": {
-      "optional": true
-    },
-    "react-dom": {
-      "optional": true
-    },
-    "tldraw": {
-      "optional": true
-    }
+    "react-dom": ">=18 <20"
   },
   "devDependencies": {
     "@effect/vitest": "4.0.0-beta.105",
     "@types/node": "24.10.0",
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
     "fake-indexeddb": "6.2.5",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
     "typescript": "5.9.2",
     "vitest": "4.1.0"
   },

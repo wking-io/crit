@@ -202,4 +202,4 @@ const make = (options: IndexedDbDraftJournalOptions = {}): DraftJournalShape => 
 const layer = (options: IndexedDbDraftJournalOptions = {}) =>
   Layer.succeed(DraftJournal, make(options))
 
-export const IndexedDbDraftJournal = { layer } as const
+export const IndexedDbDraftJournal = { make, layer } as const

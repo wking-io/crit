@@ -32,3 +32,7 @@ export {
   type SetFrameStatusInput,
   type UpdateFrameInput
 } from "./canvas-command.js"
+export type {
+  CritFrame,
+  CritFrameProps
+} from "./internal/tldraw-schema.js"
