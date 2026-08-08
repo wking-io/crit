@@ -1,0 +1,58 @@
+{
+  "name": "@riff-refine/crit",
+  "version": "0.0.0",
+  "description": "A local-first canvas for arranging and assessing live web iterations.",
+  "type": "module",
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "skills",
+    "README.md",
+    "ARCHITECTURE.md"
+  ],
+  "exports": {
+    "./core": {
+      "types": "./dist/core/index.d.ts",
+      "import": "./dist/core/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@tldraw/store": "4.2.1",
+    "@tldraw/tlschema": "4.2.1",
+    "@tldraw/utils": "4.2.1",
+    "@tldraw/validate": "4.2.1",
+    "effect": "4.0.0-beta.105"
+  },
+  "peerDependencies": {
+    "react": ">=18 <20",
+    "react-dom": ">=18 <20",
+    "tldraw": "4.2.1"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    },
+    "react-dom": {
+      "optional": true
+    },
+    "tldraw": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@effect/vitest": "4.0.0-beta.105",
+    "@types/node": "24.10.0",
+    "typescript": "5.9.2",
+    "vitest": "4.1.0"
+  },
+  "engines": {
+    "node": ">=22.12"
+  },
+  "packageManager": "npm@11.11.0"
+}
+
