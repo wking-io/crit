@@ -58,6 +58,22 @@ export const RemoveFrameCommand = Schema.TaggedStruct("RemoveFrame", {
 })
 export type RemoveFrameCommand = typeof RemoveFrameCommand.Type
 
+export const MoveFrameCommand = Schema.TaggedStruct("MoveFrame", {
+  id: Schema.String,
+  x: Schema.Finite,
+  y: Schema.Finite
+})
+export type MoveFrameCommand = typeof MoveFrameCommand.Type
+
+const PositiveDimension = Schema.Finite.check(Schema.isGreaterThan(0))
+
+export const ResizeFrameCommand = Schema.TaggedStruct("ResizeFrame", {
+  id: Schema.String,
+  width: PositiveDimension,
+  height: PositiveDimension
+})
+export type ResizeFrameCommand = typeof ResizeFrameCommand.Type
+
 export type AddFrameInput = {
   readonly id: string
   readonly url: string
@@ -110,11 +126,35 @@ const removeFrame = (input: RemoveFrameInput): RemoveFrameCommand => ({
   ...input
 })
 
+export type MoveFrameInput = {
+  readonly id: string
+  readonly x: number
+  readonly y: number
+}
+
+const moveFrame = (input: MoveFrameInput): MoveFrameCommand => ({
+  _tag: "MoveFrame",
+  ...input
+})
+
+export type ResizeFrameInput = {
+  readonly id: string
+  readonly width: number
+  readonly height: number
+}
+
+const resizeFrame = (input: ResizeFrameInput): ResizeFrameCommand => ({
+  _tag: "ResizeFrame",
+  ...input
+})
+
 export const CanvasCommandSchema = Schema.Union([
   AddFrameCommand,
   SetFrameStatusCommand,
   UpdateFrameCommand,
-  RemoveFrameCommand
+  RemoveFrameCommand,
+  MoveFrameCommand,
+  ResizeFrameCommand
 ])
 export type CanvasCommand = typeof CanvasCommandSchema.Type
 
@@ -123,8 +163,12 @@ export const CanvasCommand = {
   SetFrameStatus: SetFrameStatusCommand,
   UpdateFrame: UpdateFrameCommand,
   RemoveFrame: RemoveFrameCommand,
+  MoveFrame: MoveFrameCommand,
+  ResizeFrame: ResizeFrameCommand,
   addFrame,
   setFrameStatus,
   updateFrame,
-  removeFrame
+  removeFrame,
+  moveFrame,
+  resizeFrame
 } as const

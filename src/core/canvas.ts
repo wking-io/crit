@@ -58,7 +58,13 @@ export const FrameSummary = Schema.Struct({
   title: Schema.String,
   status: FrameStatus,
   provenance: FrameProvenance,
-  display: FrameDisplay
+  display: FrameDisplay,
+  geometry: Schema.Struct({
+    x: Schema.Finite,
+    y: Schema.Finite,
+    width: Schema.Finite,
+    height: Schema.Finite
+  })
 })
 export type FrameSummary = typeof FrameSummary.Type
 
@@ -291,7 +297,13 @@ const getFrame = (
     title: record.props.title,
     status: record.props.status,
     provenance: record.props.provenance,
-    display: record.props.display
+    display: record.props.display,
+    geometry: {
+      x: record.x,
+      y: record.y,
+      width: record.props.w,
+      height: record.props.h
+    }
   })
 }
 
@@ -395,6 +407,21 @@ const apply = (
                 planned.set(frameId, {
                   ...record,
                   props: { ...record.props, status: command.status }
+                })
+              } else if (command._tag === "MoveFrame") {
+                planned.set(frameId, {
+                  ...record,
+                  x: command.x,
+                  y: command.y
+                })
+              } else if (command._tag === "ResizeFrame") {
+                planned.set(frameId, {
+                  ...record,
+                  props: {
+                    ...record.props,
+                    w: command.width,
+                    h: command.height
+                  }
                 })
               } else {
                 const { changes } = command

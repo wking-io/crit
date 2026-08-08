@@ -44,7 +44,8 @@ describe("Canvas UpdateFrame command", () => {
         title: "Checkout refined",
         status: "approved",
         provenance: { kind: "agent", sourceId: "refinement-agent" },
-        display: { heightMode: "fit-page" }
+        display: { heightMode: "fit-page" },
+        geometry: { x: 0, y: 0, width: 1200, height: 800 }
       })
     }))
 

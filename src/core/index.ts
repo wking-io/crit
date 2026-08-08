@@ -19,11 +19,15 @@ export {
   FrameDisplay,
   FrameProvenance,
   FrameStatus,
+  MoveFrameCommand,
   RemoveFrameCommand,
+  ResizeFrameCommand,
   SetFrameStatusCommand,
   UpdateFrameCommand,
   type AddFrameInput,
+  type MoveFrameInput,
   type RemoveFrameInput,
+  type ResizeFrameInput,
   type SetFrameStatusInput,
   type UpdateFrameInput
 } from "./canvas-command.js"
