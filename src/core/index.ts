@@ -1,4 +1,5 @@
 export {
+  AssetUnsupported,
   Canvas,
   CanvasChange,
   CanvasCommandFailed,

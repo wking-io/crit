@@ -128,13 +128,10 @@ export const makePage = (canvasId: string, title: string) =>
     meta: {}
   })
 
-export const assertNoAssets = (snapshot: StoreSnapshot<TLRecord>) => {
-  for (const record of Object.values(snapshot.store)) {
-    if (record.typeName === "asset") {
-      throw new Error("Asset records are unsupported in Crit V1")
-    }
-  }
-}
+export const findAssetIds = (snapshot: StoreSnapshot<TLRecord>) =>
+  Object.values(snapshot.store)
+    .filter((record) => record.typeName === "asset")
+    .map((record) => record.id)
 
 export const isCritFrame = (record: TLRecord): record is CritFrame =>
   record.typeName === "shape" && record.type === "crit-frame"

@@ -21,7 +21,10 @@ const canonicalize = (id: string, input: unknown) =>
       (cause) =>
         new DocumentMalformed({
           id,
-          detail: cause.detail
+          detail:
+            cause._tag === "AssetUnsupported"
+              ? `Asset records are unsupported: ${cause.assetIds.join(", ")}`
+              : cause.detail
         })
     )
   )

@@ -8,8 +8,8 @@ import {
   type CanvasCommand as CanvasCommandInput
 } from "./canvas-command.js"
 import {
-  assertNoAssets,
   critSchema,
+  findAssetIds,
   isCritFrame,
   makePage,
   makeStore,
@@ -64,6 +64,13 @@ export class CanvasOpenFailed extends Schema.TaggedError<CanvasOpenFailed>()(
   }
 ) {}
 
+export class AssetUnsupported extends Schema.TaggedError<AssetUnsupported>()(
+  "AssetUnsupported",
+  {
+    assetIds: Schema.Array(Schema.String)
+  }
+) {}
+
 export class CanvasCommandFailed extends Schema.TaggedError<CanvasCommandFailed>()(
   "CanvasCommandFailed",
   {
@@ -109,7 +116,8 @@ const create = (input: { readonly id: string; readonly title: string }): Canvas 
 
 const openDocument = (document: CanvasDocument): Canvas => {
   const snapshot = document.document as StoreSnapshot<TLRecord>
-  assertNoAssets(snapshot)
+  const assetIds = findAssetIds(snapshot)
+  if (assetIds.length > 0) throw new AssetUnsupported({ assetIds })
 
   const migration = critSchema.migrateStoreSnapshot(snapshot)
   if (migration.type !== "success") {
@@ -130,7 +138,9 @@ const openDocument = (document: CanvasDocument): Canvas => {
   })
 }
 
-const open = (input: unknown): Effect.Effect<Canvas, CanvasOpenFailed> =>
+const open = (
+  input: unknown
+): Effect.Effect<Canvas, CanvasOpenFailed | AssetUnsupported> =>
   Schema.decodeUnknownEffect(CanvasDocument)(input).pipe(
     Effect.mapError(
       (cause) =>
@@ -143,10 +153,12 @@ const open = (input: unknown): Effect.Effect<Canvas, CanvasOpenFailed> =>
       Effect.try({
         try: () => openDocument(document),
         catch: (cause) =>
-          new CanvasOpenFailed({
-            reason: "invalid-document",
-            detail: cause instanceof Error ? cause.message : String(cause)
-          })
+          cause instanceof AssetUnsupported
+            ? cause
+            : new CanvasOpenFailed({
+                reason: "invalid-document",
+                detail: cause instanceof Error ? cause.message : String(cause)
+              })
       })
     )
   )
@@ -154,7 +166,8 @@ const open = (input: unknown): Effect.Effect<Canvas, CanvasOpenFailed> =>
 const exportCanvas = (canvas: Canvas): CanvasDocument => {
   const state = stateOf(canvas)
   const document = state.store.getStoreSnapshot("document")
-  assertNoAssets(document)
+  const assetIds = findAssetIds(document)
+  if (assetIds.length > 0) throw new AssetUnsupported({ assetIds })
 
   return {
     format: "crit-canvas",
