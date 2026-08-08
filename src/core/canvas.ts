@@ -5,6 +5,9 @@ import { Effect, Schema } from "effect"
 
 import {
   CanvasCommandSchema,
+  FrameDisplay,
+  FrameProvenance,
+  FrameStatus,
   type CanvasCommand as CanvasCommandInput
 } from "./canvas-command.js"
 import {
@@ -48,6 +51,16 @@ export const CanvasSummary = Schema.Struct({
 })
 
 export type CanvasSummary = typeof CanvasSummary.Type
+
+export const FrameSummary = Schema.Struct({
+  id: Schema.String,
+  url: Schema.String,
+  title: Schema.String,
+  status: FrameStatus,
+  provenance: FrameProvenance,
+  display: FrameDisplay
+})
+export type FrameSummary = typeof FrameSummary.Type
 
 export const CanvasChange = Schema.Struct({
   commandCount: Schema.Number,
@@ -93,6 +106,11 @@ export class CanvasCommandFailed extends Schema.TaggedError<CanvasCommandFailed>
     ]),
     detail: Schema.String
   }
+) {}
+
+export class FrameNotFound extends Schema.TaggedError<FrameNotFound>()(
+  "FrameNotFound",
+  { id: Schema.String }
 ) {}
 
 type CanvasState = {
@@ -255,6 +273,28 @@ const summarize = (canvas: Canvas): CanvasSummary => {
   }
 }
 
+const frameIdFrom = (id: string) =>
+  createShapeId(id.startsWith("shape:") ? id.slice("shape:".length) : id)
+
+const getFrame = (
+  canvas: Canvas,
+  id: string
+): Effect.Effect<FrameSummary, FrameNotFound> => {
+  const frameId = frameIdFrom(id)
+  const record = stateOf(canvas).store.get(frameId)
+  if (record === undefined || !isCritFrame(record)) {
+    return Effect.fail(new FrameNotFound({ id: frameId }))
+  }
+  return Effect.succeed({
+    id: record.id,
+    url: record.props.url,
+    title: record.props.title,
+    status: record.props.status,
+    provenance: record.props.provenance,
+    display: record.props.display
+  })
+}
+
 const apply = (
   canvas: Canvas,
   ...commands: ReadonlyArray<CanvasCommandInput>
@@ -295,7 +335,7 @@ const apply = (
           const changedFrameIds: Array<string> = []
 
           for (const command of decoded) {
-            const frameId = createShapeId(command.id)
+            const frameId = frameIdFrom(command.id)
             if (command._tag === "AddFrame") {
               if (state.store.has(frameId) || planned.has(frameId)) {
                 throw new CanvasCommandFailed({
@@ -331,10 +371,35 @@ const apply = (
                   detail: `Frame not found: ${frameId}`
                 })
               }
-              planned.set(frameId, {
-                ...record,
-                props: { ...record.props, status: command.status }
-              })
+              if (command._tag === "SetFrameStatus") {
+                planned.set(frameId, {
+                  ...record,
+                  props: { ...record.props, status: command.status }
+                })
+              } else {
+                const { changes } = command
+                if (Object.values(changes).every((value) => value === undefined)) {
+                  throw new CanvasCommandFailed({
+                    reason: "invalid-command",
+                    detail: `UpdateFrame requires at least one change: ${frameId}`
+                  })
+                }
+                planned.set(frameId, {
+                  ...record,
+                  props: {
+                    ...record.props,
+                    ...(changes.url === undefined ? {} : { url: changes.url }),
+                    ...(changes.title === undefined ? {} : { title: changes.title }),
+                    ...(changes.status === undefined ? {} : { status: changes.status }),
+                    ...(changes.provenance === undefined
+                      ? {}
+                      : { provenance: changes.provenance }),
+                    ...(changes.display === undefined
+                      ? {}
+                      : { display: changes.display })
+                  }
+                })
+              }
             }
             if (!changedFrameIds.includes(frameId)) changedFrameIds.push(frameId)
           }
@@ -363,5 +428,6 @@ export const Canvas = {
   open,
   apply,
   export: exportCanvas,
-  summarize
+  summarize,
+  getFrame
 } as const

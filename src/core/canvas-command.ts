@@ -18,6 +18,14 @@ export const FrameProvenance = Schema.Struct({
 })
 export type FrameProvenance = typeof FrameProvenance.Type
 
+export const FrameDisplay = Schema.Struct({
+  heightMode: Schema.Union([
+    Schema.Literal("viewport"),
+    Schema.Literal("fit-page")
+  ])
+})
+export type FrameDisplay = typeof FrameDisplay.Type
+
 export const AddFrameCommand = Schema.TaggedStruct("AddFrame", {
   id: Schema.String,
   url: Schema.String,
@@ -32,6 +40,18 @@ export const SetFrameStatusCommand = Schema.TaggedStruct("SetFrameStatus", {
   status: FrameStatus
 })
 export type SetFrameStatusCommand = typeof SetFrameStatusCommand.Type
+
+export const UpdateFrameCommand = Schema.TaggedStruct("UpdateFrame", {
+  id: Schema.String,
+  changes: Schema.Struct({
+    url: Schema.optional(Schema.String),
+    title: Schema.optional(Schema.String),
+    status: Schema.optional(FrameStatus),
+    provenance: Schema.optional(FrameProvenance),
+    display: Schema.optional(FrameDisplay)
+  })
+})
+export type UpdateFrameCommand = typeof UpdateFrameCommand.Type
 
 export type AddFrameInput = {
   readonly id: string
@@ -60,15 +80,34 @@ const setFrameStatus = (input: SetFrameStatusInput): SetFrameStatusCommand => ({
   ...input
 })
 
+export type UpdateFrameInput = {
+  readonly id: string
+  readonly changes: {
+    readonly url?: string
+    readonly title?: string
+    readonly status?: FrameStatus
+    readonly provenance?: FrameProvenance
+    readonly display?: FrameDisplay
+  }
+}
+
+const updateFrame = (input: UpdateFrameInput): UpdateFrameCommand => ({
+  _tag: "UpdateFrame",
+  ...input
+})
+
 export const CanvasCommandSchema = Schema.Union([
   AddFrameCommand,
-  SetFrameStatusCommand
+  SetFrameStatusCommand,
+  UpdateFrameCommand
 ])
 export type CanvasCommand = typeof CanvasCommandSchema.Type
 
 export const CanvasCommand = {
   AddFrame: AddFrameCommand,
   SetFrameStatus: SetFrameStatusCommand,
+  UpdateFrame: UpdateFrameCommand,
   addFrame,
-  setFrameStatus
+  setFrameStatus,
+  updateFrame
 } as const

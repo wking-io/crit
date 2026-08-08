@@ -5,6 +5,8 @@ export {
   CanvasCommandFailed,
   CanvasDocumentTooLarge,
   CanvasDocument,
+  FrameNotFound,
+  FrameSummary,
   CanvasOpenFailed,
   CanvasSummary,
   MAX_CANVAS_DOCUMENT_BYTES,
@@ -14,9 +16,12 @@ export {
   AddFrameCommand,
   CanvasCommand,
   CanvasCommandSchema,
+  FrameDisplay,
   FrameProvenance,
   FrameStatus,
   SetFrameStatusCommand,
+  UpdateFrameCommand,
   type AddFrameInput,
-  type SetFrameStatusInput
+  type SetFrameStatusInput,
+  type UpdateFrameInput
 } from "./canvas-command.js"
