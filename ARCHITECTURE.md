@@ -15,10 +15,13 @@ failures, services, Layers, concurrency, and lifecycle. Synchronous in-memory
 document transitions remain pure TypeScript.
 
 Filesystem and D1 stores implement one `DocumentStore` contract. React owns a
-scoped optimistic `CanvasSession`; Vite and Cloudflare expose one shared HTTP
-contract. CLI, React, HTTP, and future MCP integrations call the same semantic
-Canvas commands and never edit raw storage or tldraw records.
+scoped optimistic `CanvasSession`. A Web Request/Response module owns the shared
+HTTP contract; Vite adapts it to Connect middleware and Cloudflare can adapt it
+to Workers later without changing the contract.
+
+CLI and future agent integrations express changes as semantic Canvas commands.
+The Session persists validated Canvas Document envelopes with optimistic
+revision checks. Neither path edits raw storage records.
 
 V1 deliberately excludes Asset ingestion, real-time collaboration,
 authentication, and remote MCP mutation.
-

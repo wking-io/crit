@@ -26,6 +26,7 @@ import {
 import "tldraw/tldraw.css"
 
 import { IndexedDbDraftJournal } from "../browser/indexeddb-draft-journal.js"
+import { HttpCritClient } from "../http/client.js"
 import {
   CanvasSession,
   type CanvasSession as CanvasSessionHandle,
@@ -118,7 +119,8 @@ const combineOverrides = (
 
 export interface CritProps {
   readonly canvasId: string
-  readonly client: CritClientShape
+  readonly client?: CritClientShape
+  readonly apiPath?: string
   readonly autosaveDelay?: Duration.Input
   readonly sessionId?: string
   readonly draftJournal?: DraftJournalShape | false
@@ -137,6 +139,7 @@ export interface CritProps {
 export function Crit({
   canvasId,
   client,
+  apiPath,
   autosaveDelay,
   sessionId,
   draftJournal,
@@ -159,6 +162,12 @@ export function Crit({
   const resolvedSessionId = useMemo(
     () => sessionId ?? sessionIdForCanvas(canvasId),
     [canvasId, sessionId]
+  )
+  const resolvedClient = useMemo(
+    () =>
+      client ??
+      HttpCritClient.make(apiPath === undefined ? {} : { apiPath }),
+    [apiPath, client]
   )
   const resolvedJournal = useMemo(
     () =>
@@ -188,7 +197,7 @@ export function Crit({
         ? { sessionId: resolvedSessionId }
         : { autosaveDelay, sessionId: resolvedSessionId }
     let openSession = CanvasSession.open(canvasId, sessionOptions).pipe(
-      Effect.provideService(CritClient, client),
+      Effect.provideService(CritClient, resolvedClient),
       Effect.provideService(Scope.Scope, scope)
     )
     if (resolvedJournal !== undefined) {
@@ -228,7 +237,7 @@ export function Crit({
   }, [
     autosaveDelay,
     canvasId,
-    client,
+    resolvedClient,
     resolvedJournal,
     resolvedSessionId
   ])

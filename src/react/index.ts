@@ -1,6 +1,10 @@
 export * from "../core/index.js"
 export { IndexedDbDraftJournal } from "../browser/indexeddb-draft-journal.js"
 export {
+  HttpCritClient,
+  type HttpCritClientOptions
+} from "../http/client.js"
+export {
   CanvasSession,
   CanvasSessionRecoveryStatus,
   CanvasSessionSaveStatus,
