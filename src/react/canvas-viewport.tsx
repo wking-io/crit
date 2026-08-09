@@ -781,11 +781,6 @@ export function CanvasViewport({
           aria-hidden="true"
           className="crit-canvas__pan-shield"
           data-panning={panning ? "true" : "false"}
-          {...helpTarget({
-            name: "Pan canvas",
-            hotkey: "H",
-            description: "Drag anywhere on the canvas to move the view."
-          })}
           onContextMenu={(event) => event.preventDefault()}
           onPointerDown={startPan}
         />
