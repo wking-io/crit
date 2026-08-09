@@ -73,6 +73,9 @@ describe("Crit", () => {
     expect(CRIT_HOTKEYS).toEqual({
       selectTool: "V",
       handTool: "H",
+      addFrame: "F",
+      addNote: "N",
+      deleteSelection: "Delete",
       zoomIn: [
         { key: "=", mod: true },
         { key: "=", mod: true, shift: true }
@@ -98,6 +101,10 @@ describe("Crit", () => {
     expect(critStyles).toContain("nesw-resize")
     expect(critStyles).toContain("ew-resize")
     expect(critStyles).toContain("ns-resize")
+    expect(html).toContain('data-crit-help-name="Resize"')
+    expect(html).toContain(
+      'data-crit-help-description="Drag to resize the frame in this direction."'
+    )
   })
 
   it("includes archive in the original status sequence", () => {
@@ -195,10 +202,12 @@ describe("Crit", () => {
     expect(html).toContain('data-crit-help-name="Select"')
     expect(html).toContain('data-crit-help-hotkey="V"')
     expect(html).toContain(
-      'data-crit-help-description="Select, move, and resize frames and notes."'
+      'data-crit-help-description="Select, move, resize, and interact with frames and notes."'
     )
     expect(html).toContain('data-crit-help-name="Add frame"')
     expect(html).toContain('data-crit-help-name="Add note"')
+    expect(html).toContain('data-crit-help-hotkey="F"')
+    expect(html).toContain('data-crit-help-hotkey="N"')
     expect(html).not.toContain("crit-tooltip")
 
     const detailCounts = [
@@ -261,6 +270,9 @@ describe("Crit", () => {
     expect(html).toContain('aria-label="Redo"')
     expect(html).toContain('aria-keyshortcuts="V"')
     expect(html).toContain('aria-keyshortcuts="H"')
+    expect(html).toContain('aria-keyshortcuts="F"')
+    expect(html).toContain('aria-keyshortcuts="N"')
+    expect(html).toContain('aria-keyshortcuts="Delete"')
     expect(html).toContain('aria-label="Select"')
     expect(html).toContain('aria-label="Hand"')
     expect(html.indexOf('aria-label="Select"')).toBeLessThan(

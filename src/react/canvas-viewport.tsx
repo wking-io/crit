@@ -93,6 +93,9 @@ type CanvasZoomDirection = -1 | 0 | 1
 export const CRIT_HOTKEYS = {
   selectTool: "V",
   handTool: "H",
+  addFrame: "F",
+  addNote: "N",
+  deleteSelection: "Delete",
   zoomIn: [
     { key: "=", mod: true },
     { key: "=", mod: true, shift: true }
@@ -104,6 +107,9 @@ export const CRIT_HOTKEYS = {
 } as const satisfies {
   readonly selectTool: RegisterableHotkey
   readonly handTool: RegisterableHotkey
+  readonly addFrame: RegisterableHotkey
+  readonly addNote: RegisterableHotkey
+  readonly deleteSelection: RegisterableHotkey
   readonly zoomIn: ReadonlyArray<RegisterableHotkey>
   readonly zoomOut: ReadonlyArray<RegisterableHotkey>
 }
@@ -473,6 +479,30 @@ export function CanvasViewport({
     applyCameraInput({ type: "zoom-step", direction, viewport })
   }, [applyCameraInput, viewport])
 
+  const openNewFrameAtCenter = useCallback(() => {
+    setNewFrameTarget({
+      x: (viewport.width / 2 - camera.x) / camera.zoom - 600,
+      y: (viewport.height / 2 - camera.y) / camera.zoom - 400
+    })
+  }, [camera, viewport])
+
+  const addNoteAtCenter = useCallback(() => {
+    addNoteAt(
+      (viewport.width / 2 - camera.x) / camera.zoom - 140,
+      (viewport.height / 2 - camera.y) / camera.zoom - 80
+    )
+  }, [addNoteAt, camera, viewport])
+
+  const deleteSelection = useCallback(() => {
+    if (selectedId === null) return
+    if (document.frames.some((frame) => frame.id === selectedId)) {
+      run(CanvasCommand.removeFrame({ id: selectedId }))
+    } else if (document.notes.some((note) => note.id === selectedId)) {
+      run(CanvasCommand.removeNote({ id: selectedId }))
+    }
+    setSelectedId(null)
+  }, [document.frames, document.notes, run, selectedId])
+
   useHotkeys([
     {
       hotkey: CRIT_HOTKEYS.selectTool,
@@ -482,6 +512,21 @@ export function CanvasViewport({
     {
       hotkey: CRIT_HOTKEYS.handTool,
       callback: () => setTool("pan"),
+      options: { ignoreInputs: true }
+    },
+    {
+      hotkey: CRIT_HOTKEYS.addFrame,
+      callback: openNewFrameAtCenter,
+      options: { ignoreInputs: true }
+    },
+    {
+      hotkey: CRIT_HOTKEYS.addNote,
+      callback: addNoteAtCenter,
+      options: { ignoreInputs: true }
+    },
+    {
+      hotkey: CRIT_HOTKEYS.deleteSelection,
+      callback: deleteSelection,
       options: { ignoreInputs: true }
     },
     ...CRIT_HOTKEYS.zoomIn.map((hotkey) => ({
@@ -835,7 +880,7 @@ export function CanvasViewport({
               {...helpTarget({
                 name: "Select",
                 hotkey: "V",
-                description: "Select, move, and resize frames and notes."
+                description: "Select, move, resize, and interact with frames and notes."
               })}
               onClick={() => setTool("select")}
               type="button"
@@ -854,33 +899,27 @@ export function CanvasViewport({
               type="button"
             ><IconPan /></button>
             <button
+              aria-keyshortcuts="F"
               aria-label="Add frame"
               className="crit-icon-button"
               {...helpTarget({
                 name: "Add frame",
-                hotkey: NO_HELP_HOTKEY,
+                hotkey: "F",
                 description: "Add a live web page to the center of the current view."
               })}
-              onClick={() => setNewFrameTarget({
-                x: (viewport.width / 2 - camera.x) / camera.zoom - 600,
-                y: (viewport.height / 2 - camera.y) / camera.zoom - 400
-              })}
+              onClick={openNewFrameAtCenter}
               type="button"
             ><IconAddFrame /></button>
             <button
+              aria-keyshortcuts="N"
               aria-label="Add note"
               className="crit-icon-button"
               {...helpTarget({
                 name: "Add note",
-                hotkey: NO_HELP_HOTKEY,
+                hotkey: "N",
                 description: "Add an editable note to the center of the current view."
               })}
-              onClick={() => {
-                addNoteAt(
-                  (viewport.width / 2 - camera.x) / camera.zoom - 140,
-                  (viewport.height / 2 - camera.y) / camera.zoom - 80
-                )
-              }}
+              onClick={addNoteAtCenter}
               type="button"
             ><IconNote /></button>
           </span>
@@ -1375,11 +1414,12 @@ function FrameCard({
               {fullscreen ? <IconMinimize /> : <IconFullscreen />}
             </button> : null}
             {actions.delete ? <button
+              aria-keyshortcuts="Delete"
               aria-label={`Delete ${frame.title}`}
               className="crit-frame__action"
               {...helpTarget({
                 name: "Remove frame",
-                hotkey: NO_HELP_HOTKEY,
+                hotkey: "Del",
                 description: "Remove this frame from the canvas."
               })}
               onClick={onRemove}
@@ -1391,14 +1431,6 @@ function FrameCard({
         {iframeVisible ? (
           <iframe
             allow={iframeAllow}
-            {...helpTarget({
-              name: frame.snapshot === undefined ? "Live frame" : "Snapshot frame",
-              hotkey: NO_HELP_HOTKEY,
-              description:
-                frame.snapshot === undefined
-                  ? "Interact with the live page. Canvas shortcuts still work while it has focus."
-                  : "Review an immutable captured version of this page."
-            })}
             ref={iframeRef}
             referrerPolicy="no-referrer"
             // Snapshot Artifacts are captured foreign pages with their CSP
@@ -1789,7 +1821,7 @@ function NewFrameDialog({
             {...helpTarget({
               name: "Frame URL",
               hotkey: NO_HELP_HOTKEY,
-              description: "Enter the HTTP or HTTPS page to show in the new live frame."
+              description: "Enter the url to load in a new live frame."
             })}
             onChange={(event) => setUrl(event.currentTarget.value)}
             placeholder="https://example.com/iteration"
@@ -1804,7 +1836,7 @@ function NewFrameDialog({
             {...helpTarget({
               name: "Frame title",
               hotkey: NO_HELP_HOTKEY,
-              description: "Optionally name the frame; Crit infers a title when left blank."
+              description: "Name the frame. Optional, title is inferred when left blank."
             })}
             onChange={(event) => setTitle(event.currentTarget.value)}
             placeholder="Inferred from URL"
@@ -1895,10 +1927,11 @@ function NoteCard({
             onSendToBack={onSendToBack}
           />
           <button
+            aria-keyshortcuts="Delete"
             aria-label="Delete note"
             {...helpTarget({
               name: "Remove note",
-              hotkey: NO_HELP_HOTKEY,
+              hotkey: "Del",
               description: "Remove this note from the canvas."
             })}
             onClick={onRemove}

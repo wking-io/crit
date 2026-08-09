@@ -92,9 +92,9 @@ export function CanvasSelection({
           aria-label={`Resize ${label} from ${handle}`}
           className="crit-selection__handle"
           {...helpTarget({
-            name: `Resize ${label}`,
+            name: "Resize",
             hotkey: NO_HELP_HOTKEY,
-            description: `Drag to resize the ${label} from its ${handle.replace("-", " ")} edge.`
+            description: "Drag to resize the frame in this direction."
           })}
           data-resize-handle={handle}
           data-visible-handle={cornerHandles.has(handle) || undefined}
