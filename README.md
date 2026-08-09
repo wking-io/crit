@@ -124,7 +124,7 @@ is added beside it, with its source URL, capture time, artifact ID, and size.
 The Vite plugin serves artifacts under `/__crit/snapshots/<artifact-id>` with
 immutable cache headers. Capture currently supports HTTP and HTTPS Frames and
 limits an individual fetched resource to 12 MiB, the final artifact to 30 MiB,
-and capture requests to 60 seconds. This is page preservation, not an asset
+and each resource fetch to 60 seconds. This is page preservation, not an asset
 upload system; V1 still has no user-managed uploads.
 
 ## Browser behavior
@@ -169,6 +169,10 @@ Iframe capabilities are configurable:
   iframeSandbox="allow-scripts allow-same-origin allow-forms"
 />
 ```
+
+When `iframeSandbox` is not set, archived Frames render their Snapshot
+Artifact with `sandbox="allow-scripts"` so captured foreign scripts never run
+same-origin with the host application; live Frames stay unsandboxed.
 
 Pass `draftJournal={false}` to disable recovery, a custom `CritClientShape` for
 another local HTTP host, or `onSession` to access `dispatch`, `flush`, `refresh`,

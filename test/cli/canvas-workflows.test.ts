@@ -324,4 +324,72 @@ describe("crit Canvas workflows", () => {
       })
     }).pipe(Effect.provide(cliLayer))
   })
+
+  it.effect("rejects AddSnapshotFrame on the public apply surface", () => {
+    const storeLayer = FileSystemCanvasRepository.layer({ root })
+    const runtimeLayer = CritRuntimeLive.pipe(Layer.provide(storeLayer))
+    const cliLayer = Layer.mergeAll(
+      FileSystem.layerNoop({}),
+      Path.layer,
+      Stdio.layerTest({
+        stdout: () =>
+          Sink.forEach((chunk: string | Uint8Array) =>
+            Effect.sync(() => {
+              stdout.push(
+                typeof chunk === "string" ? chunk : new TextDecoder().decode(chunk)
+              )
+            })
+          )
+      }),
+      Layer.succeed(
+        Terminal.Terminal,
+        Terminal.make({
+          columns: Effect.succeed(80),
+          rows: Effect.succeed(24),
+          readInput: Effect.die("unused"),
+          readLine: Effect.die("unused"),
+          display: () => Effect.void
+        })
+      ),
+      Layer.succeed(
+        ChildProcessSpawner.ChildProcessSpawner,
+        ChildProcessSpawner.make(() => Effect.die("unused"))
+      ),
+      storeLayer,
+      runtimeLayer
+    )
+
+    return Effect.gen(function*() {
+      yield* runCrit(["create", "review", "--title", "Review", "--json"])
+      stdout = []
+
+      const forged = JSON.stringify([
+        {
+          _tag: "AddSnapshotFrame",
+          id: "snapshot-forged",
+          sourceFrameId: "candidate",
+          expectedSourceUrl: "https://checkout.localhost/v1",
+          url: "/__crit/snapshots/forged",
+          artifact: {
+            artifactId: "forged",
+            sourceUrl: "https://checkout.localhost/v1",
+            capturedAt: "2026-01-01T00:00:00.000Z",
+            sizeBytes: 1
+          }
+        }
+      ])
+      const failure = yield* runCrit(["apply", "review", forged, "--json"]).pipe(
+        Effect.flip
+      )
+      expect(failure).toMatchObject({
+        _tag: "InvalidCliInput",
+        detail: expect.stringContaining("crit snapshot")
+      })
+      stdout = []
+
+      yield* runCrit(["open", "review", "--json"])
+      const opened = JSON.parse(stdout.join(""))
+      expect(opened.canvas).toMatchObject({ revision: 0, frameCount: 0 })
+    }).pipe(Effect.provide(cliLayer))
+  })
 })

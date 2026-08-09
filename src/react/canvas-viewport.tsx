@@ -1695,7 +1695,13 @@ function FrameCard({
             allow={iframeAllow}
             ref={iframeRef}
             referrerPolicy="no-referrer"
-            sandbox={iframeSandbox}
+            // Snapshot Artifacts are captured foreign pages with their CSP
+            // stripped, served from the dev-server origin — never let their
+            // scripts run same-origin with the host app and the Crit API.
+            sandbox={
+              iframeSandbox ??
+              (frame.snapshot === undefined ? undefined : "allow-scripts")
+            }
             src={frame.url}
             title={frame.title}
           />

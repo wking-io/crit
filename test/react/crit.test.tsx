@@ -303,6 +303,95 @@ describe("Crit", () => {
     expect(html).not.toContain('aria-label="Resize"')
   })
 
+  it("sandboxes archived Frame artifacts while leaving live Frames unsandboxed", async () => {
+    const canvas = Canvas.create({ id: "review", title: "Review" })
+    await Effect.runPromise(
+      Canvas.apply(
+        canvas,
+        CanvasCommand.addFrame({
+          id: "candidate",
+          url: "https://example.com/candidate",
+          title: "Candidate",
+          provenance: { kind: "manual", sourceId: "test" }
+        }),
+        CanvasCommand.addSnapshotFrame({
+          id: "snapshot-artifact",
+          sourceFrameId: "candidate",
+          expectedSourceUrl: "https://example.com/candidate",
+          url: "/__crit/snapshots/artifact",
+          artifact: {
+            artifactId: "artifact",
+            sourceUrl: "https://example.com/candidate",
+            capturedAt: "2026-01-01T00:00:00.000Z",
+            sizeBytes: 512
+          }
+        }),
+        // Server rendering has a zero-sized viewport, so pull the archived
+        // Frame back inside the iframe mount margin.
+        CanvasCommand.moveFrame({ id: "snapshot-artifact", x: 0, y: 0 })
+      )
+    )
+
+    const html = renderToStaticMarkup(
+      <CanvasViewport
+        dispatch={() => Effect.void}
+        document={Canvas.export(canvas)}
+      />
+    )
+
+    const iframes = html.match(/<iframe[^>]*>/g) ?? []
+    const archived = iframes.filter((tag) => tag.includes("/__crit/snapshots/"))
+    const live = iframes.filter((tag) => tag.includes("example.com/candidate"))
+    expect(archived).toHaveLength(1)
+    expect(live).toHaveLength(1)
+    expect(archived[0]).toContain('sandbox="allow-scripts"')
+    expect(live[0]).not.toContain("sandbox")
+  })
+
+  it("keeps an explicit iframeSandbox policy for archived Frames", async () => {
+    const canvas = Canvas.create({ id: "review", title: "Review" })
+    await Effect.runPromise(
+      Canvas.apply(
+        canvas,
+        CanvasCommand.addFrame({
+          id: "candidate",
+          url: "https://example.com/candidate",
+          title: "Candidate",
+          provenance: { kind: "manual", sourceId: "test" }
+        }),
+        CanvasCommand.addSnapshotFrame({
+          id: "snapshot-artifact",
+          sourceFrameId: "candidate",
+          expectedSourceUrl: "https://example.com/candidate",
+          url: "/__crit/snapshots/artifact",
+          artifact: {
+            artifactId: "artifact",
+            sourceUrl: "https://example.com/candidate",
+            capturedAt: "2026-01-01T00:00:00.000Z",
+            sizeBytes: 512
+          }
+        }),
+        // Server rendering has a zero-sized viewport, so pull the archived
+        // Frame back inside the iframe mount margin.
+        CanvasCommand.moveFrame({ id: "snapshot-artifact", x: 0, y: 0 })
+      )
+    )
+
+    const html = renderToStaticMarkup(
+      <CanvasViewport
+        dispatch={() => Effect.void}
+        document={Canvas.export(canvas)}
+        iframeSandbox="allow-scripts allow-forms"
+      />
+    )
+
+    const iframes = html.match(/<iframe[^>]*>/g) ?? []
+    expect(iframes.length).toBeGreaterThan(0)
+    for (const tag of iframes) {
+      expect(tag).toContain('sandbox="allow-scripts allow-forms"')
+    }
+  })
+
   it("offers snapshot capture for live Frames", async () => {
     const canvas = Canvas.create({ id: "review", title: "Review" })
     await Effect.runPromise(
