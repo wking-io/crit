@@ -16,6 +16,7 @@ import {
   SnapshotStorageFailed,
   type SnapshotArchiveShape
 } from "../runtime/snapshot-archive.js"
+import { hasNodeErrorCode } from "./internal/node-error.js"
 
 const SNAPSHOT_DIRECTORY = ".crit/snapshots"
 const MAX_RESOURCE_BYTES = 12 * 1024 * 1024
@@ -131,7 +132,7 @@ const make = (
           )
         },
         catch: (cause) =>
-          isNodeError(cause, "ENOENT")
+          hasNodeErrorCode(cause, "ENOENT")
             ? new SnapshotNotFound({ artifactId })
             : storageFailure("read", artifactId, cause)
       }),
@@ -142,7 +143,7 @@ const make = (
           try {
             await unlink(snapshotFilePath(directory, artifactId))
           } catch (cause) {
-            if (!isNodeError(cause, "ENOENT")) throw cause
+            if (!hasNodeErrorCode(cause, "ENOENT")) throw cause
           }
         },
         catch: (cause) => storageFailure("remove", artifactId, cause)
@@ -696,8 +697,3 @@ const formatBytes = (value: number) => {
   if (value < 1024 * 1024) return `${Math.ceil(value / 1024)} KB`
   return `${(value / (1024 * 1024)).toFixed(1)} MB`
 }
-
-const isNodeError = (cause: unknown, code: string) =>
-  cause instanceof Error &&
-  "code" in cause &&
-  cause.code === code

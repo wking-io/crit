@@ -4,13 +4,13 @@ import {
   CanvasCommandSchema,
   FrameDisplay,
   FrameProvenance,
+  PositiveDimension,
   SnapshotArtifact,
   FrameStatus,
   type CanvasCommand as CanvasCommandInput
 } from "./canvas-command.js"
 
 const CanvasTypeId: unique symbol = Symbol.for("@riff-refine/crit/Canvas")
-const PositiveDimension = Schema.Finite.check(Schema.isGreaterThan(0))
 const NonNegativeInteger = Schema.Finite.check(
   Schema.isInt(),
   Schema.isGreaterThanOrEqualTo(0)

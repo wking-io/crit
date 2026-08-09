@@ -98,7 +98,7 @@ export const MoveFrameCommand = Schema.TaggedStruct("MoveFrame", {
 })
 export type MoveFrameCommand = typeof MoveFrameCommand.Type
 
-const PositiveDimension = Schema.Finite.check(Schema.isGreaterThan(0))
+export const PositiveDimension = Schema.Finite.check(Schema.isGreaterThan(0))
 
 export const ResizeFrameCommand = Schema.TaggedStruct("ResizeFrame", {
   id: Schema.String,

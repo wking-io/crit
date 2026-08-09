@@ -24,6 +24,7 @@ import {
   canonicalizeDocument,
   serializeDocument
 } from "../runtime/internal/document-codec.js"
+import { hasNodeErrorCode } from "./internal/node-error.js"
 
 const storageFailure = (operation: string, id: string, cause: unknown) =>
   unavailableCanvas(operation, id, cause)
@@ -32,16 +33,13 @@ const storageFailure = (operation: string, id: string, cause: unknown) =>
 // lock older than this belongs to a wedged or dead writer and is safe to steal.
 const staleLockTtlMillis = 60_000
 
-const hasCode = (cause: unknown, code: string) =>
-  cause instanceof Error && "code" in cause && cause.code === code
-
 const isProcessAlive = (pid: number) => {
   try {
     process.kill(pid, 0)
     return true
   } catch (cause) {
     // EPERM means the process exists but belongs to another user.
-    return hasCode(cause, "EPERM")
+    return hasNodeErrorCode(cause, "EPERM")
   }
 }
 
@@ -59,7 +57,7 @@ const removeLockIfStale = async (lock: string) => {
   try {
     modifiedAtMillis = (await stat(lock)).mtimeMs
   } catch (cause) {
-    if (hasCode(cause, "ENOENT")) return true
+    if (hasNodeErrorCode(cause, "ENOENT")) return true
     throw cause
   }
 
@@ -68,7 +66,7 @@ const removeLockIfStale = async (lock: string) => {
     const pid = Number.parseInt((await readFile(lock, "utf8")).trim(), 10)
     ownerDead = Number.isSafeInteger(pid) && pid > 0 && !isProcessAlive(pid)
   } catch (cause) {
-    if (!hasCode(cause, "ENOENT")) throw cause
+    if (!hasNodeErrorCode(cause, "ENOENT")) throw cause
     return true
   }
 
@@ -78,7 +76,7 @@ const removeLockIfStale = async (lock: string) => {
   try {
     await unlink(lock)
   } catch (cause) {
-    if (!hasCode(cause, "ENOENT")) throw cause
+    if (!hasNodeErrorCode(cause, "ENOENT")) throw cause
   }
   return true
 }
@@ -196,7 +194,7 @@ const make = (root: string) =>
               await handle.close()
               return
             } catch (cause) {
-              if (!hasCode(cause, "EEXIST")) throw cause
+              if (!hasNodeErrorCode(cause, "EEXIST")) throw cause
               if (!checkedForStaleLock) {
                 checkedForStaleLock = true
                 if (await removeLockIfStale(lock)) continue

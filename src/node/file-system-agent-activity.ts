@@ -11,6 +11,7 @@ import {
   type AgentActivityStoreShape,
   type SignalAgentActivityInput
 } from "../runtime/agent-activity.js"
+import { hasNodeErrorCode } from "./internal/node-error.js"
 
 const ACTIVITY_DIRECTORY = ".crit/activity"
 const MAX_ACTIVITY_SECONDS = 60 * 60
@@ -48,7 +49,7 @@ const make = (
     try {
       await unlink(targetFor(canvasId))
     } catch (cause) {
-      if (!isNodeError(cause, "ENOENT")) throw cause
+      if (!hasNodeErrorCode(cause, "ENOENT")) throw cause
     }
   }
 
@@ -59,7 +60,7 @@ const make = (
         try {
           source = await readFile(targetFor(canvasId), "utf8")
         } catch (cause) {
-          if (isNodeError(cause, "ENOENT")) return inactive(canvasId)
+          if (hasNodeErrorCode(cause, "ENOENT")) return inactive(canvasId)
           throw cause
         }
         const decoded = Schema.decodeUnknownSync(AgentActivityStatus)(
@@ -138,6 +139,3 @@ const layer = (options: FileSystemAgentActivityOptions) =>
   Layer.succeed(AgentActivityStore, make(options))
 
 export const FileSystemAgentActivity = { make, layer } as const
-
-const isNodeError = (cause: unknown, code: string) =>
-  cause instanceof Error && "code" in cause && cause.code === code
