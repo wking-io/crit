@@ -144,11 +144,11 @@ Single-key tool shortcuts are ignored while typing in inputs. The same behavior
 is preserved while focus is inside a live Frame.
 
 The Vite-served editor includes development-only DialKit panels for tuning
-Frame chrome and zoom physics. The zoom panel controls wheel and pinch
-sensitivity, keyboard impulse, exponential decay, maximum speed, and the speed
-at which motion comes to rest. Values and presets persist locally; applications
-can also pass the same values through the `frameChrome` and `zoomPhysics` props
-on `<Crit>`.
+Frame chrome and camera pan/zoom speed. Camera input follows the same immediate
+model across wheel, trackpad, touch pinch, and Frame bridges; keyboard zoom uses
+discrete steps. Values and presets persist locally. Applications can pass
+`frameChrome` and `cameraOptions` to `<Crit>`; camera options also control wheel
+behavior and the ordered zoom steps that define the minimum and maximum zoom.
 
 Live Frame review states are **In progress**, **Ready for review**, **Approved**,
 and **Changes requested**. Ready-for-review Frames receive a distinct purple

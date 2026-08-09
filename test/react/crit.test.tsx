@@ -7,16 +7,12 @@ import {
   CRIT_HOTKEYS,
   DEFAULT_FRAME_CHROME_SETTINGS,
   FRAME_SIZE_PRESETS,
-  cameraAfterPinchScale,
-  cameraAfterWheel,
-  cameraAfterZoomStep,
   frameChromeLayout,
   frameChromeMetrics,
   frameUiScale,
-  frameToolbarMode,
-  wheelDestination
+  frameToolbarMode
 } from "../../src/react/canvas-viewport.js"
-import { CanvasSelection, resizeGeometry } from "../../src/react/canvas-selection.js"
+import { CanvasSelection } from "../../src/react/canvas-selection.js"
 import {
   PAN_CANVAS_CURSOR,
   PANNING_CANVAS_CURSOR,
@@ -69,45 +65,6 @@ describe("Crit", () => {
     expect(critStyles.split(MOVE_CANVAS_CURSOR)).toHaveLength(3)
   })
 
-  it("keeps wheel zoom on the canvas and anchored beneath the pointer", () => {
-    const current = { x: 10, y: 20, zoom: 1 }
-    const pointer = { clientX: 110, clientY: 220 }
-    const next = cameraAfterWheel(current, {
-      ...pointer,
-      ctrlKey: true,
-      metaKey: false,
-      deltaX: 0,
-      deltaY: -100
-    }, { left: 10, top: 20 })
-
-    expect(next.zoom).toBeGreaterThan(current.zoom)
-    expect((100 - next.x) / next.zoom).toBeCloseTo(90)
-    expect((200 - next.y) / next.zoom).toBeCloseTo(180)
-    expect(cameraAfterWheel(current, {
-      ...pointer,
-      ctrlKey: false,
-      metaKey: false,
-      deltaX: 12,
-      deltaY: -8
-    }, { left: 10, top: 20 })).toEqual({ x: -2, y: 28, zoom: 1 })
-  })
-
-  it("keeps plain frame-content scrolling in the frame while routing zoom to the canvas", () => {
-    expect(wheelDestination({ ctrlKey: false, metaKey: false }, true)).toBe("frame")
-    expect(wheelDestination({ ctrlKey: false, metaKey: false }, false)).toBe("canvas")
-    expect(wheelDestination({ ctrlKey: true, metaKey: false }, true)).toBe("canvas")
-    expect(wheelDestination({ ctrlKey: false, metaKey: true }, true)).toBe("canvas")
-  })
-
-  it("maps native touchpad pinch scale to the canvas around its focal point", () => {
-    const current = { x: 40, y: 50, zoom: 0.65 }
-    const next = cameraAfterPinchScale(current, 1.25, { x: 420, y: 260 })
-
-    expect(next.zoom).toBeCloseTo(0.8125)
-    expect((420 - next.x) / next.zoom).toBeCloseTo((420 - current.x) / current.zoom)
-    expect((260 - next.y) / next.zoom).toBeCloseTo((260 - current.y) / current.zoom)
-  })
-
   it("defines global tool and zoom shortcuts for TanStack Hotkeys", () => {
     expect(CRIT_HOTKEYS).toEqual({
       selectTool: "V",
@@ -120,29 +77,6 @@ describe("Crit", () => {
         { key: "-", mod: true },
         { key: "-", mod: true, shift: true }
       ]
-    })
-  })
-
-  it("zooms by keyboard around the canvas center", () => {
-    const current = { x: 100, y: 80, zoom: 0.5 }
-    const next = cameraAfterZoomStep(current, 1, { width: 1200, height: 800 })
-
-    expect(next.zoom).toBeGreaterThan(current.zoom)
-    expect((600 - next.x) / next.zoom).toBeCloseTo((600 - current.x) / current.zoom)
-    expect((400 - next.y) / next.zoom).toBeCloseTo((400 - current.y) / current.zoom)
-  })
-
-  it("resizes from every selected edge while anchoring the opposite edge", () => {
-    const geometry = { x: 100, y: 200, width: 400, height: 300 }
-
-    expect(resizeGeometry(geometry, "north-west", 50, 40)).toEqual({
-      x: 150, y: 240, width: 350, height: 260
-    })
-    expect(resizeGeometry(geometry, "south-east", 50, 40)).toEqual({
-      x: 100, y: 200, width: 450, height: 340
-    })
-    expect(resizeGeometry(geometry, "west", 500, 0)).toEqual({
-      x: 320, y: 200, width: 180, height: 300
     })
   })
 

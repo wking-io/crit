@@ -29,7 +29,7 @@ import {
   CanvasViewport,
   type FrameChromeSettings
 } from "./canvas-viewport.js"
-import type { ZoomPhysicsSettings } from "./zoom-physics.js"
+import type { CanvasCameraOptions } from "./canvas-camera.js"
 
 const rootStyle: CSSProperties = {
   background: "oklch(98.5% 0 none)",
@@ -94,7 +94,7 @@ export interface CritProps {
   readonly iframeAllow?: string
   readonly iframeSandbox?: string
   readonly frameChrome?: Partial<FrameChromeSettings>
-  readonly zoomPhysics?: Partial<ZoomPhysicsSettings>
+  readonly cameraOptions?: Partial<CanvasCameraOptions>
   readonly onSession?: (session: CanvasSessionHandle) => void
   readonly onCommandError?: (message: string) => void
   readonly loadingFallback?: ReactNode
@@ -114,7 +114,7 @@ export function Crit({
   iframeAllow,
   iframeSandbox,
   frameChrome,
-  zoomPhysics,
+  cameraOptions,
   onSession,
   onCommandError,
   loadingFallback,
@@ -259,7 +259,7 @@ export function Crit({
         document={document}
         snapshotFrame={session.snapshotFrame}
         {...(frameChrome === undefined ? {} : { frameChrome })}
-        {...(zoomPhysics === undefined ? {} : { zoomPhysics })}
+        {...(cameraOptions === undefined ? {} : { cameraOptions })}
         {...(iframeAllow === undefined ? {} : { iframeAllow })}
         {...(iframeSandbox === undefined ? {} : { iframeSandbox })}
         {...(onCommandError === undefined ? {} : { onCommandError })}

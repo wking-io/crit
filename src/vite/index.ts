@@ -233,8 +233,8 @@ const buildEditorBundle = async () => {
         import {
           connectCanvasLiveRefresh,
           Crit,
-          DEFAULT_FRAME_CHROME_SETTINGS,
-          DEFAULT_ZOOM_PHYSICS_SETTINGS
+          DEFAULT_CANVAS_CAMERA_OPTIONS,
+          DEFAULT_FRAME_CHROME_SETTINGS
         } from ${JSON.stringify(reactEntry)}
 
         const dialKitStyle = document.createElement("style")
@@ -282,41 +282,12 @@ const buildEditorBundle = async () => {
             id: "crit-frame-chrome",
             persist: { key: "crit-frame-chrome", storage: "localStorage", presets: true }
           })
-          const zoom = useDialKit("Zoom physics", {
-            wheelSensitivity: [
-              DEFAULT_ZOOM_PHYSICS_SETTINGS.wheelSensitivity,
-              0.001,
-              0.05,
-              0.001
-            ],
-            pinchSensitivity: [
-              DEFAULT_ZOOM_PHYSICS_SETTINGS.pinchSensitivity,
-              1,
-              20,
-              0.25
-            ],
-            shortcutImpulse: [
-              DEFAULT_ZOOM_PHYSICS_SETTINGS.shortcutImpulse,
-              0.1,
-              5,
-              0.05
-            ],
-            decay: [DEFAULT_ZOOM_PHYSICS_SETTINGS.decay, 0.5, 30, 0.1],
-            maximumSpeed: [
-              DEFAULT_ZOOM_PHYSICS_SETTINGS.maximumSpeed,
-              0.25,
-              12,
-              0.25
-            ],
-            stopSpeed: [
-              DEFAULT_ZOOM_PHYSICS_SETTINGS.stopSpeed,
-              0.001,
-              0.1,
-              0.001
-            ]
+          const camera = useDialKit("Camera", {
+            panSpeed: [DEFAULT_CANVAS_CAMERA_OPTIONS.panSpeed, 0.1, 3, 0.05],
+            zoomSpeed: [DEFAULT_CANVAS_CAMERA_OPTIONS.zoomSpeed, 0.1, 3, 0.05]
           }, {
-            id: "crit-zoom-physics",
-            persist: { key: "crit-zoom-physics", storage: "localStorage", presets: true }
+            id: "crit-camera",
+            persist: { key: "crit-camera", storage: "localStorage", presets: true }
           })
 
           return createElement(Fragment, null,
@@ -330,13 +301,9 @@ const buildEditorBundle = async () => {
                 fullscreenMinimumWidth: chrome.iconMinimumWidth.fullscreen,
                 deleteMinimumWidth: chrome.iconMinimumWidth.delete
               },
-              zoomPhysics: {
-                wheelSensitivity: zoom.wheelSensitivity,
-                pinchSensitivity: zoom.pinchSensitivity,
-                shortcutImpulse: zoom.shortcutImpulse,
-                decay: zoom.decay,
-                maximumSpeed: zoom.maximumSpeed,
-                stopSpeed: zoom.stopSpeed
+              cameraOptions: {
+                panSpeed: camera.panSpeed,
+                zoomSpeed: camera.zoomSpeed
               }
             }),
             createElement(DialRoot, {

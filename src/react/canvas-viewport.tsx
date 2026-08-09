@@ -1,6 +1,5 @@
 import { Tooltip } from "@base-ui/react/tooltip"
 import {
-  getHotkeyManager,
   useHotkey,
   useHotkeys,
   type RegisterableHotkey
@@ -29,7 +28,12 @@ import {
   type CanvasCommand as CanvasCommandValue,
   type FrameReviewStatus
 } from "../core/index.js"
-import { isCritFrameInputMessage } from "../frame-bridge/index.js"
+import {
+  connectBridgedFrameInput,
+  connectCanvasInput,
+  connectSameOriginFrameInput,
+  type FrameInputIntent
+} from "../frame-bridge/index.js"
 import { critStyles } from "./crit-styles.js"
 import {
   canvasCursor,
@@ -37,9 +41,9 @@ import {
 } from "./canvas-cursors.js"
 import {
   CanvasSelection,
-  resizeGeometry,
   type ResizeHandlePosition
 } from "./canvas-selection.js"
+import { beginCanvasInteraction } from "./canvas-interaction.js"
 import { CritTooltipPopup } from "./crit-tooltip.js"
 import {
   FRAME_STATUSES,
@@ -65,35 +69,22 @@ import {
   shortIdForIndex
 } from "./frame-chrome.js"
 import {
-  clampZoomVelocity,
-  pinchZoomImpulse,
-  resolveZoomPhysicsSettings,
-  shortcutZoomImpulse,
-  stepZoomPhysics,
-  wheelZoomImpulse,
-  type ZoomPhysicsSettings,
-  type ZoomPoint
-} from "./zoom-physics.js"
+  canvasUiScale,
+  initialCanvasCameraState,
+  updateCanvasCamera,
+  type CanvasCamera,
+  type CanvasCameraInput,
+  type CanvasCameraOptions
+} from "./canvas-camera.js"
 
-export type CanvasCamera = { readonly x: number; readonly y: number; readonly zoom: number }
 type Camera = CanvasCamera
 type Preview = Readonly<Record<string, CanvasGeometry>>
-export type WheelInput = {
-  readonly clientX: number
-  readonly clientY: number
-  readonly ctrlKey: boolean
-  readonly metaKey: boolean
-  readonly deltaX: number
-  readonly deltaY: number
-}
+type WheelInput = Omit<
+  Extract<FrameInputIntent, { readonly type: "wheel" }>,
+  "type"
+>
 
-export const wheelDestination = (
-  event: Pick<WheelInput, "ctrlKey" | "metaKey">,
-  overFrameContent: boolean
-): "canvas" | "frame" =>
-  overFrameContent && !event.ctrlKey && !event.metaKey ? "frame" : "canvas"
-
-export type CanvasZoomDirection = -1 | 0 | 1
+type CanvasZoomDirection = -1 | 0 | 1
 
 export const CRIT_HOTKEYS = {
   selectTool: "V",
@@ -113,77 +104,6 @@ export const CRIT_HOTKEYS = {
   readonly zoomOut: ReadonlyArray<RegisterableHotkey>
 }
 
-type NativeGestureEvent = Event & {
-  readonly clientX?: number
-  readonly clientY?: number
-  readonly scale?: number
-}
-
-const cameraAtPoint = (
-  current: CanvasCamera,
-  nextZoom: number,
-  point: { readonly x: number; readonly y: number }
-): CanvasCamera => {
-  const worldX = (point.x - current.x) / current.zoom
-  const worldY = (point.y - current.y) / current.zoom
-  return {
-    zoom: nextZoom,
-    x: point.x - worldX * nextZoom,
-    y: point.y - worldY * nextZoom
-  }
-}
-
-export const cameraAfterZoomStep = (
-  current: CanvasCamera,
-  direction: CanvasZoomDirection,
-  viewport: { readonly width: number; readonly height: number }
-): CanvasCamera => {
-  if (direction === 0 || viewport.width <= 0 || viewport.height <= 0) {
-    return current
-  }
-  const nextZoom = Math.min(
-    2,
-    Math.max(0.1, current.zoom * Math.pow(1.2, direction))
-  )
-  return cameraAtPoint(current, nextZoom, {
-    x: viewport.width / 2,
-    y: viewport.height / 2
-  })
-}
-
-export const cameraAfterPinchScale = (
-  current: CanvasCamera,
-  scaleFactor: number,
-  point: { readonly x: number; readonly y: number }
-): CanvasCamera => {
-  if (!Number.isFinite(scaleFactor) || scaleFactor <= 0) return current
-  const nextZoom = Math.min(
-    2,
-    Math.max(0.1, current.zoom * scaleFactor)
-  )
-  return cameraAtPoint(current, nextZoom, point)
-}
-
-export const cameraAfterWheel = (
-  current: CanvasCamera,
-  event: WheelInput,
-  origin: { readonly left: number; readonly top: number }
-): CanvasCamera => {
-  if (event.ctrlKey || event.metaKey) {
-    const pointerX = event.clientX - origin.left
-    const pointerY = event.clientY - origin.top
-    const nextZoom = Math.min(
-      2,
-      Math.max(0.1, current.zoom * Math.exp(-event.deltaY * 0.003))
-    )
-    return cameraAtPoint(current, nextZoom, { x: pointerX, y: pointerY })
-  }
-  return {
-    ...current,
-    x: current.x - event.deltaX,
-    y: current.y - event.deltaY
-  }
-}
 export type FrameToolbarMode = "full" | "compact" | "minimal"
 export type FrameChromeAction =
   | "snapshot"
@@ -234,7 +154,7 @@ export const frameToolbarMode = (
       : "minimal"
 }
 
-export const frameUiScale = (zoom: number) => 1 / Math.max(0.1, zoom)
+export const frameUiScale = (zoom: number) => canvasUiScale(zoom)
 
 export interface FrameChromeMetrics {
   readonly screenHeight: number
@@ -337,7 +257,7 @@ export interface CanvasViewportProps {
     frameId: string
   ) => Effect.Effect<unknown, unknown>
   readonly frameChrome?: Partial<FrameChromeSettings>
-  readonly zoomPhysics?: Partial<ZoomPhysicsSettings>
+  readonly cameraOptions?: Partial<CanvasCameraOptions>
 }
 
 const itemStyle = (geometry: CanvasGeometry, zIndex: number): CSSProperties => ({
@@ -390,27 +310,19 @@ export function CanvasViewport({
   onCommandError,
   snapshotFrame,
   frameChrome,
-  zoomPhysics
+  cameraOptions
 }: CanvasViewportProps) {
   const rootRef = useRef<HTMLDivElement>(null)
-  const [camera, setCamera] = useState<Camera>({ x: 40, y: 40, zoom: 0.65 })
-  const cameraRef = useRef<Camera>(camera)
-  const zoomVelocityRef = useRef(0)
-  const zoomPointRef = useRef<ZoomPoint>({ x: 0, y: 0 })
-  const zoomFrameRef = useRef<number | null>(null)
-  const zoomFrameTimeRef = useRef<number | null>(null)
-  const resolvedZoomPhysics = useMemo(
-    () => resolveZoomPhysicsSettings(zoomPhysics),
-    [zoomPhysics]
-  )
-  const zoomPhysicsRef = useRef(resolvedZoomPhysics)
-  zoomPhysicsRef.current = resolvedZoomPhysics
+  const initialCameraState = useMemo(() => initialCanvasCameraState(), [])
+  const [camera, setCamera] = useState<Camera>(initialCameraState.camera)
+  const cameraStateRef = useRef(initialCameraState)
+  const cameraOptionsRef = useRef(cameraOptions)
+  cameraOptionsRef.current = cameraOptions
   const [viewport, setViewport] = useState({ width: 0, height: 0 })
   const [preview, setPreview] = useState<Preview>({})
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [tool, setTool] = useState<CanvasTool>("select")
   const [panning, setPanning] = useState(false)
-  const gestureActiveRef = useRef(false)
   const [canvasMenu, setCanvasMenu] = useState<
     (ContextMenuPosition & { readonly worldX: number; readonly worldY: number }) | null
   >(null)
@@ -420,59 +332,21 @@ export function CanvasViewport({
   } | null>(null)
   const toolbarTooltip = useMemo(() => Tooltip.createHandle<string>(), [])
 
-  useEffect(() => {
-    cameraRef.current = camera
-  }, [camera])
-
-  const stopZoomMotion = useCallback(() => {
-    if (zoomFrameRef.current !== null) {
-      cancelAnimationFrame(zoomFrameRef.current)
-      zoomFrameRef.current = null
-    }
-    zoomFrameTimeRef.current = null
-    zoomVelocityRef.current = 0
-  }, [])
-
-  const scheduleZoomMotion = useCallback(() => {
-    if (zoomFrameRef.current !== null) return
-    zoomFrameTimeRef.current = performance.now()
-
-    const tick = (time: number) => {
-      const previousTime = zoomFrameTimeRef.current ?? time
-      zoomFrameTimeRef.current = time
-      const next = stepZoomPhysics(
-        cameraRef.current,
-        zoomVelocityRef.current,
-        time - previousTime,
-        zoomPointRef.current,
-        zoomPhysicsRef.current
-      )
-      cameraRef.current = next.camera
-      zoomVelocityRef.current = next.velocity
+  const commitCameraState = useCallback(
+    (next: ReturnType<typeof initialCanvasCameraState>) => {
+      cameraStateRef.current = next
       setCamera(next.camera)
+    },
+    []
+  )
 
-      if (next.velocity === 0) {
-        zoomFrameRef.current = null
-        zoomFrameTimeRef.current = null
-        return
-      }
-      zoomFrameRef.current = requestAnimationFrame(tick)
-    }
-
-    zoomFrameRef.current = requestAnimationFrame(tick)
-  }, [])
-
-  const addZoomImpulse = useCallback((impulse: number, point: ZoomPoint) => {
-    if (!Number.isFinite(impulse) || impulse === 0) return
-    zoomPointRef.current = point
-    zoomVelocityRef.current = clampZoomVelocity(
-      zoomVelocityRef.current + impulse,
-      zoomPhysicsRef.current
-    )
-    scheduleZoomMotion()
-  }, [scheduleZoomMotion])
-
-  useEffect(() => stopZoomMotion, [stopZoomMotion])
+  const applyCameraInput = useCallback((input: CanvasCameraInput) => {
+    commitCameraState(updateCanvasCamera(
+      cameraStateRef.current,
+      input,
+      cameraOptionsRef.current
+    ))
+  }, [commitCameraState])
 
   useEffect(() => {
     const root = rootRef.current
@@ -536,17 +410,16 @@ export function CanvasViewport({
   const startPan = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) return
     event.preventDefault()
-    stopZoomMotion()
     setSelectedId(null)
     setPanning(true)
     const start = { x: event.clientX, y: event.clientY, camera }
     event.currentTarget.setPointerCapture(event.pointerId)
     const move = (next: PointerEvent) =>
-      setCamera({
+      commitCameraState(initialCanvasCameraState({
         ...start.camera,
         x: start.camera.x + next.clientX - start.x,
         y: start.camera.y + next.clientY - start.y
-      })
+      }))
     const end = () => {
       setPanning(false)
       window.removeEventListener("pointermove", move)
@@ -561,37 +434,30 @@ export function CanvasViewport({
   const applyWheel = useCallback((event: WheelInput) => {
     const rect = rootRef.current?.getBoundingClientRect()
     if (rect === undefined) return
-    if (event.ctrlKey || event.metaKey) {
-      addZoomImpulse(
-        wheelZoomImpulse(event.deltaY, zoomPhysicsRef.current),
-        { x: event.clientX - rect.left, y: event.clientY - rect.top }
-      )
-      return
-    }
-    stopZoomMotion()
-    setCamera((current) => cameraAfterWheel(current, event, rect))
-  }, [addZoomImpulse, stopZoomMotion])
+    applyCameraInput({ type: "wheel", ...event, origin: rect })
+  }, [applyCameraInput])
 
   const applyPinchScale = useCallback((
     scaleFactor: number,
     clientX: number,
-    clientY: number
+    clientY: number,
+    deltaX: number,
+    deltaY: number
   ) => {
     const rect = rootRef.current?.getBoundingClientRect()
     if (rect === undefined) return
-    addZoomImpulse(
-      pinchZoomImpulse(scaleFactor, zoomPhysicsRef.current),
-      { x: clientX - rect.left, y: clientY - rect.top }
-    )
-  }, [addZoomImpulse])
+    applyCameraInput({
+      type: "pinch",
+      scaleFactor,
+      point: { x: clientX - rect.left, y: clientY - rect.top },
+      deltaX,
+      deltaY
+    })
+  }, [applyCameraInput])
 
   const applyZoomStep = useCallback((direction: CanvasZoomDirection) => {
-    if (direction === 0 || viewport.width <= 0 || viewport.height <= 0) return
-    addZoomImpulse(
-      shortcutZoomImpulse(direction, zoomPhysicsRef.current),
-      { x: viewport.width / 2, y: viewport.height / 2 }
-    )
-  }, [addZoomImpulse, viewport])
+    applyCameraInput({ type: "zoom-step", direction, viewport })
+  }, [applyCameraInput, viewport])
 
   useHotkeys([
     {
@@ -622,71 +488,25 @@ export function CanvasViewport({
   useEffect(() => {
     const root = rootRef.current
     if (root === null) return
-    const captureWheel = (event: WheelEvent) => {
-      const rect = root.getBoundingClientRect()
-      if (
-        event.clientX < rect.left || event.clientX > rect.right ||
-        event.clientY < rect.top || event.clientY > rect.bottom
-      ) return
-      const overFrameContent =
-        event.target instanceof Element &&
-        event.target.closest(".crit-frame__viewport") !== null
-      if (wheelDestination(event, overFrameContent) === "frame") return
-      event.preventDefault()
-      event.stopPropagation()
-      if (gestureActiveRef.current && (event.ctrlKey || event.metaKey)) return
-      applyWheel(event)
-    }
-    window.addEventListener("wheel", captureWheel, {
-      capture: true,
-      passive: false
-    })
-    return () => window.removeEventListener("wheel", captureWheel, true)
-  }, [applyWheel])
-
-  useEffect(() => {
-    const root = rootRef.current
-    if (root === null) return
-    let previousScale = 1
-    const gesturePoint = (event: NativeGestureEvent) => {
-      const rect = root.getBoundingClientRect()
-      return {
-        x: event.clientX ?? rect.left + rect.width / 2,
-        y: event.clientY ?? rect.top + rect.height / 2
+    return connectCanvasInput({
+      target: window,
+      root,
+      onIntent: (intent) => {
+        if (intent.type === "wheel") {
+          const { type: _type, ...wheel } = intent
+          applyWheel(wheel)
+        } else if (intent.type === "pinch") {
+          applyPinchScale(
+            intent.scaleFactor,
+            intent.clientX,
+            intent.clientY,
+            intent.deltaX,
+            intent.deltaY
+          )
+        }
       }
-    }
-    const captureGestureStart = (event: NativeGestureEvent) => {
-      event.preventDefault()
-      event.stopPropagation()
-      gestureActiveRef.current = true
-      previousScale = event.scale ?? 1
-    }
-    const captureGestureChange = (event: NativeGestureEvent) => {
-      event.preventDefault()
-      event.stopPropagation()
-      const nextScale = event.scale ?? previousScale
-      const factor = nextScale / previousScale
-      previousScale = nextScale
-      const point = gesturePoint(event)
-      applyPinchScale(factor, point.x, point.y)
-    }
-    const captureGestureEnd = (event: NativeGestureEvent) => {
-      event.preventDefault()
-      event.stopPropagation()
-      gestureActiveRef.current = false
-      previousScale = 1
-    }
-    const options = { capture: true, passive: false } as const
-    window.addEventListener("gesturestart", captureGestureStart as EventListener, options)
-    window.addEventListener("gesturechange", captureGestureChange as EventListener, options)
-    window.addEventListener("gestureend", captureGestureEnd as EventListener, options)
-    return () => {
-      gestureActiveRef.current = false
-      window.removeEventListener("gesturestart", captureGestureStart as EventListener, true)
-      window.removeEventListener("gesturechange", captureGestureChange as EventListener, true)
-      window.removeEventListener("gestureend", captureGestureEnd as EventListener, true)
-    }
-  }, [applyPinchScale])
+    })
+  }, [applyPinchScale, applyWheel])
 
   useEffect(() => {
     const html = globalThis.document.documentElement
@@ -708,66 +528,33 @@ export function CanvasViewport({
     event.preventDefault()
     event.stopPropagation()
     const start = { x: event.clientX, y: event.clientY, geometry: geometryOf(item) }
-    const attached = "url" in item
-      ? document.notes.filter((note) => note.attachedTo === item.id)
-      : []
+    const interaction = beginCanvasInteraction({
+      document,
+      itemId: item.id,
+      startGeometry: start.geometry,
+      kind: { type: "move" },
+      geometryOverrides: preview
+    })
+    const deltaAt = (clientX: number, clientY: number) => ({
+      x: (clientX - start.x) / camera.zoom,
+      y: (clientY - start.y) / camera.zoom
+    })
     const move = (next: PointerEvent) => {
-      const deltaX = (next.clientX - start.x) / camera.zoom
-      const deltaY = (next.clientY - start.y) / camera.zoom
-      const geometry = {
-        ...start.geometry,
-        x: start.geometry.x + deltaX,
-        y: start.geometry.y + deltaY
-      }
       setPreview((current) => ({
         ...current,
-        [item.id]: geometry,
-        ...Object.fromEntries(attached.map((note) => [
-          note.id,
-          {
-            ...note.geometry,
-            x: note.geometry.x + deltaX,
-            y: note.geometry.y + deltaY
-          }
-        ]))
+        ...interaction.preview(deltaAt(next.clientX, next.clientY))
       }))
     }
     const end = (next: PointerEvent) => {
       window.removeEventListener("pointermove", move)
       window.removeEventListener("pointerup", end)
-      const geometry = {
-        ...start.geometry,
-        x: start.geometry.x + (next.clientX - start.x) / camera.zoom,
-        y: start.geometry.y + (next.clientY - start.y) / camera.zoom
-      }
       setPreview((current) => {
-        const removedIds = new Set([item.id, ...attached.map((note) => note.id)])
+        const removedIds = new Set(interaction.affectedIds)
         return Object.fromEntries(
           Object.entries(current).filter(([id]) => !removedIds.has(id))
         )
       })
-      if ("url" in item) {
-        run(CanvasCommand.moveFrame({ id: item.id, x: geometry.x, y: geometry.y }))
-        return
-      }
-      const centerX = geometry.x + geometry.width / 2
-      const centerY = geometry.y + geometry.height / 2
-      const parent = document.frames.find((frame) => {
-        const bounds = geometryOf(frame)
-        return (
-          centerX >= bounds.x && centerX <= bounds.x + bounds.width &&
-          centerY >= bounds.y && centerY <= bounds.y + bounds.height
-        )
-      })
-      const commands: Array<CanvasCommandValue> = [
-        CanvasCommand.moveNote({ id: item.id, x: geometry.x, y: geometry.y })
-      ]
-      if (parent !== undefined && item.attachedTo !== parent.id) {
-        commands.push(CanvasCommand.attachNote({ id: item.id, frameId: parent.id }))
-      } else if (parent === undefined && item.attachedTo !== null) {
-        commands.push(CanvasCommand.detachNote({ id: item.id }))
-      }
-      run(...commands)
+      run(...interaction.finish(deltaAt(next.clientX, next.clientY)))
     }
     window.addEventListener("pointermove", move)
     window.addEventListener("pointerup", end, { once: true })
@@ -781,89 +568,44 @@ export function CanvasViewport({
     event.preventDefault()
     event.stopPropagation()
     const start = { x: event.clientX, y: event.clientY, geometry: geometryOf(item) }
-    const attached = "url" in item
-      ? document.notes.filter((note) => note.attachedTo === item.id)
-      : []
-    const geometryAt = (clientX: number, clientY: number) =>
-      resizeGeometry(
-        start.geometry,
-        handle,
-        (clientX - start.x) / camera.zoom,
-        (clientY - start.y) / camera.zoom
-      )
+    const interaction = beginCanvasInteraction({
+      document,
+      itemId: item.id,
+      startGeometry: start.geometry,
+      kind: { type: "resize", handle },
+      geometryOverrides: preview
+    })
+    const deltaAt = (clientX: number, clientY: number) => ({
+      x: (clientX - start.x) / camera.zoom,
+      y: (clientY - start.y) / camera.zoom
+    })
     const move = (next: PointerEvent) => {
-      const geometry = geometryAt(next.clientX, next.clientY)
-      const deltaX = geometry.x - start.geometry.x
-      const deltaY = geometry.y - start.geometry.y
       setPreview((current) => ({
         ...current,
-        [item.id]: geometry,
-        ...Object.fromEntries(attached.map((note) => [
-          note.id,
-          {
-            ...note.geometry,
-            x: note.geometry.x + deltaX,
-            y: note.geometry.y + deltaY
-          }
-        ]))
+        ...interaction.preview(deltaAt(next.clientX, next.clientY))
       }))
     }
     const end = (next: PointerEvent) => {
       window.removeEventListener("pointermove", move)
       window.removeEventListener("pointerup", end)
-      const geometry = geometryAt(next.clientX, next.clientY)
       setPreview((current) => {
-        const removedIds = new Set([item.id, ...attached.map((note) => note.id)])
+        const removedIds = new Set(interaction.affectedIds)
         return Object.fromEntries(
           Object.entries(current).filter(([id]) => !removedIds.has(id))
         )
       })
-      const commands: Array<CanvasCommandValue> = []
-      if (geometry.x !== start.geometry.x || geometry.y !== start.geometry.y) {
-        commands.push(
-          "url" in item
-            ? CanvasCommand.moveFrame({ id: item.id, x: geometry.x, y: geometry.y })
-            : CanvasCommand.moveNote({ id: item.id, x: geometry.x, y: geometry.y })
-        )
-      }
-      commands.push(
-        "url" in item
-          ? CanvasCommand.resizeFrame({ id: item.id, width: geometry.width, height: geometry.height })
-          : CanvasCommand.resizeNote({ id: item.id, width: geometry.width, height: geometry.height })
-      )
-      if ("url" in item && item.display.heightMode === "fit-page") {
-        commands.unshift(
-          CanvasCommand.updateFrame({
-            id: item.id,
-            changes: { display: { heightMode: "viewport" } }
-          })
-        )
-      }
-      run(...commands)
+      run(...interaction.finish(deltaAt(next.clientX, next.clientY)))
     }
     window.addEventListener("pointermove", move)
     window.addEventListener("pointerup", end, { once: true })
   }
 
   const fit = () => {
-    stopZoomMotion()
     const items = [...document.frames, ...document.notes]
-    if (items.length === 0) {
-      setCamera({ x: 40, y: 40, zoom: 0.65 })
-      return
-    }
-    const left = Math.min(...items.map((item) => item.geometry.x))
-    const top = Math.min(...items.map((item) => item.geometry.y))
-    const right = Math.max(...items.map((item) => item.geometry.x + item.geometry.width))
-    const bottom = Math.max(...items.map((item) => item.geometry.y + item.geometry.height))
-    const nextZoom = Math.min(1, Math.max(0.1, Math.min(
-      (viewport.width - 80) / Math.max(1, right - left),
-      (viewport.height - 80) / Math.max(1, bottom - top)
-    )))
-    setCamera({
-      zoom: nextZoom,
-      x: (viewport.width - (right - left) * nextZoom) / 2 - left * nextZoom,
-      y: (viewport.height - (bottom - top) * nextZoom) / 2 - top * nextZoom
+    applyCameraInput({
+      type: "fit",
+      geometries: items.map((item) => item.geometry),
+      viewport
     })
   }
 
@@ -931,10 +673,26 @@ export function CanvasViewport({
               )}
               selected={selectedId === item.id}
               onSelect={() => setSelectedId(item.id)}
-              onFrameWheel={applyWheel}
-              onFramePinchScale={applyPinchScale}
-              onFrameZoomShortcut={applyZoomStep}
-              onFrameToolShortcut={setTool}
+              onInputIntent={(intent) => {
+                if (intent.type === "select") {
+                  setSelectedId(item.id)
+                } else if (intent.type === "tool") {
+                  setTool(intent.tool)
+                } else if (intent.type === "zoom-step") {
+                  applyZoomStep(intent.direction)
+                } else if (intent.type === "pinch") {
+                  applyPinchScale(
+                    intent.scaleFactor,
+                    intent.clientX,
+                    intent.clientY,
+                    intent.deltaX,
+                    intent.deltaY
+                  )
+                } else {
+                  const { type: _type, ...wheel } = intent
+                  applyWheel(wheel)
+                }
+              }}
               onMove={(event, frame) => {
                 setSelectedId(frame.id)
                 startMove(event, frame)
@@ -1143,10 +901,7 @@ function FrameCard({
   onRemove,
   onResize,
   onSelect,
-  onFrameWheel,
-  onFramePinchScale,
-  onFrameToolShortcut,
-  onFrameZoomShortcut,
+  onInputIntent,
   onSnapshot,
   onSnapshotError,
   onSendToBack,
@@ -1173,14 +928,7 @@ function FrameCard({
     handle: ResizeHandlePosition
   ) => void
   readonly onSelect: () => void
-  readonly onFrameWheel: (event: WheelInput) => void
-  readonly onFramePinchScale: (
-    scaleFactor: number,
-    clientX: number,
-    clientY: number
-  ) => void
-  readonly onFrameToolShortcut: (tool: CanvasTool) => void
-  readonly onFrameZoomShortcut: (direction: CanvasZoomDirection) => void
+  readonly onInputIntent: (intent: FrameInputIntent) => void
   readonly onSnapshot?: () => Effect.Effect<unknown, unknown>
   readonly onSnapshotError: (cause: unknown) => void
   readonly onSendToBack: () => void
@@ -1276,52 +1024,11 @@ function FrameCard({
       try {
         const iframeWindow = iframe.contentWindow
         if (iframeWindow === null) return
-        const relay = (event: WheelEvent) => {
-          if (event.defaultPrevented) return
-          if (wheelDestination(event, true) === "frame") return
-          event.preventDefault()
-          event.stopPropagation()
-          if (gestureActive && (event.ctrlKey || event.metaKey)) return
-          const rect = iframe.getBoundingClientRect()
-          onFrameWheel({
-            clientX: rect.left + event.clientX,
-            clientY: rect.top + event.clientY,
-            ctrlKey: event.ctrlKey,
-            metaKey: event.metaKey,
-            deltaX: event.deltaX,
-            deltaY: event.deltaY
-          })
-        }
-        let gestureScale = 1
-        let gestureActive = false
-        const gesturePoint = (event: NativeGestureEvent) => {
-          const rect = iframe.getBoundingClientRect()
-          return {
-            x: rect.left + (event.clientX ?? rect.width / 2),
-            y: rect.top + (event.clientY ?? rect.height / 2)
-          }
-        }
-        const relayGestureStart = (event: NativeGestureEvent) => {
-          event.preventDefault()
-          event.stopPropagation()
-          gestureActive = true
-          gestureScale = event.scale ?? 1
-        }
-        const relayGestureChange = (event: NativeGestureEvent) => {
-          event.preventDefault()
-          event.stopPropagation()
-          const nextScale = event.scale ?? gestureScale
-          const factor = nextScale / gestureScale
-          gestureScale = nextScale
-          const point = gesturePoint(event)
-          onFramePinchScale(factor, point.x, point.y)
-        }
-        const relayGestureEnd = (event: NativeGestureEvent) => {
-          event.preventDefault()
-          event.stopPropagation()
-          gestureActive = false
-          gestureScale = 1
-        }
+        const disconnectInput = connectSameOriginFrameInput({
+          target: iframeWindow,
+          frameElement: iframe,
+          onIntent: onInputIntent
+        })
         const openContextMenu = (event: MouseEvent) => {
           event.preventDefault()
           event.stopPropagation()
@@ -1332,45 +1039,7 @@ function FrameCard({
           })
           onSelect()
         }
-        const selectFrame = () => onSelect()
-        const hotkeyManager = getHotkeyManager()
-        const sharedHotkeyOptions = {
-          conflictBehavior: "allow" as const,
-          preventDefault: true,
-          stopPropagation: true,
-          target: iframeWindow
-        }
-        const hotkeyHandles = [
-          hotkeyManager.register(
-            CRIT_HOTKEYS.selectTool,
-            () => onFrameToolShortcut("select"),
-            { ...sharedHotkeyOptions, ignoreInputs: true }
-          ),
-          hotkeyManager.register(
-            CRIT_HOTKEYS.handTool,
-            () => onFrameToolShortcut("pan"),
-            { ...sharedHotkeyOptions, ignoreInputs: true }
-          ),
-          ...CRIT_HOTKEYS.zoomIn.map((hotkey) => hotkeyManager.register(
-            hotkey,
-            () => onFrameZoomShortcut(1),
-            { ...sharedHotkeyOptions, ignoreInputs: false }
-          )),
-          ...CRIT_HOTKEYS.zoomOut.map((hotkey) => hotkeyManager.register(
-            hotkey,
-            () => onFrameZoomShortcut(-1),
-            { ...sharedHotkeyOptions, ignoreInputs: false }
-          ))
-        ]
-        iframeWindow.addEventListener("wheel", relay, {
-          capture: true,
-          passive: false
-        })
-        iframeWindow.addEventListener("pointerdown", selectFrame, true)
         iframeWindow.addEventListener("contextmenu", openContextMenu, true)
-        iframeWindow.addEventListener("gesturestart", relayGestureStart as EventListener, { capture: true, passive: false })
-        iframeWindow.addEventListener("gesturechange", relayGestureChange as EventListener, { capture: true, passive: false })
-        iframeWindow.addEventListener("gestureend", relayGestureEnd as EventListener, { capture: true, passive: false })
         const resizeObserver = frame.display.heightMode === "fit-page"
           ? new ResizeObserver(() => measureContentHeight())
           : null
@@ -1382,84 +1051,34 @@ function FrameCard({
         }
         disconnect = () => {
           try {
-            iframeWindow.removeEventListener("wheel", relay, true)
-            iframeWindow.removeEventListener("pointerdown", selectFrame, true)
             iframeWindow.removeEventListener("contextmenu", openContextMenu, true)
-            iframeWindow.removeEventListener("gesturestart", relayGestureStart as EventListener, true)
-            iframeWindow.removeEventListener("gesturechange", relayGestureChange as EventListener, true)
-            iframeWindow.removeEventListener("gestureend", relayGestureEnd as EventListener, true)
+            disconnectInput()
           } catch {
             // A navigation may make the former WindowProxy cross-origin first.
           }
-          for (const handle of hotkeyHandles) handle.unregister()
           resizeObserver?.disconnect()
         }
       } catch {
         disconnect = () => {}
       }
     }
-    const relayBridgeMessage = (event: MessageEvent) => {
-      if (
-        event.source !== iframe.contentWindow ||
-        !isCritFrameInputMessage(event.data)
-      ) return
-      if (event.data.type === "select") {
-        onSelect()
-        return
-      }
-      if (event.data.type === "hotkey") {
-        if (
-          event.data.input &&
-          !event.data.ctrlKey &&
-          !event.data.metaKey
-        ) return
-        document.dispatchEvent(new KeyboardEvent("keydown", {
-          altKey: event.data.altKey,
-          bubbles: true,
-          cancelable: true,
-          code: event.data.code,
-          ctrlKey: event.data.ctrlKey,
-          key: event.data.key,
-          metaKey: event.data.metaKey,
-          shiftKey: event.data.shiftKey
-        }))
-        return
-      }
-      const rect = iframe.getBoundingClientRect()
-      if (event.data.type === "pinch") {
-        onFramePinchScale(
-          event.data.scaleFactor,
-          rect.left + event.data.clientX,
-          rect.top + event.data.clientY
-        )
-        return
-      }
-      if (wheelDestination(event.data, true) === "frame") return
-      onFrameWheel({
-        clientX: rect.left + event.data.clientX,
-        clientY: rect.top + event.data.clientY,
-        ctrlKey: event.data.ctrlKey,
-        metaKey: event.data.metaKey,
-        deltaX: event.data.deltaX,
-        deltaY: event.data.deltaY
-      })
-    }
-    window.addEventListener("message", relayBridgeMessage)
+    const disconnectBridge = connectBridgedFrameInput({
+      target: window,
+      frameElement: iframe,
+      onIntent: onInputIntent
+    })
     iframe.addEventListener("load", connect)
     connect()
     return () => {
       iframe.removeEventListener("load", connect)
-      window.removeEventListener("message", relayBridgeMessage)
+      disconnectBridge()
       disconnect()
     }
   }, [
     frame.display.heightMode,
     frame.url,
     measureContentHeight,
-    onFrameWheel,
-    onFramePinchScale,
-    onFrameToolShortcut,
-    onFrameZoomShortcut,
+    onInputIntent,
     onSelect
   ])
   const takeSnapshot = () => {
