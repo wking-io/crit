@@ -79,14 +79,10 @@ export const CanvasSummary = Schema.Struct({
 })
 export type CanvasSummary = typeof CanvasSummary.Type
 
-export const FrameSummary = CanvasFrame
-export type FrameSummary = CanvasFrame
-export const FrameList = Schema.Array(FrameSummary)
+export const FrameList = Schema.Array(CanvasFrame)
 export type FrameList = typeof FrameList.Type
 
-export const NoteSummary = CanvasNote
-export type NoteSummary = CanvasNote
-export const NoteList = Schema.Array(NoteSummary)
+export const NoteList = Schema.Array(CanvasNote)
 export type NoteList = typeof NoteList.Type
 
 export const CanvasChange = Schema.Struct({
@@ -354,7 +350,7 @@ const listNotes = (canvas: Canvas): NoteList =>
 const getFrame = (
   canvas: Canvas,
   id: string
-): Effect.Effect<FrameSummary, FrameNotFound> => {
+): Effect.Effect<CanvasFrame, FrameNotFound> => {
   const frame = stateOf(canvas).frames.find((candidate) => candidate.id === id)
   return frame === undefined
     ? Effect.fail(new FrameNotFound({ id }))
@@ -364,7 +360,7 @@ const getFrame = (
 const getNote = (
   canvas: Canvas,
   id: string
-): Effect.Effect<NoteSummary, NoteNotFound> => {
+): Effect.Effect<CanvasNote, NoteNotFound> => {
   const note = stateOf(canvas).notes.find((candidate) => candidate.id === id)
   return note === undefined
     ? Effect.fail(new NoteNotFound({ id }))
@@ -708,7 +704,6 @@ const apply = (
             markNote(command.id)
           }
 
-          current.title = draft.title
           current.frames = draft.frames
           current.notes = draft.notes
           return {

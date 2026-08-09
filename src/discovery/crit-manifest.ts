@@ -6,7 +6,7 @@ import {
   FrameDisplay,
   FrameReviewStatus,
   type CanvasCommand as CanvasCommandInput,
-  type FrameSummary
+  type CanvasFrame
 } from "../core/index.js"
 import {
   CritClientCommandFailed,
@@ -199,7 +199,7 @@ const same = (left: unknown, right: unknown) =>
 const planFrameCommands = (
   manifest: ResolvedCritManifest,
   canvas: ResolvedCritManifestCanvas,
-  current: ReadonlyArray<FrameSummary>
+  current: ReadonlyArray<CanvasFrame>
 ) => {
   const byId = new Map(current.map((frame) => [frame.id, frame]))
   const commands: Array<CanvasCommandInput> = []
