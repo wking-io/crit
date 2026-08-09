@@ -41,7 +41,8 @@ describe("crit Canvas workflows", () => {
               capturedAt: "2026-08-08T12:00:00.000Z",
               sizeBytes: 512
             }),
-          read: () => Effect.die("unused")
+          read: () => Effect.die("unused"),
+          remove: () => Effect.void
         })
       )
     )
