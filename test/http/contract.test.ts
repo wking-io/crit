@@ -3,7 +3,10 @@ import { describe, expect, it } from "vitest"
 
 import { Canvas, CanvasCommand } from "../../src/core/index.js"
 import { HttpCritClient } from "../../src/http/client.js"
-import { makeCritHttpHandler } from "../../src/http/contract.js"
+import {
+  makeCritHttpHandler,
+  parseCritHttpRoute
+} from "../../src/http/contract.js"
 import {
   CritClientCommandFailed,
   type CritClientShape
@@ -39,6 +42,43 @@ const snapshotUrl = `${canvasUrl}/frames/candidate/snapshot`
 
 const applyBody = JSON.stringify({
   commands: [{ _tag: "SetFrameStatus", id: "candidate", status: "approved" }]
+})
+
+describe("parseCritHttpRoute", () => {
+  it.each([
+    [
+      "/__crit/api/canvases/home%20page",
+      { _tag: "Canvas", id: "home page" }
+    ],
+    [
+      "/__crit/api/canvases/home%20page/activity",
+      { _tag: "CanvasActivity", id: "home page" }
+    ],
+    [
+      "/__crit/api/canvases/home%20page/frames/mobile%2Fwide/snapshot",
+      { _tag: "FrameSnapshot", id: "home page", frameId: "mobile/wide" }
+    ]
+  ])("parses %s", (url, expected) => {
+    expect(parseCritHttpRoute(url)).toEqual(expected)
+  })
+
+  it.each([
+    "/__crit/api/canvases/",
+    "/__crit/api/canvases/homepage/unknown",
+    "/__crit/api/canvases/%invalid"
+  ])("marks malformed contract routes invalid: %s", (url) => {
+    expect(parseCritHttpRoute(url)).toEqual({ _tag: "Invalid" })
+  })
+
+  it("leaves requests outside the Canvas route space unclaimed", () => {
+    expect(parseCritHttpRoute("/__crit/manifest.json")).toBeUndefined()
+  })
+
+  it("normalizes a trailing slash on a configured API path", () => {
+    expect(
+      parseCritHttpRoute("/custom/canvases/homepage", "/custom/")
+    ).toEqual({ _tag: "Canvas", id: "homepage" })
+  })
 })
 
 describe("makeCritHttpHandler", () => {

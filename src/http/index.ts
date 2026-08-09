@@ -8,9 +8,10 @@ export {
   critCanvasActivityUrl,
   critFrameSnapshotUrl,
   decodeAgentActivity,
-  isCritHttpRequest,
   makeCritHttpHandler,
+  parseCritHttpRoute,
   type CritHttpHandler,
-  type CritHttpHandlerOptions
+  type CritHttpHandlerOptions,
+  type CritHttpRoute
 } from "./contract.js"
 export { HttpCritClient, type HttpCritClientOptions } from "./client.js"

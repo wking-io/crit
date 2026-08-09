@@ -42,8 +42,19 @@ export const CritHttpErrorBody = Schema.Struct({
 })
 export type CritHttpErrorBody = typeof CritHttpErrorBody.Type
 
+export type CritHttpRoute =
+  | { readonly _tag: "Canvas"; readonly id: string }
+  | { readonly _tag: "CanvasActivity"; readonly id: string }
+  | {
+      readonly _tag: "FrameSnapshot"
+      readonly id: string
+      readonly frameId: string
+    }
+  | { readonly _tag: "Invalid" }
+
 export type CritHttpHandler = (
-  request: Request
+  request: Request,
+  route?: CritHttpRoute
 ) => Effect.Effect<Response | null>
 
 export interface CritHttpHandlerOptions {
@@ -66,25 +77,42 @@ export const critFrameSnapshotUrl = (
 export const critCanvasActivityUrl = (apiPath: string, canvasId: string) =>
   `${critCanvasUrl(apiPath, canvasId)}/activity`
 
-const pathnameFor = (request: Request) => {
-  try {
-    return new URL(request.url).pathname
-  } catch {
-    return ""
-  }
-}
-
-export const isCritHttpRequest = (
+export const parseCritHttpRoute = (
   requestUrl: string | undefined,
   apiPath = DEFAULT_CRIT_API_PATH
-) => {
-  if (requestUrl === undefined) return false
+): CritHttpRoute | undefined => {
+  if (requestUrl === undefined) return undefined
+  let pathname: string
   try {
-    const pathname = new URL(requestUrl, "http://crit.local").pathname
-    const prefix = `${stripTrailingSlash(apiPath)}/canvases/`
-    return pathname.startsWith(prefix)
+    pathname = new URL(requestUrl, "http://crit.local").pathname
   } catch {
-    return false
+    return undefined
+  }
+  const prefix = `${stripTrailingSlash(apiPath)}/canvases/`
+  if (!pathname.startsWith(prefix)) return undefined
+  const segments = pathname.slice(prefix.length).split("/")
+  if (segments[0]?.length === 0) return { _tag: "Invalid" }
+  try {
+    const id = decodeURIComponent(segments[0]!)
+    if (segments.length === 1) return { _tag: "Canvas", id }
+    if (segments.length === 2 && segments[1] === "activity") {
+      return { _tag: "CanvasActivity", id }
+    }
+    if (
+      segments.length === 4 &&
+      segments[1] === "frames" &&
+      segments[2]?.length !== 0 &&
+      segments[3] === "snapshot"
+    ) {
+      return {
+        _tag: "FrameSnapshot",
+        id,
+        frameId: decodeURIComponent(segments[2]!)
+      }
+    }
+    return { _tag: "Invalid" }
+  } catch {
+    return { _tag: "Invalid" }
   }
 }
 
@@ -110,6 +138,24 @@ const errorBody = (
 ): CritHttpErrorBody => ({
   error: { code, message, ...details }
 })
+
+const methodNotAllowed = (
+  id: string,
+  allowedMethods: ReadonlyArray<string>
+) => {
+  const methods = allowedMethods.length === 1
+    ? allowedMethods[0]!
+    : `${allowedMethods.slice(0, -1).join(", ")} and ${allowedMethods.at(-1)!}`
+  return json(
+    405,
+    errorBody(
+      "method-not-allowed",
+      `Only ${methods} ${allowedMethods.length === 1 ? "is" : "are"} supported`,
+      { id }
+    ),
+    { Allow: allowedMethods.join(", ") }
+  )
+}
 
 // Mutating routes are reachable by simple cross-origin requests (form POSTs
 // and preflight-free fetches), so a foreign Origin must be rejected. Requests
@@ -190,32 +236,6 @@ const readApplyRequest = (request: Request, maxBodyBytes: number) =>
     )
   )
 
-const canvasRouteFrom = (request: Request, apiPath: string) => {
-  const prefix = `${stripTrailingSlash(apiPath)}/canvases/`
-  const pathname = pathnameFor(request)
-  if (!pathname.startsWith(prefix)) return undefined
-  const segments = pathname.slice(prefix.length).split("/")
-  if (segments[0]?.length === 0) return { id: "" }
-  try {
-    const id = decodeURIComponent(segments[0]!)
-    if (segments.length === 1) return { id }
-    if (segments.length === 2 && segments[1] === "activity") {
-      return { id, activity: true as const }
-    }
-    if (
-      segments.length === 4 &&
-      segments[1] === "frames" &&
-      segments[2]?.length !== 0 &&
-      segments[3] === "snapshot"
-    ) {
-      return { id, frameId: decodeURIComponent(segments[2]!) }
-    }
-    return { id: "" }
-  } catch {
-    return { id: "" }
-  }
-}
-
 export const makeCritHttpHandler = (
   client: CritClientShape,
   options: CritHttpHandlerOptions = {}
@@ -223,25 +243,19 @@ export const makeCritHttpHandler = (
   const apiPath = options.apiPath ?? DEFAULT_CRIT_API_PATH
   const maxBodyBytes = options.maxBodyBytes ?? MAX_CRIT_HTTP_BODY_BYTES
 
-  return (request) => {
-    const route = canvasRouteFrom(request, apiPath)
+  return (request, parsedRoute) => {
+    const route = parsedRoute ?? parseCritHttpRoute(request.url, apiPath)
     if (route === undefined) return Effect.succeed(null)
-    if (route.id.length === 0) {
+    if (route._tag === "Invalid") {
       return Effect.succeed(
         json(400, errorBody("invalid-request", "A Canvas ID is required"))
       )
     }
     const id = route.id
 
-    if (route.activity === true) {
+    if (route._tag === "CanvasActivity") {
       if (request.method !== "GET") {
-        return Effect.succeed(
-          json(
-            405,
-            errorBody("method-not-allowed", "Only GET is supported", { id }),
-            { Allow: "GET" }
-          )
-        )
+        return Effect.succeed(methodNotAllowed(id, ["GET"]))
       }
       if (client.activity === undefined) {
         return Effect.succeed(
@@ -260,15 +274,9 @@ export const makeCritHttpHandler = (
       )
     }
 
-    if (route.frameId !== undefined) {
+    if (route._tag === "FrameSnapshot") {
       if (request.method !== "POST") {
-        return Effect.succeed(
-          json(
-            405,
-            errorBody("method-not-allowed", "Only POST is supported", { id }),
-            { Allow: "POST" }
-          )
-        )
+        return Effect.succeed(methodNotAllowed(id, ["POST"]))
       }
       const rejected = crossOriginRejection(request, id)
       if (rejected !== undefined) return Effect.succeed(rejected)
@@ -346,15 +354,7 @@ export const makeCritHttpHandler = (
       )
     }
 
-    return Effect.succeed(
-      json(
-        405,
-        errorBody("method-not-allowed", "Only GET and PATCH are supported", {
-          id
-        }),
-        { Allow: "GET, PATCH" }
-      )
-    )
+    return Effect.succeed(methodNotAllowed(id, ["GET", "PATCH"]))
   }
 }
 

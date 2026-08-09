@@ -19,8 +19,8 @@ import {
 } from "../discovery/index.js"
 import {
   DEFAULT_CRIT_API_PATH,
-  isCritHttpRequest,
-  makeCritHttpHandler
+  makeCritHttpHandler,
+  parseCritHttpRoute
 } from "../http/contract.js"
 import { FileSystemCanvasRepository } from "../node/file-system-canvas-repository.js"
 import { FileSystemAgentActivity } from "../node/file-system-agent-activity.js"
@@ -113,25 +113,20 @@ const sendJson = (response: ServerResponse, status: number, body: unknown) => {
   response.end(JSON.stringify(body))
 }
 
+const requireGet = (
+  request: IncomingMessage,
+  response: ServerResponse
+) => {
+  if (request.method === "GET") return true
+  response.setHeader("Allow", "GET")
+  sendJson(response, 405, {
+    error: { code: "method-not-allowed", message: "Use GET" }
+  })
+  return false
+}
+
 const requestPathname = (request: IncomingMessage) =>
   new URL(request.url ?? "/", "http://crit.local").pathname
-
-const requestedCanvasId = (
-  request: IncomingMessage,
-  apiPath: string
-) => {
-  if (request.method !== "GET") return undefined
-  const prefix = `${apiPath.replace(/\/+$/, "")}/canvases/`
-  const pathname = requestPathname(request)
-  if (!pathname.startsWith(prefix)) return undefined
-  const encoded = pathname.slice(prefix.length)
-  if (encoded.length === 0 || encoded.includes("/")) return undefined
-  try {
-    return decodeURIComponent(encoded)
-  } catch {
-    return undefined
-  }
-}
 
 const requestedSnapshotId = (request: IncomingMessage) => {
   const pathname = requestPathname(request)
@@ -522,13 +517,7 @@ export const crit = (options: CritVitePluginOptions = {}): Plugin => {
         editorAssetPath !== undefined &&
         requestPathname(request) === editorAssetPath
       ) {
-        if (request.method !== "GET") {
-          response.setHeader("Allow", "GET")
-          sendJson(response, 405, {
-            error: { code: "method-not-allowed", message: "Use GET" }
-          })
-          return
-        }
+        if (!requireGet(request, response)) return
         void editorBundle!
           .then((javascript) => {
             response.statusCode = 200
@@ -542,13 +531,7 @@ export const crit = (options: CritVitePluginOptions = {}): Plugin => {
       }
       const editorCanvasId = requestedEditorCanvasId(request, editorPath)
       if (editorCanvasId !== undefined) {
-        if (request.method !== "GET") {
-          response.setHeader("Allow", "GET")
-          sendJson(response, 405, {
-            error: { code: "method-not-allowed", message: "Use GET" }
-          })
-          return
-        }
+        if (!requireGet(request, response)) return
         if (editorCanvasId.length === 0) {
           sendJson(response, 400, {
             error: { code: "invalid-request", message: "Invalid Canvas ID" }
@@ -564,13 +547,7 @@ export const crit = (options: CritVitePluginOptions = {}): Plugin => {
       }
       const snapshotId = requestedSnapshotId(request)
       if (snapshotId !== undefined) {
-        if (request.method !== "GET") {
-          response.setHeader("Allow", "GET")
-          sendJson(response, 405, {
-            error: { code: "method-not-allowed", message: "Use GET" }
-          })
-          return
-        }
+        if (!requireGet(request, response)) return
         if (snapshotId.length === 0) {
           sendJson(response, 400, {
             error: { code: "invalid-request", message: "Invalid snapshot artifact ID" }
@@ -598,13 +575,7 @@ export const crit = (options: CritVitePluginOptions = {}): Plugin => {
         return
       }
       if (requestPathname(request) === manifestPath) {
-        if (request.method !== "GET") {
-          response.setHeader("Allow", "GET")
-          sendJson(response, 405, {
-            error: { code: "method-not-allowed", message: "Use GET" }
-          })
-          return
-        }
+        if (!requireGet(request, response)) return
         void loadManifest(request)
           .then((manifest) => {
             if (manifest === undefined) {
@@ -621,22 +592,22 @@ export const crit = (options: CritVitePluginOptions = {}): Plugin => {
           .catch((cause: unknown) => sendUnexpectedFailure(response, cause))
         return
       }
-      if (!isCritHttpRequest(request.url, apiPath)) {
+      const route = parseCritHttpRoute(request.url, apiPath)
+      if (route === undefined) {
         next()
         return
       }
-      const canvasId = requestedCanvasId(request, apiPath)
       void services
         .then(async (resolved) => {
-          if (canvasId !== undefined) {
+          if (request.method === "GET" && route._tag === "Canvas") {
             const manifest = await loadManifest(request)
-            if (manifest?.canvases.some((canvas) => canvas.id === canvasId)) {
+            if (manifest?.canvases.some((canvas) => canvas.id === route.id)) {
               await runtime.runPromise(
-                CritManifest.sync(manifest, { canvasId })
+                CritManifest.sync(manifest, { canvasId: route.id })
               )
             }
           }
-          return Effect.runPromise(resolved.handler(webRequest(request)))
+          return Effect.runPromise(resolved.handler(webRequest(request), route))
         })
         .then((output) =>
           output === null ? next() : sendWebResponse(output, response)
