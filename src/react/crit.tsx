@@ -30,6 +30,10 @@ import {
   type FrameChromeSettings
 } from "./canvas-viewport.js"
 import type { CanvasCameraOptions } from "./canvas-camera.js"
+import {
+  CanvasHelpPanel,
+  CanvasHelpSurface
+} from "./canvas-help.js"
 
 const rootStyle: CSSProperties = {
   background: "oklch(98.5% 0 none)",
@@ -253,7 +257,10 @@ export function Crit({
   }
 
   return (
-    <div className={classes("crit-root", className)} style={{ ...rootStyle, ...style }}>
+    <CanvasHelpSurface
+      className={classes("crit-root", className)}
+      style={{ ...rootStyle, ...style }}
+    >
       <CanvasViewport
         dispatch={session.dispatch}
         document={document}
@@ -264,12 +271,12 @@ export function Crit({
         {...(iframeSandbox === undefined ? {} : { iframeSandbox })}
         {...(onCommandError === undefined ? {} : { onCommandError })}
       />
+      <CanvasHelpPanel />
       {sessionState?.agentActivity.active ? (
         <div
           aria-live="polite"
           className="crit-presence"
           role="status"
-          title={sessionState.agentActivity.activeUntil ?? undefined}
         >
           <span className="crit-presence__dot" />
           Agent working
@@ -294,7 +301,6 @@ export function Crit({
               )
             }
           }}
-          title={sessionState.detail ?? sessionState.recoveryDetail ?? undefined}
           type="button"
         >
           {sessionState.saveStatus === "clean"
@@ -304,6 +310,6 @@ export function Crit({
           {sessionState.saveStatus === "conflict" ? " · discard local changes" : ""}
         </button>
       )}
-    </div>
+    </CanvasHelpSurface>
   )
 }

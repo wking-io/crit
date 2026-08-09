@@ -1,4 +1,3 @@
-import { Tooltip } from "@base-ui/react/tooltip"
 import {
   useHotkey,
   useHotkeys,
@@ -26,7 +25,8 @@ import {
   type CanvasGeometry,
   type CanvasNote,
   type CanvasCommand as CanvasCommandValue,
-  type FrameReviewStatus
+  type FrameReviewStatus,
+  type FrameStatus
 } from "../core/index.js"
 import {
   connectBridgedFrameInput,
@@ -44,7 +44,11 @@ import {
   type ResizeHandlePosition
 } from "./canvas-selection.js"
 import { beginCanvasInteraction } from "./canvas-interaction.js"
-import { CritTooltipPopup } from "./crit-tooltip.js"
+import {
+  CanvasHelpPanel,
+  NO_HELP_HOTKEY,
+  helpTarget
+} from "./canvas-help.js"
 import {
   FRAME_STATUSES,
   IconAddFrame,
@@ -89,6 +93,9 @@ type CanvasZoomDirection = -1 | 0 | 1
 export const CRIT_HOTKEYS = {
   selectTool: "V",
   handTool: "H",
+  addFrame: "F",
+  addNote: "N",
+  deleteSelection: "Delete",
   zoomIn: [
     { key: "=", mod: true },
     { key: "=", mod: true, shift: true }
@@ -100,6 +107,9 @@ export const CRIT_HOTKEYS = {
 } as const satisfies {
   readonly selectTool: RegisterableHotkey
   readonly handTool: RegisterableHotkey
+  readonly addFrame: RegisterableHotkey
+  readonly addNote: RegisterableHotkey
+  readonly deleteSelection: RegisterableHotkey
   readonly zoomIn: ReadonlyArray<RegisterableHotkey>
   readonly zoomOut: ReadonlyArray<RegisterableHotkey>
 }
@@ -220,12 +230,14 @@ type ContextMenuPosition = {
 type ContextMenuActionItem =
   | {
       readonly detail?: string
+      readonly help: string
       readonly label: string
       readonly onSelect: () => void
       readonly tone?: "danger"
     }
   | {
       readonly detail?: string
+      readonly help: string
       readonly href: string
       readonly label: string
     }
@@ -233,6 +245,7 @@ type ContextMenuActionItem =
 type ContextMenuItem =
   | ContextMenuActionItem
   | {
+      readonly help: string
       readonly items: ReadonlyArray<ContextMenuActionItem>
       readonly label: string
     }
@@ -244,6 +257,14 @@ export const FRAME_SIZE_PRESETS = [
   { id: "desktop", label: "Desktop", width: 1512, height: 982 },
   { id: "widescreen", label: "Widescreen", width: 2560, height: 1440 }
 ] as const
+
+const statusHelpDescriptions: Readonly<Record<FrameStatus, string>> = {
+  "changes-requested": "Mark this frame as needing another iteration.",
+  "in-progress": "Mark this frame as actively being worked on.",
+  archived: "Capture the current page as an immutable snapshot frame.",
+  approved: "Mark this frame as accepted for the reviewed direction.",
+  "ready-for-review": "Mark this frame as ready for feedback or approval."
+}
 
 export interface CanvasViewportProps {
   readonly document: CanvasDocument
@@ -330,7 +351,6 @@ export function CanvasViewport({
     readonly x: number
     readonly y: number
   } | null>(null)
-  const toolbarTooltip = useMemo(() => Tooltip.createHandle<string>(), [])
 
   const commitCameraState = useCallback(
     (next: ReturnType<typeof initialCanvasCameraState>) => {
@@ -459,6 +479,30 @@ export function CanvasViewport({
     applyCameraInput({ type: "zoom-step", direction, viewport })
   }, [applyCameraInput, viewport])
 
+  const openNewFrameAtCenter = useCallback(() => {
+    setNewFrameTarget({
+      x: (viewport.width / 2 - camera.x) / camera.zoom - 600,
+      y: (viewport.height / 2 - camera.y) / camera.zoom - 400
+    })
+  }, [camera, viewport])
+
+  const addNoteAtCenter = useCallback(() => {
+    addNoteAt(
+      (viewport.width / 2 - camera.x) / camera.zoom - 140,
+      (viewport.height / 2 - camera.y) / camera.zoom - 80
+    )
+  }, [addNoteAt, camera, viewport])
+
+  const deleteSelection = useCallback(() => {
+    if (selectedId === null) return
+    if (document.frames.some((frame) => frame.id === selectedId)) {
+      run(CanvasCommand.removeFrame({ id: selectedId }))
+    } else if (document.notes.some((note) => note.id === selectedId)) {
+      run(CanvasCommand.removeNote({ id: selectedId }))
+    }
+    setSelectedId(null)
+  }, [document.frames, document.notes, run, selectedId])
+
   useHotkeys([
     {
       hotkey: CRIT_HOTKEYS.selectTool,
@@ -468,6 +512,21 @@ export function CanvasViewport({
     {
       hotkey: CRIT_HOTKEYS.handTool,
       callback: () => setTool("pan"),
+      options: { ignoreInputs: true }
+    },
+    {
+      hotkey: CRIT_HOTKEYS.addFrame,
+      callback: openNewFrameAtCenter,
+      options: { ignoreInputs: true }
+    },
+    {
+      hotkey: CRIT_HOTKEYS.addNote,
+      callback: addNoteAtCenter,
+      options: { ignoreInputs: true }
+    },
+    {
+      hotkey: CRIT_HOTKEYS.deleteSelection,
+      callback: deleteSelection,
       options: { ignoreInputs: true }
     },
     ...CRIT_HOTKEYS.zoomIn.map((hotkey) => ({
@@ -775,87 +834,101 @@ export function CanvasViewport({
         className="crit-toolbar"
         onPointerDown={(event) => event.stopPropagation()}
       >
-        <span className="crit-toolbar__title" title={document.title}>
+        <span
+          className="crit-toolbar__title"
+          {...helpTarget({
+            name: document.title,
+            hotkey: NO_HELP_HOTKEY,
+            description: "The canvas currently open for arranging and reviewing work."
+          })}
+        >
           <span>{document.title}</span>
           <IconSwitcher />
         </span>
         <span aria-hidden="true" className="crit-toolbar__divider" />
-        <Tooltip.Provider delay={450} closeDelay={80}>
           <span className="crit-toolbar__group">
-            <Tooltip.Trigger
+            <button
               aria-disabled="true"
               aria-label="Undo"
               className="crit-icon-button"
-              handle={toolbarTooltip}
-              payload="Undo"
+              {...helpTarget({
+                name: "Undo",
+                hotkey: NO_HELP_HOTKEY,
+                description: "Undo is not available yet."
+              })}
               type="button"
-            ><IconUndo /></Tooltip.Trigger>
-            <Tooltip.Trigger
+            ><IconUndo /></button>
+            <button
               aria-disabled="true"
               aria-label="Redo"
               className="crit-icon-button"
-              handle={toolbarTooltip}
-              payload="Redo"
+              {...helpTarget({
+                name: "Redo",
+                hotkey: NO_HELP_HOTKEY,
+                description: "Redo is not available yet."
+              })}
               type="button"
-            ><IconRedo /></Tooltip.Trigger>
+            ><IconRedo /></button>
           </span>
           <span aria-hidden="true" className="crit-toolbar__divider" />
           <span className="crit-toolbar__group">
-            <Tooltip.Trigger
+            <button
               aria-keyshortcuts="V"
               aria-label="Select"
               aria-pressed={tool === "select"}
               className="crit-icon-button"
-              handle={toolbarTooltip}
+              {...helpTarget({
+                name: "Select",
+                hotkey: "V",
+                description: "Select, move, resize, and interact with frames and notes."
+              })}
               onClick={() => setTool("select")}
-              payload="Select · V"
               type="button"
-            ><IconPointer /></Tooltip.Trigger>
-            <Tooltip.Trigger
+            ><IconPointer /></button>
+            <button
               aria-keyshortcuts="H"
               aria-label="Hand"
               aria-pressed={tool === "pan"}
               className="crit-icon-button"
-              handle={toolbarTooltip}
+              {...helpTarget({
+                name: "Hand",
+                hotkey: "H",
+                description: "Drag the canvas to pan without selecting an item."
+              })}
               onClick={() => setTool("pan")}
-              payload="Hand · H"
               type="button"
-            ><IconPan /></Tooltip.Trigger>
-            <Tooltip.Trigger
+            ><IconPan /></button>
+            <button
+              aria-keyshortcuts="F"
               aria-label="Add frame"
               className="crit-icon-button"
-              handle={toolbarTooltip}
-              onClick={() => setNewFrameTarget({
-                x: (viewport.width / 2 - camera.x) / camera.zoom - 600,
-                y: (viewport.height / 2 - camera.y) / camera.zoom - 400
+              {...helpTarget({
+                name: "Add frame",
+                hotkey: "F",
+                description: "Add a live web page to the center of the current view."
               })}
-              payload="Add frame"
+              onClick={openNewFrameAtCenter}
               type="button"
-            ><IconAddFrame /></Tooltip.Trigger>
-            <Tooltip.Trigger
+            ><IconAddFrame /></button>
+            <button
+              aria-keyshortcuts="N"
               aria-label="Add note"
               className="crit-icon-button"
-              handle={toolbarTooltip}
-              onClick={() => {
-                addNoteAt(
-                  (viewport.width / 2 - camera.x) / camera.zoom - 140,
-                  (viewport.height / 2 - camera.y) / camera.zoom - 80
-                )
-              }}
-              payload="Add note"
+              {...helpTarget({
+                name: "Add note",
+                hotkey: "N",
+                description: "Add an editable note to the center of the current view."
+              })}
+              onClick={addNoteAtCenter}
               type="button"
-            ><IconNote /></Tooltip.Trigger>
+            ><IconNote /></button>
           </span>
-          <CritTooltipPopup
-            handle={toolbarTooltip}
-            ink={frameStatus("archived").ink}
-          />
-        </Tooltip.Provider>
       </div>
       <CritContextMenu
         ariaLabel="Canvas actions"
         items={canvasMenu === null ? [] : [
           {
+            help: "Add a live web page at the point where the canvas menu opened.",
             label: "New frame",
             onSelect: () => setNewFrameTarget({
               x: canvasMenu.worldX,
@@ -863,10 +936,15 @@ export function CanvasViewport({
             })
           },
           {
+            help: "Add an editable note at the point where the canvas menu opened.",
             label: "New note",
             onSelect: () => addNoteAt(canvasMenu.worldX, canvasMenu.worldY)
           },
-          { label: "Zoom to fit", onSelect: fit }
+          {
+            help: "Adjust the view so every frame and note is visible.",
+            label: "Zoom to fit",
+            onSelect: fit
+          }
         ]}
         onClose={() => setCanvasMenu(null)}
         position={canvasMenu}
@@ -938,7 +1016,6 @@ function FrameCard({
 }) {
   const frameRef = useRef<HTMLElement>(null)
   const iframeRef = useRef<HTMLIFrameElement>(null)
-  const actionTooltip = useMemo(() => Tooltip.createHandle<string>(), [])
   const [contextMenu, setContextMenu] = useState<ContextMenuPosition | null>(null)
   const [fullscreen, setFullscreen] = useState(false)
   const [snapshotting, setSnapshotting] = useState(false)
@@ -1155,6 +1232,11 @@ function FrameCard({
                       aria-checked={false}
                       className="crit-status-option"
                       disabled={option.id === "archived" && onSnapshot === undefined}
+                      {...helpTarget({
+                        name: option.label,
+                        hotkey: NO_HELP_HOTKEY,
+                        description: statusHelpDescriptions[option.id]
+                      })}
                       key={option.id}
                       onClick={(event) => {
                         if (event.detail === 0) selectStatus()
@@ -1208,6 +1290,11 @@ function FrameCard({
       ) : null}
       <header
         className="crit-frame__chrome"
+        {...helpTarget({
+          name: "Move frame",
+          hotkey: NO_HELP_HOTKEY,
+          description: "Drag the frame header to reposition it on the canvas."
+        })}
         data-toolbar-mode={toolbarMode}
         onPointerDown={(event) => onMove(event, frame)}
       >
@@ -1218,6 +1305,14 @@ function FrameCard({
             aria-label={`Status: ${status.label}. Change status`}
             className="crit-frame__mark"
             disabled={frame.snapshot !== undefined}
+            {...helpTarget({
+              name: "Frame status",
+              hotkey: NO_HELP_HOTKEY,
+              description:
+                frame.snapshot === undefined
+                  ? "Review or change this frame's current workflow status."
+                  : "Snapshot frames remain archived and cannot change status."
+            })}
             onClick={() => setStatusMenuOpen((open) => !open)}
             onPointerDown={(event) => event.stopPropagation()}
             type="button"
@@ -1225,11 +1320,16 @@ function FrameCard({
             <StatusIcon />
           </button>
           {titleVisible ? (
-            <span className="crit-frame__title-mask" title={`${shortId}: ${frame.title}`}>
+            <span className="crit-frame__title-mask">
               {titleEditing ? (
                 <input
                   aria-label="Frame title"
                   autoFocus
+                  {...helpTarget({
+                    name: "Frame title",
+                    hotkey: "Enter · Esc",
+                    description: "Rename the frame. Press Enter to save or Escape to cancel."
+                  })}
                   onBlur={commitTitle}
                   onChange={(event) => setTitleDraft(event.currentTarget.value)}
                   onKeyDown={(event) => {
@@ -1247,6 +1347,11 @@ function FrameCard({
                 <button
                   aria-label={`Edit frame title: ${frame.title}`}
                   className="crit-frame__title-button"
+                  {...helpTarget({
+                    name: "Edit frame title",
+                    hotkey: NO_HELP_HOTKEY,
+                    description: "Rename this frame while preserving its stable frame ID."
+                  })}
                   onClick={() => setTitleEditing(true)}
                   onPointerDown={(event) => event.stopPropagation()}
                   type="button"
@@ -1262,50 +1367,64 @@ function FrameCard({
           ) : null}
         </div>
         <div className="crit-frame__actions" onPointerDown={(event) => event.stopPropagation()}>
-          <Tooltip.Provider delay={450} closeDelay={80}>
             {frame.snapshot === undefined && onSnapshot !== undefined && actions.snapshot ? (
-              <Tooltip.Trigger
+              <button
                 aria-label={snapshotting ? "Taking snapshot" : "Take snapshot"}
                 className="crit-frame__action"
                 data-snapshotting={snapshotting || undefined}
                 disabled={snapshotting}
-                handle={actionTooltip}
+                {...helpTarget({
+                  name: snapshotting ? "Taking snapshot" : "Take snapshot",
+                  hotkey: NO_HELP_HOTKEY,
+                  description: "Preserve the live page as a separate immutable snapshot frame."
+                })}
                 onClick={takeSnapshot}
-                payload={snapshotting ? "Taking snapshot…" : "Take snapshot"}
                 type="button"
               >
                 <IconSnapshot />
-              </Tooltip.Trigger>
+              </button>
             ) : null}
-            {actions.open ? <Tooltip.Trigger
+            {actions.open ? <a
               aria-label={`Open ${frame.title}`}
               className="crit-frame__action"
-              handle={actionTooltip}
-              payload="Open in a new tab"
-              render={<a href={frame.url} rel="noreferrer" target="_blank" />}
+              {...helpTarget({
+                name: "Open in new tab",
+                hotkey: NO_HELP_HOTKEY,
+                description: "Open this frame's page in a separate browser tab."
+              })}
+              href={frame.url}
+              rel="noreferrer"
+              target="_blank"
             >
               <IconOpenExternal />
-            </Tooltip.Trigger> : null}
-            {actions.fullscreen ? <Tooltip.Trigger
+            </a> : null}
+            {actions.fullscreen ? <button
               aria-label={fullscreen ? `Collapse ${frame.title} to canvas` : `Enter ${frame.title} fullscreen`}
               className="crit-frame__action"
-              handle={actionTooltip}
+              {...helpTarget({
+                name: fullscreen ? "Collapse to canvas" : "Enter fullscreen",
+                hotkey: fullscreen ? "Esc" : NO_HELP_HOTKEY,
+                description: fullscreen
+                  ? "Return this frame to its position on the canvas."
+                  : "Expand this frame to fill the screen for focused review."
+              })}
               onClick={toggleFullscreen}
-              payload={fullscreen ? "Collapse to canvas" : "Enter fullscreen"}
               type="button"
             >
               {fullscreen ? <IconMinimize /> : <IconFullscreen />}
-            </Tooltip.Trigger> : null}
-            {actions.delete ? <Tooltip.Trigger
+            </button> : null}
+            {actions.delete ? <button
+              aria-keyshortcuts="Delete"
               aria-label={`Delete ${frame.title}`}
               className="crit-frame__action"
-              handle={actionTooltip}
+              {...helpTarget({
+                name: "Remove frame",
+                hotkey: "Del",
+                description: "Remove this frame from the canvas."
+              })}
               onClick={onRemove}
-              payload="Remove from canvas"
               type="button"
-            ><IconTrash /></Tooltip.Trigger> : null}
-            <CritTooltipPopup handle={actionTooltip} ink={status.ink} />
-          </Tooltip.Provider>
+            ><IconTrash /></button> : null}
         </div>
       </header>
       <div className="crit-frame__viewport">
@@ -1324,7 +1443,14 @@ function FrameCard({
             src={frame.url}
             title={frame.title}
           />
-        ) : <div className="crit-frame__paused">Frame paused while offscreen</div>}
+        ) : <div
+          className="crit-frame__paused"
+          {...helpTarget({
+            name: "Paused frame",
+            hotkey: NO_HELP_HOTKEY,
+            description: "This frame is unloaded while far outside the current view to save resources."
+          })}
+        >Frame paused while offscreen</div>}
       </div>
       {selected ? (
         <CanvasSelection
@@ -1334,26 +1460,53 @@ function FrameCard({
           zoom={zoom}
         />
       ) : null}
+      {fullscreen ? <CanvasHelpPanel /> : null}
       <CritContextMenu
         ariaLabel={`Actions for ${frame.title}`}
         items={[
-          { label: "Delete", onSelect: onRemove, tone: "danger" },
           {
+            help: "Remove this frame from the canvas.",
+            label: "Delete",
+            onSelect: onRemove,
+            tone: "danger"
+          },
+          {
+            help: fullscreen
+              ? "Return this frame to its position on the canvas."
+              : "Expand this frame to fill the screen for focused review.",
             label: fullscreen ? "Collapse to canvas" : "Fullscreen",
             onSelect: toggleFullscreen
           },
-          { href: frame.url, label: "Open in new tab" },
-          { label: "Bring to front", onSelect: onBringToFront },
-          { label: "Send to back", onSelect: onSendToBack },
           {
+            help: "Open this frame's page in a separate browser tab.",
+            href: frame.url,
+            label: "Open in new tab"
+          },
+          {
+            help: "Place this frame above every other canvas item.",
+            label: "Bring to front",
+            onSelect: onBringToFront
+          },
+          {
+            help: "Place this frame behind every other canvas item.",
+            label: "Send to back",
+            onSelect: onSendToBack
+          },
+          {
+            help: "Choose a standard viewport size for this frame.",
             label: "Set size to...",
             items: FRAME_SIZE_PRESETS.map((preset) => ({
               detail: `${preset.width} × ${preset.height}`,
+              help: `Resize this frame to the ${preset.label.toLowerCase()} preset at ${preset.width} by ${preset.height} pixels.`,
               label: preset.label,
               onSelect: () => onSetSize(preset.width, preset.height)
             }))
           },
-          { label: "Fit content", onSelect: () => measureContentHeight(true) }
+          {
+            help: "Resize the frame height to fit its same-origin page content.",
+            label: "Fit content",
+            onSelect: () => measureContentHeight(true)
+          }
         ]}
         onClose={() => setContextMenu(null)}
         position={contextMenu}
@@ -1468,6 +1621,11 @@ function CritContextMenu({
               aria-expanded={submenu?.label === item.label}
               aria-haspopup="menu"
               data-submenu-trigger=""
+              {...helpTarget({
+                name: item.label,
+                hotkey: NO_HELP_HOTKEY,
+                description: item.help
+              })}
               key={item.label}
               onClick={(event) => {
                 if (submenu?.label === item.label) setSubmenu(null)
@@ -1489,6 +1647,11 @@ function CritContextMenu({
           ) : "href" in item ? (
             <a
               href={item.href}
+              {...helpTarget({
+                name: item.label,
+                hotkey: NO_HELP_HOTKEY,
+                description: item.help
+              })}
               key={item.label}
               onClick={close}
               onPointerEnter={() => setSubmenu(null)}
@@ -1504,6 +1667,11 @@ function CritContextMenu({
           ) : (
             <button
               data-tone={item.tone}
+              {...helpTarget({
+                name: item.label,
+                hotkey: NO_HELP_HOTKEY,
+                description: item.help
+              })}
               key={item.label}
               onClick={() => {
                 close()
@@ -1544,6 +1712,11 @@ function CritContextMenu({
             "href" in item ? (
               <a
                 href={item.href}
+                {...helpTarget({
+                  name: item.label,
+                  hotkey: NO_HELP_HOTKEY,
+                  description: item.help
+                })}
                 key={item.label}
                 onClick={close}
                 rel="noreferrer"
@@ -1558,6 +1731,11 @@ function CritContextMenu({
             ) : (
               <button
                 data-tone={item.tone}
+                {...helpTarget({
+                  name: item.label,
+                  hotkey: NO_HELP_HOTKEY,
+                  description: item.help
+                })}
                 key={item.label}
                 onClick={() => {
                   close()
@@ -1640,6 +1818,11 @@ function NewFrameDialog({
           URL
           <input
             autoFocus
+            {...helpTarget({
+              name: "Frame URL",
+              hotkey: NO_HELP_HOTKEY,
+              description: "Enter the url to load in a new live frame."
+            })}
             onChange={(event) => setUrl(event.currentTarget.value)}
             placeholder="https://example.com/iteration"
             required
@@ -1650,6 +1833,11 @@ function NewFrameDialog({
         <label>
           Title <span>(optional)</span>
           <input
+            {...helpTarget({
+              name: "Frame title",
+              hotkey: NO_HELP_HOTKEY,
+              description: "Name the frame. Optional, title is inferred when left blank."
+            })}
             onChange={(event) => setTitle(event.currentTarget.value)}
             placeholder="Inferred from URL"
             type="text"
@@ -1657,8 +1845,24 @@ function NewFrameDialog({
           />
         </label>
         <div className="crit-new-frame-dialog__actions">
-          <button onClick={onCancel} type="button">Cancel</button>
-          <button data-primary="" type="submit">Add frame</button>
+          <button
+            {...helpTarget({
+              name: "Cancel",
+              hotkey: "Esc",
+              description: "Close the dialog without adding a frame."
+            })}
+            onClick={onCancel}
+            type="button"
+          >Cancel</button>
+          <button
+            data-primary=""
+            {...helpTarget({
+              name: "Add frame",
+              hotkey: "Enter",
+              description: "Create a live frame using the entered URL and title."
+            })}
+            type="submit"
+          >Add frame</button>
         </div>
       </form>
     </div>,
@@ -1705,6 +1909,11 @@ function NoteCard({
     >
       <header
         className="crit-note__chrome"
+        {...helpTarget({
+          name: "Move note",
+          hotkey: NO_HELP_HOTKEY,
+          description: "Drag the note header to reposition it on the canvas."
+        })}
         onPointerDown={(event) => {
           onSelect()
           onMove(event, note)
@@ -1717,11 +1926,27 @@ function NoteCard({
             onBringToFront={onBringToFront}
             onSendToBack={onSendToBack}
           />
-          <button aria-label="Delete note" onClick={onRemove} onPointerDown={(event) => event.stopPropagation()} type="button">×</button>
+          <button
+            aria-keyshortcuts="Delete"
+            aria-label="Delete note"
+            {...helpTarget({
+              name: "Remove note",
+              hotkey: "Del",
+              description: "Remove this note from the canvas."
+            })}
+            onClick={onRemove}
+            onPointerDown={(event) => event.stopPropagation()}
+            type="button"
+          >×</button>
         </span>
       </header>
       <textarea
         aria-label="Note"
+        {...helpTarget({
+          name: "Edit note",
+          hotkey: NO_HELP_HOTKEY,
+          description: "Write review feedback. Changes save when focus leaves the note."
+        })}
         onBlur={() => text !== note.text && onText(note.text, text)}
         onChange={(event) => setText(event.currentTarget.value)}
         value={text}
@@ -1730,6 +1955,11 @@ function NoteCard({
         <button
           aria-label="Select note"
           className="crit-note__select-shield"
+          {...helpTarget({
+            name: "Select note",
+            hotkey: "V",
+            description: "Select this note so it can be moved or resized."
+          })}
           onPointerDown={(event) => {
             event.preventDefault()
             event.stopPropagation()
@@ -1765,20 +1995,28 @@ function OrderControls({
     <span style={{ display: "flex", flex: "0 0 auto", gap: style === undefined ? 4 : 0 }}>
       <button
         aria-label={`Send ${label} to back`}
+        {...helpTarget({
+          name: "Send to back",
+          hotkey: NO_HELP_HOTKEY,
+          description: `Place this ${label} behind every other canvas item.`
+        })}
         onClick={onSendToBack}
         onPointerDown={(event) => event.stopPropagation()}
         style={style}
-        title="Send to back"
         type="button"
       >
         ⇩
       </button>
       <button
         aria-label={`Bring ${label} to front`}
+        {...helpTarget({
+          name: "Bring to front",
+          hotkey: NO_HELP_HOTKEY,
+          description: `Place this ${label} above every other canvas item.`
+        })}
         onClick={onBringToFront}
         onPointerDown={(event) => event.stopPropagation()}
         style={style}
-        title="Bring to front"
         type="button"
       >
         ⇧

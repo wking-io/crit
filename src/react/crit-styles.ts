@@ -9,7 +9,7 @@ export const critStyles = String.raw`
   --crit-muted: #77746c;
   --crit-accent: #ff5c35;
   background: var(--crit-paper);
-  color: var(--crit-ink);
+  color: #191918;
   cursor: var(--crit-canvas-cursor);
   font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
   isolation: isolate;
@@ -398,61 +398,34 @@ export const critStyles = String.raw`
 .crit-selection__handle[data-resize-handle="south-west"] { bottom: 0; cursor: ${resizeCursors.nesw}; left: 0; transform: translate(-50%, 50%); }
 .crit-selection__handle[data-resize-handle="west"] { bottom: calc(8px * var(--selection-ui)); cursor: ${resizeCursors.ew}; left: 0; top: calc(8px * var(--selection-ui)); transform: translateX(-50%); width: calc(12px * var(--selection-ui)); }
 
-.crit-tooltip__positioner {
-  height: var(--positioner-height);
+.crit-help {
+  background: oklch(97% 0.001 106.4);
+  border-radius: 8px;
+  bottom: 16px;
+  box-shadow:
+    #ffffff80 0 0 0 1px inset,
+    #fff 0 1px 0 inset,
+    oklch(14.7% 0.004 49.3 / 10%) 0 2px 4px,
+    oklch(14.7% 0.004 49.3 / 20%) 0 0 0 .5px;
+  color: var(--crit-ink);
+  display: grid;
+  font-family: system-ui, -apple-system, sans-serif;
+  gap: 12px;
+  height: 128px;
+  left: 16px;
+  padding: 14px 16px;
   pointer-events: none;
-  transition: top 180ms cubic-bezier(.22, 1, .36, 1), right 180ms cubic-bezier(.22, 1, .36, 1), bottom 180ms cubic-bezier(.22, 1, .36, 1), left 180ms cubic-bezier(.22, 1, .36, 1);
-  width: var(--positioner-width);
-  z-index: 2000;
+  position: absolute;
+  width: 320px;
+  z-index: 4900;
 }
-.crit-tooltip__popup {
-  background: var(--tooltip-ink);
-  border: 1px solid var(--tooltip-ink);
-  border-radius: 6px;
-  box-shadow: 0 1px 0 rgba(255,255,255,.12) inset, 0 4px 12px rgba(25,25,24,.18);
-  box-sizing: border-box;
-  color: #fff;
-  font: 500 11px/14px system-ui, -apple-system, sans-serif;
-  height: 26px;
-  opacity: 1;
-  padding: 5px 7px;
-  transform: translateY(0) scale(1);
-  transform-origin: var(--transform-origin);
-  transition: width 180ms cubic-bezier(.22, 1, .36, 1), opacity 120ms ease, transform 160ms cubic-bezier(.22, 1, .36, 1);
-  width: var(--popup-width);
-}
-.crit-tooltip__popup[data-starting-style], .crit-tooltip__popup[data-ending-style] { opacity: 0; transform: translateY(4px) scale(.96); }
-.crit-tooltip__arrow { color: var(--tooltip-ink); display: flex; height: 4px; line-height: 0; transform: translateX(-50%); width: 8px; }
-.crit-tooltip__arrow[data-side="top"] { bottom: -4px; left: 50% !important; }
-.crit-tooltip__arrow svg { display: block; fill: currentColor; }
-.crit-tooltip__viewport { height: 14px; overflow: hidden; position: relative; white-space: nowrap; width: 100%; }
-.crit-tooltip__viewport > [data-current],
-.crit-tooltip__viewport > [data-previous] {
-  animation-duration: 180ms;
-  animation-fill-mode: both;
-  animation-timing-function: cubic-bezier(.22, 1, .36, 1);
-}
-.crit-tooltip__viewport[data-activation-direction~="right"] > [data-current] { animation-name: crit-tooltip-content-in-from-right; }
-.crit-tooltip__viewport[data-activation-direction~="right"] > [data-previous] { animation-name: crit-tooltip-content-out-to-left; }
-.crit-tooltip__viewport[data-activation-direction~="left"] > [data-current] { animation-name: crit-tooltip-content-in-from-left; }
-.crit-tooltip__viewport[data-activation-direction~="left"] > [data-previous] { animation-name: crit-tooltip-content-out-to-right; }
-
-@keyframes crit-tooltip-content-in-from-right {
-  from { opacity: 0; transform: translateX(6px); }
-  to { opacity: 1; transform: translateX(0); }
-}
-@keyframes crit-tooltip-content-out-to-left {
-  from { opacity: 1; transform: translateX(0); }
-  to { opacity: 0; transform: translateX(-6px); }
-}
-@keyframes crit-tooltip-content-in-from-left {
-  from { opacity: 0; transform: translateX(-6px); }
-  to { opacity: 1; transform: translateX(0); }
-}
-@keyframes crit-tooltip-content-out-to-right {
-  from { opacity: 1; transform: translateX(0); }
-  to { opacity: 0; transform: translateX(6px); }
-}
+.crit-help__header { display: flex; gap: 16px; justify-content: space-between; min-width: 0; }
+.crit-help__field { display: grid; gap: 3px; min-width: 0; }
+.crit-help__field--hotkey { flex: 0 0 auto; text-align: right; }
+.crit-help__label { color: #77746c; font-size: 9px; font-weight: 700; letter-spacing: .08em; line-height: 11px; text-transform: uppercase; }
+.crit-help strong { font-size: 13px; font-weight: 650; line-height: 17px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.crit-help kbd { color: #77746c; font: 600 10px/17px "JetBrains Mono", ui-monospace, monospace; white-space: nowrap; }
+.crit-help__description p { font-size: 11px; line-height: 15px; margin: 0; }
 
 .crit-frame:fullscreen {
   --crit-ui: 1 !important;
@@ -474,7 +447,7 @@ export const critStyles = String.raw`
   position: absolute;
   z-index: 1100;
 }
-.crit-presence { align-items: center; background: #191918; display: flex; font-size: 11px; font-weight: 600; gap: 7px; left: 24px; padding: 8px 11px; top: 24px; }
+.crit-presence { align-items: center; background: #191918; display: flex; font-size: 11px; font-weight: 600; gap: 7px; padding: 8px 11px; right: 24px; top: 24px; }
 .crit-presence__dot { background: #d9ff6f; border-radius: 999px; height: 8px; width: 8px; }
 .crit-save-state { background: rgba(25,25,24,.86); bottom: 16px; cursor: default; font-size: 10px; padding: 7px 9px; right: 16px; text-transform: capitalize; }
 .crit-save-state:enabled { cursor: pointer; }
@@ -569,9 +542,12 @@ export const critStyles = String.raw`
 
 @media (max-width: 640px) {
   .crit-toolbar { left: 12px; max-width: calc(100% - 24px); top: 12px; }
+  .crit-help { bottom: 12px; left: 12px; max-width: calc(100% - 24px); width: 320px; }
+  .crit-presence { right: 12px; top: 64px; }
+  .crit-save-state { bottom: 12px; right: 12px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .crit-frame__mark, .crit-frame__action, .crit-frame__action[data-snapshotting] svg, .crit-frame__title-track, .crit-frame__title-edit-icon, .crit-tooltip__positioner, .crit-tooltip__popup, .crit-tooltip__viewport, .crit-tooltip__viewport > [data-current], .crit-tooltip__viewport > [data-previous] { animation-duration: .01ms; transition-duration: .01ms; }
+  .crit-frame__mark, .crit-frame__action, .crit-frame__action[data-snapshotting] svg, .crit-frame__title-track, .crit-frame__title-edit-icon { animation-duration: .01ms; transition-duration: .01ms; }
 }
 `

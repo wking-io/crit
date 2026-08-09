@@ -3,6 +3,10 @@ import { describe, expect, it } from "vitest"
 
 import { Crit } from "../../src/react/crit.js"
 import {
+  CanvasHelpPanel,
+  CanvasHelpSurface
+} from "../../src/react/canvas-help.js"
+import {
   CanvasViewport,
   CRIT_HOTKEYS,
   DEFAULT_FRAME_CHROME_SETTINGS,
@@ -34,8 +38,8 @@ describe("Crit", () => {
     expect(critStyles).toContain(".crit-status-option")
     expect(critStyles).toContain(".crit-selection__handle")
     expect(critStyles).toContain(".crit-canvas__pan-shield")
-    expect(critStyles).toContain("crit-tooltip-content-in-from-right")
-    expect(critStyles).toContain('[data-activation-direction~="left"]')
+    expect(critStyles).toContain(".crit-help")
+    expect(critStyles).not.toContain(".crit-tooltip")
     expect(critStyles).not.toContain(".crit-resize-handle")
     expect(critStyles).not.toContain(".crit-frame__more")
     expect(critStyles).not.toContain("#e8ebef")
@@ -69,6 +73,9 @@ describe("Crit", () => {
     expect(CRIT_HOTKEYS).toEqual({
       selectTool: "V",
       handTool: "H",
+      addFrame: "F",
+      addNote: "N",
+      deleteSelection: "Delete",
       zoomIn: [
         { key: "=", mod: true },
         { key: "=", mod: true, shift: true }
@@ -94,6 +101,10 @@ describe("Crit", () => {
     expect(critStyles).toContain("nesw-resize")
     expect(critStyles).toContain("ew-resize")
     expect(critStyles).toContain("ns-resize")
+    expect(html).toContain('data-crit-help-name="Resize"')
+    expect(html).toContain(
+      'data-crit-help-description="Drag to resize the frame in this direction."'
+    )
   })
 
   it("includes archive in the original status sequence", () => {
@@ -174,6 +185,39 @@ describe("Crit", () => {
     expect(html).toContain("Opening canvas…")
   })
 
+  it("hides inactive help and emits complete details for canvas controls", () => {
+    const canvas = Canvas.create({ id: "review", title: "Review" })
+    const html = renderToStaticMarkup(
+      <CanvasHelpSurface>
+        <CanvasViewport
+          dispatch={() => Effect.void}
+          document={Canvas.export(canvas)}
+        />
+        <CanvasHelpPanel />
+      </CanvasHelpSurface>
+    )
+
+    expect(html).not.toContain('aria-label="Control help"')
+    expect(html).not.toContain("Arrange frames and notes on an infinite canvas")
+    expect(html).toContain('data-crit-help-name="Select"')
+    expect(html).toContain('data-crit-help-hotkey="V"')
+    expect(html).toContain(
+      'data-crit-help-description="Select, move, resize, and interact with frames and notes."'
+    )
+    expect(html).toContain('data-crit-help-name="Add frame"')
+    expect(html).toContain('data-crit-help-name="Add note"')
+    expect(html).toContain('data-crit-help-hotkey="F"')
+    expect(html).toContain('data-crit-help-hotkey="N"')
+    expect(html).not.toContain("crit-tooltip")
+
+    const detailCounts = [
+      html.match(/data-crit-help-name=/g)?.length ?? 0,
+      html.match(/data-crit-help-hotkey=/g)?.length ?? 0,
+      html.match(/data-crit-help-description=/g)?.length ?? 0
+    ]
+    expect(new Set(detailCounts).size).toBe(1)
+  })
+
   it("renders Frames and attached Notes without a canvas framework", async () => {
     const canvas = Canvas.create({ id: "review", title: "Review" })
     await Effect.runPromise(Canvas.apply(
@@ -216,12 +260,19 @@ describe("Crit", () => {
     expect(html).toContain("Tighten spacing")
     expect(html).toContain("Send note to back")
     expect(html).toContain("Bring note to front")
+    expect(html).toContain('data-crit-help-name="Frame status"')
+    expect(html).toContain('data-crit-help-name="Edit frame title"')
+    expect(html).toContain('data-crit-help-name="Edit note"')
+    expect(html).toContain('data-crit-help-name="Send to back"')
     expect(html).not.toContain("Layer options for Candidate")
     expect(html).not.toContain("crit-frame__select-shield")
     expect(html).toContain('aria-label="Undo"')
     expect(html).toContain('aria-label="Redo"')
     expect(html).toContain('aria-keyshortcuts="V"')
     expect(html).toContain('aria-keyshortcuts="H"')
+    expect(html).toContain('aria-keyshortcuts="F"')
+    expect(html).toContain('aria-keyshortcuts="N"')
+    expect(html).toContain('aria-keyshortcuts="Delete"')
     expect(html).toContain('aria-label="Select"')
     expect(html).toContain('aria-label="Hand"')
     expect(html.indexOf('aria-label="Select"')).toBeLessThan(
