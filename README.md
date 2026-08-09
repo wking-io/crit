@@ -171,6 +171,10 @@ Iframe capabilities are configurable:
 />
 ```
 
+When `iframeSandbox` is not set, archived Frames render their Snapshot
+Artifact with `sandbox="allow-scripts"` so captured foreign scripts never run
+same-origin with the host application; live Frames stay unsandboxed.
+
 Pass `draftJournal={false}` to disable recovery, a custom `CritClientShape` for
 another local HTTP host, or `onSession` to access `dispatch`, `flush`, `refresh`,
 and `snapshotFrame` directly.

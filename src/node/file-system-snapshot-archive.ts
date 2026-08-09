@@ -177,6 +177,19 @@ const createResourceFetcher = (
     throw new Error(`Could not snapshot ${url}.`)
   }
 
+// Vite dev servers serve a .css URL as a JavaScript HMR module unless the
+// request accepts text/css, so stylesheet fetches must say what they want.
+const acceptHeaderFor = (url: string) => {
+  try {
+    if (new URL(url).pathname.toLowerCase().endsWith(".css")) {
+      return "text/css,*/*;q=0.1"
+    }
+  } catch {
+    // Not a parsable URL; the fetch itself will report the real failure.
+  }
+  return "*/*"
+}
+
 const fetchResourceOnce = async (
   fetchImpl: typeof globalThis.fetch,
   url: string,
@@ -184,7 +197,7 @@ const fetchResourceOnce = async (
 ): Promise<FetchedResource> => {
   const response = await fetchImpl(url, {
     headers: {
-      Accept: "*/*",
+      Accept: acceptHeaderFor(url),
       "User-Agent": "crit-snapshot/1.0"
     },
     redirect: "follow",
