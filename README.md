@@ -124,8 +124,9 @@ is added beside it, with its source URL, capture time, artifact ID, and size.
 The Vite plugin serves artifacts under `/__crit/snapshots/<artifact-id>` with
 immutable cache headers. Capture currently supports HTTP and HTTPS Frames and
 limits an individual fetched resource to 12 MiB, the final artifact to 30 MiB,
-and each resource fetch to 60 seconds. This is page preservation, not an asset
-upload system; V1 still has no user-managed uploads.
+and a whole capture — including every resource fetch — to 60 seconds. This is
+page preservation, not an asset upload system; V1 still has no user-managed
+uploads.
 
 ## Browser behavior
 

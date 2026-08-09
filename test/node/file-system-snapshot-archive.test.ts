@@ -73,6 +73,43 @@ describe("FileSystemSnapshotArchive", () => {
       )
     ))
 
+  // it.live: the deadline relies on the real clock, which it.effect virtualizes.
+  it.live("fails once a capture exceeds its overall deadline", () => {
+    const pendingSignals: Array<AbortSignal> = []
+    const hangingFetch: typeof fetch = (_input, init) =>
+      new Promise((_resolve, reject) => {
+        const signal = init?.signal
+        if (signal == null) return
+        pendingSignals.push(signal)
+        signal.addEventListener("abort", () =>
+          reject(signal.reason ?? new Error("aborted"))
+        )
+      })
+
+    return Effect.gen(function*() {
+      const archive = yield* SnapshotArchive
+      const failure = yield* Effect.flip(
+        archive.capture("http://127.0.0.1:9/hangs-forever")
+      )
+
+      expect(failure).toMatchObject({
+        _tag: "SnapshotCaptureFailed",
+        sourceUrl: "http://127.0.0.1:9/hangs-forever"
+      })
+      expect(failure.detail).toContain("Capture deadline exceeded")
+      expect(pendingSignals).toHaveLength(1)
+      expect(pendingSignals[0]?.aborted).toBe(true)
+    }).pipe(
+      Effect.provide(
+        FileSystemSnapshotArchive.layer({
+          root,
+          fetch: hangingFetch,
+          captureTimeoutMillis: 100
+        })
+      )
+    )
+  })
+
   const startFixtureServer = () =>
     new Promise<string>((resolve, reject) => {
       server = createServer((request, response) => {
