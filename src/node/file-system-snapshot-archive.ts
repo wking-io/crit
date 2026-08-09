@@ -133,6 +133,18 @@ const make = (
           isNodeError(cause, "ENOENT")
             ? new SnapshotNotFound({ artifactId })
             : storageFailure("read", artifactId, cause)
+      }),
+    remove: (artifactId) =>
+      Effect.tryPromise({
+        try: async () => {
+          assertArtifactId(artifactId)
+          try {
+            await unlink(snapshotFilePath(directory, artifactId))
+          } catch (cause) {
+            if (!isNodeError(cause, "ENOENT")) throw cause
+          }
+        },
+        catch: (cause) => storageFailure("remove", artifactId, cause)
       })
   }
 }

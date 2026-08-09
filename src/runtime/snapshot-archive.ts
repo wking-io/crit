@@ -48,6 +48,10 @@ export interface SnapshotArchiveShape {
   readonly read: (
     artifactId: string
   ) => Effect.Effect<Uint8Array, SnapshotNotFound | SnapshotStorageFailed>
+  /** Deletes an artifact. Removing an absent artifact succeeds. */
+  readonly remove: (
+    artifactId: string
+  ) => Effect.Effect<void, SnapshotStorageFailed>
 }
 
 export class SnapshotArchive extends Context.Service<SnapshotArchive, SnapshotArchiveShape>()(

@@ -90,7 +90,14 @@ export const SnapshotServiceLive = Layer.effect(
               url: snapshotArtifactUrl(artifact.artifactId),
               artifact
             })
-          ])
+          ]).pipe(
+            // A rejected commit (for example snapshot-source-changed) must not
+            // leave the just-captured artifact orphaned on disk. Cleanup is
+            // best effort: the commit failure is what the caller must see.
+            Effect.onError(() =>
+              archive.remove(artifact.artifactId).pipe(Effect.ignore)
+            )
+          )
           return mutation.document
         }),
       readArtifact: archive.read

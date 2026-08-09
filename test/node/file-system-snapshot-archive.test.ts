@@ -8,7 +8,10 @@ import { Effect } from "effect"
 import { parse } from "node-html-parser"
 
 import { FileSystemSnapshotArchive } from "../../src/node/file-system-snapshot-archive.js"
-import { SnapshotArchive } from "../../src/runtime/snapshot-archive.js"
+import {
+  SnapshotArchive,
+  SnapshotNotFound
+} from "../../src/runtime/snapshot-archive.js"
 
 describe("FileSystemSnapshotArchive", () => {
   let root = ""
@@ -71,6 +74,21 @@ describe("FileSystemSnapshotArchive", () => {
           now: () => new Date("2026-08-08T12:00:00.000Z")
         })
       )
+    ))
+
+  it.effect("removes stored artifacts idempotently", () =>
+    Effect.gen(function*() {
+      const archive = yield* SnapshotArchive
+      const origin = yield* Effect.promise(startFixtureServer)
+      const artifact = yield* archive.capture(`${origin}/`)
+
+      yield* archive.remove(artifact.artifactId)
+      const missing = yield* Effect.flip(archive.read(artifact.artifactId))
+      yield* archive.remove(artifact.artifactId)
+
+      expect(missing).toBeInstanceOf(SnapshotNotFound)
+    }).pipe(
+      Effect.provide(FileSystemSnapshotArchive.layer({ root }))
     ))
 
   // it.live: the deadline relies on the real clock, which it.effect virtualizes.
