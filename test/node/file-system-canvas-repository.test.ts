@@ -1,4 +1,5 @@
-import { mkdtemp, rm } from "node:fs/promises"
+import { spawnSync } from "node:child_process"
+import { mkdtemp, rm, utimes, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 
@@ -70,5 +71,45 @@ describe("FileSystemCanvasRepository", () => {
         "agent-a",
         "agent-b"
       ])
+    }).pipe(Effect.provide(FileSystemCanvasRepository.layer({ root }))))
+
+  it.effect("steals a lock whose owning process is dead", () =>
+    Effect.gen(function*() {
+      const store = yield* CanvasRepository
+      yield* store.create(
+        Canvas.export(Canvas.create({ id: "wedged", title: "Wedged" }))
+      )
+
+      // A short-lived child process yields a PID that is guaranteed dead.
+      const child = spawnSync(process.execPath, ["-e", ""])
+      const lock = path.join(root, ".crit", "canvases", "wedged.json.lock")
+      yield* Effect.promise(() => writeFile(lock, `${child.pid}\n`, { mode: 0o600 }))
+
+      const { document } = yield* store.apply("wedged", [
+        CanvasCommand.addNote({ id: "note", text: "", x: 0, y: 0, width: 200, height: 120 })
+      ])
+
+      expect(document.revision).toBe(1)
+    }).pipe(Effect.provide(FileSystemCanvasRepository.layer({ root }))))
+
+  it.effect("steals a lock without a readable PID once its TTL expires", () =>
+    Effect.gen(function*() {
+      const store = yield* CanvasRepository
+      yield* store.create(
+        Canvas.export(Canvas.create({ id: "abandoned", title: "Abandoned" }))
+      )
+
+      const lock = path.join(root, ".crit", "canvases", "abandoned.json.lock")
+      yield* Effect.promise(async () => {
+        await writeFile(lock, "", { mode: 0o600 })
+        const past = new Date(Date.now() - 10 * 60_000)
+        await utimes(lock, past, past)
+      })
+
+      const { document } = yield* store.apply("abandoned", [
+        CanvasCommand.addNote({ id: "note", text: "", x: 0, y: 0, width: 200, height: 120 })
+      ])
+
+      expect(document.revision).toBe(1)
     }).pipe(Effect.provide(FileSystemCanvasRepository.layer({ root }))))
 })
