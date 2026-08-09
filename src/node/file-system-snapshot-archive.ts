@@ -19,13 +19,14 @@ import {
 const SNAPSHOT_DIRECTORY = ".crit/snapshots"
 const MAX_RESOURCE_BYTES = 12 * 1024 * 1024
 const MAX_SNAPSHOT_BYTES = 30 * 1024 * 1024
-const FETCH_TIMEOUT_MS = 60_000
+const CAPTURE_TIMEOUT_MS = 60_000
 
 export interface FileSystemSnapshotArchiveOptions {
   readonly root: string
   readonly fetch?: typeof globalThis.fetch
   readonly now?: () => Date
   readonly createId?: () => string
+  readonly captureTimeoutMillis?: number
 }
 
 type FetchedResource = {
@@ -40,9 +41,10 @@ const make = (
   options: FileSystemSnapshotArchiveOptions
 ): SnapshotArchiveShape => {
   const directory = path.join(options.root, SNAPSHOT_DIRECTORY)
-  const fetchResource = createResourceFetcher(options.fetch ?? globalThis.fetch)
+  const fetchImplementation = options.fetch ?? globalThis.fetch
   const now = options.now ?? (() => new Date())
   const createId = options.createId ?? createSnapshotId
+  const captureTimeout = options.captureTimeoutMillis ?? CAPTURE_TIMEOUT_MS
 
   return {
     capture: (value) =>
@@ -60,7 +62,13 @@ const make = (
           catch: (cause) => captureFailure(sourceUrl, cause)
         })
         const html = yield* Effect.tryPromise({
-          try: async () => {
+          // The signal aborts when the capture deadline interrupts this
+          // effect, cancelling every in-flight resource fetch with it.
+          try: async (signal) => {
+            const fetchResource = createResourceFetcher(
+              fetchImplementation,
+              signal
+            )
             const response = await fetchResource(sourceUrl)
             const output = await buildSnapshotHtml(
               response.body.toString("utf8"),
@@ -99,7 +107,20 @@ const make = (
           capturedAt: now().toISOString(),
           sizeBytes
         } satisfies SnapshotArtifact
-      }),
+      }).pipe(
+        Effect.timeoutOrElse({
+          duration: captureTimeout,
+          orElse: () =>
+            Effect.fail(
+              captureFailure(
+                value,
+                new Error(
+                  `Capture deadline exceeded: the snapshot did not complete within ${Math.round(captureTimeout / 1000)} seconds.`
+                )
+              )
+            )
+        })
+      ),
     read: (artifactId) =>
       Effect.tryPromise({
         try: async () => {
@@ -135,14 +156,21 @@ const storageFailure = (operation: string, artifactId: string, cause: unknown) =
   })
 
 const createResourceFetcher = (
-  fetchImpl: typeof globalThis.fetch
+  fetchImpl: typeof globalThis.fetch,
+  signal: AbortSignal
 ): FetchResource =>
   async (url) => {
     for (let attempt = 0; attempt < 2; attempt += 1) {
       try {
-        return await fetchResourceOnce(fetchImpl, url)
+        return await fetchResourceOnce(fetchImpl, url, signal)
       } catch (cause) {
-        if (!(cause instanceof TypeError) || attempt > 0) throw cause
+        if (
+          !(cause instanceof TypeError) ||
+          attempt > 0 ||
+          signal.aborted
+        ) {
+          throw cause
+        }
         await new Promise((resolve) => setTimeout(resolve, 250))
       }
     }
@@ -151,7 +179,8 @@ const createResourceFetcher = (
 
 const fetchResourceOnce = async (
   fetchImpl: typeof globalThis.fetch,
-  url: string
+  url: string,
+  signal: AbortSignal
 ): Promise<FetchedResource> => {
   const response = await fetchImpl(url, {
     headers: {
@@ -159,7 +188,7 @@ const fetchResourceOnce = async (
       "User-Agent": "crit-snapshot/1.0"
     },
     redirect: "follow",
-    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS)
+    signal
   })
   if (!response.ok) {
     throw new Error(`Could not snapshot ${url} (${response.status}).`)
