@@ -13,68 +13,12 @@ button, a { -webkit-tap-highlight-color: transparent; }
 a { color: inherit; }
 code { font-family: "SFMono-Regular", Consolas, ui-monospace, monospace; }
 
-.lab-shell { min-height: 100vh; padding: 28px clamp(20px, 5vw, 72px) 32px; }
-.lab-hero {
-  align-items: flex-end;
-  border-bottom: 1px solid #b9b8ae;
-  display: flex;
-  gap: 40px;
-  justify-content: space-between;
-  padding: clamp(56px, 9vw, 120px) 0 56px;
-}
-.brand, .kicker, .frame-eyebrow {
+.frame-eyebrow {
   font: 500 12px/1.4 "SFMono-Regular", Consolas, ui-monospace, monospace;
   letter-spacing: .11em;
   margin: 0 0 18px;
   text-transform: uppercase;
 }
-.lab-hero h1 { font-size: clamp(48px, 8vw, 112px); letter-spacing: -.065em; line-height: .9; margin: 0; max-width: 980px; }
-.lede { color: #5e625a; font-size: clamp(17px, 2vw, 22px); line-height: 1.55; margin: 32px 0 0; max-width: 700px; }
-.open-canvas {
-  align-items: center;
-  background: #182018;
-  border-radius: 999px;
-  color: #fff;
-  display: inline-flex;
-  flex: 0 0 auto;
-  font-weight: 700;
-  gap: 28px;
-  padding: 18px 22px;
-  text-decoration: none;
-  transition: transform 150ms ease, background 150ms ease;
-}
-.open-canvas:hover { background: #344332; transform: translateY(-2px); }
-.lab-section { border-bottom: 1px solid #b9b8ae; padding: 64px 0; }
-.section-heading { align-items: flex-end; display: flex; gap: 48px; justify-content: space-between; margin-bottom: 36px; }
-.section-heading h2 { font-size: clamp(30px, 4vw, 52px); letter-spacing: -.045em; line-height: 1; margin: 0; max-width: 760px; }
-.section-heading > p { color: #676b63; margin: 0; max-width: 360px; }
-.feature-grid { display: grid; gap: 12px; grid-template-columns: repeat(4, 1fr); }
-.feature-card { background: #e9e6dc; border-radius: 14px; min-height: 300px; padding: 22px; position: relative; }
-.feature-number { color: #777970; font: 500 12px "SFMono-Regular", Consolas, ui-monospace, monospace; }
-.feature-card h3 { font-size: 25px; letter-spacing: -.035em; margin: 78px 0 24px; }
-.feature-card ul { color: #555a52; line-height: 1.9; list-style: none; margin: 0; padding: 0; }
-.feature-card li::before { content: "↳"; margin-right: 9px; }
-.agent-section { background: #20261f; border: 0; color: #f5f3ec; margin: 0 calc(clamp(20px, 5vw, 72px) * -1); padding-left: clamp(20px, 5vw, 72px); padding-right: clamp(20px, 5vw, 72px); }
-.agent-section .kicker, .agent-section .section-heading > p { color: #aeb7a9; }
-.command-list { display: grid; gap: 8px; }
-.command {
-  align-items: center;
-  background: #2b332a;
-  border: 1px solid #3d473b;
-  border-radius: 9px;
-  color: #dfe7dc;
-  cursor: pointer;
-  display: flex;
-  gap: 18px;
-  justify-content: space-between;
-  min-width: 0;
-  padding: 15px 16px;
-  text-align: left;
-}
-.command code { font-size: 12px; overflow: auto; white-space: nowrap; }
-.command span { color: #a9bba5; flex: 0 0 auto; font-size: 12px; font-weight: 700; text-transform: uppercase; }
-.lab-footer { display: flex; justify-content: space-between; padding-top: 28px; color: #676b63; font-size: 13px; }
-
 .frame-page { --accent: #7c3aed; background: #f9f8f4; color: #181c18; min-height: 100vh; }
 .store-nav { align-items: center; border-bottom: 1px solid #deddd7; display: grid; grid-template-columns: 1fr auto 1fr; padding: 18px clamp(20px, 4vw, 56px); }
 .store-nav > span { font-size: 13px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
@@ -111,17 +55,11 @@ dt, dd { font-size: 13px; margin: 0; }
 .frame-changes .primary-action { border-radius: 0; }
 
 @media (max-width: 960px) {
-  .lab-hero, .section-heading { align-items: flex-start; flex-direction: column; }
-  .feature-grid { grid-template-columns: repeat(2, 1fr); }
   .checkout-shell { grid-template-columns: 1fr; }
   .order-card { max-width: 560px; width: 100%; }
 }
 
 @media (max-width: 600px) {
-  .lab-hero h1 { font-size: 50px; }
-  .feature-grid { grid-template-columns: 1fr; }
-  .feature-card { min-height: 250px; }
-  .lab-footer { flex-direction: column; gap: 12px; }
   .store-nav { grid-template-columns: auto 1fr auto; gap: 12px; }
   .checkout-copy > h1 { font-size: 50px; }
 }

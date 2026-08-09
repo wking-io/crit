@@ -1,4 +1,5 @@
 export { FileSystemCanvasRepository } from "./file-system-canvas-repository.js"
+export { gitCommentAuthor } from "./git-comment-author.js"
 export {
   FileSystemAgentActivity,
   type FileSystemAgentActivityOptions

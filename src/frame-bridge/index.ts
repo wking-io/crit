@@ -12,6 +12,13 @@ export {
   type FrameInputIntent,
   type FrameWheelDecision
 } from "./input-relay.js"
+export {
+  CRIT_FRAME_COMMENT_SOURCE,
+  connectBridgedFrameComments,
+  critFrameCommentBridgeScript,
+  type FrameCommentEvent,
+  type FrameCommentPin
+} from "./comment-bridge.js"
 
 export const CRIT_FRAME_INPUT_SOURCE = "@riff-refine/crit/frame-input"
 

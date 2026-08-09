@@ -58,7 +58,7 @@ export const critStyles = String.raw`
   pointer-events: auto;
   position: absolute;
   top: 17px;
-  width: 365px;
+  width: 395px;
   z-index: 1000;
 }
 
@@ -293,6 +293,27 @@ export const critStyles = String.raw`
 }
 .crit-frame__viewport iframe { background: oklch(97% 0.001 106.4); border: 0; height: 100%; width: 100%; }
 .crit-frame__paused { color: var(--crit-muted); font: calc(10px * var(--crit-ui))/1.5 system-ui, sans-serif; padding: calc(24px * var(--crit-ui)); }
+.crit-frame__comment-fallback { background: transparent; border: 0; cursor: crosshair; inset: 0; padding: 0; position: absolute; z-index: 3; }
+.crit-comment-pin { align-items: center; background: #fff; border: 1px solid currentColor; border-radius: 999px; box-shadow: 0 2px 6px oklch(14.7% 0.004 49.3 / 18%); cursor: pointer; display: grid; height: calc(24px * var(--crit-ui)); justify-content: center; padding: calc(3px * var(--crit-ui)); position: absolute; transform: translate(-50%, -100%); width: calc(24px * var(--crit-ui)); z-index: 4; }
+.crit-comment-pin svg { height: calc(16px * var(--crit-ui)); width: calc(16px * var(--crit-ui)); }
+.crit-comment-popover { background: oklch(97% 0.001 106.4); border: 1px solid currentColor; border-radius: 10px; box-shadow: oklch(14.7% 0.004 49.3 / 24%) 0 12px 36px; font-family: system-ui, -apple-system, sans-serif; max-height: min(440px, calc(100vh - 24px)); overflow: auto; padding: 12px; position: fixed; width: 332px; z-index: 5000; }
+.crit-comment-popover__header { align-items: center; display: flex; justify-content: space-between; margin-bottom: 10px; }
+.crit-comment-popover__header > span { align-items: center; display: flex; font-size: 12px; font-weight: 700; gap: 6px; }
+.crit-comment-popover__header button, .crit-comment__actions button, .crit-comment__text-action { background: transparent; border: 0; border-radius: 4px; color: inherit; cursor: pointer; font: 600 11px/1.2 system-ui, sans-serif; padding: 5px 7px; }
+.crit-comment-popover__header button:hover, .crit-comment__actions button:hover, .crit-comment__text-action:hover { background: color-mix(in oklch, currentColor 10%, transparent); }
+.crit-comment__messages { display: grid; gap: 8px; margin-bottom: 10px; }
+.crit-comment__message { border-top: 1px solid color-mix(in oklch, currentColor 20%, transparent); color: #191918; padding-top: 8px; }
+.crit-comment__message:first-child { border-top: 0; padding-top: 0; }
+.crit-comment__message-header { align-items: baseline; display: flex; gap: 8px; }
+.crit-comment__message-header strong { font-size: 11px; }
+.crit-comment__message-header span { color: #77746c; font-size: 9px; }
+.crit-comment__message p { font-size: 12px; line-height: 1.45; margin: 4px 0; white-space: pre-wrap; }
+.crit-comment__text-action { color: #77746c; padding-left: 0; }
+.crit-comment__composer, .crit-comment__message form { display: grid; gap: 8px; }
+.crit-comment__composer textarea, .crit-comment__message textarea { background: #fff; border: 1px solid color-mix(in oklch, currentColor 35%, transparent); border-radius: 6px; color: #191918; font: 12px/1.45 system-ui, sans-serif; min-height: 72px; padding: 8px; resize: vertical; }
+.crit-comment__actions { align-items: center; display: flex; justify-content: space-between; }
+.crit-comment__actions button[type="submit"] { background: #191918; color: #fff; }
+.crit-comment__actions button:disabled { cursor: default; opacity: .45; }
 
 .crit-status-menu {
   align-items: flex-start;
@@ -416,6 +437,7 @@ export const critStyles = String.raw`
   padding: 14px 16px;
   pointer-events: none;
   position: absolute;
+  transform-origin: bottom left;
   width: 320px;
   z-index: 4900;
 }

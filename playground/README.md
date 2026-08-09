@@ -6,13 +6,16 @@ From the repository root, run:
 npm run dev:portless
 ```
 
-Open `https://crit.localhost` for the test guide or
-`https://crit.localhost/crit/feature-lab` for the Canvas itself. Portless
+Open `https://crit.localhost` for the feature-lab Canvas. Portless
 registers the stable hostname and selects the backing port automatically.
-Portless requires Node.js 24 or newer.
+Portless requires Node.js 24 or newer. On first use, macOS may request
+administrator access to bind standard HTTPS port 443; accept that prompt to use
+the hostname without a port.
 
 For a direct Vite server without Portless, use `npm run dev`. It defaults to
 `http://127.0.0.1:5173`; set `CRIT_PLAYGROUND_PORT` if that port is unavailable.
+The editor is source-backed in development: changes under `src/react` update the
+open playground through Vite without a manual package build or server restart.
 
 The playground uses Crit's real Vite plugin, HTTP adapter, filesystem repository,
 snapshot archive, manifest discovery, and standalone editor route. Its four Frame

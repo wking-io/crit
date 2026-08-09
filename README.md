@@ -272,14 +272,17 @@ Run the source-backed visual test app from this repository:
 npm run dev:portless
 ```
 
-Open `https://crit.localhost` for the feature guide or
-`https://crit.localhost/crit/feature-lab` for the pre-populated Canvas. Portless
-registers the stable hostname and chooses the backing port. The app
+Open `https://crit.localhost` for the pre-populated feature-lab Canvas. Portless
+registers the stable hostname and chooses the backing port. On first use,
+macOS may request administrator access so Portless can bind standard HTTPS port
+443; accepting that prompt is what makes the URL work without a port. The app
 uses the real Vite plugin, four real local Frame pages, filesystem persistence,
 manifest discovery, Notes, every review state, snapshots, and agent activity.
 
 Use `npm run dev` when you want direct Vite without Portless; it defaults to
-`http://127.0.0.1:5173`.
+`http://127.0.0.1:5173`. Both commands serve the Crit editor from the package's
+source through Vite, so changes under `src/react` update the open playground
+without rebuilding or restarting it.
 
 In another terminal, agents can edit the exact same Canvas:
 

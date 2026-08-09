@@ -74,6 +74,8 @@ describe("crit create", () => {
           revision: 0,
           frameCount: 0,
           noteCount: 0,
+          activeCommentCount: 0,
+          resolvedCommentCount: 0,
           statuses: {
             inProgress: 0,
             readyForReview: 0,

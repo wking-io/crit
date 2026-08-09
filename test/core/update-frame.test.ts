@@ -37,7 +37,8 @@ describe("Canvas UpdateFrame command", () => {
       expect(change).toEqual({
         commandCount: 1,
         changedFrameIds: [frameId],
-        changedNoteIds: []
+        changedNoteIds: [],
+        changedCommentThreadIds: []
       })
       expect(frame).toEqual({
         id: frameId,

@@ -146,6 +146,8 @@ describe("crit Canvas workflows", () => {
             revision: 0,
             frameCount: 0,
             noteCount: 0,
+            activeCommentCount: 0,
+            resolvedCommentCount: 0,
             statuses: {
               inProgress: 0,
               readyForReview: 0,
@@ -160,6 +162,8 @@ describe("crit Canvas workflows", () => {
             revision: 1,
             frameCount: 2,
             noteCount: 0,
+            activeCommentCount: 0,
+            resolvedCommentCount: 0,
             statuses: {
               inProgress: 2,
               readyForReview: 0,
@@ -476,7 +480,9 @@ describe("crit Canvas workflows", () => {
                   zIndex: 2
                 }
               ],
-              notes: []
+              notes: [],
+              owner: null,
+              comments: []
             }),
           readArtifact: () => Effect.die("unused")
         })

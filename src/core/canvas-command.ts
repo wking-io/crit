@@ -1,5 +1,11 @@
 import { Schema } from "effect"
 
+import {
+  CommentAnchor,
+  CommentAuthor,
+  CommentMessage
+} from "./comment.js"
+
 export const FrameReviewStatus = Schema.Union([
   Schema.Literal("in-progress"),
   Schema.Literal("ready-for-review"),
@@ -177,6 +183,55 @@ export const RemoveNoteCommand = Schema.TaggedStruct("RemoveNote", {
   id: Schema.String
 })
 export type RemoveNoteCommand = typeof RemoveNoteCommand.Type
+
+export const AddCommentThreadCommand = Schema.TaggedStruct("AddCommentThread", {
+  id: Schema.String,
+  frameId: Schema.String,
+  anchor: CommentAnchor,
+  opening: CommentMessage
+})
+export type AddCommentThreadCommand = typeof AddCommentThreadCommand.Type
+
+export const ReplyToCommentThreadCommand = Schema.TaggedStruct(
+  "ReplyToCommentThread",
+  {
+    id: Schema.String,
+    reply: CommentMessage
+  }
+)
+export type ReplyToCommentThreadCommand = typeof ReplyToCommentThreadCommand.Type
+
+export const EditCommentCommand = Schema.TaggedStruct("EditComment", {
+  id: Schema.String,
+  commentId: Schema.String,
+  actorId: Schema.String,
+  expectedBody: Schema.String,
+  body: Schema.String,
+  editedAt: Schema.String
+})
+export type EditCommentCommand = typeof EditCommentCommand.Type
+
+export const SetCommentThreadResolvedCommand = Schema.TaggedStruct(
+  "SetCommentThreadResolved",
+  {
+    id: Schema.String,
+    actor: CommentAuthor,
+    resolved: Schema.Boolean,
+    at: Schema.String
+  }
+)
+export type SetCommentThreadResolvedCommand =
+  typeof SetCommentThreadResolvedCommand.Type
+
+export const UpdateCommentAnchorCommand = Schema.TaggedStruct(
+  "UpdateCommentAnchor",
+  {
+    id: Schema.String,
+    actorId: Schema.String,
+    anchor: CommentAnchor
+  }
+)
+export type UpdateCommentAnchorCommand = typeof UpdateCommentAnchorCommand.Type
 
 export type AddFrameInput = {
   readonly id: string
@@ -363,6 +418,67 @@ const removeNote = (input: RemoveNoteInput): RemoveNoteCommand => ({
   ...input
 })
 
+export type AddCommentThreadInput = {
+  readonly id: string
+  readonly frameId: string
+  readonly anchor: CommentAnchor
+  readonly opening: CommentMessage
+}
+
+const addCommentThread = (
+  input: AddCommentThreadInput
+): AddCommentThreadCommand => ({ _tag: "AddCommentThread", ...input })
+
+export type ReplyToCommentThreadInput = {
+  readonly id: string
+  readonly reply: CommentMessage
+}
+
+const replyToCommentThread = (
+  input: ReplyToCommentThreadInput
+): ReplyToCommentThreadCommand => ({ _tag: "ReplyToCommentThread", ...input })
+
+export type EditCommentInput = {
+  readonly id: string
+  readonly commentId: string
+  readonly actorId: string
+  readonly expectedBody: string
+  readonly body: string
+  readonly editedAt: string
+}
+
+const editComment = (input: EditCommentInput): EditCommentCommand => ({
+  _tag: "EditComment",
+  ...input
+})
+
+export type SetCommentThreadResolvedInput = {
+  readonly id: string
+  readonly actor: CommentAuthor
+  readonly resolved: boolean
+  readonly at: string
+}
+
+const setCommentThreadResolved = (
+  input: SetCommentThreadResolvedInput
+): SetCommentThreadResolvedCommand => ({
+  _tag: "SetCommentThreadResolved",
+  ...input
+})
+
+export type UpdateCommentAnchorInput = {
+  readonly id: string
+  readonly actorId: string
+  readonly anchor: CommentAnchor
+}
+
+const updateCommentAnchor = (
+  input: UpdateCommentAnchorInput
+): UpdateCommentAnchorCommand => ({
+  _tag: "UpdateCommentAnchor",
+  ...input
+})
+
 export const CanvasCommandSchema = Schema.Union([
   AddFrameCommand,
   AddSnapshotFrameCommand,
@@ -381,7 +497,12 @@ export const CanvasCommandSchema = Schema.Union([
   SendNoteToBackCommand,
   AttachNoteCommand,
   DetachNoteCommand,
-  RemoveNoteCommand
+  RemoveNoteCommand,
+  AddCommentThreadCommand,
+  ReplyToCommentThreadCommand,
+  EditCommentCommand,
+  SetCommentThreadResolvedCommand,
+  UpdateCommentAnchorCommand
 ])
 export type CanvasCommand = typeof CanvasCommandSchema.Type
 
@@ -404,6 +525,11 @@ export const CanvasCommand = {
   AttachNote: AttachNoteCommand,
   DetachNote: DetachNoteCommand,
   RemoveNote: RemoveNoteCommand,
+  AddCommentThread: AddCommentThreadCommand,
+  ReplyToCommentThread: ReplyToCommentThreadCommand,
+  EditComment: EditCommentCommand,
+  SetCommentThreadResolved: SetCommentThreadResolvedCommand,
+  UpdateCommentAnchor: UpdateCommentAnchorCommand,
   addFrame,
   addSnapshotFrame,
   setFrameStatus,
@@ -421,5 +547,10 @@ export const CanvasCommand = {
   sendNoteToBack,
   attachNote,
   detachNote,
-  removeNote
+  removeNote,
+  addCommentThread,
+  replyToCommentThread,
+  editComment,
+  setCommentThreadResolved,
+  updateCommentAnchor
 } as const

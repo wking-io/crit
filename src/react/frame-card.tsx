@@ -10,12 +10,15 @@ import {
 } from "react"
 
 import type {
+  CanvasCommentThread,
   CanvasFrame,
   CanvasGeometry,
+  CommentAnchor,
   FrameReviewStatus,
   FrameStatus
 } from "../core/index.js"
 import {
+  connectBridgedFrameComments,
   connectBridgedFrameInput,
   connectSameOriginFrameInput,
   type FrameInputIntent
@@ -38,6 +41,7 @@ import {
 import {
   FRAME_STATUSES,
   IconEditTitle,
+  IconCommentPin,
   IconFullscreen,
   IconMinimize,
   IconOpenExternal,
@@ -185,6 +189,8 @@ export function FrameCard({
   selected,
   shortId,
   zoom,
+  commentMode,
+  commentThreads,
   onBringToFront,
   onFitContent,
   onMove,
@@ -192,6 +198,8 @@ export function FrameCard({
   onResize,
   onSelect,
   onInputIntent,
+  onCommentAnchor,
+  onOpenComment,
   onSnapshot,
   onSnapshotError,
   onSendToBack,
@@ -208,6 +216,8 @@ export function FrameCard({
   readonly selected: boolean
   readonly shortId: string
   readonly zoom: number
+  readonly commentMode: boolean
+  readonly commentThreads: ReadonlyArray<CanvasCommentThread>
   readonly onBringToFront: () => void
   readonly onFitContent: (height: number) => void
   readonly onMove: (event: ReactPointerEvent, item: CanvasFrame) => void
@@ -219,6 +229,8 @@ export function FrameCard({
   ) => void
   readonly onSelect: () => void
   readonly onInputIntent: (intent: FrameInputIntent) => void
+  readonly onCommentAnchor: (anchor: CommentAnchor, point: { readonly x: number; readonly y: number }) => void
+  readonly onOpenComment: (id: string, point: { readonly x: number; readonly y: number }) => void
   readonly onSnapshot?: () => Effect.Effect<unknown, unknown>
   readonly onSnapshotError: (cause: unknown) => void
   readonly onSendToBack: () => void
@@ -234,6 +246,12 @@ export function FrameCard({
   const [statusMenuOpen, setStatusMenuOpen] = useState(false)
   const [titleDraft, setTitleDraft] = useState(frame.title)
   const [titleEditing, setTitleEditing] = useState(false)
+  const [commentBridgeReady, setCommentBridgeReady] = useState(false)
+  const commentBridgeRef = useRef<ReturnType<typeof connectBridgedFrameComments> | null>(null)
+  const onCommentAnchorRef = useRef(onCommentAnchor)
+  const onOpenCommentRef = useRef(onOpenComment)
+  onCommentAnchorRef.current = onCommentAnchor
+  onOpenCommentRef.current = onOpenComment
   useEffect(() => setTitleDraft(frame.title), [frame.title])
   useEffect(() => {
     const update = () => setFullscreen(document.fullscreenElement === frameRef.current)
@@ -370,6 +388,40 @@ export function FrameCard({
     onInputIntent,
     onSelect
   ])
+  useEffect(() => {
+    const iframe = iframeRef.current
+    if (iframe === null || frame.snapshot !== undefined) {
+      setCommentBridgeReady(false)
+      return
+    }
+    setCommentBridgeReady(false)
+    const bridge = connectBridgedFrameComments({
+      target: window,
+      frameElement: iframe,
+      onEvent: (event) => {
+        if (event.type === "ready") setCommentBridgeReady(true)
+        else if (event.type === "select") onCommentAnchorRef.current(event.anchor, { x: event.clientX, y: event.clientY })
+        else onOpenCommentRef.current(event.id, { x: event.clientX, y: event.clientY })
+      }
+    })
+    commentBridgeRef.current = bridge
+    return () => {
+      bridge.disconnect()
+      if (commentBridgeRef.current === bridge) commentBridgeRef.current = null
+    }
+  }, [frame.snapshot, frame.url])
+  useEffect(() => {
+    if (!commentBridgeReady) return
+    commentBridgeRef.current?.configure({
+      enabled: commentMode,
+      color: status.ink,
+      pins: commentThreads.flatMap((thread) =>
+        thread.anchor.kind === "element"
+          ? [{ id: thread.id, anchor: thread.anchor }]
+          : []
+      )
+    })
+  }, [commentBridgeReady, commentMode, commentThreads, status.ink])
   const takeSnapshot = () => {
     if (onSnapshot === undefined || snapshotting) return
     setSnapshotting(true)
@@ -663,6 +715,41 @@ export function FrameCard({
             description: "This frame is unloaded while far outside the current view to save resources."
           })}
         >Frame paused while offscreen</div>}
+        {frame.snapshot === undefined ? commentThreads
+          .filter((thread) => thread.anchor.kind === "frame")
+          .map((thread) => {
+            if (thread.anchor.kind !== "frame") return null
+            return <button
+              aria-label={`Open comment by ${thread.opening.author.name}`}
+              className="crit-comment-pin"
+              key={thread.id}
+              onClick={(event) => {
+                event.preventDefault()
+                event.stopPropagation()
+                onOpenComment(thread.id, { x: event.clientX, y: event.clientY })
+              }}
+              onPointerDown={(event) => event.stopPropagation()}
+              style={{ color: status.ink, left: `${thread.anchor.xRatio * 100}%`, top: `${thread.anchor.yRatio * 100}%` }}
+              type="button"
+            ><IconCommentPin /></button>
+          }) : null}
+        {commentMode && frame.snapshot === undefined && !commentBridgeReady ? (
+          <button
+            aria-label={`Place a comment on ${frame.title}`}
+            className="crit-frame__comment-fallback"
+            onClick={(event) => {
+              const rect = event.currentTarget.getBoundingClientRect()
+              onCommentAnchor({
+                kind: "frame",
+                xRatio: Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width)),
+                yRatio: Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height))
+              }, { x: event.clientX, y: event.clientY })
+            }}
+            onContextMenu={(event) => event.preventDefault()}
+            onPointerDown={(event) => event.stopPropagation()}
+            type="button"
+          />
+        ) : null}
       </div>
       {selected ? (
         <CanvasSelection

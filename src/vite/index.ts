@@ -25,10 +25,12 @@ import {
 import { FileSystemCanvasRepository } from "../node/file-system-canvas-repository.js"
 import { FileSystemAgentActivity } from "../node/file-system-agent-activity.js"
 import { FileSystemSnapshotArchive } from "../node/file-system-snapshot-archive.js"
+import { gitCommentAuthor } from "../node/git-comment-author.js"
 import { CanvasRepositoryCritClient } from "../runtime/canvas-repository-crit-client.js"
 import { CanvasRepository } from "../runtime/canvas-repository.js"
 import { AgentActivityStore } from "../runtime/agent-activity.js"
 import { critFrameInputBridgeScript } from "../frame-bridge/index.js"
+import { critFrameCommentBridgeScript } from "../frame-bridge/comment-bridge.js"
 import {
   CRIT_SNAPSHOT_PATH,
   SnapshotNotFound
@@ -186,11 +188,9 @@ const editorHtml = (
 }
 
 /**
- * Resolves where a browser page served by this dev server reaches the HMR
- * WebSocket, mirroring the values Vite injects into its own client. The served
- * editor's script is a pre-built bundle outside Vite's module graph, so it has
- * no `import.meta.hot` and receives this endpoint through the editor HTML
- * instead.
+ * Resolves where the editor reaches the HMR WebSocket for Canvas data hints.
+ * This remains explicit because preview uses a self-contained editor bundle,
+ * while development also uses the same socket for browser and agent writes.
  */
 const liveRefreshEndpointFromConfig = (
   config: ResolvedConfig
@@ -216,109 +216,128 @@ const liveRefreshEndpointFromConfig = (
   }
 }
 
-const buildEditorBundle = async () => {
+const VIRTUAL_EDITOR_ID = "virtual:crit-editor.js"
+const VIRTUAL_EDITOR_PATH = `/@id/${VIRTUAL_EDITOR_ID}`
+
+const resolveReactEntry = () => {
   const javascriptEntry = fileURLToPath(
     new URL("../react/index.js", import.meta.url)
   )
-  const reactEntry = existsSync(javascriptEntry)
+  return existsSync(javascriptEntry)
     ? javascriptEntry
     : javascriptEntry.replace(/\.js$/, ".ts")
+}
+
+const resolvedVirtualEditorId = () =>
+  path.join(path.dirname(resolveReactEntry()), "__crit_virtual_editor.js")
+
+const editorModuleSource = (
+  reactEntry: string,
+  delivery: "vite" | "bundle"
+) => {
+  return `
+  import { createElement, Fragment } from "react"
+  import { createRoot } from "react-dom/client"
+  import { DialRoot, useDialKit } from "dialkit"
+  ${delivery === "vite"
+    ? `import "/@vite/client"
+  import "dialkit/styles.css"`
+    : `import dialKitStyles from "dialkit/styles.css"`}
+  import {
+    connectCanvasLiveRefresh,
+    Crit,
+    DEFAULT_CANVAS_CAMERA_OPTIONS,
+    DEFAULT_FRAME_CHROME_SETTINGS
+  } from ${JSON.stringify(reactEntry)}
+
+  ${delivery === "bundle" ? `
+  const dialKitStyle = document.createElement("style")
+  dialKitStyle.dataset.critDialkit = ""
+  dialKitStyle.textContent = dialKitStyles
+  document.head.append(dialKitStyle)
+  ` : ""}
+
+  const canvasId = document.body.dataset.critCanvasId || "default"
+
+  const liveRefreshEndpoint = (() => {
+    try {
+      return JSON.parse(document.body.dataset.critLiveRefresh || "{}")
+    } catch {
+      return { enabled: false }
+    }
+  })()
+  let disposeLiveRefresh
+  const attachLiveRefresh = (session) => {
+    disposeLiveRefresh?.()
+    disposeLiveRefresh = connectCanvasLiveRefresh({
+      canvasId,
+      session,
+      endpoint: liveRefreshEndpoint
+    })
+  }
+
+  function CritEditor() {
+    const chrome = useDialKit("Frame chrome", {
+      titleMinimumCharacters: [
+        DEFAULT_FRAME_CHROME_SETTINGS.titleMinimumCharacters,
+        0,
+        80,
+        1
+      ],
+      iconMinimumWidth: {
+        snapshot: [DEFAULT_FRAME_CHROME_SETTINGS.snapshotMinimumWidth, 0, 1600, 1],
+        open: [DEFAULT_FRAME_CHROME_SETTINGS.openMinimumWidth, 0, 1600, 1],
+        fullscreen: [DEFAULT_FRAME_CHROME_SETTINGS.fullscreenMinimumWidth, 0, 1600, 1],
+        delete: [DEFAULT_FRAME_CHROME_SETTINGS.deleteMinimumWidth, 0, 1600, 1]
+      }
+    }, {
+      id: "crit-frame-chrome",
+      persist: { key: "crit-frame-chrome", storage: "localStorage", presets: true }
+    })
+    const camera = useDialKit("Camera", {
+      panSpeed: [DEFAULT_CANVAS_CAMERA_OPTIONS.panSpeed, 0.1, 3, 0.05],
+      zoomSpeed: [DEFAULT_CANVAS_CAMERA_OPTIONS.zoomSpeed, 0.1, 3, 0.05]
+    }, {
+      id: "crit-camera",
+      persist: { key: "crit-camera", storage: "localStorage", presets: true }
+    })
+
+    return createElement(Fragment, null,
+      createElement(Crit, {
+        canvasId,
+        onSession: attachLiveRefresh,
+        frameChrome: {
+          titleMinimumCharacters: chrome.titleMinimumCharacters,
+          snapshotMinimumWidth: chrome.iconMinimumWidth.snapshot,
+          openMinimumWidth: chrome.iconMinimumWidth.open,
+          fullscreenMinimumWidth: chrome.iconMinimumWidth.fullscreen,
+          deleteMinimumWidth: chrome.iconMinimumWidth.delete
+        },
+        cameraOptions: {
+          panSpeed: camera.panSpeed,
+          zoomSpeed: camera.zoomSpeed
+        }
+      }),
+      createElement(DialRoot, {
+        defaultOpen: true,
+        position: "bottom-right",
+        productionEnabled: true,
+        theme: "system"
+      })
+    )
+  }
+
+  createRoot(document.getElementById("crit-root")).render(
+    createElement(CritEditor)
+  )
+`
+}
+
+const buildEditorBundle = async () => {
+  const reactEntry = resolveReactEntry()
   const result = await build({
     stdin: {
-      contents: `
-        import { createElement, Fragment } from "react"
-        import { createRoot } from "react-dom/client"
-        import { DialRoot, useDialKit } from "dialkit"
-        import dialKitStyles from "dialkit/styles.css"
-        import {
-          connectCanvasLiveRefresh,
-          Crit,
-          DEFAULT_CANVAS_CAMERA_OPTIONS,
-          DEFAULT_FRAME_CHROME_SETTINGS
-        } from ${JSON.stringify(reactEntry)}
-
-        const dialKitStyle = document.createElement("style")
-        dialKitStyle.dataset.critDialkit = ""
-        dialKitStyle.textContent = dialKitStyles
-        document.head.append(dialKitStyle)
-
-        const canvasId = document.body.dataset.critCanvasId || "default"
-
-        // This bundle is built outside Vite's module graph, so import.meta.hot
-        // never exists here. The live refresh hint channel is reached through
-        // the HMR WebSocket endpoint the plugin injected into the page.
-        const liveRefreshEndpoint = (() => {
-          try {
-            return JSON.parse(document.body.dataset.critLiveRefresh || "{}")
-          } catch {
-            return { enabled: false }
-          }
-        })()
-        let disposeLiveRefresh
-        const attachLiveRefresh = (session) => {
-          disposeLiveRefresh?.()
-          disposeLiveRefresh = connectCanvasLiveRefresh({
-            canvasId,
-            session,
-            endpoint: liveRefreshEndpoint
-          })
-        }
-
-        function CritEditor() {
-          const chrome = useDialKit("Frame chrome", {
-            titleMinimumCharacters: [
-              DEFAULT_FRAME_CHROME_SETTINGS.titleMinimumCharacters,
-              0,
-              80,
-              1
-            ],
-            iconMinimumWidth: {
-              snapshot: [DEFAULT_FRAME_CHROME_SETTINGS.snapshotMinimumWidth, 0, 1600, 1],
-              open: [DEFAULT_FRAME_CHROME_SETTINGS.openMinimumWidth, 0, 1600, 1],
-              fullscreen: [DEFAULT_FRAME_CHROME_SETTINGS.fullscreenMinimumWidth, 0, 1600, 1],
-              delete: [DEFAULT_FRAME_CHROME_SETTINGS.deleteMinimumWidth, 0, 1600, 1]
-            }
-          }, {
-            id: "crit-frame-chrome",
-            persist: { key: "crit-frame-chrome", storage: "localStorage", presets: true }
-          })
-          const camera = useDialKit("Camera", {
-            panSpeed: [DEFAULT_CANVAS_CAMERA_OPTIONS.panSpeed, 0.1, 3, 0.05],
-            zoomSpeed: [DEFAULT_CANVAS_CAMERA_OPTIONS.zoomSpeed, 0.1, 3, 0.05]
-          }, {
-            id: "crit-camera",
-            persist: { key: "crit-camera", storage: "localStorage", presets: true }
-          })
-
-          return createElement(Fragment, null,
-            createElement(Crit, {
-              canvasId,
-              onSession: attachLiveRefresh,
-              frameChrome: {
-                titleMinimumCharacters: chrome.titleMinimumCharacters,
-                snapshotMinimumWidth: chrome.iconMinimumWidth.snapshot,
-                openMinimumWidth: chrome.iconMinimumWidth.open,
-                fullscreenMinimumWidth: chrome.iconMinimumWidth.fullscreen,
-                deleteMinimumWidth: chrome.iconMinimumWidth.delete
-              },
-              cameraOptions: {
-                panSpeed: camera.panSpeed,
-                zoomSpeed: camera.zoomSpeed
-              }
-            }),
-            createElement(DialRoot, {
-              defaultOpen: true,
-              position: "bottom-left",
-              productionEnabled: true,
-              theme: "system"
-            })
-          )
-        }
-
-        createRoot(document.getElementById("crit-root")).render(
-          createElement(CritEditor)
-        )
-      `,
+      contents: editorModuleSource(reactEntry, "bundle"),
       loader: "js",
       resolveDir: path.dirname(reactEntry),
       sourcefile: "crit-editor.js"
@@ -340,11 +359,13 @@ const buildEditorBundle = async () => {
 
 export const crit = (options: CritVitePluginOptions = {}): Plugin => {
   const apiPath = options.apiPath ?? DEFAULT_CRIT_API_PATH
+  const identityPath = `${apiPath.replace(/\/+$/, "")}/identity`
   const manifestPath = options.manifestPath ?? CRIT_MANIFEST_PATH
   const editorPath = options.editorPath ?? "/crit"
   const enabled = options.enabled ?? true
   let resolvedRoot = options.root ?? process.cwd()
   let liveRefreshEndpoint: CanvasLiveRefreshEndpoint = { enabled: false }
+  let isPreview = false
 
   const configure = (server: CritViteServer) => {
     if (!enabled) return
@@ -363,9 +384,13 @@ export const crit = (options: CritVitePluginOptions = {}): Plugin => {
     const editorBase =
       editorPath === false ? undefined : normalizedEditorPath(editorPath)
     const editorAssetPath =
-      editorBase === undefined ? undefined : `${editorBase}/__assets/editor.js`
+      editorBase === undefined
+        ? undefined
+        : isPreview
+          ? `${editorBase}/__assets/editor.js`
+          : VIRTUAL_EDITOR_PATH
     const editorBundle =
-      editorBase === undefined ? undefined : buildEditorBundle()
+      editorBase === undefined || !isPreview ? undefined : buildEditorBundle()
     const runtime = ManagedRuntime.make(
       Layer.mergeAll(
         documentLayer,
@@ -480,7 +505,22 @@ export const crit = (options: CritVitePluginOptions = {}): Plugin => {
     }
 
     server.middlewares.use((request, response, next) => {
+      if (requestPathname(request) === identityPath) {
+        if (!requireGet(request, response)) return
+        void gitCommentAuthor(resolvedRoot)
+          .then((author) => sendJson(response, 200, author))
+          .catch((cause: unknown) => sendJson(response, 503, {
+            error: {
+              code: "unavailable",
+              message: cause instanceof Error
+                ? cause.message
+                : "Git comment identity is unavailable"
+            }
+          }))
+        return
+      }
       if (
+        editorBundle !== undefined &&
         editorAssetPath !== undefined &&
         requestPathname(request) === editorAssetPath
       ) {
@@ -594,17 +634,45 @@ export const crit = (options: CritVitePluginOptions = {}): Plugin => {
       resolvedRoot = options.root ?? config.root
       liveRefreshEndpoint = liveRefreshEndpointFromConfig(config)
     },
+    resolveId(id) {
+      if (
+        enabled &&
+        editorPath !== false &&
+        id === VIRTUAL_EDITOR_ID
+      ) {
+        return resolvedVirtualEditorId()
+      }
+    },
+    load(id) {
+      if (id === resolvedVirtualEditorId()) {
+        return editorModuleSource(resolveReactEntry(), "vite")
+      }
+    },
     transformIndexHtml() {
       if (options.frameInputBridge === false) return []
-      return [{
-        tag: "script",
-        attrs: { "data-crit-frame-input-bridge": "" },
-        children: critFrameInputBridgeScript,
-        injectTo: "head-prepend"
-      }]
+      return [
+        {
+          tag: "script",
+          attrs: { "data-crit-frame-input-bridge": "" },
+          children: critFrameInputBridgeScript,
+          injectTo: "head-prepend"
+        },
+        {
+          tag: "script",
+          attrs: { "data-crit-frame-comment-bridge": "" },
+          children: critFrameCommentBridgeScript,
+          injectTo: "head-prepend"
+        }
+      ]
     },
-    configureServer: configure,
-    configurePreviewServer: configure
+    configureServer(server) {
+      isPreview = false
+      return configure(server)
+    },
+    configurePreviewServer(server) {
+      isPreview = true
+      return configure(server)
+    }
   }
 }
 

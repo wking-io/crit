@@ -16,7 +16,7 @@ import {
 } from "react"
 
 import { IndexedDbDraftJournal } from "../browser/indexeddb-draft-journal.js"
-import type { CanvasDocument } from "../core/index.js"
+import type { CanvasDocument, CommentAuthor } from "../core/index.js"
 import { HttpCritClient } from "../http/client.js"
 import {
   CanvasSession,
@@ -99,6 +99,7 @@ export interface CritProps {
   readonly iframeSandbox?: string
   readonly frameChrome?: Partial<FrameChromeSettings>
   readonly cameraOptions?: Partial<CanvasCameraOptions>
+  readonly author?: CommentAuthor
   readonly onSession?: (session: CanvasSessionHandle) => void
   readonly onCommandError?: (message: string) => void
   readonly loadingFallback?: ReactNode
@@ -119,6 +120,7 @@ export function Crit({
   iframeSandbox,
   frameChrome,
   cameraOptions,
+  author,
   onSession,
   onCommandError,
   loadingFallback,
@@ -128,6 +130,9 @@ export function Crit({
   const [sessionState, setSessionState] = useState<CanvasSessionState | null>(null)
   const [document, setDocument] = useState<CanvasDocument | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [resolvedAuthor, setResolvedAuthor] = useState<CommentAuthor | null>(
+    author ?? null
+  )
   const onSessionRef = useRef(onSession)
   onSessionRef.current = onSession
   const resolvedSessionId = useMemo(
@@ -142,6 +147,30 @@ export function Crit({
     () => draftJournal === false ? undefined : (draftJournal ?? IndexedDbDraftJournal.make()),
     [draftJournal]
   )
+
+  useEffect(() => {
+    if (author !== undefined) {
+      setResolvedAuthor(author)
+      return
+    }
+    const controller = new AbortController()
+    const base = (apiPath ?? "/__crit/api").replace(/\/+$/, "")
+    void fetch(`${base}/identity`, { signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Git comment identity is unavailable")
+        const value = await response.json() as Partial<CommentAuthor>
+        if (typeof value.id !== "string" || typeof value.name !== "string") {
+          throw new Error("Git comment identity is invalid")
+        }
+        setResolvedAuthor({ id: value.id, name: value.name })
+      })
+      .catch((cause: unknown) => {
+        if (!(cause instanceof DOMException && cause.name === "AbortError")) {
+          onCommandError?.(errorMessage(cause))
+        }
+      })
+    return () => controller.abort()
+  }, [apiPath, author, onCommandError])
 
   useEffect(() => {
     const scope = Effect.runSync(Scope.make())
@@ -262,6 +291,7 @@ export function Crit({
       style={{ ...rootStyle, ...style }}
     >
       <CanvasViewport
+        author={resolvedAuthor}
         dispatch={session.dispatch}
         document={document}
         snapshotFrame={session.snapshotFrame}

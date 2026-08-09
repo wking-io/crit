@@ -32,7 +32,8 @@ describe("Canvas RemoveFrame command", () => {
       expect(change).toEqual({
         commandCount: 1,
         changedFrameIds: ["checkout-v1"],
-        changedNoteIds: ["checkout-note"]
+        changedNoteIds: ["checkout-note"],
+        changedCommentThreadIds: []
       })
       expect(Canvas.summarize(canvas)).toMatchObject({
         frameCount: 0,

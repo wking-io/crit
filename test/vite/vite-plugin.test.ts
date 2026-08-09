@@ -38,12 +38,16 @@ describe("crit Vite plugin", () => {
     await rm(root, { recursive: true, force: true })
   })
 
-  const start = async (options: Parameters<typeof crit>[0] = {}) => {
+  const start = async (
+    options: Parameters<typeof crit>[0] = {},
+    viteRoot = root
+  ) => {
     server = await createServer({
-      root,
+      root: viteRoot,
       configFile: false,
       logLevel: "silent",
       plugins: [crit(options)],
+      optimizeDeps: { noDiscovery: true, include: [] },
       server: { middlewareMode: true }
     })
     httpServer = createHttpServer(server.middlewares)
@@ -60,10 +64,6 @@ describe("crit Vite plugin", () => {
     const client = HttpCritClient.make({ apiPath: `${origin}/__crit/api` })
     const editorResponse = await fetch(`${origin}/crit/homepage`)
     const editorHtml = await editorResponse.text()
-    const editorBundleResponse = await fetch(
-      `${origin}/crit/__assets/editor.js`
-    )
-    const editorBundle = await editorBundleResponse.text()
     const activityStore = FileSystemAgentActivity.make({ root })
     await Effect.runPromise(activityStore.signal({
       canvasId: "homepage",
@@ -127,21 +127,9 @@ describe("crit Vite plugin", () => {
     expect(editorResponse.status).toBe(200)
     expect(editorResponse.headers.get("content-type")).toContain("text/html")
     expect(editorHtml).toContain("<title>Crit · homepage</title>")
-    expect(editorHtml).toContain('src="/crit/__assets/editor.js"')
+    expect(editorHtml).toContain('src="/@id/virtual:crit-editor.js"')
     expect(editorHtml).toContain("overflow:hidden;overscroll-behavior:none")
     expect(editorHtml).toContain("overscroll-behavior-x:none")
-    expect(editorBundleResponse.status).toBe(200)
-    expect(editorBundleResponse.headers.get("content-type")).toContain(
-      "text/javascript"
-    )
-    expect(editorBundle.length).toBeGreaterThan(10_000)
-    expect(editorBundle).toContain("Frame chrome")
-    expect(editorBundle).toContain("titleMinimumCharacters")
-    expect(editorBundle).toContain("Camera")
-    expect(editorBundle).toContain("panSpeed")
-    expect(editorBundle).toContain("zoomSpeed")
-    expect(editorBundle).toContain("vite-hmr")
-    expect(editorBundle).toContain("crit:canvas-changed")
     expect(editorHtml).toContain("data-crit-live-refresh=")
     expect(activity).toMatchObject({
       canvasId: "homepage",
@@ -161,6 +149,28 @@ describe("crit Vite plugin", () => {
     expect(methodResponse.headers.get("allow")).toBe("GET, PATCH")
     expect(invalidResponse.status).toBe(400)
     expect(invalidBody.error.code).toBe("invalid-request")
+  })
+
+  it("loads the development editor through Vite's watched module graph", async () => {
+    const origin = await start({ root }, process.cwd())
+    const editorHtml = await (await fetch(`${origin}/crit/homepage`, {
+      headers: { Connection: "close" }
+    })).text()
+
+    expect(editorHtml).toContain('src="/@id/virtual:crit-editor.js"')
+
+    const editorModuleResponse = await fetch(
+      `${origin}/@id/virtual:crit-editor.js`
+    )
+    const editorModule = await editorModuleResponse.text()
+    expect(editorModuleResponse.status).toBe(200)
+    expect(editorModule).toContain("/@vite/client")
+    expect(editorModule).toContain("Frame chrome")
+    expect(editorModule).toContain("titleMinimumCharacters")
+    expect(editorModule).toContain("Camera")
+    expect(editorModule).toContain("panSpeed")
+    expect(editorModule).toContain("zoomSpeed")
+    expect(editorModule).toContain("bottom-right")
   })
 
   it("pushes Canvas change hints to the served editor over the HMR WebSocket", async () => {

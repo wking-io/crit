@@ -20,6 +20,9 @@ import {
   type CanvasFrame,
   type CanvasGeometry,
   type CanvasNote,
+  type CommentAnchor,
+  type CommentAuthor,
+  type CommentMessage,
   type CanvasCommand as CanvasCommandValue
 } from "../core/index.js"
 import {
@@ -47,12 +50,14 @@ import {
 } from "./frame-card.js"
 import {
   IconAddFrame,
+  IconComment,
   IconNote,
   IconPan,
   IconPointer,
   IconRedo,
   IconSwitcher,
   IconUndo,
+  frameStatus,
   shortIdForIndex
 } from "./frame-chrome.js"
 import {
@@ -64,6 +69,7 @@ import {
 } from "./canvas-camera.js"
 import { NewFrameDialog } from "./new-frame-dialog.js"
 import { NoteCard } from "./note-card.js"
+import { CommentPopover } from "./comment-popover.js"
 
 export {
   DEFAULT_FRAME_CHROME_SETTINGS,
@@ -115,6 +121,7 @@ const CRIT_HOTKEYS = {
 
 export interface CanvasViewportProps {
   readonly document: CanvasDocument
+  readonly author?: CommentAuthor | null
   readonly dispatch: (
     ...commands: ReadonlyArray<CanvasCommandValue>
   ) => Effect.Effect<unknown, CanvasCommandFailed>
@@ -163,6 +170,7 @@ const intersectsViewport = (
 
 export function CanvasViewport({
   document,
+  author = null,
   dispatch,
   iframeAllow = "clipboard-read; clipboard-write; fullscreen",
   iframeSandbox,
@@ -188,6 +196,12 @@ export function CanvasViewport({
   const [newFrameTarget, setNewFrameTarget] = useState<{
     readonly x: number
     readonly y: number
+  } | null>(null)
+  const [commentTarget, setCommentTarget] = useState<{
+    readonly frameId: string
+    readonly anchor?: CommentAnchor
+    readonly threadId?: string
+    readonly point: { readonly x: number; readonly y: number }
   } | null>(null)
   const commitCameraState = useCallback(
     (next: ReturnType<typeof initialCanvasCameraState>) => {
@@ -512,6 +526,11 @@ export function CanvasViewport({
       ),
     [document]
   )
+  const activeComments = useMemo(() => document.comments.filter((thread) => thread.resolvedAt === null), [document.comments])
+  const commentThread = commentTarget?.threadId === undefined ? undefined : document.comments.find((thread) => thread.id === commentTarget.threadId)
+  const commentFrame = commentTarget === null ? undefined : document.frames.find((frame) => frame.id === commentTarget.frameId)
+  const commentStatusColor = frameStatus(commentFrame?.status ?? "archived").ink
+  const makeCommentMessage = (body: string): CommentMessage => ({ id: localId("comment"), body, author: author!, createdAt: new Date().toISOString(), editedAt: null })
 
   return (
     <div
@@ -568,6 +587,13 @@ export function CanvasViewport({
                 geometryOf(item), camera, viewport.width, viewport.height
               )}
               selected={selectedId === item.id}
+              commentMode={tool === "comment"}
+              commentThreads={activeComments.filter((thread) => thread.frameId === item.id)}
+              onCommentAnchor={(anchor, point) => {
+                if (author === null) return onCommandError?.("Configure Git user.name and user.email to leave comments")
+                setCommentTarget({ frameId: item.id, anchor, point })
+              }}
+              onOpenComment={(threadId, point) => setCommentTarget({ frameId: item.id, threadId, point })}
               onSelect={() => setSelectedId(item.id)}
               onInputIntent={(intent) => {
                 if (intent.type === "select") {
@@ -762,6 +788,21 @@ export function CanvasViewport({
               onClick={addNoteAtCenter}
               type="button"
             ><IconNote /></button>
+            <button
+              aria-label="Comment"
+              aria-pressed={tool === "comment"}
+              className="crit-icon-button"
+              disabled={author === null}
+              {...helpTarget({
+                name: "Comment",
+                hotkey: NO_HELP_HOTKEY,
+                description: author === null
+                  ? "Configure Git user.name and user.email to leave comments."
+                  : "Pin feedback to an element or location inside a live frame."
+              })}
+              onClick={() => setTool("comment")}
+              type="button"
+            ><IconComment /></button>
           </span>
       </div>
       <CritContextMenu

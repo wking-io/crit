@@ -9,6 +9,12 @@ import {
   FrameStatus,
   type CanvasCommand as CanvasCommandInput
 } from "./canvas-command.js"
+import {
+  CanvasCommentThread,
+  CommentAuthor,
+  canManageCommentThread,
+  commentMessageById
+} from "./comment.js"
 
 const CanvasTypeId: unique symbol = Symbol.for("@riff-refine/crit/Canvas")
 const NonNegativeInteger = Schema.Finite.check(
@@ -59,7 +65,13 @@ export const CanvasDocument = Schema.Struct({
   title: Schema.String,
   revision: NonNegativeInteger,
   frames: Schema.Array(CanvasFrame),
-  notes: Schema.Array(CanvasNote)
+  notes: Schema.Array(CanvasNote),
+  owner: Schema.NullOr(CommentAuthor).pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed(null))
+  ),
+  comments: Schema.Array(CanvasCommentThread).pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed([]))
+  )
 })
 export type CanvasDocument = typeof CanvasDocument.Type
 
@@ -69,6 +81,8 @@ export const CanvasSummary = Schema.Struct({
   revision: NonNegativeInteger,
   frameCount: NonNegativeInteger,
   noteCount: NonNegativeInteger,
+  activeCommentCount: NonNegativeInteger,
+  resolvedCommentCount: NonNegativeInteger,
   statuses: Schema.Struct({
     inProgress: NonNegativeInteger,
     readyForReview: NonNegativeInteger,
@@ -85,10 +99,16 @@ export type FrameList = typeof FrameList.Type
 export const NoteList = Schema.Array(CanvasNote)
 export type NoteList = typeof NoteList.Type
 
+export const CommentThreadSummary = CanvasCommentThread
+export type CommentThreadSummary = CanvasCommentThread
+export const CommentThreadList = Schema.Array(CommentThreadSummary)
+export type CommentThreadList = typeof CommentThreadList.Type
+
 export const CanvasChange = Schema.Struct({
   commandCount: NonNegativeInteger,
   changedFrameIds: Schema.Array(Schema.String),
-  changedNoteIds: Schema.Array(Schema.String)
+  changedNoteIds: Schema.Array(Schema.String),
+  changedCommentThreadIds: Schema.Array(Schema.String)
 })
 export type CanvasChange = typeof CanvasChange.Type
 
@@ -122,6 +142,12 @@ export class CanvasCommandFailed extends Schema.TaggedError<CanvasCommandFailed>
       Schema.Literal("duplicate-note"),
       Schema.Literal("note-not-found"),
       Schema.Literal("note-conflict"),
+      Schema.Literal("duplicate-comment-thread"),
+      Schema.Literal("comment-thread-not-found"),
+      Schema.Literal("comment-not-found"),
+      Schema.Literal("comment-conflict"),
+      Schema.Literal("comment-forbidden"),
+      Schema.Literal("archived-frame-comments-unsupported"),
       Schema.Literal("snapshot-source-changed"),
       Schema.Literal("snapshot-source-invalid"),
       Schema.Literal("snapshot-frame-immutable"),
@@ -142,12 +168,19 @@ export class NoteNotFound extends Schema.TaggedError<NoteNotFound>()(
   { id: Schema.String }
 ) {}
 
+export class CommentThreadNotFound extends Schema.TaggedError<CommentThreadNotFound>()(
+  "CommentThreadNotFound",
+  { id: Schema.String }
+) {}
+
 type CanvasState = {
   readonly id: string
   title: string
   revision: number
   frames: Array<CanvasFrame>
   notes: Array<CanvasNote>
+  owner: CommentAuthor | null
+  comments: Array<CanvasCommentThread>
 }
 
 const states = new WeakMap<object, CanvasState>()
@@ -175,7 +208,9 @@ const documentOf = (state: CanvasState): CanvasDocument => ({
   title: state.title,
   revision: state.revision,
   frames: clone(state.frames),
-  notes: clone(state.notes)
+  notes: clone(state.notes),
+  owner: clone(state.owner),
+  comments: clone(state.comments)
 })
 
 export const CanvasInternals = {
@@ -194,16 +229,24 @@ export const CanvasInternals = {
     target.revision = source.revision
     target.frames = clone(source.frames)
     target.notes = clone(source.notes)
+    target.owner = clone(source.owner)
+    target.comments = clone(source.comments)
   }
 } as const
 
-const create = (input: { readonly id: string; readonly title: string }): Canvas =>
+const create = (input: {
+  readonly id: string
+  readonly title: string
+  readonly owner?: CommentAuthor
+}): Canvas =>
   makeCanvas({
     id: input.id,
     title: input.title,
     revision: 0,
     frames: [],
-    notes: []
+    notes: [],
+    owner: input.owner ?? null,
+    comments: []
   })
 
 const encodedBytes = (input: unknown) => {
@@ -243,6 +286,30 @@ const validateDocument = (document: CanvasDocument) => {
       )
     }
   }
+  const messageIds = new Set<string>()
+  for (const thread of document.comments) {
+    if (thread.id.trim().length === 0) throw new Error("Comment Thread IDs cannot be empty")
+    if (ids.has(thread.id)) throw new Error(`Duplicate Canvas item ID: ${thread.id}`)
+    ids.add(thread.id)
+    const frame = document.frames.find((candidate) => candidate.id === thread.frameId)
+    if (frame === undefined) {
+      throw new Error(`Comment Thread ${thread.id} targets missing Frame ${thread.frameId}`)
+    }
+    if (frame.snapshot !== undefined) {
+      throw new Error(`Archived Frame ${thread.frameId} cannot contain Comment Threads`)
+    }
+    for (const message of [thread.opening, ...thread.replies]) {
+      if (message.id.trim().length === 0) throw new Error("Comment IDs cannot be empty")
+      if (messageIds.has(message.id)) throw new Error(`Duplicate Comment ID: ${message.id}`)
+      messageIds.add(message.id)
+      if (message.author.id.trim().length === 0 || message.author.name.trim().length === 0) {
+        throw new Error(`Comment ${message.id} has an invalid Author`)
+      }
+    }
+    if ((thread.resolvedAt === null) !== (thread.resolvedBy === null)) {
+      throw new Error(`Comment Thread ${thread.id} has inconsistent resolution metadata`)
+    }
+  }
   return document
 }
 
@@ -253,7 +320,9 @@ const fromDocument = (document: CanvasDocument): Canvas => {
     title: validated.title,
     revision: validated.revision,
     frames: clone(Array.from(validated.frames)),
-    notes: clone(Array.from(validated.notes))
+    notes: clone(Array.from(validated.notes)),
+    owner: clone(validated.owner),
+    comments: clone(Array.from(validated.comments))
   })
 }
 
@@ -330,6 +399,8 @@ const summarize = (canvas: Canvas): CanvasSummary => {
     revision: state.revision,
     frameCount: state.frames.length,
     noteCount: state.notes.length,
+    activeCommentCount: state.comments.filter((thread) => thread.resolvedAt === null).length,
+    resolvedCommentCount: state.comments.filter((thread) => thread.resolvedAt !== null).length,
     statuses
   }
 }
@@ -346,6 +417,9 @@ const listFrames = (canvas: Canvas): FrameList =>
 
 const listNotes = (canvas: Canvas): NoteList =>
   clone(ordered(stateOf(canvas).notes))
+
+const listCommentThreads = (canvas: Canvas): CommentThreadList =>
+  clone(stateOf(canvas).comments)
 
 const getFrame = (
   canvas: Canvas,
@@ -365,6 +439,16 @@ const getNote = (
   return note === undefined
     ? Effect.fail(new NoteNotFound({ id }))
     : Effect.succeed(clone(note))
+}
+
+const getCommentThread = (
+  canvas: Canvas,
+  id: string
+): Effect.Effect<CommentThreadSummary, CommentThreadNotFound> => {
+  const thread = stateOf(canvas).comments.find((candidate) => candidate.id === id)
+  return thread === undefined
+    ? Effect.fail(new CommentThreadNotFound({ id }))
+    : Effect.succeed(clone(thread))
 }
 
 const nextZIndex = (state: CanvasState) =>
@@ -405,15 +489,21 @@ const apply = (
             title: current.title,
             revision: current.revision,
             frames: clone(current.frames),
-            notes: clone(current.notes)
+            notes: clone(current.notes),
+            owner: clone(current.owner),
+            comments: clone(current.comments)
           }
           const changedFrameIds: Array<string> = []
           const changedNoteIds: Array<string> = []
+          const changedCommentThreadIds: Array<string> = []
           const markFrame = (id: string) => {
             if (!changedFrameIds.includes(id)) changedFrameIds.push(id)
           }
           const markNote = (id: string) => {
             if (!changedNoteIds.includes(id)) changedNoteIds.push(id)
+          }
+          const markCommentThread = (id: string) => {
+            if (!changedCommentThreadIds.includes(id)) changedCommentThreadIds.push(id)
           }
           const frameAt = (id: string) => {
             const index = draft.frames.findIndex((frame) => frame.id === id)
@@ -435,12 +525,23 @@ const apply = (
             }
             return index
           }
+          const commentThreadAt = (id: string) => {
+            const index = draft.comments.findIndex((thread) => thread.id === id)
+            if (index < 0) {
+              throw new CanvasCommandFailed({
+                reason: "comment-thread-not-found",
+                detail: `Comment Thread not found: ${id}`
+              })
+            }
+            return index
+          }
 
           for (const command of decoded) {
             if (command._tag === "AddFrame") {
               if (
                 draft.frames.some((frame) => frame.id === command.id) ||
-                draft.notes.some((note) => note.id === command.id)
+                draft.notes.some((note) => note.id === command.id) ||
+                draft.comments.some((thread) => thread.id === command.id)
               ) {
                 throw new CanvasCommandFailed({
                   reason: "duplicate-frame",
@@ -476,7 +577,8 @@ const apply = (
             if (command._tag === "AddSnapshotFrame") {
               if (
                 draft.frames.some((frame) => frame.id === command.id) ||
-                draft.notes.some((note) => note.id === command.id)
+                draft.notes.some((note) => note.id === command.id) ||
+                draft.comments.some((thread) => thread.id === command.id)
               ) {
                 throw new CanvasCommandFailed({
                   reason: "duplicate-frame",
@@ -528,7 +630,8 @@ const apply = (
             if (command._tag === "AddNote") {
               if (
                 draft.frames.some((frame) => frame.id === command.id) ||
-                draft.notes.some((note) => note.id === command.id)
+                draft.notes.some((note) => note.id === command.id) ||
+                draft.comments.some((thread) => thread.id === command.id)
               ) {
                 throw new CanvasCommandFailed({
                   reason: "duplicate-note",
@@ -595,6 +698,13 @@ const apply = (
                   (note) => note.attachedTo !== command.id
                 )
                 for (const note of attached) markNote(note.id)
+                const removedThreads = draft.comments.filter(
+                  (thread) => thread.frameId === command.id
+                )
+                draft.comments = draft.comments.filter(
+                  (thread) => thread.frameId !== command.id
+                )
+                for (const thread of removedThreads) markCommentThread(thread.id)
               } else if (command._tag === "SetFrameStatus") {
                 draft.frames[index] = { ...frame, status: command.status }
               } else if (command._tag === "UpdateFrame") {
@@ -665,6 +775,134 @@ const apply = (
               continue
             }
 
+            if (command._tag === "AddCommentThread") {
+              if (
+                draft.frames.some((frame) => frame.id === command.id) ||
+                draft.notes.some((note) => note.id === command.id) ||
+                draft.comments.some((thread) => thread.id === command.id)
+              ) {
+                throw new CanvasCommandFailed({
+                  reason: "duplicate-comment-thread",
+                  detail: `Canvas item already exists: ${command.id}`
+                })
+              }
+              const frame = draft.frames[frameAt(command.frameId)]!
+              if (frame.snapshot !== undefined) {
+                throw new CanvasCommandFailed({
+                  reason: "archived-frame-comments-unsupported",
+                  detail: `Archived Frame ${frame.id} does not support comments`
+                })
+              }
+              if (command.opening.body.trim().length === 0) {
+                throw new CanvasCommandFailed({
+                  reason: "invalid-command",
+                  detail: "The opening Comment cannot be empty"
+                })
+              }
+              if (draft.owner === null) draft.owner = clone(command.opening.author)
+              draft.comments.push({
+                id: command.id,
+                frameId: command.frameId,
+                anchor: command.anchor,
+                opening: command.opening,
+                replies: [],
+                resolvedAt: null,
+                resolvedBy: null
+              })
+              markCommentThread(command.id)
+              continue
+            }
+
+            if (
+              command._tag === "ReplyToCommentThread" ||
+              command._tag === "EditComment" ||
+              command._tag === "SetCommentThreadResolved" ||
+              command._tag === "UpdateCommentAnchor"
+            ) {
+              const index = commentThreadAt(command.id)
+              const thread = draft.comments[index]!
+              if (command._tag === "ReplyToCommentThread") {
+                if (command.reply.body.trim().length === 0) {
+                  throw new CanvasCommandFailed({
+                    reason: "invalid-command",
+                    detail: "A Reply cannot be empty"
+                  })
+                }
+                if (
+                  draft.comments.some((candidate) =>
+                    candidate.opening.id === command.reply.id ||
+                    candidate.replies.some((reply) => reply.id === command.reply.id)
+                  )
+                ) {
+                  throw new CanvasCommandFailed({
+                    reason: "invalid-command",
+                    detail: `Comment already exists: ${command.reply.id}`
+                  })
+                }
+                draft.comments[index] = {
+                  ...thread,
+                  replies: [...thread.replies, command.reply]
+                }
+              } else if (command._tag === "EditComment") {
+                const message = commentMessageById(thread, command.commentId)
+                if (message === undefined) {
+                  throw new CanvasCommandFailed({
+                    reason: "comment-not-found",
+                    detail: `Comment not found: ${command.commentId}`
+                  })
+                }
+                if (message.author.id !== command.actorId) {
+                  throw new CanvasCommandFailed({
+                    reason: "comment-forbidden",
+                    detail: "Only the Comment Author may edit it"
+                  })
+                }
+                if (message.body !== command.expectedBody) {
+                  throw new CanvasCommandFailed({
+                    reason: "comment-conflict",
+                    detail: `Comment ${command.commentId} changed before this edit`
+                  })
+                }
+                if (command.body.trim().length === 0) {
+                  throw new CanvasCommandFailed({
+                    reason: "invalid-command",
+                    detail: "A Comment cannot be empty"
+                  })
+                }
+                const edited = { ...message, body: command.body, editedAt: command.editedAt }
+                draft.comments[index] = thread.opening.id === command.commentId
+                  ? { ...thread, opening: edited }
+                  : {
+                      ...thread,
+                      replies: thread.replies.map((reply) =>
+                        reply.id === command.commentId ? edited : reply
+                      )
+                    }
+              } else if (command._tag === "SetCommentThreadResolved") {
+                if (!canManageCommentThread(draft.owner, thread, command.actor.id)) {
+                  throw new CanvasCommandFailed({
+                    reason: "comment-forbidden",
+                    detail: "Only the Canvas Owner or opening Comment Author may change resolution"
+                  })
+                }
+                draft.comments[index] = {
+                  ...thread,
+                  resolvedAt: command.resolved ? command.at : null,
+                  resolvedBy: command.resolved ? command.actor : null
+                }
+              } else {
+                if (!canManageCommentThread(draft.owner, thread, command.actorId)) {
+                  throw new CanvasCommandFailed({
+                    reason: "comment-forbidden",
+                    detail: "Only the Canvas Owner or opening Comment Author may re-anchor a thread"
+                  })
+                }
+                draft.comments[index] = { ...thread, anchor: command.anchor }
+              }
+              markCommentThread(command.id)
+              continue
+            }
+
             const index = noteAt(command.id)
             const note = draft.notes[index]!
             if (command._tag === "UpdateNote") {
@@ -706,10 +944,13 @@ const apply = (
 
           current.frames = draft.frames
           current.notes = draft.notes
+          current.owner = draft.owner
+          current.comments = draft.comments
           return {
             commandCount: decoded.length,
             changedFrameIds,
-            changedNoteIds
+            changedNoteIds,
+            changedCommentThreadIds
           }
         },
         catch: (cause) =>
@@ -732,6 +973,8 @@ export const Canvas = {
   summarize,
   listFrames,
   listNotes,
+  listCommentThreads,
   getFrame,
-  getNote
+  getNote,
+  getCommentThread
 } as const

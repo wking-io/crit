@@ -37,111 +37,6 @@ const variants: Record<FrameVariant, {
   }
 }
 
-const featureGroups = [
-  {
-    title: "Canvas",
-    items: ["Infinite pan and zoom", "Right-click creation menu", "Stable Frame toolbars", "Offscreen iframe pausing"]
-  },
-  {
-    title: "Frames",
-    items: ["Drag and resize", "Full document-height fit", "Right-click actions", "Live iframe interaction"]
-  },
-  {
-    title: "Review",
-    items: ["Editable Notes", "Attach and detach Notes", "Autosave and recovery", "Immutable snapshots"]
-  },
-  {
-    title: "Coordination",
-    items: ["Agent CLI edits", "Activity indicator", "Multiple browser windows", "Manifest discovery"]
-  }
-] as const
-
-const agentCommands = [
-  "npm run dev:agent -- open feature-lab --json",
-  "npm run dev:agent -- activity feature-lab --for 120 --detail \"Testing agent edits\" --json",
-  "npm run dev:agent -- apply feature-lab '[{\"_tag\":\"SetFrameStatus\",\"id\":\"checkout-draft\",\"status\":\"ready-for-review\"}]' --json",
-  "npm run dev:agent -- snapshot feature-lab checkout-ready --json",
-  "npm run dev:agent -- activity feature-lab --clear --json"
-] as const
-
-function CopyCommand({ command }: { readonly command: string }) {
-  const [copied, setCopied] = useState(false)
-  return (
-    <button
-      className="command"
-      onClick={() => {
-        void navigator.clipboard.writeText(command).then(() => {
-          setCopied(true)
-          window.setTimeout(() => setCopied(false), 1_200)
-        })
-      }}
-      type="button"
-    >
-      <code>{command}</code>
-      <span>{copied ? "Copied" : "Copy"}</span>
-    </button>
-  )
-}
-
-function LabHome() {
-  return (
-    <main className="lab-shell">
-      <header className="lab-hero">
-        <div>
-          <p className="brand">CRIT / FEATURE LAB</p>
-          <h1>Test the whole local review loop.</h1>
-          <p className="lede">
-            One real Vite app, four live iterations, a filesystem-backed Canvas,
-            and the same commands local agents use.
-          </p>
-        </div>
-        <a className="open-canvas" href="/crit/feature-lab">
-          Open feature Canvas <span aria-hidden="true">↗</span>
-        </a>
-      </header>
-
-      <section aria-labelledby="coverage-title" className="lab-section">
-        <div className="section-heading">
-          <div>
-            <p className="kicker">Browser coverage</p>
-            <h2 id="coverage-title">A deliberate surface for every V1 behavior</h2>
-          </div>
-          <p>Open the Canvas in two windows to test local synchronization.</p>
-        </div>
-        <div className="feature-grid">
-          {featureGroups.map((group, index) => (
-            <article className="feature-card" key={group.title}>
-              <span className="feature-number">0{index + 1}</span>
-              <h3>{group.title}</h3>
-              <ul>
-                {group.items.map((item) => <li key={item}>{item}</li>)}
-              </ul>
-            </article>
-          ))}
-        </div>
-      </section>
-
-      <section aria-labelledby="agent-title" className="lab-section agent-section">
-        <div className="section-heading">
-          <div>
-            <p className="kicker">Agent coverage</p>
-            <h2 id="agent-title">Edit the open Canvas from another terminal</h2>
-          </div>
-          <p>Run from the Crit repository while <code>npm run dev:portless</code> remains active.</p>
-        </div>
-        <div className="command-list">
-          {agentCommands.map((command) => <CopyCommand command={command} key={command} />)}
-        </div>
-      </section>
-
-      <footer className="lab-footer">
-        <span>Data persists in <code>playground/.crit</code></span>
-        <a href="/.well-known/crit.json">Inspect discovery manifest</a>
-      </footer>
-    </main>
-  )
-}
-
 function QuantityControl() {
   const [quantity, setQuantity] = useState(1)
   return (
@@ -162,7 +57,7 @@ function FramePage({ variant }: { readonly variant: FrameVariant }) {
   return (
     <main className={`frame-page frame-${variant}`} style={{ "--accent": content.accent } as CSSProperties}>
       <nav className="store-nav">
-        <a href="/" className="store-mark" aria-label="Back to feature lab">R/R</a>
+        <span className="store-mark" aria-label="Riff Supply">R/R</span>
         <span>Riff Supply</span>
         <button type="button">Bag · 1</button>
       </nav>
@@ -235,7 +130,7 @@ function FramePage({ variant }: { readonly variant: FrameVariant }) {
 
 function App() {
   const match = window.location.pathname.match(/^\/frames\/(draft|ready|approved|changes)\/?$/)
-  return match === null ? <LabHome /> : <FramePage variant={match[1] as FrameVariant} />
+  return match === null ? null : <FramePage variant={match[1] as FrameVariant} />
 }
 
 createRoot(document.getElementById("root")!).render(

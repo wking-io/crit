@@ -39,7 +39,8 @@ describe("Canvas Frame geometry commands", () => {
       expect(change).toEqual({
         commandCount: 2,
         changedFrameIds: ["checkout-v1"],
-        changedNoteIds: ["checkout-note"]
+        changedNoteIds: ["checkout-note"],
+        changedCommentThreadIds: []
       })
       expect(frame.geometry).toEqual({
         x: 360,

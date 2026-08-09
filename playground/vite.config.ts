@@ -11,6 +11,23 @@ const port = Number.parseInt(
 export default defineConfig({
   root: fileURLToPath(new URL(".", import.meta.url)),
   plugins: [
+    {
+      name: "crit-feature-lab-home",
+      configureServer(server) {
+        server.middlewares.use((request, response, next) => {
+          const url = new URL(
+            request.url ?? "/",
+            "http://crit.localhost"
+          )
+          if (request.method !== "GET" || url.pathname !== "/") {
+            next()
+            return
+          }
+          request.url = `/crit/feature-lab${url.search}`
+          next()
+        })
+      }
+    },
     crit({
       title: (canvasId) =>
         canvasId === "feature-lab" ? "Crit feature lab" : canvasId

@@ -8,7 +8,7 @@ Crit is a local-first tool for arranging and assessing live web iterations.
 
 **Canvas**: A named review workspace containing the live web iterations being assessed together.
 
-**Canvas Document**: The sole durable representation of a Canvas, including its Frames, Notes, layout, and monotonic revision.
+**Canvas Document**: The sole durable representation of a Canvas, including its owner, Frames, Notes, Comment Threads, layout, and monotonic revision.
 
 **Frame**: A web iteration placed on a Canvas, together with its review status, stable identity, and geometry. A Frame is either live at its source URL or archived against an immutable Snapshot Artifact. Its identity is independent from its URL, and multiple Frames may reference the same URL.
 
@@ -19,6 +19,16 @@ Crit is a local-first tool for arranging and assessing live web iterations.
 **Snapshot Archive**: The storage and capture boundary for immutable Snapshot Artifacts.
 
 **Note**: Plain-text review feedback with Canvas geometry. A Note may attach to a Frame so it moves with the Frame, then detach without changing its position.
+
+**Comment Thread**: A Canvas-owned feedback conversation pinned to a live Frame or to an element within that Frame. A Comment Thread contains one opening Comment and zero or more flat Replies, and may be active or resolved.
+
+**Comment**: An authored message within a Comment Thread. The opening Comment owns the thread; subsequent Comments are Replies and cannot contain nested Replies.
+
+**Comment Anchor**: The durable location of a Comment Thread within a live Frame. An Element Anchor identifies DOM content through the Crit Frame Bridge, while a Frame Anchor preserves a normalized point for an uninstrumented Frame.
+
+**Canvas Owner**: The Git-derived Author who created or first upgrades a Canvas. The Canvas Owner may resolve or reopen any Comment Thread on that Canvas.
+
+**Author**: A local collaborator identified by an opaque ID derived from Git identity and shown by Git committer name. Authors may edit their own Comments, and the opening Comment's Author may resolve or reopen its thread.
 
 **Canvas Repository**: The local persistence boundary that serializes semantic command batches under a per-Canvas filesystem lock.
 

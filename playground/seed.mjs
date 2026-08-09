@@ -41,6 +41,6 @@ if (!hasSeed) {
 }
 
 process.stdout.write(
-  `Crit playground ready: ${origin}/crit/feature-lab\n` +
+  `Crit playground ready: ${origin}\n` +
     `Agent CLI: npm run dev:agent -- open feature-lab --json\n`
 )
