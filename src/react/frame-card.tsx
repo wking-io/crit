@@ -626,7 +626,7 @@ export function FrameCard({
               {fullscreen ? <IconMinimize /> : <IconFullscreen />}
             </button> : null}
             {actions.delete ? <button
-              aria-keyshortcuts="Delete"
+              aria-keyshortcuts="Backspace"
               aria-label={`Delete ${frame.title}`}
               className="crit-frame__action"
               {...helpTarget({

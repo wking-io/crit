@@ -93,7 +93,7 @@ const CRIT_HOTKEYS = {
   handTool: "H",
   addFrame: "F",
   addNote: "N",
-  deleteSelection: "Delete",
+  deleteSelection: "Backspace",
   zoomIn: [
     { key: "=", mod: true },
     { key: "=", mod: true, shift: true }
@@ -572,6 +572,9 @@ export function CanvasViewport({
               onInputIntent={(intent) => {
                 if (intent.type === "select") {
                   setSelectedId(item.id)
+                } else if (intent.type === "delete") {
+                  run(CanvasCommand.removeFrame({ id: item.id }))
+                  setSelectedId(null)
                 } else if (intent.type === "tool") {
                   setTool(intent.tool)
                 } else if (intent.type === "zoom-step") {
@@ -584,7 +587,7 @@ export function CanvasViewport({
                     intent.deltaX,
                     intent.deltaY
                   )
-                } else {
+                } else if (intent.type === "wheel") {
                   const { type: _type, ...wheel } = intent
                   applyWheel(wheel)
                 }

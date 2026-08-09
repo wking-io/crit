@@ -1,5 +1,6 @@
 export type FrameInputIntent =
   | { readonly type: "select" }
+  | { readonly type: "delete" }
   | { readonly type: "tool"; readonly tool: "select" | "pan" }
   | { readonly type: "zoom-step"; readonly direction: -1 | 1 }
   | {
@@ -66,6 +67,9 @@ export function createFrameInputRelay() {
     }): FrameInputIntent | null => {
       if (input.input && !input.ctrlKey && !input.metaKey) return null
       const key = input.key.toLowerCase()
+      if (!input.ctrlKey && !input.metaKey && key === "backspace") {
+        return { type: "delete" }
+      }
       if (!input.ctrlKey && !input.metaKey && (key === "v" || key === "h")) {
         return { type: "tool", tool: key === "v" ? "select" : "pan" }
       }

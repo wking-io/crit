@@ -75,7 +75,7 @@ export function NoteCard({
             onSendToBack={onSendToBack}
           />
           <button
-            aria-keyshortcuts="Delete"
+            aria-keyshortcuts="Backspace"
             aria-label="Delete note"
             {...helpTarget({
               name: "Remove note",

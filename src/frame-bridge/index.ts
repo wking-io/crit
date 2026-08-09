@@ -33,6 +33,7 @@ export const isCritFrameInputMessage = (
     !("type" in value)
   ) return false
   if (value.type === "select") return true
+  if (value.type === "delete") return true
   if (value.type === "tool") {
     return "tool" in value && (value.tool === "select" || value.tool === "pan")
   }
