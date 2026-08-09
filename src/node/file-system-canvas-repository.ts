@@ -1,5 +1,5 @@
 import * as NodeServices from "@effect/platform-node/NodeServices"
-import { open as openFile } from "node:fs/promises"
+import { open as openFile, readFile, stat, unlink } from "node:fs/promises"
 import { Effect, FileSystem, Layer, Path } from "effect"
 
 import {
@@ -28,6 +28,61 @@ const storageFailure = (operation: string, id: string, cause: unknown) =>
     id,
     detail: cause instanceof Error ? cause.message : String(cause)
   })
+
+// A Canvas mutation holds its lock for one read-apply-write cycle, so any
+// lock older than this belongs to a wedged or dead writer and is safe to steal.
+const staleLockTtlMillis = 60_000
+
+const hasCode = (cause: unknown, code: string) =>
+  cause instanceof Error && "code" in cause && cause.code === code
+
+const isProcessAlive = (pid: number) => {
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch (cause) {
+    // EPERM means the process exists but belongs to another user.
+    return hasCode(cause, "EPERM")
+  }
+}
+
+/**
+ * Removes the lock file when its owner is provably gone. Returns whether the
+ * caller should immediately retry acquisition.
+ *
+ * A lock is stale when its recorded PID is no longer alive, or — covering
+ * recycled PIDs and locks whose contents never got written — when its mtime
+ * exceeds a generous TTL. A fresh lock without a parseable PID is never
+ * stolen: the owner may sit between creating the file and recording its PID.
+ */
+const removeLockIfStale = async (lock: string) => {
+  let modifiedAtMillis: number
+  try {
+    modifiedAtMillis = (await stat(lock)).mtimeMs
+  } catch (cause) {
+    if (hasCode(cause, "ENOENT")) return true
+    throw cause
+  }
+
+  let ownerDead = false
+  try {
+    const pid = Number.parseInt((await readFile(lock, "utf8")).trim(), 10)
+    ownerDead = Number.isSafeInteger(pid) && pid > 0 && !isProcessAlive(pid)
+  } catch (cause) {
+    if (!hasCode(cause, "ENOENT")) throw cause
+    return true
+  }
+
+  const expired = Date.now() - modifiedAtMillis > staleLockTtlMillis
+  if (!ownerDead && !expired) return false
+
+  try {
+    await unlink(lock)
+  } catch (cause) {
+    if (!hasCode(cause, "ENOENT")) throw cause
+  }
+  return true
+}
 
 const make = (root: string) =>
   Effect.gen(function*() {
@@ -134,6 +189,7 @@ const make = (root: string) =>
       const acquire = Effect.tryPromise({
         try: async () => {
           const deadline = Date.now() + 5_000
+          let checkedForStaleLock = false
           for (;;) {
             try {
               const handle = await openFile(lock, "wx", 0o600)
@@ -141,11 +197,15 @@ const make = (root: string) =>
               await handle.close()
               return
             } catch (cause) {
-              if (
-                !(cause instanceof Error && "code" in cause && cause.code === "EEXIST") ||
-                Date.now() >= deadline
-              ) {
-                throw cause
+              if (!hasCode(cause, "EEXIST")) throw cause
+              if (!checkedForStaleLock) {
+                checkedForStaleLock = true
+                if (await removeLockIfStale(lock)) continue
+              }
+              if (Date.now() >= deadline) {
+                throw new Error(
+                  `Timed out waiting for the Canvas lock held by a live writer: ${lock}`
+                )
               }
               await new Promise((resolve) => setTimeout(resolve, 10))
             }
