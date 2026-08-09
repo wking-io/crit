@@ -137,6 +137,18 @@ zooming and progressively hide title and secondary controls when space becomes
 tight. Frame and Note headers include send-to-back and bring-to-front controls.
 Offscreen iframes are paused for performance.
 
+Global shortcuts are registered through TanStack Hotkeys: `V` selects the
+Select tool, `H` selects the Hand tool, and `Mod++` / `Mod+-` zoom the Canvas.
+Single-key tool shortcuts are ignored while typing in inputs. The same behavior
+is preserved while focus is inside a live Frame.
+
+The Vite-served editor includes development-only DialKit panels for tuning
+Frame chrome and zoom physics. The zoom panel controls wheel and pinch
+sensitivity, keyboard impulse, exponential decay, maximum speed, and the speed
+at which motion comes to rest. Values and presets persist locally; applications
+can also pass the same values through the `frameChrome` and `zoomPhysics` props
+on `<Crit>`.
+
 Live Frame review states are **In progress**, **Ready for review**, **Approved**,
 and **Changes requested**. Ready-for-review Frames receive a distinct purple
 border, header treatment, and status indicator; archived snapshots remain a
@@ -171,3 +183,30 @@ import { Canvas, CanvasCommand } from "@riff-refine/crit/core"
 Before publishing, run `npm run verify`. It typechecks, tests, packs the module,
 installs it in an isolated consumer, builds the React entry point, imports every
 public adapter, and exercises the installed CLI.
+
+## Local feature playground
+
+Run the source-backed visual test app from this repository:
+
+```sh
+npm run dev:portless
+```
+
+Open `https://crit.localhost` for the feature guide or
+`https://crit.localhost/crit/feature-lab` for the pre-populated Canvas. Portless
+registers the stable hostname and chooses the backing port. The app
+uses the real Vite plugin, four real local Frame pages, filesystem persistence,
+manifest discovery, Notes, every review state, snapshots, and agent activity.
+
+Use `npm run dev` when you want direct Vite without Portless; it defaults to
+`http://127.0.0.1:5173`.
+
+In another terminal, agents can edit the exact same Canvas:
+
+```sh
+npm run dev:agent -- open feature-lab --json
+npm run dev:agent -- activity feature-lab --for 120 --detail "Testing agent edits" --json
+```
+
+See [playground/README.md](playground/README.md) for the complete browser and
+agent checklist. Playground state persists in ignored `playground/.crit` data.

@@ -63,6 +63,9 @@ events remain the immediate path.
 Frame and Note movement and resizing, review status, note editing and
 attach/detach behavior. Offscreen iframes are not mounted, keeping the cost tied
 to visible work. The iframe `allow` and `sandbox` policies are configurable.
+Global Canvas shortcuts are centralized through TanStack Hotkeys. The iframe
+input bridge only transports keyboard intent across document and origin
+boundaries; shortcut matching and actions remain owned by the React viewport.
 
 The HTTP adapter supports `GET` for authoritative documents and agent activity,
 `PATCH` for semantic command batches, and `POST` on a Frame snapshot route. Vite adapts it

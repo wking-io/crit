@@ -27,6 +27,7 @@ import { CanvasRepositoryCritClient } from "../runtime/canvas-repository-crit-cl
 import { CanvasRepository } from "../runtime/canvas-repository.js"
 import { CritRuntimeLive } from "../runtime/crit-runtime.js"
 import { AgentActivityStore } from "../runtime/agent-activity.js"
+import { critFrameInputBridgeScript } from "../frame-bridge/index.js"
 import {
   CRIT_SNAPSHOT_PATH,
   SnapshotNotFound
@@ -42,6 +43,7 @@ export interface CritVitePluginOptions {
   readonly manifest?: string | false
   readonly manifestPath?: string
   readonly editorPath?: string | false
+  readonly frameInputBridge?: boolean
 }
 
 type CritViteServer = Pick<ViteDevServer, "middlewares" | "httpServer"> &
@@ -173,7 +175,7 @@ const editorHtml = (canvasId: string, editorAssetPath: string) => {
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Crit · ${escapedCanvasId}</title>
-    <style>html,body,#crit-root{height:100%;margin:0}</style>
+    <style>html,body,#crit-root{height:100%;margin:0;overflow:hidden;overscroll-behavior:none;overscroll-behavior-x:none}</style>
   </head>
   <body data-crit-canvas-id="${escapedCanvasId}">
     <div id="crit-root"></div>
@@ -192,12 +194,108 @@ const buildEditorBundle = async () => {
   const result = await build({
     stdin: {
       contents: `
-        import { createElement } from "react"
+        import { createElement, Fragment } from "react"
         import { createRoot } from "react-dom/client"
-        import { Crit } from ${JSON.stringify(reactEntry)}
+        import { DialRoot, useDialKit } from "dialkit"
+        import dialKitStyles from "dialkit/styles.css"
+        import {
+          Crit,
+          DEFAULT_FRAME_CHROME_SETTINGS,
+          DEFAULT_ZOOM_PHYSICS_SETTINGS
+        } from ${JSON.stringify(reactEntry)}
+
+        const dialKitStyle = document.createElement("style")
+        dialKitStyle.dataset.critDialkit = ""
+        dialKitStyle.textContent = dialKitStyles
+        document.head.append(dialKitStyle)
+
         const canvasId = document.body.dataset.critCanvasId || "default"
+
+        function CritEditor() {
+          const chrome = useDialKit("Frame chrome", {
+            titleMinimumCharacters: [
+              DEFAULT_FRAME_CHROME_SETTINGS.titleMinimumCharacters,
+              0,
+              80,
+              1
+            ],
+            iconMinimumWidth: {
+              snapshot: [DEFAULT_FRAME_CHROME_SETTINGS.snapshotMinimumWidth, 0, 1600, 1],
+              open: [DEFAULT_FRAME_CHROME_SETTINGS.openMinimumWidth, 0, 1600, 1],
+              fullscreen: [DEFAULT_FRAME_CHROME_SETTINGS.fullscreenMinimumWidth, 0, 1600, 1],
+              delete: [DEFAULT_FRAME_CHROME_SETTINGS.deleteMinimumWidth, 0, 1600, 1]
+            }
+          }, {
+            id: "crit-frame-chrome",
+            persist: { key: "crit-frame-chrome", storage: "localStorage", presets: true }
+          })
+          const zoom = useDialKit("Zoom physics", {
+            wheelSensitivity: [
+              DEFAULT_ZOOM_PHYSICS_SETTINGS.wheelSensitivity,
+              0.001,
+              0.05,
+              0.001
+            ],
+            pinchSensitivity: [
+              DEFAULT_ZOOM_PHYSICS_SETTINGS.pinchSensitivity,
+              1,
+              20,
+              0.25
+            ],
+            shortcutImpulse: [
+              DEFAULT_ZOOM_PHYSICS_SETTINGS.shortcutImpulse,
+              0.1,
+              5,
+              0.05
+            ],
+            decay: [DEFAULT_ZOOM_PHYSICS_SETTINGS.decay, 0.5, 30, 0.1],
+            maximumSpeed: [
+              DEFAULT_ZOOM_PHYSICS_SETTINGS.maximumSpeed,
+              0.25,
+              12,
+              0.25
+            ],
+            stopSpeed: [
+              DEFAULT_ZOOM_PHYSICS_SETTINGS.stopSpeed,
+              0.001,
+              0.1,
+              0.001
+            ]
+          }, {
+            id: "crit-zoom-physics",
+            persist: { key: "crit-zoom-physics", storage: "localStorage", presets: true }
+          })
+
+          return createElement(Fragment, null,
+            createElement(Crit, {
+              canvasId,
+              frameChrome: {
+                titleMinimumCharacters: chrome.titleMinimumCharacters,
+                snapshotMinimumWidth: chrome.iconMinimumWidth.snapshot,
+                openMinimumWidth: chrome.iconMinimumWidth.open,
+                fullscreenMinimumWidth: chrome.iconMinimumWidth.fullscreen,
+                deleteMinimumWidth: chrome.iconMinimumWidth.delete
+              },
+              zoomPhysics: {
+                wheelSensitivity: zoom.wheelSensitivity,
+                pinchSensitivity: zoom.pinchSensitivity,
+                shortcutImpulse: zoom.shortcutImpulse,
+                decay: zoom.decay,
+                maximumSpeed: zoom.maximumSpeed,
+                stopSpeed: zoom.stopSpeed
+              }
+            }),
+            createElement(DialRoot, {
+              defaultOpen: true,
+              position: "bottom-left",
+              productionEnabled: true,
+              theme: "system"
+            })
+          )
+        }
+
         createRoot(document.getElementById("crit-root")).render(
-          createElement(Crit, { canvasId })
+          createElement(CritEditor)
         )
       `,
       loader: "js",
@@ -206,6 +304,7 @@ const buildEditorBundle = async () => {
     },
     bundle: true,
     format: "esm",
+    loader: { ".css": "text" },
     legalComments: "none",
     logLevel: "silent",
     minify: true,
@@ -491,6 +590,15 @@ export const crit = (options: CritVitePluginOptions = {}): Plugin => {
     apply: "serve",
     configResolved(config) {
       resolvedRoot = options.root ?? config.root
+    },
+    transformIndexHtml() {
+      if (options.frameInputBridge === false) return []
+      return [{
+        tag: "script",
+        attrs: { "data-crit-frame-input-bridge": "" },
+        children: critFrameInputBridgeScript,
+        injectTo: "head-prepend"
+      }]
     },
     configureServer: configure,
     configurePreviewServer: configure

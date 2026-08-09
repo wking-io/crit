@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "id": "crit-playground",
+  "canvases": [
+    {
+      "id": "feature-lab",
+      "title": "Crit feature lab",
+      "frames": [
+        {
+          "id": "checkout-draft",
+          "url": "/frames/draft",
+          "title": "Checkout draft · intentionally unfinished"
+        },
+        {
+          "id": "checkout-ready",
+          "url": "/frames/ready",
+          "title": "Checkout candidate with an intentionally long title for responsive toolbar testing"
+        },
+        {
+          "id": "checkout-approved",
+          "url": "/frames/approved",
+          "title": "Approved confirmation"
+        },
+        {
+          "id": "checkout-changes",
+          "url": "/frames/changes",
+          "title": "Checkout with changes requested"
+        }
+      ]
+    }
+  ]
+}

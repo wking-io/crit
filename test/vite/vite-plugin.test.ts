@@ -127,11 +127,18 @@ describe("crit Vite plugin", () => {
     expect(editorResponse.headers.get("content-type")).toContain("text/html")
     expect(editorHtml).toContain("<title>Crit · homepage</title>")
     expect(editorHtml).toContain('src="/crit/__assets/editor.js"')
+    expect(editorHtml).toContain("overflow:hidden;overscroll-behavior:none")
+    expect(editorHtml).toContain("overscroll-behavior-x:none")
     expect(editorBundleResponse.status).toBe(200)
     expect(editorBundleResponse.headers.get("content-type")).toContain(
       "text/javascript"
     )
     expect(editorBundle.length).toBeGreaterThan(10_000)
+    expect(editorBundle).toContain("Frame chrome")
+    expect(editorBundle).toContain("titleMinimumCharacters")
+    expect(editorBundle).toContain("Zoom physics")
+    expect(editorBundle).toContain("wheelSensitivity")
+    expect(editorBundle).toContain("shortcutImpulse")
     expect(activity).toMatchObject({
       canvasId: "homepage",
       active: true,
@@ -162,6 +169,29 @@ describe("crit Vite plugin", () => {
 
     expect(failure).toBeInstanceOf(CritClientNotFound)
     expect(failure).toMatchObject({ id: "missing" })
+  })
+
+  it("injects a cross-origin Frame input bridge into served apps", async () => {
+    await writeFile(
+      path.join(root, "index.html"),
+      "<!doctype html><html><head></head><body>Frame app</body></html>"
+    )
+    const origin = await start()
+
+    const response = await fetch(origin)
+    const html = await response.text()
+
+    expect(response.status).toBe(200)
+    expect(html).toContain("@riff-refine/crit/frame-input")
+    expect(html).toContain('addEventListener("keydown"')
+    expect(html).toContain('type: "hotkey"')
+    expect(html).toContain('addEventListener("pointerdown"')
+    expect(html).toContain('addEventListener("wheel"')
+    expect(html).toContain("if (!event.ctrlKey && !event.metaKey) return")
+    expect(html).toContain('addEventListener("gesturechange"')
+    expect(html).toContain('type: "pinch"')
+    expect(html).toContain("event.preventDefault()")
+    expect(html).toContain("window.parent.postMessage")
   })
 
   it("serves and reconciles the project discovery manifest", async () => {

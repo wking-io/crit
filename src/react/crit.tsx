@@ -25,27 +25,40 @@ import {
 } from "../session/canvas-session.js"
 import { CritClient, type CritClientShape } from "../session/crit-client.js"
 import { DraftJournal, type DraftJournalShape } from "../session/draft-journal.js"
-import { CanvasViewport } from "./canvas-viewport.js"
+import {
+  CanvasViewport,
+  type FrameChromeSettings
+} from "./canvas-viewport.js"
+import type { ZoomPhysicsSettings } from "./zoom-physics.js"
 
 const rootStyle: CSSProperties = {
+  background: "oklch(98.5% 0 none)",
+  color: "#191918",
+  fontFamily: '"JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace',
   height: "100%",
   minHeight: 420,
+  overflow: "hidden",
+  overscrollBehavior: "none",
+  overscrollBehaviorX: "none",
   position: "relative",
   width: "100%"
 }
 
 const messageStyle: CSSProperties = {
   alignItems: "center",
-  background: "#f8fafc",
-  color: "#475569",
+  background: "oklch(98.5% 0 none)",
+  color: "#68655e",
   display: "flex",
-  font: "500 13px/1.5 ui-sans-serif, system-ui, sans-serif",
+  font: '500 12px/1.7 "JetBrains Mono", ui-monospace, monospace',
   height: "100%",
   justifyContent: "center",
   minHeight: 420,
   padding: 24,
   textAlign: "center"
 }
+
+const classes = (...values: ReadonlyArray<string | undefined>) =>
+  values.filter((value): value is string => value !== undefined).join(" ")
 
 const sessionIdForCanvas = (canvasId: string) => {
   const key = `@riff-refine/crit/session/${canvasId}`
@@ -80,6 +93,8 @@ export interface CritProps {
   readonly style?: CSSProperties
   readonly iframeAllow?: string
   readonly iframeSandbox?: string
+  readonly frameChrome?: Partial<FrameChromeSettings>
+  readonly zoomPhysics?: Partial<ZoomPhysicsSettings>
   readonly onSession?: (session: CanvasSessionHandle) => void
   readonly onCommandError?: (message: string) => void
   readonly loadingFallback?: ReactNode
@@ -98,6 +113,8 @@ export function Crit({
   style,
   iframeAllow,
   iframeSandbox,
+  frameChrome,
+  zoomPhysics,
   onSession,
   onCommandError,
   loadingFallback,
@@ -236,11 +253,13 @@ export function Crit({
   }
 
   return (
-    <div className={className} style={{ ...rootStyle, ...style }}>
+    <div className={classes("crit-root", className)} style={{ ...rootStyle, ...style }}>
       <CanvasViewport
         dispatch={session.dispatch}
         document={document}
         snapshotFrame={session.snapshotFrame}
+        {...(frameChrome === undefined ? {} : { frameChrome })}
+        {...(zoomPhysics === undefined ? {} : { zoomPhysics })}
         {...(iframeAllow === undefined ? {} : { iframeAllow })}
         {...(iframeSandbox === undefined ? {} : { iframeSandbox })}
         {...(onCommandError === undefined ? {} : { onCommandError })}
@@ -248,31 +267,11 @@ export function Crit({
       {sessionState?.agentActivity.active ? (
         <div
           aria-live="polite"
+          className="crit-presence"
           role="status"
-          style={{
-            alignItems: "center",
-            background: "rgba(88, 28, 135, 0.92)",
-            borderRadius: 999,
-            color: "#ffffff",
-            display: "flex",
-            font: "600 12px/1 ui-sans-serif, system-ui, sans-serif",
-            gap: 7,
-            padding: "8px 11px",
-            position: "absolute",
-            right: 12,
-            top: 12,
-            zIndex: 400
-          }}
           title={sessionState.agentActivity.activeUntil ?? undefined}
         >
-          <span
-            style={{
-              background: "#c4b5fd",
-              borderRadius: 999,
-              height: 8,
-              width: 8
-            }}
-          />
+          <span className="crit-presence__dot" />
           Agent working
           {sessionState.agentActivity.detail === null
             ? ""
@@ -282,6 +281,7 @@ export function Crit({
       {sessionState === null ? null : (
         <button
           aria-live="polite"
+          className="crit-save-state"
           disabled={sessionState.saveStatus !== "conflict"}
           onClick={() => {
             if (sessionState.saveStatus === "conflict") {
@@ -293,21 +293,6 @@ export function Crit({
                 )
               )
             }
-          }}
-          style={{
-            background: "rgba(15, 23, 42, 0.84)",
-            borderRadius: 999,
-            bottom: 12,
-            color: "#ffffff",
-            font: "500 11px/1 ui-sans-serif, system-ui, sans-serif",
-            padding: "7px 9px",
-            border: 0,
-            cursor:
-              sessionState.saveStatus === "conflict" ? "pointer" : "default",
-            position: "absolute",
-            right: 12,
-            textTransform: "capitalize",
-            zIndex: 400
           }}
           title={sessionState.detail ?? sessionState.recoveryDetail ?? undefined}
           type="button"

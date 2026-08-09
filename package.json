@@ -57,6 +57,10 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "check:package": "node scripts/check-package.mjs",
+    "dev": "npm run build --silent && node playground/seed.mjs && vite --config playground/vite.config.ts",
+    "dev:agent": "npm run build --silent && cd playground && node ../dist/cli.js",
+    "dev:portless": "PORTLESS_PORT=1355 portless",
+    "dev:seed": "npm run build --silent && node playground/seed.mjs",
     "postbuild": "node scripts/mark-executable.mjs",
     "prepack": "npm run build",
     "prepublishOnly": "npm run verify",
@@ -65,9 +69,13 @@
     "verify": "npm run typecheck && npm test && npm run check:package"
   },
   "dependencies": {
+    "@base-ui/react": "^1.7.0",
     "@effect/platform-node": "4.0.0-beta.105",
+    "@tanstack/react-hotkeys": "^0.10.0",
+    "dialkit": "^1.4.3",
     "effect": "4.0.0-beta.105",
     "esbuild": "0.28.1",
+    "motion": "^13.0.0",
     "node-html-parser": "6.1.13"
   },
   "peerDependencies": {
@@ -86,6 +94,7 @@
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
     "fake-indexeddb": "6.2.5",
+    "portless": "0.15.4",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "typescript": "5.9.2",
@@ -97,6 +106,10 @@
   },
   "publishConfig": {
     "access": "public"
+  },
+  "portless": {
+    "name": "crit",
+    "script": "dev"
   },
   "packageManager": "npm@11.11.0"
 }

@@ -33,7 +33,37 @@ export {
 export { Crit, type CritProps } from "./crit.js"
 export {
   CanvasViewport,
+  cameraAfterPinchScale,
+  cameraAfterWheel,
+  cameraAfterZoomStep,
+  CRIT_HOTKEYS,
+  DEFAULT_FRAME_CHROME_SETTINGS,
+  frameChromeLayout,
+  frameChromeMetrics,
+  frameUiScale,
   frameToolbarMode,
+  type CanvasCamera,
+  type CanvasZoomDirection,
+  type FrameChromeMetrics,
+  type FrameChromeAction,
+  type FrameChromeLayout,
+  type FrameChromeSettings,
   type CanvasViewportProps,
-  type FrameToolbarMode
+  type FrameToolbarMode,
+  type WheelInput
 } from "./canvas-viewport.js"
+export {
+  DEFAULT_ZOOM_PHYSICS_SETTINGS,
+  MAXIMUM_CANVAS_ZOOM,
+  MINIMUM_CANVAS_ZOOM,
+  clampZoomVelocity,
+  pinchZoomImpulse,
+  resolveZoomPhysicsSettings,
+  shortcutZoomImpulse,
+  stepZoomPhysics,
+  wheelZoomImpulse,
+  type ZoomCamera,
+  type ZoomPhysicsSettings,
+  type ZoomPhysicsStep,
+  type ZoomPoint
+} from "./zoom-physics.js"
