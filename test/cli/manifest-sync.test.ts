@@ -13,7 +13,6 @@ import { runCrit } from "../../src/cli/command.js"
 import { FileSystemAgentActivity } from "../../src/node/file-system-agent-activity.js"
 import { FileSystemCanvasRepository } from "../../src/node/file-system-canvas-repository.js"
 import { AgentActivityStore } from "../../src/runtime/agent-activity.js"
-import { CritRuntimeLive } from "../../src/runtime/crit-runtime.js"
 
 describe("crit sync", () => {
   let root = ""
@@ -71,7 +70,6 @@ describe("crit sync", () => {
 
   it("discovers an app origin and creates its complete Canvas", async () => {
     const storeLayer = FileSystemCanvasRepository.layer({ root })
-    const runtimeLayer = CritRuntimeLive.pipe(Layer.provide(storeLayer))
     const activity = FileSystemAgentActivity.make({ root })
     const cliLayer = Layer.mergeAll(
       NodeFileSystem.layer,
@@ -103,7 +101,6 @@ describe("crit sync", () => {
         ChildProcessSpawner.make(() => Effect.die("unused"))
       ),
       storeLayer,
-      runtimeLayer,
       Layer.succeed(AgentActivityStore, activity)
     )
 

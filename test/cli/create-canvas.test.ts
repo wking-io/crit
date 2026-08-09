@@ -8,7 +8,6 @@ import { ChildProcessSpawner } from "effect/unstable/process"
 
 import { runCrit } from "../../src/cli/command.js"
 import { FileSystemCanvasRepository } from "../../src/node/file-system-canvas-repository.js"
-import { CritRuntime, CritRuntimeLive } from "../../src/runtime/crit-runtime.js"
 import { CanvasRepository } from "../../src/runtime/canvas-repository.js"
 
 describe("crit create", () => {
@@ -26,7 +25,6 @@ describe("crit create", () => {
 
   it.effect("creates a Canvas and reports a versioned JSON result", () => {
     const storeLayer = FileSystemCanvasRepository.layer({ root })
-    const runtimeLayer = CritRuntimeLive.pipe(Layer.provide(storeLayer))
     const cliLayer = Layer.mergeAll(
       FileSystem.layerNoop({}),
       Path.layer,
@@ -52,8 +50,7 @@ describe("crit create", () => {
         ChildProcessSpawner.ChildProcessSpawner,
         ChildProcessSpawner.make(() => Effect.die("unused"))
       ),
-      storeLayer,
-      runtimeLayer
+      storeLayer
     )
 
     return Effect.gen(function*() {
@@ -66,7 +63,6 @@ describe("crit create", () => {
       ])
 
       const store = yield* CanvasRepository
-      const runtime = yield* CritRuntime
       const persisted = yield* store.load("checkout-iterations")
 
       expect(JSON.parse(stdout.join(""))).toEqual({
@@ -88,9 +84,6 @@ describe("crit create", () => {
         }
       })
       expect(persisted.id).toBe("checkout-iterations")
-      expect(yield* runtime.readCanvas("checkout-iterations")).toEqual(
-        persisted
-      )
     }).pipe(Effect.provide(cliLayer))
   })
 })

@@ -2,18 +2,16 @@ import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 
-import { Effect, Layer } from "effect"
+import { Effect } from "effect"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 
 import {
   CritManifest,
   CritManifestInvalid
 } from "../../src/discovery/index.js"
+import { Canvas } from "../../src/core/index.js"
 import { FileSystemCanvasRepository } from "../../src/node/file-system-canvas-repository.js"
-import {
-  CritRuntime,
-  CritRuntimeLive
-} from "../../src/runtime/crit-runtime.js"
+import { CanvasRepository } from "../../src/runtime/canvas-repository.js"
 
 describe("CritManifest", () => {
   let root = ""
@@ -73,18 +71,17 @@ describe("CritManifest", () => {
     expect(duplicate.detail).toContain("Duplicate Canvas ID")
   })
 
-  it("creates and idempotently reconciles manifest Frames through the runtime interface", async () => {
+  it("creates and idempotently reconciles manifest Frames through the repository interface", async () => {
     const storeLayer = FileSystemCanvasRepository.layer({ root })
-    const runtimeLayer = CritRuntimeLive.pipe(Layer.provide(storeLayer))
     const resolved = await Effect.runPromise(
       CritManifest.resolve(input, { baseUrl: "https://iteration.localhost" })
     )
 
     const first = await Effect.runPromise(
-      CritManifest.sync(resolved).pipe(Effect.provide(runtimeLayer))
+      CritManifest.sync(resolved).pipe(Effect.provide(storeLayer))
     )
     const second = await Effect.runPromise(
-      CritManifest.sync(resolved).pipe(Effect.provide(runtimeLayer))
+      CritManifest.sync(resolved).pipe(Effect.provide(storeLayer))
     )
     const changed = await Effect.runPromise(
       CritManifest.resolve(
@@ -109,10 +106,10 @@ describe("CritManifest", () => {
     const third = await Effect.runPromise(
       Effect.gen(function*() {
         const sync = yield* CritManifest.sync(changed)
-        const runtime = yield* CritRuntime
-        const canvas = yield* runtime.getCanvas("checkout-review")
-        return { sync, canvas }
-      }).pipe(Effect.provide(runtimeLayer))
+        const documents = yield* CanvasRepository
+        const canvas = Canvas.fromDocument(yield* documents.load("checkout-review"))
+        return { sync, frames: Canvas.listFrames(canvas) }
+      }).pipe(Effect.provide(storeLayer))
     )
     const statusUnmanaged = await Effect.runPromise(
       CritManifest.resolve(
@@ -138,10 +135,10 @@ describe("CritManifest", () => {
     const fourth = await Effect.runPromise(
       Effect.gen(function*() {
         const sync = yield* CritManifest.sync(statusUnmanaged)
-        const runtime = yield* CritRuntime
-        const canvas = yield* runtime.getCanvas("checkout-review")
-        return { sync, canvas }
-      }).pipe(Effect.provide(runtimeLayer))
+        const documents = yield* CanvasRepository
+        const canvas = Canvas.fromDocument(yield* documents.load("checkout-review"))
+        return { sync, frames: Canvas.listFrames(canvas) }
+      }).pipe(Effect.provide(storeLayer))
     )
     const empty = await Effect.runPromise(
       CritManifest.resolve(
@@ -155,10 +152,10 @@ describe("CritManifest", () => {
     const fifth = await Effect.runPromise(
       Effect.gen(function*() {
         const sync = yield* CritManifest.sync(empty)
-        const runtime = yield* CritRuntime
-        const canvas = yield* runtime.getCanvas("checkout-review")
-        return { sync, canvas }
-      }).pipe(Effect.provide(runtimeLayer))
+        const documents = yield* CanvasRepository
+        const canvas = Canvas.fromDocument(yield* documents.load("checkout-review"))
+        return { sync, frames: Canvas.listFrames(canvas) }
+      }).pipe(Effect.provide(storeLayer))
     )
 
     expect(first.canvases[0]).toMatchObject({
@@ -176,7 +173,7 @@ describe("CritManifest", () => {
       revision: 2,
       updatedFrameIds: ["current"]
     })
-    expect(third.canvas.frames[0]).toMatchObject({
+    expect(third.frames[0]).toMatchObject({
       id: "current",
       url: "https://iteration.localhost/checkout/v2",
       status: "approved",
@@ -190,7 +187,7 @@ describe("CritManifest", () => {
       action: "updated",
       revision: 3
     })
-    expect(fourth.canvas.frames[0]).toMatchObject({
+    expect(fourth.frames[0]).toMatchObject({
       url: "https://iteration.localhost/checkout/v3",
       status: "approved"
     })
@@ -198,6 +195,6 @@ describe("CritManifest", () => {
       action: "unchanged",
       revision: 3
     })
-    expect(fifth.canvas.frames).toHaveLength(1)
+    expect(fifth.frames).toHaveLength(1)
   })
 })

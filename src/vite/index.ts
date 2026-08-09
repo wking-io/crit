@@ -27,7 +27,6 @@ import { FileSystemAgentActivity } from "../node/file-system-agent-activity.js"
 import { FileSystemSnapshotArchive } from "../node/file-system-snapshot-archive.js"
 import { CanvasRepositoryCritClient } from "../runtime/canvas-repository-crit-client.js"
 import { CanvasRepository } from "../runtime/canvas-repository.js"
-import { CritRuntimeLive } from "../runtime/crit-runtime.js"
 import { AgentActivityStore } from "../runtime/agent-activity.js"
 import { critFrameInputBridgeScript } from "../frame-bridge/index.js"
 import {
@@ -396,7 +395,6 @@ export const crit = (options: CritVitePluginOptions = {}): Plugin => {
     const documentLayer = FileSystemCanvasRepository.layer({ root: resolvedRoot })
     const agentActivityLayer = FileSystemAgentActivity.layer({ root: resolvedRoot })
     const archiveLayer = FileSystemSnapshotArchive.layer({ root: resolvedRoot })
-    const critRuntimeLayer = CritRuntimeLive.pipe(Layer.provide(documentLayer))
     const snapshotServiceLayer = SnapshotServiceLive.pipe(
       Layer.provide(Layer.mergeAll(documentLayer, archiveLayer))
     )
@@ -411,7 +409,6 @@ export const crit = (options: CritVitePluginOptions = {}): Plugin => {
         documentLayer,
         agentActivityLayer,
         archiveLayer,
-        critRuntimeLayer,
         snapshotServiceLayer
       )
     )

@@ -9,7 +9,6 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest"
 
 import { runCrit } from "../../src/cli/command.js"
 import { FileSystemCanvasRepository } from "../../src/node/file-system-canvas-repository.js"
-import { CritRuntimeLive } from "../../src/runtime/crit-runtime.js"
 
 describe("crit init", () => {
   let root = ""
@@ -45,7 +44,6 @@ export default defineConfig({})
 
   it("exposes the initializer through the CLI with machine-readable output", async () => {
     const storeLayer = FileSystemCanvasRepository.layer({ root })
-    const runtimeLayer = CritRuntimeLive.pipe(Layer.provide(storeLayer))
     const cliLayer = Layer.mergeAll(
       NodeFileSystem.layer,
       Path.layer,
@@ -75,8 +73,7 @@ export default defineConfig({})
         ChildProcessSpawner.ChildProcessSpawner,
         ChildProcessSpawner.make(() => Effect.die("install must be skipped"))
       ),
-      storeLayer,
-      runtimeLayer
+      storeLayer
     )
 
     await Effect.runPromise(

@@ -9,7 +9,6 @@ import { ChildProcessSpawner } from "effect/unstable/process"
 import { runCrit } from "../../src/cli/command.js"
 import { FileSystemAgentActivity } from "../../src/node/file-system-agent-activity.js"
 import { FileSystemCanvasRepository } from "../../src/node/file-system-canvas-repository.js"
-import { CritRuntimeLive } from "../../src/runtime/crit-runtime.js"
 import { SnapshotArchive } from "../../src/runtime/snapshot-archive.js"
 import {
   SnapshotService,
@@ -31,7 +30,6 @@ describe("crit Canvas workflows", () => {
 
   it.effect("adds URLs, lists Canvases, and opens a semantic Canvas view", () => {
     const storeLayer = FileSystemCanvasRepository.layer({ root })
-    const runtimeLayer = CritRuntimeLive.pipe(Layer.provide(storeLayer))
     const activityLayer = FileSystemAgentActivity.layer({ root })
     const snapshotLayer = SnapshotServiceLive.pipe(
       Layer.provide(storeLayer),
@@ -77,7 +75,6 @@ describe("crit Canvas workflows", () => {
         ChildProcessSpawner.make(() => Effect.die("unused"))
       ),
       storeLayer,
-      runtimeLayer,
       snapshotLayer,
       activityLayer
     )
@@ -211,7 +208,6 @@ describe("crit Canvas workflows", () => {
 
   it.effect("atomically exposes every semantic Frame edit to agents", () => {
     const storeLayer = FileSystemCanvasRepository.layer({ root })
-    const runtimeLayer = CritRuntimeLive.pipe(Layer.provide(storeLayer))
     const cliLayer = Layer.mergeAll(
       FileSystem.layerNoop({}),
       Path.layer,
@@ -239,8 +235,7 @@ describe("crit Canvas workflows", () => {
         ChildProcessSpawner.ChildProcessSpawner,
         ChildProcessSpawner.make(() => Effect.die("unused"))
       ),
-      storeLayer,
-      runtimeLayer
+      storeLayer
     )
 
     return Effect.gen(function*() {
@@ -331,7 +326,6 @@ describe("crit Canvas workflows", () => {
 
   it.effect("rejects AddSnapshotFrame on the public apply surface", () => {
     const storeLayer = FileSystemCanvasRepository.layer({ root })
-    const runtimeLayer = CritRuntimeLive.pipe(Layer.provide(storeLayer))
     const cliLayer = Layer.mergeAll(
       FileSystem.layerNoop({}),
       Path.layer,
@@ -359,8 +353,7 @@ describe("crit Canvas workflows", () => {
         ChildProcessSpawner.ChildProcessSpawner,
         ChildProcessSpawner.make(() => Effect.die("unused"))
       ),
-      storeLayer,
-      runtimeLayer
+      storeLayer
     )
 
     return Effect.gen(function*() {
@@ -401,7 +394,6 @@ describe("crit Canvas workflows", () => {
     "reports the captured snapshot when a concurrent writer appends another Frame",
     () => {
       const storeLayer = FileSystemCanvasRepository.layer({ root })
-      const runtimeLayer = CritRuntimeLive.pipe(Layer.provide(storeLayer))
       const cliLayer = Layer.mergeAll(
         FileSystem.layerNoop({}),
         Path.layer,
@@ -432,7 +424,6 @@ describe("crit Canvas workflows", () => {
           ChildProcessSpawner.make(() => Effect.die("unused"))
         ),
         storeLayer,
-        runtimeLayer,
         Layer.succeed(SnapshotService, {
           snapshotFrame: () =>
             Effect.succeed({

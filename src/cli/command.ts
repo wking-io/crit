@@ -3,9 +3,11 @@ import { Argument, Command, Flag } from "effect/unstable/cli"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 
 import {
+  Canvas,
   CanvasCommand,
   CanvasCommandSchema,
-  type CanvasCommand as CanvasCommandInput
+  type CanvasCommand as CanvasCommandInput,
+  type CanvasDocument
 } from "../core/index.js"
 import {
   CRIT_MANIFEST_FILE,
@@ -14,8 +16,11 @@ import {
   CritManifestInvalid
 } from "../discovery/index.js"
 import { CritInitFailed, CritInitializer } from "../init/project-initializer.js"
-import { CritRuntime } from "../runtime/crit-runtime.js"
 import { AgentActivityStore } from "../runtime/agent-activity.js"
+import {
+  CanvasRepository,
+  type CanvasRepositoryMutation
+} from "../runtime/canvas-repository.js"
 import { SnapshotService } from "../runtime/snapshot-service.js"
 import { PACKAGE_VERSION } from "../version.js"
 
@@ -46,6 +51,21 @@ const pulseAgentActivity = (
       })
     )
   )
+
+const canvasView = (document: CanvasDocument) => {
+  const canvas = Canvas.fromDocument(document)
+  return {
+    canvas: Canvas.summarize(canvas),
+    frames: Canvas.listFrames(canvas),
+    notes: Canvas.listNotes(canvas)
+  }
+}
+
+const canvasMutation = (mutation: CanvasRepositoryMutation) => ({
+  revision: mutation.document.revision,
+  change: mutation.change,
+  canvas: Canvas.summarize(Canvas.fromDocument(mutation.document))
+})
 
 const parseJson = (source: string, contents: string) =>
   Effect.try({
@@ -268,7 +288,7 @@ const applyCommand = Command.make(
   },
   ({ id, commands, json }) =>
     Effect.gen(function*() {
-      const runtime = yield* CritRuntime
+      const documents = yield* CanvasRepository
       yield* pulseAgentActivity(id, "Applying Canvas edits")
       const decoded: ReadonlyArray<CanvasCommandInput> =
         yield* decodeCanvasCommands(commands)
@@ -277,11 +297,9 @@ const applyCommand = Command.make(
           detail: "At least one Canvas command is required"
         })
       }
-      const mutation = yield* runtime.updateCanvas({
-        id,
-        commands: decoded
-      })
-      const updated = yield* runtime.getCanvas(id)
+      const persisted = yield* documents.apply(id, decoded)
+      const mutation = canvasMutation(persisted)
+      const updated = canvasView(persisted.document)
       const output = json
         ? JSON.stringify({
             schemaVersion: 1,
@@ -308,8 +326,10 @@ const createCommand = Command.make(
   },
   ({ id, title, json }) =>
     Effect.gen(function*() {
-      const runtime = yield* CritRuntime
-      const canvas = yield* runtime.createCanvas({ id, title })
+      const documents = yield* CanvasRepository
+      const created = Canvas.create({ id, title })
+      const canvas = Canvas.summarize(created)
+      yield* documents.create(Canvas.export(created))
       yield* pulseAgentActivity(id, "Created Canvas")
       const output = json
         ? JSON.stringify({
@@ -371,9 +391,9 @@ const addCommand = Command.make(
   },
   ({ id, urls, json }) =>
     Effect.gen(function*() {
-      const runtime = yield* CritRuntime
+      const documents = yield* CanvasRepository
       yield* pulseAgentActivity(id, "Adding Frames")
-      const current = yield* runtime.getCanvas(id)
+      const current = canvasView(yield* documents.load(id))
       const usedIds = new Set(current.frames.map((frame) => frame.id))
       const normalized = yield* Effect.forEach(urls, normalizeUrl)
       const commands = normalized.map((url) =>
@@ -384,11 +404,9 @@ const addCommand = Command.make(
           provenance: { kind: "agent", sourceId: "crit-cli:add" }
         })
       )
-      const mutation = yield* runtime.updateCanvas({
-        id,
-        commands
-      })
-      const updated = yield* runtime.getCanvas(id)
+      const persisted = yield* documents.apply(id, commands)
+      const mutation = canvasMutation(persisted)
+      const updated = canvasView(persisted.document)
       const output = json
         ? JSON.stringify({
             schemaVersion: 1,
@@ -406,8 +424,10 @@ const listCommand = Command.make(
   { json: Flag.boolean("json") },
   ({ json }) =>
     Effect.gen(function*() {
-      const runtime = yield* CritRuntime
-      const canvases = yield* runtime.listCanvases()
+      const documents = yield* CanvasRepository
+      const canvases = (yield* documents.list()).map((document) =>
+        Canvas.summarize(Canvas.fromDocument(document))
+      )
       const output = json
         ? JSON.stringify({ schemaVersion: 1, command: "list", canvases })
         : canvases.length === 0
@@ -430,9 +450,9 @@ const openCommand = Command.make(
   },
   ({ id, json }) =>
     Effect.gen(function*() {
-      const runtime = yield* CritRuntime
+      const documents = yield* CanvasRepository
       yield* pulseAgentActivity(id, "Reading Canvas")
-      const view = yield* runtime.getCanvas(id)
+      const view = canvasView(yield* documents.load(id))
       const output = json
         ? JSON.stringify({ schemaVersion: 1, command: "open", ...view })
         : `Canvas "${view.canvas.title}" (${view.canvas.id}), revision ${view.canvas.revision}, ${view.canvas.frameCount} Frame(s).`

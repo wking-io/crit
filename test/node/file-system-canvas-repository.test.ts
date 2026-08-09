@@ -73,6 +73,43 @@ describe("FileSystemCanvasRepository", () => {
       ])
     }).pipe(Effect.provide(FileSystemCanvasRepository.layer({ root }))))
 
+  it.effect("does not persist failed or empty command batches", () =>
+    Effect.gen(function*() {
+      const store = yield* CanvasRepository
+      yield* store.create(
+        Canvas.export(Canvas.create({ id: "review", title: "Review" }))
+      )
+
+      const commandFailure = yield* Effect.flip(
+        store.apply("review", [
+          CanvasCommand.addFrame({
+            id: "checkout-v1",
+            url: "https://checkout.localhost/v1",
+            title: "Checkout v1",
+            provenance: { kind: "agent", sourceId: "iteration-agent" }
+          }),
+          CanvasCommand.updateFrame({
+            id: "missing-frame",
+            changes: { status: "approved" }
+          })
+        ])
+      )
+      const emptyFailure = yield* Effect.flip(store.apply("review", []))
+      const persisted = yield* store.load("review")
+
+      expect(commandFailure).toMatchObject({
+        _tag: "CritClientCommandFailed",
+        id: "review",
+        reason: "frame-not-found"
+      })
+      expect(emptyFailure).toMatchObject({
+        _tag: "CritClientCommandFailed",
+        id: "review",
+        reason: "invalid-command"
+      })
+      expect(persisted).toMatchObject({ revision: 0, frames: [] })
+    }).pipe(Effect.provide(FileSystemCanvasRepository.layer({ root }))))
+
   it.effect("steals a lock whose owning process is dead", () =>
     Effect.gen(function*() {
       const store = yield* CanvasRepository

@@ -1,6 +1,7 @@
 import { Effect, Schema } from "effect"
 
 import {
+  Canvas,
   CanvasCommand,
   FrameDisplay,
   FrameReviewStatus,
@@ -14,9 +15,9 @@ import {
   CritClientUnavailable
 } from "../runtime/canvas-failure.js"
 import {
-  CritRuntime,
-  type CritRuntimeShape
-} from "../runtime/crit-runtime.js"
+  CanvasRepository,
+  type CanvasRepositoryShape
+} from "../runtime/canvas-repository.js"
 
 export const CRIT_MANIFEST_PATH = "/.well-known/crit.json"
 export const CRIT_MANIFEST_FILE = "crit.manifest.json"
@@ -306,7 +307,7 @@ const planFrameCommands = (
 }
 
 const syncWith = (
-  runtime: CritRuntimeShape,
+  documents: CanvasRepositoryShape,
   manifest: ResolvedCritManifest,
   options: { readonly canvasId?: string } = {}
 ) => {
@@ -328,39 +329,42 @@ const syncWith = (
   ): Effect.Effect<CritManifestCanvasSync, CritManifestSyncError> =>
     Effect.gen(function*() {
       let created = false
-      const current = yield* runtime.getCanvas(canvas.id).pipe(
+      const current = yield* documents.load(canvas.id).pipe(
         Effect.catchTag("CritClientNotFound", () =>
-          runtime.createCanvas({ id: canvas.id, title: canvas.title }).pipe(
+          documents.create(
+            Canvas.export(Canvas.create({ id: canvas.id, title: canvas.title }))
+          ).pipe(
             Effect.tap(() =>
               Effect.sync(() => {
                 created = true
               })
             ),
             Effect.catchTag("DocumentAlreadyExists", () => Effect.void),
-            Effect.andThen(runtime.getCanvas(canvas.id))
+            Effect.andThen(documents.load(canvas.id))
           )
         )
       )
-      const plan = planFrameCommands(manifest, canvas, current.frames)
+      const plan = planFrameCommands(
+        manifest,
+        canvas,
+        Canvas.listFrames(Canvas.fromDocument(current))
+      )
       if (plan.commands.length === 0) {
         return {
           id: canvas.id,
           action: created ? "created" as const : "unchanged" as const,
-          revision: current.canvas.revision,
+          revision: current.revision,
           addedFrameIds: plan.addedFrameIds,
           updatedFrameIds: plan.updatedFrameIds,
           unchangedFrameIds: plan.unchangedFrameIds
         }
       }
 
-      const mutation = yield* runtime.updateCanvas({
-        id: canvas.id,
-        commands: plan.commands
-      })
+      const mutation = yield* documents.apply(canvas.id, plan.commands)
       return {
         id: canvas.id,
         action: created ? "created" as const : "updated" as const,
-        revision: mutation.revision,
+        revision: mutation.document.revision,
         addedFrameIds: plan.addedFrameIds,
         updatedFrameIds: plan.updatedFrameIds,
         unchangedFrameIds: plan.unchangedFrameIds
@@ -381,7 +385,9 @@ const syncWith = (
 const sync = (
   manifest: ResolvedCritManifest,
   options: { readonly canvasId?: string } = {}
-) => Effect.flatMap(CritRuntime, (runtime) => syncWith(runtime, manifest, options))
+) => Effect.flatMap(CanvasRepository, (documents) =>
+  syncWith(documents, manifest, options)
+)
 
 export const CritManifest = {
   decode,

@@ -41,8 +41,8 @@ committing an `AddSnapshotFrame` command that checks the source Frame still has
 the URL that was captured. The live Frame is retained; its archived Frame points
 to the immutable artifact. Snapshot bytes do not bloat the Canvas Document.
 
-`CritRuntime` exposes creation, reads, summaries, and command application to CLI
-and discovery adapters. `CanvasSession` adds optimistic browser state,
+CLI and discovery adapters use the Canvas Repository directly and derive views
+through the Canvas core. `CanvasSession` adds optimistic browser state,
 single-flight autosave, semantic-command draft recovery, and revision adoption.
 The Vite plugin watches the Canvas directory and sends change hints to browser
 windows; polling remains a fallback. Notifications are only an optimization—the

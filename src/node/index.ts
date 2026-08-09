@@ -23,14 +23,6 @@ export {
   type CritClientError
 } from "../runtime/canvas-failure.js"
 export {
-  CritRuntime,
-  CritRuntimeLive,
-  UpdateCanvasInput,
-  CanvasMutationResult,
-  CanvasView,
-  type CritRuntimeShape
-} from "../runtime/crit-runtime.js"
-export {
   AgentActivityFailed,
   AgentActivityStatus,
   AgentActivityStore,
