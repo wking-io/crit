@@ -306,7 +306,7 @@ export const critStyles = String.raw`
   z-index: 10;
 }
 
-.crit-status-option {
+.crit-canvas .crit-status-option {
   align-items: center;
   background: var(--status-shell);
   border: 0;
