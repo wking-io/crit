@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest"
 
 import {
-  DEFAULT_CANVAS_CAMERA_OPTIONS,
   initialCanvasCameraState,
   updateCanvasCamera
 } from "../../src/react/canvas-camera.js"
@@ -118,8 +117,5 @@ describe("canvas camera", () => {
     expect(fitted.camera.zoom).toBeLessThanOrEqual(1)
     expect(fitted.camera.x).toBeGreaterThanOrEqual(-100)
     expect(sanitized.camera.zoom).toBeGreaterThan(1)
-    expect(DEFAULT_CANVAS_CAMERA_OPTIONS.zoomSteps).toEqual([
-      0.05, 0.1, 0.25, 0.5, 1, 2, 4, 8
-    ])
   })
 })

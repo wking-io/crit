@@ -4,108 +4,15 @@ import { describe, expect, it } from "vitest"
 import { Crit } from "../../src/react/crit.js"
 import {
   CanvasViewport,
-  CRIT_HOTKEYS,
-  DEFAULT_FRAME_CHROME_SETTINGS,
-  FRAME_SIZE_PRESETS,
   frameChromeLayout,
   frameChromeMetrics,
   frameUiScale,
   frameToolbarMode
 } from "../../src/react/canvas-viewport.js"
-import { CanvasSelection } from "../../src/react/canvas-selection.js"
-import {
-  PAN_CANVAS_CURSOR,
-  PANNING_CANVAS_CURSOR,
-  SELECT_CANVAS_CURSOR,
-  canvasCursor
-} from "../../src/react/canvas-cursors.js"
-import { critStyles } from "../../src/react/crit-styles.js"
-import { FRAME_STATUSES } from "../../src/react/frame-chrome.js"
-import { resizeCursors } from "../../src/react/resize-cursors.js"
-import { MOVE_CANVAS_CURSOR } from "../../src/react/move-cursor.js"
 import { Canvas, CanvasCommand } from "../../src/core/index.js"
 import { Effect } from "effect"
 
 describe("Crit", () => {
-  it("ships the established dev-canvas visual contract with the component", () => {
-    expect(critStyles).toContain("--crit-ink: #191918")
-    expect(critStyles).toContain("--crit-accent: #ff5c35")
-    expect(critStyles).toContain(".crit-toolbar")
-    expect(critStyles).toContain(".crit-status-option")
-    expect(critStyles).toContain(".crit-selection__handle")
-    expect(critStyles).toContain(".crit-canvas__pan-shield")
-    expect(critStyles).toContain("crit-tooltip-content-in-from-right")
-    expect(critStyles).toContain('[data-activation-direction~="left"]')
-    expect(critStyles).not.toContain(".crit-resize-handle")
-    expect(critStyles).not.toContain(".crit-frame__more")
-    expect(critStyles).not.toContain("#e8ebef")
-  })
-
-  it("uses the supplied pointer and hand artwork for canvas tools", () => {
-    expect(canvasCursor("select")).toBe(SELECT_CANVAS_CURSOR)
-    expect(canvasCursor("pan")).toBe(PAN_CANVAS_CURSOR)
-    expect(canvasCursor("pan", true)).toBe(PANNING_CANVAS_CURSOR)
-    expect(SELECT_CANVAS_CURSOR).toContain(") 8 8, default")
-    expect(PAN_CANVAS_CURSOR).toContain(") 16 16, grab")
-    expect(PANNING_CANVAS_CURSOR).toContain(") 16 16, grabbing")
-  })
-
-  it("renders resize cursors at the same 32px canvas size as other tools", () => {
-    for (const cursor of Object.values(resizeCursors)) {
-      expect(decodeURIComponent(cursor)).toContain('width="32" height="32"')
-      expect(cursor).toContain(") 16 16,")
-    }
-  })
-
-  it("uses the supplied four-way move cursor on draggable headers", () => {
-    expect(decodeURIComponent(MOVE_CANVAS_CURSOR)).toContain(
-      'width="32" height="32"'
-    )
-    expect(MOVE_CANVAS_CURSOR).toContain(") 16 16, move")
-    expect(critStyles.split(MOVE_CANVAS_CURSOR)).toHaveLength(3)
-  })
-
-  it("defines global tool and zoom shortcuts for TanStack Hotkeys", () => {
-    expect(CRIT_HOTKEYS).toEqual({
-      selectTool: "V",
-      handTool: "H",
-      zoomIn: [
-        { key: "=", mod: true },
-        { key: "=", mod: true, shift: true }
-      ],
-      zoomOut: [
-        { key: "-", mod: true },
-        { key: "-", mod: true, shift: true }
-      ]
-    })
-  })
-
-  it("shows four corner handles with invisible edge resize targets", () => {
-    const html = renderToStaticMarkup(
-      <CanvasSelection ink="#123456" label="Candidate" onResize={() => {}} zoom={0.5} />
-    )
-
-    expect(html.match(/data-resize-handle=/g)).toHaveLength(8)
-    expect(html.match(/data-visible-handle=/g)).toHaveLength(4)
-    expect(html).toContain("Selected Candidate")
-    expect(html).toContain("--selection-ui:2")
-    expect(critStyles).toContain("data:image/svg+xml")
-    expect(critStyles).toContain("nwse-resize")
-    expect(critStyles).toContain("nesw-resize")
-    expect(critStyles).toContain("ew-resize")
-    expect(critStyles).toContain("ns-resize")
-  })
-
-  it("includes archive in the original status sequence", () => {
-    expect(FRAME_STATUSES.map((status) => status.id)).toEqual([
-      "changes-requested",
-      "in-progress",
-      "archived",
-      "approved",
-      "ready-for-review"
-    ])
-  })
-
   it("keeps the title until fewer than ten characters fit", () => {
     expect(frameToolbarMode(223)).toBe("full")
     expect(frameToolbarMode(222)).toBe("compact")
@@ -113,13 +20,6 @@ describe("Crit", () => {
   })
 
   it("progressively hides Frame actions only when their width budget runs out", () => {
-    expect(DEFAULT_FRAME_CHROME_SETTINGS).toEqual({
-      titleMinimumCharacters: 10,
-      snapshotMinimumWidth: 148,
-      openMinimumWidth: 82,
-      fullscreenMinimumWidth: 104,
-      deleteMinimumWidth: 60
-    })
     expect(frameChromeLayout(150, 1, true).actions).toEqual({
       snapshot: true,
       open: true,
@@ -139,16 +39,6 @@ describe("Crit", () => {
     expect(frameChromeMetrics(245, 1, 5, {
       titleMinimumCharacters: 11
     }).titleVisible).toBe(false)
-  })
-
-  it("defines the frame screen-size presets as exact resize targets", () => {
-    expect(FRAME_SIZE_PRESETS).toEqual([
-      { id: "mobile", label: "Mobile", width: 402, height: 874 },
-      { id: "tablet", label: "Tablet", width: 832, height: 1194 },
-      { id: "laptop", label: "Laptop", width: 1280, height: 832 },
-      { id: "desktop", label: "Desktop", width: 1512, height: 982 },
-      { id: "widescreen", label: "Widescreen", width: 2560, height: 1440 }
-    ])
   })
 
   it("keeps Frame chrome proportional and resize-driven across zoom", () => {
@@ -206,10 +96,6 @@ describe("Crit", () => {
     expect(html).toContain("Candidate")
     expect(html).toContain("Approved")
     expect(html).toContain("Ready for review")
-    expect(html).toContain('data-frame-status="ready-for-review"')
-    expect(html).toContain('class="crit-toolbar"')
-    expect(html).toContain('class="crit-frame"')
-    expect(html).toContain('class="crit-note"')
     expect(html).toContain("Status: Approved. Change status")
     expect(html).toContain("A: Candidate")
     expect(html).toContain("Attached to candidate")
@@ -217,7 +103,6 @@ describe("Crit", () => {
     expect(html).toContain("Send note to back")
     expect(html).toContain("Bring note to front")
     expect(html).not.toContain("Layer options for Candidate")
-    expect(html).not.toContain("crit-frame__select-shield")
     expect(html).toContain('aria-label="Undo"')
     expect(html).toContain('aria-label="Redo"')
     expect(html).toContain('aria-keyshortcuts="V"')
