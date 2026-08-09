@@ -3,6 +3,10 @@ import { describe, expect, it } from "vitest"
 
 import { Crit } from "../../src/react/crit.js"
 import {
+  CanvasHelpPanel,
+  CanvasHelpSurface
+} from "../../src/react/canvas-help.js"
+import {
   CanvasViewport,
   CRIT_HOTKEYS,
   DEFAULT_FRAME_CHROME_SETTINGS,
@@ -34,8 +38,8 @@ describe("Crit", () => {
     expect(critStyles).toContain(".crit-status-option")
     expect(critStyles).toContain(".crit-selection__handle")
     expect(critStyles).toContain(".crit-canvas__pan-shield")
-    expect(critStyles).toContain("crit-tooltip-content-in-from-right")
-    expect(critStyles).toContain('[data-activation-direction~="left"]')
+    expect(critStyles).toContain(".crit-help")
+    expect(critStyles).not.toContain(".crit-tooltip")
     expect(critStyles).not.toContain(".crit-resize-handle")
     expect(critStyles).not.toContain(".crit-frame__more")
     expect(critStyles).not.toContain("#e8ebef")
@@ -174,6 +178,37 @@ describe("Crit", () => {
     expect(html).toContain("Opening canvas…")
   })
 
+  it("hides inactive help and emits complete details for canvas controls", () => {
+    const canvas = Canvas.create({ id: "review", title: "Review" })
+    const html = renderToStaticMarkup(
+      <CanvasHelpSurface>
+        <CanvasViewport
+          dispatch={() => Effect.void}
+          document={Canvas.export(canvas)}
+        />
+        <CanvasHelpPanel />
+      </CanvasHelpSurface>
+    )
+
+    expect(html).not.toContain('aria-label="Control help"')
+    expect(html).not.toContain("Arrange frames and notes on an infinite canvas")
+    expect(html).toContain('data-crit-help-name="Select"')
+    expect(html).toContain('data-crit-help-hotkey="V"')
+    expect(html).toContain(
+      'data-crit-help-description="Select, move, and resize frames and notes."'
+    )
+    expect(html).toContain('data-crit-help-name="Add frame"')
+    expect(html).toContain('data-crit-help-name="Add note"')
+    expect(html).not.toContain("crit-tooltip")
+
+    const detailCounts = [
+      html.match(/data-crit-help-name=/g)?.length ?? 0,
+      html.match(/data-crit-help-hotkey=/g)?.length ?? 0,
+      html.match(/data-crit-help-description=/g)?.length ?? 0
+    ]
+    expect(new Set(detailCounts).size).toBe(1)
+  })
+
   it("renders Frames and attached Notes without a canvas framework", async () => {
     const canvas = Canvas.create({ id: "review", title: "Review" })
     await Effect.runPromise(Canvas.apply(
@@ -216,6 +251,10 @@ describe("Crit", () => {
     expect(html).toContain("Tighten spacing")
     expect(html).toContain("Send note to back")
     expect(html).toContain("Bring note to front")
+    expect(html).toContain('data-crit-help-name="Frame status"')
+    expect(html).toContain('data-crit-help-name="Edit frame title"')
+    expect(html).toContain('data-crit-help-name="Edit note"')
+    expect(html).toContain('data-crit-help-name="Send to back"')
     expect(html).not.toContain("Layer options for Candidate")
     expect(html).not.toContain("crit-frame__select-shield")
     expect(html).toContain('aria-label="Undo"')

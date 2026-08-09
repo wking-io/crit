@@ -4,6 +4,7 @@ import type {
 } from "react"
 
 import type { CanvasGeometry } from "../core/index.js"
+import { NO_HELP_HOTKEY, helpTarget } from "./canvas-help.js"
 
 export type ResizeHandlePosition =
   | "north-west"
@@ -90,6 +91,11 @@ export function CanvasSelection({
         <button
           aria-label={`Resize ${label} from ${handle}`}
           className="crit-selection__handle"
+          {...helpTarget({
+            name: `Resize ${label}`,
+            hotkey: NO_HELP_HOTKEY,
+            description: `Drag to resize the ${label} from its ${handle.replace("-", " ")} edge.`
+          })}
           data-resize-handle={handle}
           data-visible-handle={cornerHandles.has(handle) || undefined}
           key={handle}
