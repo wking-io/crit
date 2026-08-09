@@ -1,4 +1,3 @@
-import { Tooltip } from "@base-ui/react/tooltip"
 import {
   useHotkeys,
   type RegisterableHotkey
@@ -38,7 +37,10 @@ import {
 } from "./canvas-cursors.js"
 import type { ResizeHandlePosition } from "./canvas-selection.js"
 import { beginCanvasInteraction } from "./canvas-interaction.js"
-import { CritTooltipPopup } from "./crit-tooltip.js"
+import {
+  NO_HELP_HOTKEY,
+  helpTarget
+} from "./canvas-help.js"
 import {
   FrameCard,
   type FrameChromeSettings
@@ -51,7 +53,6 @@ import {
   IconRedo,
   IconSwitcher,
   IconUndo,
-  frameStatus,
   shortIdForIndex
 } from "./frame-chrome.js"
 import {
@@ -90,6 +91,9 @@ type CanvasZoomDirection = -1 | 0 | 1
 const CRIT_HOTKEYS = {
   selectTool: "V",
   handTool: "H",
+  addFrame: "F",
+  addNote: "N",
+  deleteSelection: "Delete",
   zoomIn: [
     { key: "=", mod: true },
     { key: "=", mod: true, shift: true }
@@ -101,6 +105,9 @@ const CRIT_HOTKEYS = {
 } as const satisfies {
   readonly selectTool: RegisterableHotkey
   readonly handTool: RegisterableHotkey
+  readonly addFrame: RegisterableHotkey
+  readonly addNote: RegisterableHotkey
+  readonly deleteSelection: RegisterableHotkey
   readonly zoomIn: ReadonlyArray<RegisterableHotkey>
   readonly zoomOut: ReadonlyArray<RegisterableHotkey>
 }
@@ -182,8 +189,6 @@ export function CanvasViewport({
     readonly x: number
     readonly y: number
   } | null>(null)
-  const toolbarTooltip = useMemo(() => Tooltip.createHandle<string>(), [])
-
   const commitCameraState = useCallback(
     (next: ReturnType<typeof initialCanvasCameraState>) => {
       cameraStateRef.current = next
@@ -311,6 +316,30 @@ export function CanvasViewport({
     applyCameraInput({ type: "zoom-step", direction, viewport })
   }, [applyCameraInput, viewport])
 
+  const openNewFrameAtCenter = useCallback(() => {
+    setNewFrameTarget({
+      x: (viewport.width / 2 - camera.x) / camera.zoom - 600,
+      y: (viewport.height / 2 - camera.y) / camera.zoom - 400
+    })
+  }, [camera, viewport])
+
+  const addNoteAtCenter = useCallback(() => {
+    addNoteAt(
+      (viewport.width / 2 - camera.x) / camera.zoom - 140,
+      (viewport.height / 2 - camera.y) / camera.zoom - 80
+    )
+  }, [addNoteAt, camera, viewport])
+
+  const deleteSelection = useCallback(() => {
+    if (selectedId === null) return
+    if (document.frames.some((frame) => frame.id === selectedId)) {
+      run(CanvasCommand.removeFrame({ id: selectedId }))
+    } else if (document.notes.some((note) => note.id === selectedId)) {
+      run(CanvasCommand.removeNote({ id: selectedId }))
+    }
+    setSelectedId(null)
+  }, [document.frames, document.notes, run, selectedId])
+
   useHotkeys([
     {
       hotkey: CRIT_HOTKEYS.selectTool,
@@ -320,6 +349,21 @@ export function CanvasViewport({
     {
       hotkey: CRIT_HOTKEYS.handTool,
       callback: () => setTool("pan"),
+      options: { ignoreInputs: true }
+    },
+    {
+      hotkey: CRIT_HOTKEYS.addFrame,
+      callback: openNewFrameAtCenter,
+      options: { ignoreInputs: true }
+    },
+    {
+      hotkey: CRIT_HOTKEYS.addNote,
+      callback: addNoteAtCenter,
+      options: { ignoreInputs: true }
+    },
+    {
+      hotkey: CRIT_HOTKEYS.deleteSelection,
+      callback: deleteSelection,
       options: { ignoreInputs: true }
     },
     ...CRIT_HOTKEYS.zoomIn.map((hotkey) => ({
@@ -627,87 +671,101 @@ export function CanvasViewport({
         className="crit-toolbar"
         onPointerDown={(event) => event.stopPropagation()}
       >
-        <span className="crit-toolbar__title" title={document.title}>
+        <span
+          className="crit-toolbar__title"
+          {...helpTarget({
+            name: document.title,
+            hotkey: NO_HELP_HOTKEY,
+            description: "The canvas currently open for arranging and reviewing work."
+          })}
+        >
           <span>{document.title}</span>
           <IconSwitcher />
         </span>
         <span aria-hidden="true" className="crit-toolbar__divider" />
-        <Tooltip.Provider delay={450} closeDelay={80}>
-          <span className="crit-toolbar__group">
-            <Tooltip.Trigger
+        <span className="crit-toolbar__group">
+            <button
               aria-disabled="true"
               aria-label="Undo"
               className="crit-icon-button"
-              handle={toolbarTooltip}
-              payload="Undo"
+              {...helpTarget({
+                name: "Undo",
+                hotkey: NO_HELP_HOTKEY,
+                description: "Undo is not available yet."
+              })}
               type="button"
-            ><IconUndo /></Tooltip.Trigger>
-            <Tooltip.Trigger
+            ><IconUndo /></button>
+            <button
               aria-disabled="true"
               aria-label="Redo"
               className="crit-icon-button"
-              handle={toolbarTooltip}
-              payload="Redo"
+              {...helpTarget({
+                name: "Redo",
+                hotkey: NO_HELP_HOTKEY,
+                description: "Redo is not available yet."
+              })}
               type="button"
-            ><IconRedo /></Tooltip.Trigger>
+            ><IconRedo /></button>
           </span>
           <span aria-hidden="true" className="crit-toolbar__divider" />
           <span className="crit-toolbar__group">
-            <Tooltip.Trigger
+            <button
               aria-keyshortcuts="V"
               aria-label="Select"
               aria-pressed={tool === "select"}
               className="crit-icon-button"
-              handle={toolbarTooltip}
+              {...helpTarget({
+                name: "Select",
+                hotkey: "V",
+                description: "Select, move, resize, and interact with frames and notes."
+              })}
               onClick={() => setTool("select")}
-              payload="Select · V"
               type="button"
-            ><IconPointer /></Tooltip.Trigger>
-            <Tooltip.Trigger
+            ><IconPointer /></button>
+            <button
               aria-keyshortcuts="H"
               aria-label="Hand"
               aria-pressed={tool === "pan"}
               className="crit-icon-button"
-              handle={toolbarTooltip}
+              {...helpTarget({
+                name: "Hand",
+                hotkey: "H",
+                description: "Drag the canvas to pan without selecting an item."
+              })}
               onClick={() => setTool("pan")}
-              payload="Hand · H"
               type="button"
-            ><IconPan /></Tooltip.Trigger>
-            <Tooltip.Trigger
+            ><IconPan /></button>
+            <button
+              aria-keyshortcuts="F"
               aria-label="Add frame"
               className="crit-icon-button"
-              handle={toolbarTooltip}
-              onClick={() => setNewFrameTarget({
-                x: (viewport.width / 2 - camera.x) / camera.zoom - 600,
-                y: (viewport.height / 2 - camera.y) / camera.zoom - 400
+              {...helpTarget({
+                name: "Add frame",
+                hotkey: "F",
+                description: "Add a live web page to the center of the current view."
               })}
-              payload="Add frame"
+              onClick={openNewFrameAtCenter}
               type="button"
-            ><IconAddFrame /></Tooltip.Trigger>
-            <Tooltip.Trigger
+            ><IconAddFrame /></button>
+            <button
+              aria-keyshortcuts="N"
               aria-label="Add note"
               className="crit-icon-button"
-              handle={toolbarTooltip}
-              onClick={() => {
-                addNoteAt(
-                  (viewport.width / 2 - camera.x) / camera.zoom - 140,
-                  (viewport.height / 2 - camera.y) / camera.zoom - 80
-                )
-              }}
-              payload="Add note"
+              {...helpTarget({
+                name: "Add note",
+                hotkey: "N",
+                description: "Add an editable note to the center of the current view."
+              })}
+              onClick={addNoteAtCenter}
               type="button"
-            ><IconNote /></Tooltip.Trigger>
+            ><IconNote /></button>
           </span>
-          <CritTooltipPopup
-            handle={toolbarTooltip}
-            ink={frameStatus("archived").ink}
-          />
-        </Tooltip.Provider>
       </div>
       <CritContextMenu
         ariaLabel="Canvas actions"
         items={canvasMenu === null ? [] : [
           {
+            help: "Add a live web page at the point where the canvas menu opened.",
             label: "New frame",
             onSelect: () => setNewFrameTarget({
               x: canvasMenu.worldX,
@@ -715,10 +773,15 @@ export function CanvasViewport({
             })
           },
           {
+            help: "Add an editable note at the point where the canvas menu opened.",
             label: "New note",
             onSelect: () => addNoteAt(canvasMenu.worldX, canvasMenu.worldY)
           },
-          { label: "Zoom to fit", onSelect: fit }
+          {
+            help: "Adjust the view so every frame and note is visible.",
+            label: "Zoom to fit",
+            onSelect: fit
+          }
         ]}
         onClose={() => setCanvasMenu(null)}
         position={canvasMenu}

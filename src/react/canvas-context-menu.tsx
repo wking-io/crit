@@ -7,6 +7,8 @@ import {
 } from "react"
 import { createPortal } from "react-dom"
 
+import { NO_HELP_HOTKEY, helpTarget } from "./canvas-help.js"
+
 export type ContextMenuPosition = {
   readonly x: number
   readonly y: number
@@ -15,12 +17,14 @@ export type ContextMenuPosition = {
 export type ContextMenuActionItem =
   | {
       readonly detail?: string
+      readonly help: string
       readonly label: string
       readonly onSelect: () => void
       readonly tone?: "danger"
     }
   | {
       readonly detail?: string
+      readonly help: string
       readonly href: string
       readonly label: string
     }
@@ -28,6 +32,7 @@ export type ContextMenuActionItem =
 export type ContextMenuItem =
   | ContextMenuActionItem
   | {
+      readonly help: string
       readonly items: ReadonlyArray<ContextMenuActionItem>
       readonly label: string
     }
@@ -53,6 +58,11 @@ function ContextMenuAction({
   return "href" in item ? (
     <a
       href={item.href}
+      {...helpTarget({
+        name: item.label,
+        hotkey: NO_HELP_HOTKEY,
+        description: item.help
+      })}
       onClick={onClose}
       {...(onPointerEnter === undefined ? {} : { onPointerEnter })}
       rel="noreferrer"
@@ -64,6 +74,11 @@ function ContextMenuAction({
   ) : (
     <button
       data-tone={item.tone}
+      {...helpTarget({
+        name: item.label,
+        hotkey: NO_HELP_HOTKEY,
+        description: item.help
+      })}
       onClick={() => {
         onClose()
         item.onSelect()
@@ -183,6 +198,11 @@ export function CritContextMenu({
               aria-expanded={submenu?.label === item.label}
               aria-haspopup="menu"
               data-submenu-trigger=""
+              {...helpTarget({
+                name: item.label,
+                hotkey: NO_HELP_HOTKEY,
+                description: item.help
+              })}
               key={item.label}
               onClick={(event) => {
                 if (submenu?.label === item.label) setSubmenu(null)

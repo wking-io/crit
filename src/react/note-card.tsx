@@ -10,6 +10,7 @@ import type {
   CanvasNote
 } from "../core/index.js"
 import { canvasItemStyle } from "./canvas-item-style.js"
+import { NO_HELP_HOTKEY, helpTarget } from "./canvas-help.js"
 import {
   CanvasSelection,
   type ResizeHandlePosition
@@ -56,6 +57,11 @@ export function NoteCard({
     >
       <header
         className="crit-note__chrome"
+        {...helpTarget({
+          name: "Move note",
+          hotkey: NO_HELP_HOTKEY,
+          description: "Drag the note header to reposition it on the canvas."
+        })}
         onPointerDown={(event) => {
           onSelect()
           onMove(event, note)
@@ -68,11 +74,27 @@ export function NoteCard({
             onBringToFront={onBringToFront}
             onSendToBack={onSendToBack}
           />
-          <button aria-label="Delete note" onClick={onRemove} onPointerDown={(event) => event.stopPropagation()} type="button">×</button>
+          <button
+            aria-keyshortcuts="Delete"
+            aria-label="Delete note"
+            {...helpTarget({
+              name: "Remove note",
+              hotkey: "Del",
+              description: "Remove this note from the canvas."
+            })}
+            onClick={onRemove}
+            onPointerDown={(event) => event.stopPropagation()}
+            type="button"
+          >×</button>
         </span>
       </header>
       <textarea
         aria-label="Note"
+        {...helpTarget({
+          name: "Edit note",
+          hotkey: NO_HELP_HOTKEY,
+          description: "Write review feedback. Changes save when focus leaves the note."
+        })}
         onBlur={() => text !== note.text && onText(note.text, text)}
         onChange={(event) => setText(event.currentTarget.value)}
         value={text}
@@ -81,6 +103,11 @@ export function NoteCard({
         <button
           aria-label="Select note"
           className="crit-note__select-shield"
+          {...helpTarget({
+            name: "Select note",
+            hotkey: "V",
+            description: "Select this note so it can be moved or resized."
+          })}
           onPointerDown={(event) => {
             event.preventDefault()
             event.stopPropagation()

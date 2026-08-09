@@ -6,6 +6,8 @@ import {
 } from "react"
 import { createPortal } from "react-dom"
 
+import { NO_HELP_HOTKEY, helpTarget } from "./canvas-help.js"
+
 export function NewFrameDialog({
   onCancel,
   onCreate,
@@ -66,6 +68,11 @@ export function NewFrameDialog({
           URL
           <input
             autoFocus
+            {...helpTarget({
+              name: "Frame URL",
+              hotkey: NO_HELP_HOTKEY,
+              description: "Enter the url to load in a new live frame."
+            })}
             onChange={(event) => setUrl(event.currentTarget.value)}
             placeholder="https://example.com/iteration"
             required
@@ -76,6 +83,11 @@ export function NewFrameDialog({
         <label>
           Title <span>(optional)</span>
           <input
+            {...helpTarget({
+              name: "Frame title",
+              hotkey: NO_HELP_HOTKEY,
+              description: "Name the frame. Optional, title is inferred when left blank."
+            })}
             onChange={(event) => setTitle(event.currentTarget.value)}
             placeholder="Inferred from URL"
             type="text"
@@ -83,8 +95,24 @@ export function NewFrameDialog({
           />
         </label>
         <div className="crit-new-frame-dialog__actions">
-          <button onClick={onCancel} type="button">Cancel</button>
-          <button data-primary="" type="submit">Add frame</button>
+          <button
+            {...helpTarget({
+              name: "Cancel",
+              hotkey: "Esc",
+              description: "Close the dialog without adding a frame."
+            })}
+            onClick={onCancel}
+            type="button"
+          >Cancel</button>
+          <button
+            data-primary=""
+            {...helpTarget({
+              name: "Add frame",
+              hotkey: "Enter",
+              description: "Create a live frame using the entered URL and title."
+            })}
+            type="submit"
+          >Add frame</button>
         </div>
       </form>
     </div>,

@@ -203,6 +203,10 @@ Select tool, `H` selects the Hand tool, and `Mod++` / `Mod+-` zoom the Canvas.
 Single-key tool shortcuts are ignored while typing in inputs. The same behavior
 is preserved while focus is inside a live Frame.
 
+A persistent help panel in the bottom-left corner shows the name, hotkey, and
+description for the control currently hovered or focused. Updates are immediate
+and cover canvas tools, Frame and Note controls, context menus, and dialogs.
+
 The Vite-served editor includes development-only DialKit panels for tuning
 Frame chrome and camera pan/zoom speed. Camera input follows the same immediate
 model across wheel, trackpad, touch pinch, and Frame bridges; keyboard zoom uses
