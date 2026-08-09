@@ -1,44 +1,17 @@
-import { Context, Effect, Schema } from "effect"
+import { Context, Effect } from "effect"
 
 import type { CanvasCommand, CanvasDocument } from "../core/index.js"
 import type { AgentActivityStatus } from "../runtime/agent-activity.js"
+import type { CritClientError } from "../runtime/canvas-failure.js"
 
-export class CritClientNotFound extends Schema.TaggedError<CritClientNotFound>()(
-  "CritClientNotFound",
-  { id: Schema.String }
-) {}
-
-export class CritClientInvalidDocument extends Schema.TaggedError<CritClientInvalidDocument>()(
-  "CritClientInvalidDocument",
-  {
-    id: Schema.String,
-    detail: Schema.String
-  }
-) {}
-
-export class CritClientCommandFailed extends Schema.TaggedError<CritClientCommandFailed>()(
-  "CritClientCommandFailed",
-  {
-    id: Schema.String,
-    reason: Schema.String,
-    detail: Schema.String
-  }
-) {}
-
-export class CritClientUnavailable extends Schema.TaggedError<CritClientUnavailable>()(
-  "CritClientUnavailable",
-  {
-    operation: Schema.String,
-    id: Schema.String,
-    detail: Schema.String
-  }
-) {}
-
-export type CritClientError =
-  | CritClientNotFound
-  | CritClientCommandFailed
-  | CritClientInvalidDocument
-  | CritClientUnavailable
+export {
+  CritClientCommandFailed,
+  CritClientErrorSchema,
+  CritClientInvalidDocument,
+  CritClientNotFound,
+  CritClientUnavailable,
+  type CritClientError
+} from "../runtime/canvas-failure.js"
 
 export interface CritClientShape {
   readonly load: (id: string) => Effect.Effect<CanvasDocument, CritClientError>

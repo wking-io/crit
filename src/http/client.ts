@@ -40,19 +40,13 @@ const responseError = (
   const parsed = Schema.decodeUnknownOption(CritHttpErrorBody)(input)
   if (parsed._tag === "Some") {
     const body = parsed.value.error
-    if (body.code === "not-found") return new CritClientNotFound({ id })
-    if (body.code === "command-rejected") {
-      return new CritClientCommandFailed({
-        id,
-        reason: body.reason ?? "command-rejected",
-        detail: body.message
-      })
-    }
     if (
-      body.code === "invalid-document" ||
-      body.code === "invalid-request"
+      body instanceof CritClientNotFound ||
+      body instanceof CritClientCommandFailed ||
+      body instanceof CritClientInvalidDocument ||
+      body instanceof CritClientUnavailable
     ) {
-      return new CritClientInvalidDocument({ id, detail: body.message })
+      return body
     }
     return new CritClientUnavailable({
       operation,

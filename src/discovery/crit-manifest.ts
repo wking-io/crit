@@ -2,18 +2,17 @@ import { Effect, Schema } from "effect"
 
 import {
   CanvasCommand,
-  CanvasCommandFailed,
-  CanvasDocumentTooLarge,
   FrameDisplay,
   FrameReviewStatus,
   type CanvasCommand as CanvasCommandInput,
   type FrameSummary
 } from "../core/index.js"
 import {
-  DocumentMalformed,
-  DocumentNotFound,
-  DocumentStorageFailed
-} from "../runtime/canvas-repository.js"
+  CritClientCommandFailed,
+  CritClientInvalidDocument,
+  CritClientNotFound,
+  CritClientUnavailable
+} from "../runtime/canvas-failure.js"
 import {
   CritRuntime,
   type CritRuntimeShape
@@ -83,11 +82,10 @@ export type CritManifestSyncResult = {
 
 export type CritManifestSyncError =
   | CritManifestInvalid
-  | DocumentNotFound
-  | DocumentMalformed
-  | DocumentStorageFailed
-  | CanvasCommandFailed
-  | CanvasDocumentTooLarge
+  | CritClientNotFound
+  | CritClientInvalidDocument
+  | CritClientUnavailable
+  | CritClientCommandFailed
 
 export class CritManifestInvalid extends Schema.TaggedError<CritManifestInvalid>()(
   "CritManifestInvalid",
@@ -331,7 +329,7 @@ const syncWith = (
     Effect.gen(function*() {
       let created = false
       const current = yield* runtime.getCanvas(canvas.id).pipe(
-        Effect.catchTag("DocumentNotFound", () =>
+        Effect.catchTag("CritClientNotFound", () =>
           runtime.createCanvas({ id: canvas.id, title: canvas.title }).pipe(
             Effect.tap(() =>
               Effect.sync(() => {

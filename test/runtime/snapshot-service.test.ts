@@ -154,7 +154,8 @@ describe("SnapshotService", () => {
       )
 
       expect(failure).toMatchObject({
-        _tag: "CanvasCommandFailed",
+        _tag: "CritClientCommandFailed",
+        id: "review",
         reason: "snapshot-source-changed"
       })
       expect(artifactOnDiskDuringCommit).toBe(true)

@@ -111,7 +111,8 @@ export class CanvasDocumentTooLarge extends Schema.TaggedError<CanvasDocumentToo
   "CanvasDocumentTooLarge",
   {
     actualBytes: Schema.Number,
-    maxBytes: Schema.Number
+    maxBytes: Schema.Number,
+    detail: Schema.String
   }
 ) {}
 
@@ -249,6 +250,24 @@ const validateDocument = (document: CanvasDocument) => {
   return document
 }
 
+const fromDocument = (document: CanvasDocument): Canvas => {
+  const validated = validateDocument(document)
+  return makeCanvas({
+    id: validated.id,
+    title: validated.title,
+    revision: validated.revision,
+    frames: clone(Array.from(validated.frames)),
+    notes: clone(Array.from(validated.notes))
+  })
+}
+
+const documentTooLarge = (actualBytes: number) =>
+  new CanvasDocumentTooLarge({
+    actualBytes,
+    maxBytes: MAX_CANVAS_DOCUMENT_BYTES,
+    detail: `Canvas Document is ${actualBytes} bytes; maximum is ${MAX_CANVAS_DOCUMENT_BYTES}`
+  })
+
 const open = (
   input: unknown
 ): Effect.Effect<Canvas, CanvasOpenFailed | CanvasDocumentTooLarge> =>
@@ -262,10 +281,7 @@ const open = (
         })
     })
     if (actualBytes > MAX_CANVAS_DOCUMENT_BYTES) {
-      return yield* new CanvasDocumentTooLarge({
-        actualBytes,
-        maxBytes: MAX_CANVAS_DOCUMENT_BYTES
-      })
+      return yield* documentTooLarge(actualBytes)
     }
 
     const document = yield* Schema.decodeUnknownEffect(CanvasDocument)(input).pipe(
@@ -277,20 +293,13 @@ const open = (
           })
       )
     )
-    const validated = yield* Effect.try({
-      try: () => validateDocument(document),
+    return yield* Effect.try({
+      try: () => fromDocument(document),
       catch: (cause) =>
         new CanvasOpenFailed({
           reason: "invalid-document",
           detail: cause instanceof Error ? cause.message : String(cause)
         })
-    })
-    return makeCanvas({
-      id: validated.id,
-      title: validated.title,
-      revision: validated.revision,
-      frames: clone(Array.from(validated.frames)),
-      notes: clone(Array.from(validated.notes))
     })
   })
 
@@ -298,10 +307,7 @@ const exportCanvas = (canvas: Canvas): CanvasDocument => {
   const exported = documentOf(stateOf(canvas))
   const actualBytes = encodedBytes(exported)
   if (actualBytes > MAX_CANVAS_DOCUMENT_BYTES) {
-    throw new CanvasDocumentTooLarge({
-      actualBytes,
-      maxBytes: MAX_CANVAS_DOCUMENT_BYTES
-    })
+    throw documentTooLarge(actualBytes)
   }
   return exported
 }
@@ -724,6 +730,7 @@ const apply = (
 
 export const Canvas = {
   create,
+  fromDocument,
   open,
   apply,
   export: exportCanvas,

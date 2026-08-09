@@ -10,13 +10,18 @@ export {
 export {
   CanvasRepository,
   DocumentAlreadyExists,
-  DocumentMalformed,
-  DocumentNotFound,
-  DocumentStorageFailed,
   type CanvasRepositoryError,
   type CanvasRepositoryShape,
   type CanvasRepositoryMutation
 } from "../runtime/canvas-repository.js"
+export {
+  CritClientCommandFailed,
+  CritClientErrorSchema,
+  CritClientInvalidDocument,
+  CritClientNotFound,
+  CritClientUnavailable,
+  type CritClientError
+} from "../runtime/canvas-failure.js"
 export {
   CritRuntime,
   CritRuntimeLive,

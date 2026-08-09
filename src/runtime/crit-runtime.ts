@@ -3,23 +3,23 @@ import { Context, Effect, Layer, Schema } from "effect"
 import {
   Canvas,
   CanvasChange,
-  CanvasCommandFailed,
   CanvasCommandSchema,
-  CanvasDocumentTooLarge,
   FrameList,
   NoteList,
   CanvasSummary,
   type CanvasCommand,
-  type CanvasDocument,
-  type CanvasOpenFailed
+  type CanvasDocument
 } from "../core/index.js"
 import {
-  DocumentMalformed,
   CanvasRepository,
-  type DocumentAlreadyExists,
-  type DocumentNotFound,
-  type DocumentStorageFailed
+  type DocumentAlreadyExists
 } from "./canvas-repository.js"
+import type {
+  CritClientCommandFailed,
+  CritClientInvalidDocument,
+  CritClientNotFound,
+  CritClientUnavailable
+} from "./canvas-failure.js"
 
 export const UpdateCanvasInput = Schema.Struct({
   id: Schema.String,
@@ -41,57 +41,38 @@ export const CanvasView = Schema.Struct({
 })
 export type CanvasView = typeof CanvasView.Type
 
-const malformedDetail = (
-  cause: CanvasOpenFailed | CanvasDocumentTooLarge
-) =>
-  cause._tag === "CanvasDocumentTooLarge"
-      ? `Canvas Document is ${cause.actualBytes} bytes; maximum is ${cause.maxBytes}`
-      : cause.detail
-
-const openStoredCanvas = (document: CanvasDocument) =>
-  Canvas.open(document).pipe(
-    Effect.mapError(
-      (cause) =>
-        new DocumentMalformed({
-          id: document.id,
-          detail: malformedDetail(cause)
-        })
-    )
-  )
-
 export interface CritRuntimeShape {
   readonly createCanvas: (input: {
     readonly id: string
     readonly title: string
   }) => Effect.Effect<
     CanvasSummary,
-    DocumentAlreadyExists | DocumentMalformed | DocumentStorageFailed
+    DocumentAlreadyExists | CritClientInvalidDocument | CritClientUnavailable
   >
   readonly readCanvas: (
     id: string
   ) => Effect.Effect<
     CanvasDocument,
-    DocumentNotFound | DocumentMalformed | DocumentStorageFailed
+    CritClientNotFound | CritClientInvalidDocument | CritClientUnavailable
   >
   readonly getCanvas: (
     id: string
   ) => Effect.Effect<
     CanvasView,
-    DocumentNotFound | DocumentMalformed | DocumentStorageFailed
+    CritClientNotFound | CritClientInvalidDocument | CritClientUnavailable
   >
   readonly listCanvases: () => Effect.Effect<
     ReadonlyArray<CanvasSummary>,
-    DocumentMalformed | DocumentStorageFailed
+    CritClientInvalidDocument | CritClientUnavailable
   >
   readonly updateCanvas: (
     input: UpdateCanvasInput
   ) => Effect.Effect<
     CanvasMutationResult,
-    | DocumentNotFound
-    | DocumentMalformed
-    | DocumentStorageFailed
-    | CanvasCommandFailed
-    | CanvasDocumentTooLarge
+    | CritClientNotFound
+    | CritClientInvalidDocument
+    | CritClientUnavailable
+    | CritClientCommandFailed
   >
 }
 
@@ -113,7 +94,7 @@ export const CritRuntimeLive = Layer.effect(
       getCanvas: (id) =>
         Effect.gen(function*() {
           const document = yield* documents.load(id)
-          const canvas = yield* openStoredCanvas(document)
+          const canvas = Canvas.fromDocument(document)
           return {
             canvas: Canvas.summarize(canvas),
             frames: Canvas.listFrames(canvas),
@@ -124,14 +105,14 @@ export const CritRuntimeLive = Layer.effect(
         documents.list().pipe(
           Effect.flatMap((stored) =>
             Effect.forEach(stored, (document) =>
-              openStoredCanvas(document).pipe(Effect.map(Canvas.summarize))
+              Effect.sync(() => Canvas.summarize(Canvas.fromDocument(document)))
             )
           )
         ),
       updateCanvas: (input) =>
         Effect.gen(function*() {
           const mutation = yield* documents.apply(input.id, input.commands)
-          const persisted = yield* openStoredCanvas(mutation.document)
+          const persisted = Canvas.fromDocument(mutation.document)
 
           return {
             revision: mutation.document.revision,

@@ -7,6 +7,7 @@ import {
 } from "../core/index.js"
 import {
   CritClientCommandFailed,
+  CritClientErrorSchema,
   CritClientInvalidDocument,
   CritClientNotFound,
   CritClientUnavailable,
@@ -24,22 +25,20 @@ export const CritHttpApplyRequest = Schema.Struct({
 export type CritHttpApplyRequest = typeof CritHttpApplyRequest.Type
 
 export const CritHttpErrorCode = Schema.Union([
-  Schema.Literal("not-found"),
-  Schema.Literal("command-rejected"),
-  Schema.Literal("invalid-document"),
-  Schema.Literal("unavailable"),
   Schema.Literal("invalid-request"),
   Schema.Literal("method-not-allowed")
 ])
 export type CritHttpErrorCode = typeof CritHttpErrorCode.Type
 
 export const CritHttpErrorBody = Schema.Struct({
-  error: Schema.Struct({
-    code: CritHttpErrorCode,
-    message: Schema.String,
-    id: Schema.optional(Schema.String),
-    reason: Schema.optional(Schema.String)
-  })
+  error: Schema.Union([
+    CritClientErrorSchema,
+    Schema.Struct({
+      code: CritHttpErrorCode,
+      message: Schema.String,
+      id: Schema.optional(Schema.String)
+    })
+  ])
 })
 export type CritHttpErrorBody = typeof CritHttpErrorBody.Type
 
@@ -100,12 +99,13 @@ const json = (status: number, body: unknown, headers?: HeadersInit) =>
     }
   })
 
+const encodeClientError = Schema.encodeSync(CritClientErrorSchema)
+
 const errorBody = (
   code: CritHttpErrorCode,
   message: string,
   details: {
     readonly id?: string
-    readonly reason?: string
   } = {}
 ): CritHttpErrorBody => ({
   error: { code, message, ...details }
@@ -137,30 +137,15 @@ const crossOriginRejection = (request: Request, id: string) => {
 
 const clientErrorResponse = (cause: CritClientError) => {
   if (cause instanceof CritClientNotFound) {
-    return json(
-      404,
-      errorBody("not-found", `Canvas not found: ${cause.id}`, { id: cause.id })
-    )
+    return json(404, { error: encodeClientError(cause) })
   }
   if (cause instanceof CritClientInvalidDocument) {
-    return json(
-      422,
-      errorBody("invalid-document", cause.detail, { id: cause.id })
-    )
+    return json(422, { error: encodeClientError(cause) })
   }
   if (cause instanceof CritClientCommandFailed) {
-    return json(
-      409,
-      errorBody("command-rejected", cause.detail, {
-        id: cause.id,
-        reason: cause.reason
-      })
-    )
+    return json(409, { error: encodeClientError(cause) })
   }
-  return json(
-    503,
-    errorBody("unavailable", cause.detail, { id: cause.id })
-  )
+  return json(503, { error: encodeClientError(cause) })
 }
 
 const readApplyRequest = (request: Request, maxBodyBytes: number) =>

@@ -27,5 +27,6 @@ describe("Canvas Document size policy", () => {
         throw new Error(`Expected CanvasDocumentTooLarge, received ${failure._tag}`)
       }
       expect(failure.actualBytes).toBeGreaterThan(failure.maxBytes)
+      expect(failure.detail).toContain("maximum is 10000000")
     }))
 })

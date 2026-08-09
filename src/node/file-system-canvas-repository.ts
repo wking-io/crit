@@ -4,30 +4,29 @@ import { Effect, FileSystem, Layer, Path } from "effect"
 
 import {
   Canvas,
-  CanvasCommandFailed,
   CanvasDocumentTooLarge,
   CanvasInternals,
   type CanvasDocument
 } from "../core/canvas.js"
 import {
   DocumentAlreadyExists,
-  DocumentMalformed,
-  DocumentNotFound,
-  DocumentStorageFailed,
   CanvasRepository,
   type CanvasRepositoryShape
 } from "../runtime/canvas-repository.js"
+import {
+  CritClientCommandFailed,
+  CritClientInvalidDocument,
+  CritClientNotFound,
+  rejectedCanvasCommand,
+  unavailableCanvas
+} from "../runtime/canvas-failure.js"
 import {
   canonicalizeDocument,
   serializeDocument
 } from "../runtime/internal/document-codec.js"
 
 const storageFailure = (operation: string, id: string, cause: unknown) =>
-  new DocumentStorageFailed({
-    operation,
-    id,
-    detail: cause instanceof Error ? cause.message : String(cause)
-  })
+  unavailableCanvas(operation, id, cause)
 
 // A Canvas mutation holds its lock for one read-apply-write cycle, so any
 // lock older than this belongs to a wedged or dead writer and is safe to steal.
@@ -97,7 +96,7 @@ const make = (root: string) =>
         const exists = yield* fs
           .exists(target)
           .pipe(Effect.mapError((cause) => storageFailure("load", id, cause)))
-        if (!exists) return yield* new DocumentNotFound({ id })
+        if (!exists) return yield* new CritClientNotFound({ id })
 
         const contents = yield* fs
           .readFileString(target)
@@ -105,7 +104,7 @@ const make = (root: string) =>
         const input = yield* Effect.try({
           try: () => JSON.parse(contents) as unknown,
           catch: (cause) =>
-            new DocumentMalformed({
+            new CritClientInvalidDocument({
               id,
               detail: cause instanceof Error ? cause.message : String(cause)
             })
@@ -125,7 +124,7 @@ const make = (root: string) =>
           .pipe(Effect.mapError((cause) => storageFailure("create", document.id, cause)))
         if (exists) {
           const current = yield* read(document.id).pipe(
-            Effect.catchTag("DocumentNotFound", () =>
+            Effect.catchTag("CritClientNotFound", () =>
               Effect.fail(
                 storageFailure(
                   "create",
@@ -165,7 +164,7 @@ const make = (root: string) =>
             Effect.try({
               try: () => decodeURIComponent(entry.slice(0, -".json".length)),
               catch: (cause) =>
-                new DocumentMalformed({
+                new CritClientInvalidDocument({
                   id: entry,
                   detail: cause instanceof Error ? cause.message : String(cause)
                 })
@@ -173,7 +172,7 @@ const make = (root: string) =>
         )
         const documents = yield* Effect.forEach(ids, (id) =>
           read(id).pipe(
-            Effect.catchTag("DocumentNotFound", () => Effect.succeed(undefined))
+            Effect.catchTag("CritClientNotFound", () => Effect.succeed(undefined))
           )
         )
         return documents
@@ -216,25 +215,16 @@ const make = (root: string) =>
 
       const mutate = Effect.gen(function*() {
         const current = yield* read(id)
-        const canvas = yield* Canvas.open(current).pipe(
-          Effect.mapError(
-            (cause) =>
-              new DocumentMalformed({
-                id,
-                detail:
-                  cause._tag === "CanvasOpenFailed"
-                    ? cause.detail
-                    : `Canvas Document is ${cause.actualBytes} bytes; maximum is ${cause.maxBytes}`
-              })
-          )
+        const canvas = Canvas.fromDocument(current)
+        const change = yield* Canvas.apply(canvas, ...commands).pipe(
+          Effect.mapError((cause) => rejectedCanvasCommand(id, cause))
         )
-        const change = yield* Canvas.apply(canvas, ...commands)
         CanvasInternals.setRevision(canvas, current.revision + 1)
         const next = yield* Effect.try({
           try: () => Canvas.export(canvas),
           catch: (cause) =>
             cause instanceof CanvasDocumentTooLarge
-              ? cause
+              ? new CritClientInvalidDocument({ id, detail: cause.detail })
               : storageFailure("apply", id, cause)
         })
         yield* fs
@@ -248,7 +238,8 @@ const make = (root: string) =>
 
       if (commands.length === 0) {
         return Effect.fail(
-          new CanvasCommandFailed({
+          new CritClientCommandFailed({
+            id,
             reason: "invalid-command",
             detail: "A durable Canvas update requires at least one command"
           })

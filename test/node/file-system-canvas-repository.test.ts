@@ -30,7 +30,7 @@ describe("FileSystemCanvasRepository", () => {
         ])
       )
 
-      expect(failure).toMatchObject({ _tag: "DocumentNotFound", id: "missing" })
+      expect(failure).toMatchObject({ _tag: "CritClientNotFound", id: "missing" })
     }).pipe(Effect.provide(FileSystemCanvasRepository.layer({ root }))))
 
   it.effect("serializes semantic commands from concurrent local writers", () =>

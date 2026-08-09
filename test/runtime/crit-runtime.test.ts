@@ -121,11 +121,13 @@ describe("CritRuntime.updateCanvas", () => {
       const opened = yield* Canvas.open(persisted)
 
       expect(commandFailure).toMatchObject({
-        _tag: "CanvasCommandFailed",
+        _tag: "CritClientCommandFailed",
+        id: "review",
         reason: "frame-not-found"
       })
       expect(emptyFailure).toMatchObject({
-        _tag: "CanvasCommandFailed",
+        _tag: "CritClientCommandFailed",
+        id: "review",
         reason: "invalid-command"
       })
       expect(persisted.revision).toBe(0)

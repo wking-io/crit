@@ -1,9 +1,13 @@
 import { Effect } from "effect"
 import { describe, expect, it } from "vitest"
 
-import { Canvas } from "../../src/core/index.js"
+import { Canvas, CanvasCommand } from "../../src/core/index.js"
+import { HttpCritClient } from "../../src/http/client.js"
 import { makeCritHttpHandler } from "../../src/http/contract.js"
-import type { CritClientShape } from "../../src/session/crit-client.js"
+import {
+  CritClientCommandFailed,
+  type CritClientShape
+} from "../../src/session/crit-client.js"
 
 const document = Canvas.export(
   Canvas.create({ id: "homepage", title: "Homepage" })
@@ -38,6 +42,49 @@ const applyBody = JSON.stringify({
 })
 
 describe("makeCritHttpHandler", () => {
+  it("round-trips durable failures through HTTP without translating them", async () => {
+    const client: CritClientShape = {
+      ...makeClient(),
+      apply: () =>
+        Effect.fail(
+          new CritClientCommandFailed({
+            id: "homepage",
+            reason: "frame-not-found",
+            detail: "Frame not found: candidate"
+          })
+        )
+    }
+    const handler = makeCritHttpHandler(client)
+    const http = HttpCritClient.make({
+      apiPath: "http://localhost:5173/__crit/api",
+      fetch: async (input, init) => {
+        const response = await Effect.runPromise(
+          handler(new Request(input, init))
+        )
+        if (response === null) throw new Error("Request was not handled")
+        return response
+      }
+    })
+
+    const failure = await Effect.runPromise(
+      Effect.flip(
+        http.apply("homepage", [
+          CanvasCommand.setFrameStatus({
+            id: "candidate",
+            status: "approved"
+          })
+        ])
+      )
+    )
+
+    expect(failure).toBeInstanceOf(CritClientCommandFailed)
+    expect(failure).toMatchObject({
+      id: "homepage",
+      reason: "frame-not-found",
+      detail: "Frame not found: candidate"
+    })
+  })
+
   it("applies same-origin PATCH command batches", async () => {
     const client = makeClient()
     const handler = makeCritHttpHandler(client)
