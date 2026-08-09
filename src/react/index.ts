@@ -1,6 +1,14 @@
 export * from "../core/index.js"
 export { IndexedDbDraftJournal } from "../browser/indexeddb-draft-journal.js"
 export {
+  canvasLiveRefreshSocketUrl,
+  connectCanvasLiveRefresh,
+  type CanvasLiveRefreshEndpoint,
+  type CanvasLiveRefreshLocation,
+  type CanvasLiveRefreshOptions,
+  type CanvasLiveRefreshSocket
+} from "../browser/canvas-live-refresh.js"
+export {
   AgentActivityStatus,
   type AgentActivityStatus as AgentActivityStatusValue
 } from "../runtime/agent-activity.js"

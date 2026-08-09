@@ -7,7 +7,9 @@ import { fileURLToPath } from "node:url"
 
 import { build } from "esbuild"
 import { Effect, Layer, ManagedRuntime } from "effect"
-import type { Plugin, ViteDevServer } from "vite"
+import type { Plugin, ResolvedConfig, ViteDevServer } from "vite"
+
+import type { CanvasLiveRefreshEndpoint } from "../browser/canvas-live-refresh.js"
 
 import {
   CRIT_MANIFEST_FILE,
@@ -167,8 +169,13 @@ const escapeHtml = (value: string) =>
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
 
-const editorHtml = (canvasId: string, editorAssetPath: string) => {
+const editorHtml = (
+  canvasId: string,
+  editorAssetPath: string,
+  liveRefresh: CanvasLiveRefreshEndpoint
+) => {
   const escapedCanvasId = escapeHtml(canvasId)
+  const escapedLiveRefresh = escapeHtml(JSON.stringify(liveRefresh))
   return `<!doctype html>
 <html lang="en">
   <head>
@@ -177,11 +184,42 @@ const editorHtml = (canvasId: string, editorAssetPath: string) => {
     <title>Crit · ${escapedCanvasId}</title>
     <style>html,body,#crit-root{height:100%;margin:0;overflow:hidden;overscroll-behavior:none;overscroll-behavior-x:none}</style>
   </head>
-  <body data-crit-canvas-id="${escapedCanvasId}">
+  <body data-crit-canvas-id="${escapedCanvasId}" data-crit-live-refresh="${escapedLiveRefresh}">
     <div id="crit-root"></div>
     <script type="module" src="${editorAssetPath}"></script>
   </body>
 </html>`
+}
+
+/**
+ * Resolves where a browser page served by this dev server reaches the HMR
+ * WebSocket, mirroring the values Vite injects into its own client. The served
+ * editor's script is a pre-built bundle outside Vite's module graph, so it has
+ * no `import.meta.hot` and receives this endpoint through the editor HTML
+ * instead.
+ */
+const liveRefreshEndpointFromConfig = (
+  config: ResolvedConfig
+): CanvasLiveRefreshEndpoint => {
+  if (config.server.ws === false) return { enabled: false }
+  const hmr = typeof config.server.hmr === "object" ? config.server.hmr : undefined
+  const port =
+    hmr?.clientPort ??
+    hmr?.port ??
+    (config.server.middlewareMode && hmr?.server === undefined
+      ? 24678
+      : undefined)
+  const base = hmr?.path === undefined
+    ? config.base
+    : path.posix.join(config.base, hmr.path)
+  return {
+    enabled: true,
+    token: config.webSocketToken,
+    ...(hmr?.protocol === undefined ? {} : { protocol: hmr.protocol }),
+    ...(hmr?.host === undefined ? {} : { host: hmr.host }),
+    ...(port === undefined ? {} : { port }),
+    ...(base === "/" ? {} : { path: base })
+  }
 }
 
 const buildEditorBundle = async () => {
@@ -199,6 +237,7 @@ const buildEditorBundle = async () => {
         import { DialRoot, useDialKit } from "dialkit"
         import dialKitStyles from "dialkit/styles.css"
         import {
+          connectCanvasLiveRefresh,
           Crit,
           DEFAULT_FRAME_CHROME_SETTINGS,
           DEFAULT_ZOOM_PHYSICS_SETTINGS
@@ -210,6 +249,26 @@ const buildEditorBundle = async () => {
         document.head.append(dialKitStyle)
 
         const canvasId = document.body.dataset.critCanvasId || "default"
+
+        // This bundle is built outside Vite's module graph, so import.meta.hot
+        // never exists here. The live refresh hint channel is reached through
+        // the HMR WebSocket endpoint the plugin injected into the page.
+        const liveRefreshEndpoint = (() => {
+          try {
+            return JSON.parse(document.body.dataset.critLiveRefresh || "{}")
+          } catch {
+            return { enabled: false }
+          }
+        })()
+        let disposeLiveRefresh
+        const attachLiveRefresh = (session) => {
+          disposeLiveRefresh?.()
+          disposeLiveRefresh = connectCanvasLiveRefresh({
+            canvasId,
+            session,
+            endpoint: liveRefreshEndpoint
+          })
+        }
 
         function CritEditor() {
           const chrome = useDialKit("Frame chrome", {
@@ -269,6 +328,7 @@ const buildEditorBundle = async () => {
           return createElement(Fragment, null,
             createElement(Crit, {
               canvasId,
+              onSession: attachLiveRefresh,
               frameChrome: {
                 titleMinimumCharacters: chrome.titleMinimumCharacters,
                 snapshotMinimumWidth: chrome.iconMinimumWidth.snapshot,
@@ -323,9 +383,16 @@ export const crit = (options: CritVitePluginOptions = {}): Plugin => {
   const editorPath = options.editorPath ?? "/crit"
   const enabled = options.enabled ?? true
   let resolvedRoot = options.root ?? process.cwd()
+  let liveRefreshEndpoint: CanvasLiveRefreshEndpoint = { enabled: false }
 
   const configure = (server: CritViteServer) => {
     if (!enabled) return
+    // Preview servers have no file watcher or HMR socket, so the hint channel
+    // does not exist there and the editor must not try to connect to it.
+    const liveRefresh: CanvasLiveRefreshEndpoint =
+      server.watcher === undefined || server.ws === undefined
+        ? { enabled: false }
+        : liveRefreshEndpoint
     const documentLayer = FileSystemCanvasRepository.layer({ root: resolvedRoot })
     const agentActivityLayer = FileSystemAgentActivity.layer({ root: resolvedRoot })
     const archiveLayer = FileSystemSnapshotArchive.layer({ root: resolvedRoot })
@@ -495,7 +562,7 @@ export const crit = (options: CritVitePluginOptions = {}): Plugin => {
         response.setHeader("Cache-Control", "no-store")
         response.setHeader("Content-Type", "text/html; charset=utf-8")
         response.setHeader("X-Content-Type-Options", "nosniff")
-        response.end(editorHtml(editorCanvasId, editorAssetPath!))
+        response.end(editorHtml(editorCanvasId, editorAssetPath!, liveRefresh))
         return
       }
       const snapshotId = requestedSnapshotId(request)
@@ -590,6 +657,7 @@ export const crit = (options: CritVitePluginOptions = {}): Plugin => {
     apply: "serve",
     configResolved(config) {
       resolvedRoot = options.root ?? config.root
+      liveRefreshEndpoint = liveRefreshEndpointFromConfig(config)
     },
     transformIndexHtml() {
       if (options.frameInputBridge === false) return []
