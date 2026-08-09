@@ -155,19 +155,9 @@ const make = (root: string) =>
       })
 
       const mutate = Effect.gen(function*() {
+        // read() canonicalizes through Canvas.open, so this document is trusted.
         const current = yield* read(id)
-        const canvas = yield* Canvas.open(current).pipe(
-          Effect.mapError(
-            (cause) =>
-              new DocumentMalformed({
-                id,
-                detail:
-                  cause._tag === "CanvasOpenFailed"
-                    ? cause.detail
-                    : `Canvas Document is ${cause.actualBytes} bytes; maximum is ${cause.maxBytes}`
-              })
-          )
-        )
+        const canvas = Canvas.fromDocument(current)
         const change = yield* Canvas.apply(canvas, ...commands)
         CanvasInternals.setRevision(canvas, current.revision + 1)
         const next = yield* Effect.try({

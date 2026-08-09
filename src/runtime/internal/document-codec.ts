@@ -10,13 +10,6 @@ export const canonicalizeDocument = (id: string, input: unknown) =>
   Canvas.open(input).pipe(
     Effect.map(Canvas.export),
     Effect.mapError(
-      (cause) =>
-        new DocumentMalformed({
-          id,
-          detail:
-            cause._tag === "CanvasDocumentTooLarge"
-                ? `Canvas Document is ${cause.actualBytes} bytes; maximum is ${cause.maxBytes}`
-                : cause.detail
-        })
+      (cause) => new DocumentMalformed({ id, detail: cause.message })
     )
   )

@@ -105,7 +105,11 @@ export class CanvasOpenFailed extends Schema.TaggedError<CanvasOpenFailed>()(
     ]),
     detail: Schema.String
   }
-) {}
+) {
+  override get message(): string {
+    return this.detail
+  }
+}
 
 export class CanvasDocumentTooLarge extends Schema.TaggedError<CanvasDocumentTooLarge>()(
   "CanvasDocumentTooLarge",
@@ -113,7 +117,11 @@ export class CanvasDocumentTooLarge extends Schema.TaggedError<CanvasDocumentToo
     actualBytes: Schema.Number,
     maxBytes: Schema.Number
   }
-) {}
+) {
+  override get message(): string {
+    return `Canvas Document is ${this.actualBytes} bytes; maximum is ${this.maxBytes}`
+  }
+}
 
 export class CanvasCommandFailed extends Schema.TaggedError<CanvasCommandFailed>()(
   "CanvasCommandFailed",
@@ -249,6 +257,20 @@ const validateDocument = (document: CanvasDocument) => {
   return document
 }
 
+// For documents that already crossed a trust edge (repository load, HTTP
+// document decode): the producer promised every Canvas invariant holds, so a
+// violation here is the producer's defect, not an error the caller can handle.
+const fromDocument = (document: CanvasDocument): Canvas => {
+  const validated = validateDocument(document)
+  return makeCanvas({
+    id: validated.id,
+    title: validated.title,
+    revision: validated.revision,
+    frames: clone(Array.from(validated.frames)),
+    notes: clone(Array.from(validated.notes))
+  })
+}
+
 const open = (
   input: unknown
 ): Effect.Effect<Canvas, CanvasOpenFailed | CanvasDocumentTooLarge> =>
@@ -277,20 +299,13 @@ const open = (
           })
       )
     )
-    const validated = yield* Effect.try({
-      try: () => validateDocument(document),
+    return yield* Effect.try({
+      try: () => fromDocument(document),
       catch: (cause) =>
         new CanvasOpenFailed({
           reason: "invalid-document",
           detail: cause instanceof Error ? cause.message : String(cause)
         })
-    })
-    return makeCanvas({
-      id: validated.id,
-      title: validated.title,
-      revision: validated.revision,
-      frames: clone(Array.from(validated.frames)),
-      notes: clone(Array.from(validated.notes))
     })
   })
 
@@ -725,6 +740,7 @@ const apply = (
 export const Canvas = {
   create,
   open,
+  fromDocument,
   apply,
   export: exportCanvas,
   summarize,
