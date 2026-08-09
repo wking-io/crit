@@ -12,11 +12,9 @@ import {
 import {
   Canvas,
   CanvasCommandFailed,
-  CanvasDocumentTooLarge,
   type CanvasChange,
   type CanvasCommand,
-  type CanvasDocument,
-  type CanvasOpenFailed
+  type CanvasDocument
 } from "../core/index.js"
 import { CanvasInternals } from "../core/canvas.js"
 import {
@@ -90,13 +88,6 @@ export type CanvasSessionOptions = {
   readonly sessionId?: string
 }
 
-const openFailureDetail = (
-  cause: CanvasOpenFailed | CanvasDocumentTooLarge
-) =>
-  cause._tag === "CanvasDocumentTooLarge"
-    ? `Canvas Document is ${cause.actualBytes} bytes; maximum is ${cause.maxBytes}`
-    : cause.detail
-
 const invalidDocument = (canvasId: string, cause: unknown) =>
   new CritClientInvalidDocument({
     id: canvasId,
@@ -107,17 +98,6 @@ const invalidDocument = (canvasId: string, cause: unknown) =>
           ? cause.message
           : String(cause)
   })
-
-const openCanvas = (canvasId: string, document: CanvasDocument) =>
-  Canvas.open(document).pipe(
-    Effect.mapError(
-      (cause) =>
-        new CritClientInvalidDocument({
-          id: canvasId,
-          detail: openFailureDetail(cause)
-        })
-    )
-  )
 
 type PendingBatch = {
   readonly mutation: number
@@ -154,7 +134,9 @@ const open = (
       }
     }
 
-    const canvas = yield* openCanvas(canvasId, authoritative)
+    // CritClient documents are validated at the client's trust edge, so
+    // re-opening them cannot fail — an invariant violation there is a defect.
+    const canvas = Canvas.fromDocument(authoritative)
     let pending: Array<PendingBatch> = []
     let initialMutation = 0
     if (recoveryDraft !== null) {
@@ -276,7 +258,7 @@ const open = (
           yield* documentLock.withPermit(
             Effect.gen(function*() {
               pending = pending.filter((batch) => batch.mutation > throughMutation)
-              const rebased = yield* openCanvas(canvasId, saved)
+              const rebased = Canvas.fromDocument(saved)
               if (pending.length > 0) {
                 yield* Canvas.apply(
                   rebased,
@@ -325,7 +307,7 @@ const open = (
         const localRevision = yield* Ref.get(revision)
         const remote = yield* client.load(canvasId)
         if (remote.revision <= localRevision) return false
-        const remoteCanvas = yield* openCanvas(canvasId, remote)
+        const remoteCanvas = Canvas.fromDocument(remote)
 
         return yield* documentLock.withPermit(
           Effect.gen(function*() {
@@ -366,7 +348,7 @@ const open = (
     const discardLocalChanges = saveLock.withPermit(
       documentLock.withPermit(Effect.gen(function*() {
         const remote = yield* client.load(canvasId)
-        const remoteCanvas = yield* openCanvas(canvasId, remote)
+        const remoteCanvas = Canvas.fromDocument(remote)
         pending = []
         CanvasInternals.adoptDocument(canvas, remoteCanvas)
         yield* Ref.set(revision, remote.revision)
@@ -412,7 +394,7 @@ const open = (
         const saved = yield* client.snapshot(canvasId, frameId)
         yield* documentLock.withPermit(
           Effect.gen(function*() {
-            const rebased = yield* openCanvas(canvasId, saved)
+            const rebased = Canvas.fromDocument(saved)
             if (pending.length > 0) {
               yield* Canvas.apply(
                 rebased,

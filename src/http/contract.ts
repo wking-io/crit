@@ -1,8 +1,8 @@
 import { Effect, Schema } from "effect"
 
 import {
+  Canvas,
   CanvasCommandSchema,
-  CanvasDocument,
   MAX_CANVAS_DOCUMENT_BYTES
 } from "../core/index.js"
 import {
@@ -346,11 +346,14 @@ export const makeCritHttpHandler = (
   }
 }
 
+// The HTTP client's trust edge: documents from the wire must pass the full
+// Canvas invariant validation (not just the schema) so downstream consumers
+// can re-open them with Canvas.fromDocument without handling failures.
 export const decodeCanvasDocument = (input: unknown, id: string) =>
-  Schema.decodeUnknownEffect(CanvasDocument)(input).pipe(
+  Canvas.open(input).pipe(
+    Effect.map(Canvas.export),
     Effect.mapError(
-      (cause) =>
-        new CritClientInvalidDocument({ id, detail: String(cause) })
+      (cause) => new CritClientInvalidDocument({ id, detail: cause.message })
     )
   )
 

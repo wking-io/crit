@@ -10,13 +10,12 @@ import {
   NoteList,
   CanvasSummary,
   type CanvasCommand,
-  type CanvasDocument,
-  type CanvasOpenFailed
+  type CanvasDocument
 } from "../core/index.js"
 import {
-  DocumentMalformed,
   CanvasRepository,
   type DocumentAlreadyExists,
+  type DocumentMalformed,
   type DocumentNotFound,
   type DocumentStorageFailed
 } from "./canvas-repository.js"
@@ -40,24 +39,6 @@ export const CanvasView = Schema.Struct({
   notes: NoteList
 })
 export type CanvasView = typeof CanvasView.Type
-
-const malformedDetail = (
-  cause: CanvasOpenFailed | CanvasDocumentTooLarge
-) =>
-  cause._tag === "CanvasDocumentTooLarge"
-      ? `Canvas Document is ${cause.actualBytes} bytes; maximum is ${cause.maxBytes}`
-      : cause.detail
-
-const openStoredCanvas = (document: CanvasDocument) =>
-  Canvas.open(document).pipe(
-    Effect.mapError(
-      (cause) =>
-        new DocumentMalformed({
-          id: document.id,
-          detail: malformedDetail(cause)
-        })
-    )
-  )
 
 export interface CritRuntimeShape {
   readonly createCanvas: (input: {
@@ -113,7 +94,7 @@ export const CritRuntimeLive = Layer.effect(
       getCanvas: (id) =>
         Effect.gen(function*() {
           const document = yield* documents.load(id)
-          const canvas = yield* openStoredCanvas(document)
+          const canvas = Canvas.fromDocument(document)
           return {
             canvas: Canvas.summarize(canvas),
             frames: Canvas.listFrames(canvas),
@@ -122,16 +103,14 @@ export const CritRuntimeLive = Layer.effect(
         }),
       listCanvases: () =>
         documents.list().pipe(
-          Effect.flatMap((stored) =>
-            Effect.forEach(stored, (document) =>
-              openStoredCanvas(document).pipe(Effect.map(Canvas.summarize))
-            )
+          Effect.map((stored) =>
+            stored.map((document) => Canvas.summarize(Canvas.fromDocument(document)))
           )
         ),
       updateCanvas: (input) =>
         Effect.gen(function*() {
           const mutation = yield* documents.apply(input.id, input.commands)
-          const persisted = yield* openStoredCanvas(mutation.document)
+          const persisted = Canvas.fromDocument(mutation.document)
 
           return {
             revision: mutation.document.revision,

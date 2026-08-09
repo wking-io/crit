@@ -9,7 +9,7 @@ import {
 } from "../core/index.js"
 import {
   CanvasRepository,
-  DocumentMalformed,
+  type DocumentMalformed,
   type DocumentNotFound,
   type DocumentStorageFailed
 } from "./canvas-repository.js"
@@ -54,18 +54,7 @@ export const SnapshotServiceLive = Layer.effect(
       snapshotFrame: (canvasId, frameId) =>
         Effect.gen(function*() {
           const current = yield* canvases.load(canvasId)
-          const canvas = yield* Canvas.open(current).pipe(
-            Effect.mapError(
-              (cause) =>
-                new DocumentMalformed({
-                  id: canvasId,
-                  detail:
-                    cause._tag === "CanvasOpenFailed"
-                      ? cause.detail
-                      : `Canvas Document is ${cause.actualBytes} bytes; maximum is ${cause.maxBytes}`
-                })
-            )
-          )
+          const canvas = Canvas.fromDocument(current)
           const source = yield* Canvas.getFrame(canvas, frameId).pipe(
             Effect.mapError(
               () =>
