@@ -243,6 +243,16 @@ const decodeCanvasCommands = (input: string) =>
       cause instanceof InvalidCliInput
         ? cause
         : new InvalidCliInput({ detail: `Invalid Canvas commands: ${String(cause)}` })
+    ),
+    Effect.flatMap((decoded) =>
+      decoded.some((command) => command._tag === "AddSnapshotFrame")
+        ? Effect.fail(
+            new InvalidCliInput({
+              detail:
+                "AddSnapshotFrame is reserved for snapshot capture; use `crit snapshot <canvas> <frame>` to archive an existing live Frame"
+            })
+          )
+        : Effect.succeed(decoded)
     )
   )
 

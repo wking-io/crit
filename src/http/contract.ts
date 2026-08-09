@@ -111,6 +111,30 @@ const errorBody = (
   error: { code, message, ...details }
 })
 
+// Mutating routes are reachable by simple cross-origin requests (form POSTs
+// and preflight-free fetches), so a foreign Origin must be rejected. Requests
+// without an Origin header (CLI, curl, same-origin navigations) pass. Hosts are
+// compared instead of full origins because the dev server may sit behind a
+// TLS-terminating proxy that rewrites the protocol.
+const crossOriginRejection = (request: Request, id: string) => {
+  const origin = request.headers.get("origin")
+  if (origin === null) return undefined
+  try {
+    if (new URL(origin).host === new URL(request.url).host) return undefined
+  } catch {
+    // An unparsable Origin (including the literal "null" sent by sandboxed
+    // documents) is never same-origin.
+  }
+  return json(
+    403,
+    errorBody(
+      "invalid-request",
+      "Cross-origin Canvas mutations are not allowed",
+      { id }
+    )
+  )
+}
+
 const clientErrorResponse = (cause: CritClientError) => {
   if (cause instanceof CritClientNotFound) {
     return json(
@@ -244,6 +268,8 @@ export const makeCritHttpHandler = (
           )
         )
       }
+      const rejected = crossOriginRejection(request, id)
+      if (rejected !== undefined) return Effect.succeed(rejected)
       if (client.snapshot === undefined) {
         return Effect.succeed(
           clientErrorResponse(
@@ -269,11 +295,21 @@ export const makeCritHttpHandler = (
     }
 
     if (request.method === "PATCH") {
+      const rejected = crossOriginRejection(request, id)
+      if (rejected !== undefined) return Effect.succeed(rejected)
       return readApplyRequest(request, maxBodyBytes).pipe(
         Effect.flatMap((input) =>
           input.commands.length === 0
             ? Effect.fail(new Error("At least one Canvas command is required"))
-            : client.apply(id, input.commands)
+            : input.commands.some(
+                  (command) => command._tag === "AddSnapshotFrame"
+                )
+              ? Effect.fail(
+                  new Error(
+                    "AddSnapshotFrame is reserved for snapshot capture; POST to the Frame snapshot route to archive an existing live Frame"
+                  )
+                )
+              : client.apply(id, input.commands)
         ),
         Effect.map((document) => json(200, document)),
         Effect.catch((cause) =>
