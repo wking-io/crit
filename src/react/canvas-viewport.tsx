@@ -95,7 +95,7 @@ export const CRIT_HOTKEYS = {
   handTool: "H",
   addFrame: "F",
   addNote: "N",
-  deleteSelection: "Delete",
+  deleteSelection: "Backspace",
   zoomIn: [
     { key: "=", mod: true },
     { key: "=", mod: true, shift: true }
@@ -735,6 +735,9 @@ export function CanvasViewport({
               onInputIntent={(intent) => {
                 if (intent.type === "select") {
                   setSelectedId(item.id)
+                } else if (intent.type === "delete") {
+                  run(CanvasCommand.removeFrame({ id: item.id }))
+                  setSelectedId(null)
                 } else if (intent.type === "tool") {
                   setTool(intent.tool)
                 } else if (intent.type === "zoom-step") {
@@ -1414,7 +1417,7 @@ function FrameCard({
               {fullscreen ? <IconMinimize /> : <IconFullscreen />}
             </button> : null}
             {actions.delete ? <button
-              aria-keyshortcuts="Delete"
+              aria-keyshortcuts="Backspace"
               aria-label={`Delete ${frame.title}`}
               className="crit-frame__action"
               {...helpTarget({
@@ -1927,7 +1930,7 @@ function NoteCard({
             onSendToBack={onSendToBack}
           />
           <button
-            aria-keyshortcuts="Delete"
+            aria-keyshortcuts="Backspace"
             aria-label="Delete note"
             {...helpTarget({
               name: "Remove note",

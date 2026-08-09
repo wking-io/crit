@@ -75,7 +75,7 @@ describe("Crit", () => {
       handTool: "H",
       addFrame: "F",
       addNote: "N",
-      deleteSelection: "Delete",
+      deleteSelection: "Backspace",
       zoomIn: [
         { key: "=", mod: true },
         { key: "=", mod: true, shift: true }
@@ -272,7 +272,7 @@ describe("Crit", () => {
     expect(html).toContain('aria-keyshortcuts="H"')
     expect(html).toContain('aria-keyshortcuts="F"')
     expect(html).toContain('aria-keyshortcuts="N"')
-    expect(html).toContain('aria-keyshortcuts="Delete"')
+    expect(html).toContain('aria-keyshortcuts="Backspace"')
     expect(html).toContain('aria-label="Select"')
     expect(html).toContain('aria-label="Hand"')
     expect(html.indexOf('aria-label="Select"')).toBeLessThan(

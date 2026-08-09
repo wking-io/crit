@@ -104,6 +104,20 @@ describe("Frame input relay", () => {
       key: "+",
       metaKey: false
     })).toEqual({ type: "zoom-step", direction: 1 })
+    expect(relay.hotkey({
+      code: "Backspace",
+      ctrlKey: false,
+      input: false,
+      key: "Backspace",
+      metaKey: false
+    })).toEqual({ type: "delete" })
+    expect(relay.hotkey({
+      code: "Backspace",
+      ctrlKey: false,
+      input: true,
+      key: "Backspace",
+      metaKey: false
+    })).toBeNull()
   })
 
   it("lets adapters offset pointer intents without changing other intents", () => {
@@ -134,6 +148,10 @@ describe("Frame input relay", () => {
       type: "hotkey",
       key: "h"
     })).toBe(false)
+    expect(isCritFrameInputMessage({
+      source: CRIT_FRAME_INPUT_SOURCE,
+      type: "delete"
+    })).toBe(true)
     expect(isCritFrameInputMessage({
       source: CRIT_FRAME_INPUT_SOURCE,
       type: "pinch",
