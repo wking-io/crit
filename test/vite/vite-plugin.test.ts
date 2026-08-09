@@ -8,6 +8,7 @@ import { Effect } from "effect"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import { createServer, type ViteDevServer } from "vite"
 
+import { canvasLiveRefreshSocketUrl } from "../../src/browser/canvas-live-refresh.js"
 import { HttpCritClient } from "../../src/http/client.js"
 import { Canvas, CanvasCommand } from "../../src/core/index.js"
 import { FileSystemAgentActivity } from "../../src/node/file-system-agent-activity.js"
@@ -139,6 +140,9 @@ describe("crit Vite plugin", () => {
     expect(editorBundle).toContain("Zoom physics")
     expect(editorBundle).toContain("wheelSensitivity")
     expect(editorBundle).toContain("shortcutImpulse")
+    expect(editorBundle).toContain("vite-hmr")
+    expect(editorBundle).toContain("crit:canvas-changed")
+    expect(editorHtml).toContain("data-crit-live-refresh=")
     expect(activity).toMatchObject({
       canvasId: "homepage",
       active: true,
@@ -157,6 +161,78 @@ describe("crit Vite plugin", () => {
     expect(methodResponse.headers.get("allow")).toBe("GET, PATCH")
     expect(invalidResponse.status).toBe(400)
     expect(invalidBody.error.code).toBe("invalid-request")
+  })
+
+  it("pushes Canvas change hints to the served editor over the HMR WebSocket", async () => {
+    // Mirror the served editor: attach Vite's HMR socket to the page origin,
+    // read the endpoint the plugin injects into the editor HTML, and connect
+    // the way the editor bundle does.
+    httpServer = createHttpServer()
+    server = await createServer({
+      root,
+      configFile: false,
+      logLevel: "silent",
+      plugins: [crit()],
+      server: { middlewareMode: true, hmr: { server: httpServer } }
+    })
+    httpServer.on("request", server.middlewares)
+    await new Promise<void>((resolve, reject) => {
+      httpServer?.once("error", reject)
+      httpServer?.listen(0, "127.0.0.1", resolve)
+    })
+    const port = (httpServer.address() as AddressInfo).port
+    const origin = `http://127.0.0.1:${port}`
+    const client = HttpCritClient.make({ apiPath: `${origin}/__crit/api` })
+    await Effect.runPromise(client.load("homepage"))
+
+    const editorPage = await (await fetch(`${origin}/crit/homepage`)).text()
+    const encodedEndpoint = editorPage.match(
+      /data-crit-live-refresh="([^"]*)"/
+    )?.[1]
+    expect(encodedEndpoint).toBeDefined()
+    const endpoint = JSON.parse(
+      encodedEndpoint!
+        .replace(/&quot;/g, '"')
+        .replace(/&lt;/g, "<")
+        .replace(/&gt;/g, ">")
+        .replace(/&amp;/g, "&")
+    ) as { enabled?: boolean; token?: string }
+
+    const socket = new WebSocket(
+      canvasLiveRefreshSocketUrl(endpoint, {
+        protocol: "http:",
+        hostname: "127.0.0.1",
+        port: String(port)
+      }),
+      "vite-hmr"
+    )
+    const hint = new Promise<{ data?: { id?: string } }>((resolve, reject) => {
+      socket.addEventListener("message", (message) => {
+        const payload = JSON.parse(String(message.data)) as {
+          type?: string
+          event?: string
+          data?: { id?: string }
+        }
+        if (payload.type === "custom" && payload.event === "crit:canvas-changed") {
+          resolve(payload)
+        }
+      })
+      socket.addEventListener("error", () =>
+        reject(new Error("The live refresh socket failed to connect"))
+      )
+    })
+    await new Promise<void>((resolve) =>
+      socket.addEventListener("open", () => resolve())
+    )
+    await Effect.runPromise(client.apply("homepage", [
+      CanvasCommand.addNote({ id: "note", text: "Ping", x: 0, y: 0 })
+    ]))
+    const payload = await hint
+    socket.close()
+
+    expect(endpoint.enabled).toBe(true)
+    expect(typeof endpoint.token).toBe("string")
+    expect(payload.data?.id).toBe("homepage")
   })
 
   it("can require explicit Canvas creation", async () => {
