@@ -213,6 +213,9 @@ const syncCommand = Command.make(
           onSome: (canvasId) => ({ canvasId })
         })
       )
+      yield* Effect.forEach(result.canvases, (item) =>
+        pulseAgentActivity(item.id, "Syncing manifest")
+      )
       const output = json
         ? JSON.stringify({ ...result, command: "sync", source })
         : [
@@ -456,11 +459,13 @@ const snapshotCommand = Command.make(
       }
       yield* pulseAgentActivity(canvas, "Capturing Frame snapshot", 120)
       const document = yield* snapshots.snapshotFrame(canvas, frame)
-      const archived = document.frames.at(-1)
-      if (
-        archived?.snapshot === undefined ||
-        archived.provenance.sourceId !== frame
-      ) {
+      const archived = [...document.frames].reverse().find(
+        (candidate) =>
+          candidate.snapshot !== undefined &&
+          candidate.provenance.kind === "snapshot" &&
+          candidate.provenance.sourceId === frame
+      )
+      if (archived?.snapshot === undefined) {
         return yield* new InvalidCliInput({
           detail: `Snapshot capture did not add an archived Frame for ${frame}`
         })

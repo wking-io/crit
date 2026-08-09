@@ -10,7 +10,9 @@ import { ChildProcessSpawner } from "effect/unstable/process"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 
 import { runCrit } from "../../src/cli/command.js"
+import { FileSystemAgentActivity } from "../../src/node/file-system-agent-activity.js"
 import { FileSystemCanvasRepository } from "../../src/node/file-system-canvas-repository.js"
+import { AgentActivityStore } from "../../src/runtime/agent-activity.js"
 import { CritRuntimeLive } from "../../src/runtime/crit-runtime.js"
 
 describe("crit sync", () => {
@@ -70,6 +72,7 @@ describe("crit sync", () => {
   it("discovers an app origin and creates its complete Canvas", async () => {
     const storeLayer = FileSystemCanvasRepository.layer({ root })
     const runtimeLayer = CritRuntimeLive.pipe(Layer.provide(storeLayer))
+    const activity = FileSystemAgentActivity.make({ root })
     const cliLayer = Layer.mergeAll(
       NodeFileSystem.layer,
       Path.layer,
@@ -100,7 +103,8 @@ describe("crit sync", () => {
         ChildProcessSpawner.make(() => Effect.die("unused"))
       ),
       storeLayer,
-      runtimeLayer
+      runtimeLayer,
+      Layer.succeed(AgentActivityStore, activity)
     )
 
     await Effect.runPromise(
@@ -109,6 +113,9 @@ describe("crit sync", () => {
       )
     )
     const synced = JSON.parse(stdout.join(""))
+    const syncActivity = await Effect.runPromise(
+      activity.read("checkout-review")
+    )
     stdout = []
     await Effect.runPromise(
       runCrit(["open", "checkout-review", "--json"]).pipe(
@@ -136,5 +143,10 @@ describe("crit sync", () => {
         status: "approved"
       }
     ])
+    expect(syncActivity).toMatchObject({
+      canvasId: "checkout-review",
+      active: true,
+      detail: "Syncing manifest"
+    })
   })
 })

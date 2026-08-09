@@ -11,7 +11,10 @@ import { FileSystemAgentActivity } from "../../src/node/file-system-agent-activi
 import { FileSystemCanvasRepository } from "../../src/node/file-system-canvas-repository.js"
 import { CritRuntimeLive } from "../../src/runtime/crit-runtime.js"
 import { SnapshotArchive } from "../../src/runtime/snapshot-archive.js"
-import { SnapshotServiceLive } from "../../src/runtime/snapshot-service.js"
+import {
+  SnapshotService,
+  SnapshotServiceLive
+} from "../../src/runtime/snapshot-service.js"
 
 describe("crit Canvas workflows", () => {
   let root = ""
@@ -393,4 +396,114 @@ describe("crit Canvas workflows", () => {
       expect(opened.canvas).toMatchObject({ revision: 0, frameCount: 0 })
     }).pipe(Effect.provide(cliLayer))
   })
+
+  it.effect(
+    "reports the captured snapshot when a concurrent writer appends another Frame",
+    () => {
+      const storeLayer = FileSystemCanvasRepository.layer({ root })
+      const runtimeLayer = CritRuntimeLive.pipe(Layer.provide(storeLayer))
+      const cliLayer = Layer.mergeAll(
+        FileSystem.layerNoop({}),
+        Path.layer,
+        Stdio.layerTest({
+          stdout: () =>
+            Sink.forEach((chunk: string | Uint8Array) =>
+              Effect.sync(() => {
+                stdout.push(
+                  typeof chunk === "string"
+                    ? chunk
+                    : new TextDecoder().decode(chunk)
+                )
+              })
+            )
+        }),
+        Layer.succeed(
+          Terminal.Terminal,
+          Terminal.make({
+            columns: Effect.succeed(80),
+            rows: Effect.succeed(24),
+            readInput: Effect.die("unused"),
+            readLine: Effect.die("unused"),
+            display: () => Effect.void
+          })
+        ),
+        Layer.succeed(
+          ChildProcessSpawner.ChildProcessSpawner,
+          ChildProcessSpawner.make(() => Effect.die("unused"))
+        ),
+        storeLayer,
+        runtimeLayer,
+        Layer.succeed(SnapshotService, {
+          snapshotFrame: () =>
+            Effect.succeed({
+              format: "crit-canvas" as const,
+              version: 1 as const,
+              id: "review",
+              title: "Review",
+              revision: 3,
+              frames: [
+                {
+                  id: "candidate",
+                  url: "https://checkout.localhost/v1",
+                  title: "Checkout candidate",
+                  status: "in-progress" as const,
+                  provenance: { kind: "agent" as const, sourceId: "codex" },
+                  geometry: { x: 0, y: 0, width: 1440, height: 900 },
+                  display: { heightMode: "viewport" as const },
+                  zIndex: 0
+                },
+                {
+                  id: "snapshot-20260808120000-deadbeef",
+                  url: "/__crit/snapshots/20260808120000-deadbeef",
+                  title: "Checkout candidate snapshot",
+                  status: "archived" as const,
+                  provenance: {
+                    kind: "snapshot" as const,
+                    sourceId: "candidate"
+                  },
+                  geometry: { x: 1488, y: 0, width: 1440, height: 900 },
+                  display: { heightMode: "viewport" as const },
+                  zIndex: 1,
+                  snapshot: {
+                    artifactId: "20260808120000-deadbeef",
+                    sourceUrl: "https://checkout.localhost/v1",
+                    capturedAt: "2026-08-08T12:00:00.000Z",
+                    sizeBytes: 512
+                  }
+                },
+                {
+                  id: "concurrent",
+                  url: "https://checkout.localhost/concurrent",
+                  title: "Concurrent Frame",
+                  status: "in-progress" as const,
+                  provenance: {
+                    kind: "agent" as const,
+                    sourceId: "other-agent"
+                  },
+                  geometry: { x: 2976, y: 0, width: 1440, height: 900 },
+                  display: { heightMode: "viewport" as const },
+                  zIndex: 2
+                }
+              ],
+              notes: []
+            }),
+          readArtifact: () => Effect.die("unused")
+        })
+      )
+
+      return Effect.gen(function*() {
+        yield* runCrit(["snapshot", "review", "candidate", "--json"])
+        const output = JSON.parse(stdout.join(""))
+
+        expect(output).toMatchObject({
+          command: "snapshot",
+          canvasId: "review",
+          frame: {
+            id: "snapshot-20260808120000-deadbeef",
+            provenance: { kind: "snapshot", sourceId: "candidate" }
+          }
+        })
+      }).pipe(Effect.provide(cliLayer))
+    }
+  )
 })
