@@ -101,6 +101,50 @@ describe("makeCritHttpHandler", () => {
     expect(client.applied).toHaveLength(1)
   })
 
+  it("returns 413 when the PATCH body exceeds the configured limit", async () => {
+    const client = makeClient()
+    const handler = makeCritHttpHandler(client, { maxBodyBytes: 8 })
+    const response = await Effect.runPromise(
+      handler(
+        new Request(canvasUrl, {
+          method: "PATCH",
+          body: applyBody
+        })
+      )
+    )
+
+    expect(response?.status).toBe(413)
+    expect(await response?.json()).toEqual({
+      error: {
+        code: "invalid-request",
+        message: "Request body exceeds 8 bytes",
+        id: "homepage"
+      }
+    })
+    expect(client.applied).toHaveLength(0)
+  })
+
+  it("returns 400 when a body-read failure mentions 'exceeds'", async () => {
+    const client = makeClient()
+    const handler = makeCritHttpHandler(client)
+    const request = new Request(canvasUrl, {
+      method: "PATCH",
+      body: applyBody
+    })
+    Object.defineProperty(request, "arrayBuffer", {
+      value: () =>
+        Promise.reject(new Error("Body stream exceeds transport budget"))
+    })
+    const response = await Effect.runPromise(handler(request))
+
+    expect(response?.status).toBe(400)
+    const body = (await response?.json()) as {
+      readonly error: { readonly message: string }
+    }
+    expect(body.error.message).toBe("Body stream exceeds transport budget")
+    expect(client.applied).toHaveLength(0)
+  })
+
   it("rejects cross-origin PATCH command batches", async () => {
     const client = makeClient()
     const handler = makeCritHttpHandler(client)

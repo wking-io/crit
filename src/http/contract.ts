@@ -148,28 +148,45 @@ const clientErrorResponse = (cause: CritClientError) => {
   return json(503, { error: encodeClientError(cause) })
 }
 
+class ApplyRequestBodyTooLarge extends Schema.TaggedError<ApplyRequestBodyTooLarge>()(
+  "ApplyRequestBodyTooLarge",
+  { maxBytes: Schema.Number }
+) {}
+
+class InvalidApplyRequest extends Schema.TaggedError<InvalidApplyRequest>()(
+  "InvalidApplyRequest",
+  { detail: Schema.String }
+) {}
+
 const readApplyRequest = (request: Request, maxBodyBytes: number) =>
   Effect.tryPromise({
     try: () => request.arrayBuffer(),
     catch: (cause) =>
-      new Error(
-        cause instanceof Error ? cause.message : "Could not read request body"
-      )
+      new InvalidApplyRequest({
+        detail:
+          cause instanceof Error ? cause.message : "Could not read request body"
+      })
   }).pipe(
     Effect.flatMap((body) =>
       body.byteLength > maxBodyBytes
-        ? Effect.fail(new Error(`Request body exceeds ${maxBodyBytes} bytes`))
+        ? Effect.fail(new ApplyRequestBodyTooLarge({ maxBytes: maxBodyBytes }))
         : Effect.succeed(new TextDecoder().decode(body))
     ),
     Effect.flatMap((body) =>
       Effect.try({
         try: () => JSON.parse(body) as unknown,
-        catch: () => new Error("Request body must be valid JSON")
+        catch: () =>
+          new InvalidApplyRequest({
+            detail: "Request body must be valid JSON"
+          })
       })
     ),
-    Effect.flatMap(Schema.decodeUnknownEffect(CritHttpApplyRequest)),
-    Effect.mapError((cause) =>
-      cause instanceof Error ? cause : new Error(String(cause))
+    Effect.flatMap((body) =>
+      Schema.decodeUnknownEffect(CritHttpApplyRequest)(body).pipe(
+        Effect.mapError(
+          (cause) => new InvalidApplyRequest({ detail: String(cause) })
+        )
+      )
     )
   )
 
@@ -282,20 +299,23 @@ export const makeCritHttpHandler = (
     if (request.method === "PATCH") {
       const rejected = crossOriginRejection(request, id)
       if (rejected !== undefined) return Effect.succeed(rejected)
-      return readApplyRequest(request, maxBodyBytes).pipe(
-        Effect.flatMap((input) =>
-          input.commands.length === 0
-            ? Effect.fail(new Error("At least one Canvas command is required"))
-            : input.commands.some(
-                  (command) => command._tag === "AddSnapshotFrame"
-                )
-              ? Effect.fail(
-                  new Error(
-                    "AddSnapshotFrame is reserved for snapshot capture; POST to the Frame snapshot route to archive an existing live Frame"
-                  )
-                )
-              : client.apply(id, input.commands)
-        ),
+      return Effect.gen(function*() {
+        const input = yield* readApplyRequest(request, maxBodyBytes)
+        if (input.commands.length === 0) {
+          return yield* new InvalidApplyRequest({
+            detail: "At least one Canvas command is required"
+          })
+        }
+        if (
+          input.commands.some((command) => command._tag === "AddSnapshotFrame")
+        ) {
+          return yield* new InvalidApplyRequest({
+            detail:
+              "AddSnapshotFrame is reserved for snapshot capture; POST to the Frame snapshot route to archive an existing live Frame"
+          })
+        }
+        return yield* client.apply(id, input.commands)
+      }).pipe(
         Effect.map((document) => json(200, document)),
         Effect.catch((cause) =>
           Effect.succeed(
@@ -304,16 +324,23 @@ export const makeCritHttpHandler = (
               cause instanceof CritClientInvalidDocument ||
               cause instanceof CritClientUnavailable
               ? clientErrorResponse(cause)
-              : json(
-                  cause instanceof Error && cause.message.includes("exceeds")
-                    ? 413
-                    : 400,
-                  errorBody(
-                    "invalid-request",
-                    cause instanceof Error ? cause.message : String(cause),
-                    { id }
+              : cause instanceof ApplyRequestBodyTooLarge
+                ? json(
+                    413,
+                    errorBody(
+                      "invalid-request",
+                      `Request body exceeds ${cause.maxBytes} bytes`,
+                      { id }
+                    )
                   )
-                )
+                : json(
+                    400,
+                    errorBody(
+                      "invalid-request",
+                      cause.detail,
+                      { id }
+                    )
+                  )
           )
         )
       )
