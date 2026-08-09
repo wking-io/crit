@@ -41,20 +41,9 @@ export {
 } from "../session/draft-journal.js"
 export { Crit, type CritProps } from "./crit.js"
 export {
-  CanvasViewport,
-  CRIT_HOTKEYS,
   DEFAULT_FRAME_CHROME_SETTINGS,
-  frameChromeLayout,
-  frameChromeMetrics,
-  frameUiScale,
-  frameToolbarMode,
-  type FrameChromeMetrics,
-  type FrameChromeAction,
-  type FrameChromeLayout,
-  type FrameChromeSettings,
-  type CanvasViewportProps,
-  type FrameToolbarMode
-} from "./canvas-viewport.js"
+  type FrameChromeSettings
+} from "./frame-card.js"
 export {
   DEFAULT_CANVAS_CAMERA_OPTIONS,
   type CanvasCameraOptions,

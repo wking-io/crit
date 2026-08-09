@@ -44,6 +44,50 @@ The plugin is active only during Vite serve and preview. It can be gated with
 load by default; use `createIfMissing: false` to require explicit creation. The
 automatic editor route can be moved or disabled with `editorPath`.
 
+### Vite plugin options
+
+| Option | Purpose |
+| --- | --- |
+| `enabled` | Enables the plugin; defaults to `true`. |
+| `root` | Directory containing `.crit` data and the discovery manifest; defaults to Vite's resolved root. |
+| `apiPath` | Base path for the Canvas HTTP API; defaults to `/__crit/api`. |
+| `createIfMissing` | Creates a missing Canvas when it is first loaded; defaults to `true`. |
+| `title` | Returns the title to use when a Canvas is created on first load. |
+| `manifest` | Manifest filename relative to `root`; defaults to `crit.manifest.json`. Set it to `false` to disable discovery. |
+| `manifestPath` | URL that publishes the resolved manifest; defaults to `/.well-known/crit.json`. |
+| `editorPath` | URL prefix for the standalone editor; defaults to `/crit`. Set it to `false` to disable the editor. |
+| `frameInputBridge` | Injects the script that forwards input from same-origin live Frames; defaults to `true`. |
+
+When the standalone editor is enabled, Crit reserves
+`<editorPath>/__assets/editor.js` for its generated browser bundle. This is an
+internal route managed by the plugin, not a separately configurable asset URL.
+
+### React component
+
+`<Crit>` accepts these props:
+
+| Prop | Purpose |
+| --- | --- |
+| `canvasId` | Canvas to open. Required. |
+| `client` | Custom `CritClientShape`; overrides `apiPath`. |
+| `apiPath` | Base path used by the default HTTP client; defaults to `/__crit/api`. |
+| `autosaveDelay` | Effect `Duration.Input` debounce before saving; defaults to 100 ms. |
+| `refreshInterval` | Effect `Duration.Input` polling interval; defaults to two seconds. Use `false` to disable polling. |
+| `sessionId` | Stable writer ID. By default, Crit creates one per Canvas and browser tab session. |
+| `draftJournal` | Custom `DraftJournalShape`. IndexedDB is used by default; use `false` to disable draft recovery. |
+| `className`, `style` | Class and inline styles applied to the root, loading, or error container. |
+| `iframeAllow`, `iframeSandbox` | Capability and sandbox attributes for live Frames. |
+| `frameChrome` | Partial `FrameChromeSettings` controlling title and action width thresholds. |
+| `cameraOptions` | Partial `CanvasCameraOptions` controlling pan speed, zoom speed, zoom steps, and wheel behavior. |
+| `onSession` | Receives the opened `CanvasSession` handle. |
+| `onCommandError` | Receives a user-command failure message. |
+| `loadingFallback` | React content shown while the Canvas opens. |
+| `errorFallback` | Renders React content from a Canvas-open failure message. |
+
+The main entry point exports `CritProps`, `FrameChromeSettings`,
+`CanvasCameraOptions`, `CanvasWheelBehavior`, and the default frame-chrome and
+camera option values for typed configuration.
+
 ## Discovery
 
 Declare Frames without hard-coding the running origin:
@@ -93,6 +137,22 @@ npx @riff-refine/crit snapshot checkout-review candidate --json
 npx @riff-refine/crit activity checkout-review \
   --for 120 --detail "Refining checkout" --json
 ```
+
+### CLI reference
+
+All commands accept `--json` for machine-readable output where applicable.
+
+| Command | Purpose and options |
+| --- | --- |
+| `crit init` | Configure a Vite + React project. Use `--root <directory>` to target another project and `--skip-install` to leave dependency installation to the caller. |
+| `crit sync` | Reconcile a manifest. Use `--from <file-or-url>`, `--base-url <url>` to resolve relative Frame URLs in a local manifest, and `--canvas <id>` to sync one Canvas. |
+| `crit create <id> --title <title>` | Create an empty Canvas. |
+| `crit add <canvas> <url...>` | Add one or more HTTP or HTTPS URLs as live Frames. |
+| `crit apply <canvas> <commands>` | Atomically apply a JSON array of semantic Canvas commands. |
+| `crit snapshot <canvas> <frame>` | Capture a live Frame as an immutable HTML snapshot. |
+| `crit activity <canvas>` | Signal activity with `--for <seconds>` and optional `--detail <text>`, or remove it with `--clear`. |
+| `crit list` | List local Canvases. |
+| `crit open <canvas>` | Read a Canvas and its Frames. |
 
 The command schema includes Frame operations (`AddFrame`, `UpdateFrame`,
 `SetFrameStatus`, `MoveFrame`, `ResizeFrame`, `RemoveFrame`) and Note operations
@@ -178,6 +238,17 @@ same-origin with the host application; live Frames stay unsandboxed.
 Pass `draftJournal={false}` to disable recovery, a custom `CritClientShape` for
 another local HTTP host, or `onSession` to access `dispatch`, `flush`, `refresh`,
 and `snapshotFrame` directly.
+
+### Package entry points
+
+| Entry point | Intended use |
+| --- | --- |
+| `@riff-refine/crit` | React `<Crit>` surface, browser/session clients, and core domain exports. |
+| `@riff-refine/crit/core` | Platform-neutral Effect domain model, schemas, and commands. |
+| `@riff-refine/crit/http` | HTTP contract, route helpers, request handler, and HTTP client. |
+| `@riff-refine/crit/discovery` | Discovery manifest schemas, resolution, and reconciliation. |
+| `@riff-refine/crit/node` | Node filesystem repositories, activity and snapshot services, and their service contracts. |
+| `@riff-refine/crit/vite` | Vite plugin and `CritVitePluginOptions`. |
 
 Headless consumers can import the Effect v4 domain engine:
 

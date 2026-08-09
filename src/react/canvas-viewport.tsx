@@ -87,7 +87,7 @@ type WheelInput = Omit<
 
 type CanvasZoomDirection = -1 | 0 | 1
 
-export const CRIT_HOTKEYS = {
+const CRIT_HOTKEYS = {
   selectTool: "V",
   handTool: "H",
   zoomIn: [
