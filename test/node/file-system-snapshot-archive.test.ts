@@ -58,6 +58,10 @@ describe("FileSystemSnapshotArchive", () => {
       expect(html).not.toContain('href="/styles.css"')
       expect(html).not.toContain("/* source comment */")
       expect(html).not.toContain("import ")
+      expect(html).not.toMatch(/>\s{2,}</)
+      expect(html).toContain("<h1>Frozen page</h1>")
+      expect(html).toContain("<pre>  preserve\n  spacing  </pre>")
+      expect(html).toContain("<textarea>  preserve\n  spacing  </textarea>")
       expect(duplicate).toMatchObject({
         _tag: "SnapshotStorageFailed",
         operation: "capture",
@@ -137,7 +141,10 @@ describe("FileSystemSnapshotArchive", () => {
             response.end(`<!doctype html><html><head>
               <link rel="stylesheet" href="/styles.css">
               <style>.inline { padding: 0  4px; }</style>
-              </head><body><h1>Frozen page</h1><img src="/pixel.svg" alt="">
+              </head><body><h1>Frozen   page</h1>
+              <pre>  preserve\n  spacing  </pre>
+              <textarea>  preserve\n  spacing  </textarea>
+              <img src="/pixel.svg" alt="">
               <script>window.fixture = true;</script>
               <script type="module" src="/app.js"></script></body></html>`)
             return

@@ -384,6 +384,7 @@ const buildSnapshotHtml = async (
 
   await inlineDocumentAssets(root, documentUrl, fetchResource)
   removeNonRuntimeComments(root)
+  collapseMarkupWhitespace(root)
   const serialized = root.toString().trim()
   return /^<!doctype/i.test(serialized)
     ? serialized
@@ -629,6 +630,26 @@ const removeNonRuntimeComments = (node: HtmlNode) => {
       continue
     }
     removeNonRuntimeComments(child)
+  }
+}
+
+const PRESERVED_WHITESPACE_ELEMENTS = new Set([
+  "pre",
+  "script",
+  "style",
+  "textarea"
+])
+
+const collapseMarkupWhitespace = (node: HtmlNode) => {
+  if (
+    PRESERVED_WHITESPACE_ELEMENTS.has((node.rawTagName ?? "").toLowerCase())
+  ) return
+  for (const child of node.childNodes) {
+    if (child.nodeType === NodeType.TEXT_NODE) {
+      child.rawText = child.rawText.replace(/[\t\n\f\r ]+/g, " ")
+      continue
+    }
+    collapseMarkupWhitespace(child)
   }
 }
 
