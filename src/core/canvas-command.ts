@@ -43,7 +43,7 @@ export const AddFrameCommand = Schema.TaggedStruct("AddFrame", {
 })
 export type AddFrameCommand = typeof AddFrameCommand.Type
 
-export const FrameSnapshot = Schema.Struct({
+export const SnapshotArtifact = Schema.Struct({
   artifactId: Schema.String.check(Schema.isPattern(/^[a-z0-9-]+$/)),
   sourceUrl: Schema.String.check(Schema.isPattern(/^https?:\/\//)),
   capturedAt: Schema.String.check(
@@ -54,7 +54,7 @@ export const FrameSnapshot = Schema.Struct({
     Schema.isGreaterThanOrEqualTo(0)
   )
 })
-export type FrameSnapshot = typeof FrameSnapshot.Type
+export type SnapshotArtifact = typeof SnapshotArtifact.Type
 
 export const AddSnapshotFrameCommand = Schema.TaggedStruct(
   "AddSnapshotFrame",
@@ -63,7 +63,7 @@ export const AddSnapshotFrameCommand = Schema.TaggedStruct(
     sourceFrameId: Schema.String,
     expectedSourceUrl: Schema.String,
     url: Schema.String,
-    artifact: FrameSnapshot
+    artifact: SnapshotArtifact
   }
 )
 export type AddSnapshotFrameCommand = typeof AddSnapshotFrameCommand.Type
@@ -205,7 +205,7 @@ export type AddSnapshotFrameInput = {
   readonly sourceFrameId: string
   readonly expectedSourceUrl: string
   readonly url: string
-  readonly artifact: FrameSnapshot
+  readonly artifact: SnapshotArtifact
 }
 
 const addSnapshotFrame = (

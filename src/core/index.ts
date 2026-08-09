@@ -29,7 +29,7 @@ export {
   CanvasCommandSchema,
   FrameDisplay,
   FrameProvenance,
-  FrameSnapshot,
+  SnapshotArtifact,
   FrameStatus,
   FrameReviewStatus,
   DetachNoteCommand,

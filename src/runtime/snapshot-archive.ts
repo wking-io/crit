@@ -1,6 +1,6 @@
 import { Context, Effect, Schema } from "effect"
 
-import { FrameSnapshot } from "../core/index.js"
+import type { SnapshotArtifact } from "../core/index.js"
 
 export const CRIT_SNAPSHOT_PATH = "/__crit/snapshots/"
 
@@ -10,9 +10,6 @@ export const snapshotArtifactUrl = (artifactId: string) => {
   }
   return `${CRIT_SNAPSHOT_PATH}${artifactId}`
 }
-
-export const SnapshotArtifact = FrameSnapshot
-export type SnapshotArtifact = typeof SnapshotArtifact.Type
 
 export class SnapshotCaptureFailed extends Schema.TaggedError<SnapshotCaptureFailed>()(
   "SnapshotCaptureFailed",

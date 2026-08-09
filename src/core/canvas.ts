@@ -4,7 +4,7 @@ import {
   CanvasCommandSchema,
   FrameDisplay,
   FrameProvenance,
-  FrameSnapshot,
+  SnapshotArtifact,
   FrameStatus,
   type CanvasCommand as CanvasCommandInput
 } from "./canvas-command.js"
@@ -39,7 +39,7 @@ export const CanvasFrame = Schema.Struct({
   display: FrameDisplay,
   geometry: CanvasGeometry,
   zIndex: Schema.Finite.check(Schema.isInt()),
-  snapshot: Schema.optional(FrameSnapshot)
+  snapshot: Schema.optional(SnapshotArtifact)
 })
 export type CanvasFrame = typeof CanvasFrame.Type
 

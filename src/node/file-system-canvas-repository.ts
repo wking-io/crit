@@ -90,7 +90,7 @@ const make = (root: string) =>
     const directory = path.join(root, ".crit", "canvases")
     const filePath = (id: string) => path.join(directory, `${encodeURIComponent(id)}.json`)
 
-    const read: CanvasRepositoryShape["load"] = (id) => {
+    const load: CanvasRepositoryShape["load"] = (id) => {
       const target = filePath(id)
       return Effect.gen(function*() {
         const exists = yield* fs
@@ -123,7 +123,7 @@ const make = (root: string) =>
           .exists(filePath(document.id))
           .pipe(Effect.mapError((cause) => storageFailure("create", document.id, cause)))
         if (exists) {
-          const current = yield* read(document.id).pipe(
+          const current = yield* load(document.id).pipe(
             Effect.catchTag("CritClientNotFound", () =>
               Effect.fail(
                 storageFailure(
@@ -171,7 +171,7 @@ const make = (root: string) =>
             })
         )
         const documents = yield* Effect.forEach(ids, (id) =>
-          read(id).pipe(
+          load(id).pipe(
             Effect.catchTag("CritClientNotFound", () => Effect.succeed(undefined))
           )
         )
@@ -214,7 +214,7 @@ const make = (root: string) =>
       })
 
       const mutate = Effect.gen(function*() {
-        const current = yield* read(id)
+        const current = yield* load(id)
         const canvas = Canvas.fromDocument(current)
         const change = yield* Canvas.apply(canvas, ...commands).pipe(
           Effect.mapError((cause) => rejectedCanvasCommand(id, cause))
@@ -246,7 +246,7 @@ const make = (root: string) =>
         )
       }
 
-      return read(id).pipe(
+      return load(id).pipe(
         Effect.andThen(acquire),
         Effect.andThen(
           mutate.pipe(Effect.ensuring(fs.remove(lock).pipe(Effect.ignore)))
@@ -254,7 +254,7 @@ const make = (root: string) =>
       )
     }
 
-    return { create, load: read, list, apply } satisfies CanvasRepositoryShape
+    return { create, load, list, apply } satisfies CanvasRepositoryShape
   })
 
 const layer = (options: { readonly root: string }) =>

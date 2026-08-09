@@ -22,6 +22,7 @@ export {
   CritClientUnavailable,
   type CritClientError
 } from "../runtime/canvas-failure.js"
+export { SnapshotArtifact } from "../core/index.js"
 export {
   AgentActivityFailed,
   AgentActivityStatus,
@@ -32,7 +33,6 @@ export {
 export {
   CRIT_SNAPSHOT_PATH,
   SnapshotArchive,
-  SnapshotArtifact,
   SnapshotCaptureFailed,
   SnapshotNotFound,
   SnapshotStorageFailed,

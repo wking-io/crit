@@ -6,14 +6,15 @@ import { build, transform, type Loader, type Plugin } from "esbuild"
 import { Effect, Layer } from "effect"
 import { NodeType, parse, type Node as HtmlNode } from "node-html-parser"
 
+import type { SnapshotArtifact } from "../core/index.js"
+
 import {
   SnapshotArchive,
   CRIT_SNAPSHOT_PATH,
   SnapshotCaptureFailed,
   SnapshotNotFound,
   SnapshotStorageFailed,
-  type SnapshotArchiveShape,
-  type SnapshotArtifact
+  type SnapshotArchiveShape
 } from "../runtime/snapshot-archive.js"
 
 const SNAPSHOT_DIRECTORY = ".crit/snapshots"
