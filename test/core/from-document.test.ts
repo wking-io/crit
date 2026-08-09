@@ -70,7 +70,7 @@ describe("Canvas.fromDocument", () => {
 
     const openFailure = Effect.runSync(
       Effect.flip(
-        Canvas.open({
+        Canvas.open("review", {
           ...document,
           frames: [...document.frames, ...document.frames]
         })
@@ -80,7 +80,7 @@ describe("Canvas.fromDocument", () => {
 
     const tooLarge = Effect.runSync(
       Effect.flip(
-        Canvas.open({ ...document, title: "x".repeat(10_000_001) })
+        Canvas.open("review", { ...document, title: "x".repeat(10_000_001) })
       )
     )
     expect(tooLarge.message).toMatch(

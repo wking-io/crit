@@ -9,12 +9,13 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import { createServer, type ViteDevServer } from "vite"
 
 import { HttpCritClient } from "../../src/http/client.js"
-import { Canvas, CanvasCommand } from "../../src/core/index.js"
-import { FileSystemAgentActivity } from "../../src/node/file-system-agent-activity.js"
 import {
-  CritClientCommandFailed,
-  CritClientNotFound
-} from "../../src/session/crit-client.js"
+  Canvas,
+  CanvasCommand,
+  CanvasCommandFailed,
+  CanvasNotFound
+} from "../../src/core/index.js"
+import { FileSystemAgentActivity } from "../../src/node/file-system-agent-activity.js"
 import { crit } from "../../src/vite/index.js"
 
 describe("crit Vite plugin", () => {
@@ -114,7 +115,7 @@ describe("crit Vite plugin", () => {
       }
     )
     const invalidBody = (await invalidResponse.json()) as {
-      error: { code: string }
+      error: { _tag: string; reason: string }
     }
 
     expect(initial).toMatchObject({
@@ -149,14 +150,17 @@ describe("crit Vite plugin", () => {
     expect(saved.revision).toBe(1)
     expect(second.revision).toBe(2)
     expect(updated.revision).toBe(3)
-    expect(stale).toBeInstanceOf(CritClientCommandFailed)
-    expect(stale).toMatchObject({ reason: "note-conflict" })
+    expect(stale).toBeInstanceOf(CanvasCommandFailed)
+    expect(stale).toMatchObject({ canvasId: "homepage", reason: "note-conflict" })
     expect(loaded.revision).toBe(3)
     expect(persisted.revision).toBe(3)
     expect(methodResponse.status).toBe(405)
     expect(methodResponse.headers.get("allow")).toBe("GET, PATCH")
     expect(invalidResponse.status).toBe(400)
-    expect(invalidBody.error.code).toBe("invalid-request")
+    expect(invalidBody.error).toMatchObject({
+      _tag: "RequestRejected",
+      reason: "invalid-body"
+    })
   })
 
   it("can require explicit Canvas creation", async () => {
@@ -167,8 +171,8 @@ describe("crit Vite plugin", () => {
       Effect.flip(client.load("missing"))
     )
 
-    expect(failure).toBeInstanceOf(CritClientNotFound)
-    expect(failure).toMatchObject({ id: "missing" })
+    expect(failure).toBeInstanceOf(CanvasNotFound)
+    expect(failure).toMatchObject({ canvasId: "missing" })
   })
 
   it("injects a cross-origin Frame input bridge into served apps", async () => {
@@ -224,7 +228,7 @@ describe("crit Vite plugin", () => {
     const client = HttpCritClient.make({ apiPath: `${origin}/__crit/api` })
     const first = await Effect.runPromise(client.load("default"))
     const second = await Effect.runPromise(client.load("default"))
-    const canvas = await Effect.runPromise(Canvas.open(second))
+    const canvas = Canvas.fromDocument(second)
 
     expect(manifestResponse.status).toBe(200)
     expect(manifest.canvases[0]?.frames[0]?.url).toBe(`${origin}/checkout`)

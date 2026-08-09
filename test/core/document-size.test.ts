@@ -17,7 +17,7 @@ describe("Canvas Document size policy", () => {
         title: "x".repeat(MAX_CANVAS_DOCUMENT_BYTES)
       }
 
-      const failure = yield* Effect.flip(Canvas.open(oversized))
+      const failure = yield* Effect.flip(Canvas.open("review", oversized))
 
       expect(failure).toMatchObject({
         _tag: "CanvasDocumentTooLarge",

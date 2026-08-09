@@ -3,22 +3,20 @@ import { Context, Effect, Layer, Schema } from "effect"
 import {
   Canvas,
   CanvasChange,
-  CanvasCommandFailed,
   CanvasCommandSchema,
-  CanvasDocumentTooLarge,
   FrameList,
   NoteList,
   CanvasSummary,
+  type CanvasAlreadyExists,
   type CanvasCommand,
-  type CanvasDocument
+  type CanvasCommandFailed,
+  type CanvasDocument,
+  type CanvasDocumentTooLarge,
+  type CanvasInvalidDocument,
+  type CanvasNotFound,
+  type CanvasUnavailable
 } from "../core/index.js"
-import {
-  CanvasRepository,
-  type DocumentAlreadyExists,
-  type DocumentMalformed,
-  type DocumentNotFound,
-  type DocumentStorageFailed
-} from "./canvas-repository.js"
+import { CanvasRepository } from "./canvas-repository.js"
 
 export const UpdateCanvasInput = Schema.Struct({
   id: Schema.String,
@@ -46,31 +44,40 @@ export interface CritRuntimeShape {
     readonly title: string
   }) => Effect.Effect<
     CanvasSummary,
-    DocumentAlreadyExists | DocumentMalformed | DocumentStorageFailed
+    | CanvasAlreadyExists
+    | CanvasInvalidDocument
+    | CanvasDocumentTooLarge
+    | CanvasUnavailable
   >
   readonly readCanvas: (
     id: string
   ) => Effect.Effect<
     CanvasDocument,
-    DocumentNotFound | DocumentMalformed | DocumentStorageFailed
+    | CanvasNotFound
+    | CanvasInvalidDocument
+    | CanvasDocumentTooLarge
+    | CanvasUnavailable
   >
   readonly getCanvas: (
     id: string
   ) => Effect.Effect<
     CanvasView,
-    DocumentNotFound | DocumentMalformed | DocumentStorageFailed
+    | CanvasNotFound
+    | CanvasInvalidDocument
+    | CanvasDocumentTooLarge
+    | CanvasUnavailable
   >
   readonly listCanvases: () => Effect.Effect<
     ReadonlyArray<CanvasSummary>,
-    DocumentMalformed | DocumentStorageFailed
+    CanvasInvalidDocument | CanvasDocumentTooLarge | CanvasUnavailable
   >
   readonly updateCanvas: (
     input: UpdateCanvasInput
   ) => Effect.Effect<
     CanvasMutationResult,
-    | DocumentNotFound
-    | DocumentMalformed
-    | DocumentStorageFailed
+    | CanvasNotFound
+    | CanvasInvalidDocument
+    | CanvasUnavailable
     | CanvasCommandFailed
     | CanvasDocumentTooLarge
   >

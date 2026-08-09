@@ -20,12 +20,20 @@ export class SnapshotCaptureFailed extends Schema.TaggedError<SnapshotCaptureFai
     sourceUrl: Schema.String,
     detail: Schema.String
   }
-) {}
+) {
+  override get message(): string {
+    return this.detail
+  }
+}
 
 export class SnapshotNotFound extends Schema.TaggedError<SnapshotNotFound>()(
   "SnapshotNotFound",
   { artifactId: Schema.String }
-) {}
+) {
+  override get message(): string {
+    return `Snapshot artifact not found: ${this.artifactId}`
+  }
+}
 
 export class SnapshotStorageFailed extends Schema.TaggedError<SnapshotStorageFailed>()(
   "SnapshotStorageFailed",
@@ -34,7 +42,11 @@ export class SnapshotStorageFailed extends Schema.TaggedError<SnapshotStorageFai
     artifactId: Schema.String,
     detail: Schema.String
   }
-) {}
+) {
+  override get message(): string {
+    return this.detail
+  }
+}
 
 export type SnapshotArchiveError =
   | SnapshotCaptureFailed

@@ -17,12 +17,9 @@ export {
 } from "../session/canvas-session.js"
 export {
   CritClient,
-  CritClientCommandFailed,
-  CritClientInvalidDocument,
-  CritClientNotFound,
-  CritClientUnavailable,
   type CritClientError,
-  type CritClientShape
+  type CritClientShape,
+  type CritClientSnapshotError
 } from "../session/crit-client.js"
 export {
   DraftJournal,

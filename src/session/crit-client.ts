@@ -1,44 +1,21 @@
-import { Context, Effect, Schema } from "effect"
+import { Context, Effect } from "effect"
 
-import type { CanvasCommand, CanvasDocument } from "../core/index.js"
+import type { CanvasCommand, CanvasDocument, CanvasError } from "../core/index.js"
 import type { AgentActivityStatus } from "../runtime/agent-activity.js"
+import type {
+  SnapshotCaptureFailed,
+  SnapshotStorageFailed
+} from "../runtime/snapshot-archive.js"
 
-export class CritClientNotFound extends Schema.TaggedError<CritClientNotFound>()(
-  "CritClientNotFound",
-  { id: Schema.String }
-) {}
+// The client speaks the core Canvas failure vocabulary directly; snapshot
+// capture composes its own two failure modes on top for the snapshot
+// operation. There is no client-specific error renaming.
+export type CritClientError = CanvasError
 
-export class CritClientInvalidDocument extends Schema.TaggedError<CritClientInvalidDocument>()(
-  "CritClientInvalidDocument",
-  {
-    id: Schema.String,
-    detail: Schema.String
-  }
-) {}
-
-export class CritClientCommandFailed extends Schema.TaggedError<CritClientCommandFailed>()(
-  "CritClientCommandFailed",
-  {
-    id: Schema.String,
-    reason: Schema.String,
-    detail: Schema.String
-  }
-) {}
-
-export class CritClientUnavailable extends Schema.TaggedError<CritClientUnavailable>()(
-  "CritClientUnavailable",
-  {
-    operation: Schema.String,
-    id: Schema.String,
-    detail: Schema.String
-  }
-) {}
-
-export type CritClientError =
-  | CritClientNotFound
-  | CritClientCommandFailed
-  | CritClientInvalidDocument
-  | CritClientUnavailable
+export type CritClientSnapshotError =
+  | CanvasError
+  | SnapshotCaptureFailed
+  | SnapshotStorageFailed
 
 export interface CritClientShape {
   readonly load: (id: string) => Effect.Effect<CanvasDocument, CritClientError>
@@ -49,7 +26,7 @@ export interface CritClientShape {
   readonly snapshot?: (
     canvasId: string,
     frameId: string
-  ) => Effect.Effect<CanvasDocument, CritClientError>
+  ) => Effect.Effect<CanvasDocument, CritClientSnapshotError>
   readonly activity?: (
     canvasId: string
   ) => Effect.Effect<AgentActivityStatus, CritClientError>

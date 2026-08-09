@@ -31,7 +31,7 @@ describe("Canvas UpdateFrame command", () => {
           }
         })
       )
-      const reopened = yield* Canvas.open(Canvas.export(canvas))
+      const reopened = Canvas.fromDocument(Canvas.export(canvas))
       const frame = yield* Canvas.getFrame(reopened, frameId)
 
       expect(change).toEqual({

@@ -2,18 +2,16 @@ import { Effect, Schema } from "effect"
 
 import {
   CanvasCommand,
-  CanvasCommandFailed,
-  CanvasDocumentTooLarge,
   FrameDisplay,
   FrameReviewStatus,
   type CanvasCommand as CanvasCommandInput,
+  type CanvasCommandFailed,
+  type CanvasDocumentTooLarge,
+  type CanvasInvalidDocument,
+  type CanvasNotFound,
+  type CanvasUnavailable,
   type FrameSummary
 } from "../core/index.js"
-import {
-  DocumentMalformed,
-  DocumentNotFound,
-  DocumentStorageFailed
-} from "../runtime/canvas-repository.js"
 import {
   CritRuntime,
   type CritRuntimeShape
@@ -83,9 +81,9 @@ export type CritManifestSyncResult = {
 
 export type CritManifestSyncError =
   | CritManifestInvalid
-  | DocumentNotFound
-  | DocumentMalformed
-  | DocumentStorageFailed
+  | CanvasNotFound
+  | CanvasInvalidDocument
+  | CanvasUnavailable
   | CanvasCommandFailed
   | CanvasDocumentTooLarge
 
@@ -331,14 +329,14 @@ const syncWith = (
     Effect.gen(function*() {
       let created = false
       const current = yield* runtime.getCanvas(canvas.id).pipe(
-        Effect.catchTag("DocumentNotFound", () =>
+        Effect.catchTag("CanvasNotFound", () =>
           runtime.createCanvas({ id: canvas.id, title: canvas.title }).pipe(
             Effect.tap(() =>
               Effect.sync(() => {
                 created = true
               })
             ),
-            Effect.catchTag("DocumentAlreadyExists", () => Effect.void),
+            Effect.catchTag("CanvasAlreadyExists", () => Effect.void),
             Effect.andThen(runtime.getCanvas(canvas.id))
           )
         )

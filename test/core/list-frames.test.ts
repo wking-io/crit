@@ -30,7 +30,7 @@ describe("Canvas.listFrames", () => {
           changes: { status: "approved", display: { heightMode: "fit-page" } }
         })
       )
-      const reopened = yield* Canvas.open(Canvas.export(canvas))
+      const reopened = Canvas.fromDocument(Canvas.export(canvas))
 
       expect(Canvas.listFrames(reopened)).toEqual([
         {

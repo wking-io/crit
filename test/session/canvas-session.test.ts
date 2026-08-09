@@ -7,7 +7,7 @@ import { CritClient, type CritClientShape } from "../../src/session/crit-client.
 
 const applyTo = (stored: ReturnType<typeof Canvas.export>, commands: ReadonlyArray<CanvasCommandValue>) =>
   Effect.gen(function*() {
-    const canvas = yield* Canvas.open(stored)
+    const canvas = Canvas.fromDocument(stored)
     yield* Canvas.apply(canvas, ...commands)
     return { ...Canvas.export(canvas), revision: stored.revision + 1 }
   }).pipe(Effect.orDie)
@@ -88,7 +88,7 @@ describe("CanvasSession", () => {
         yield* session.flush()
 
         const state = yield* SubscriptionRef.get(session.state)
-        const persisted = yield* Canvas.open(stored)
+        const persisted = Canvas.fromDocument(stored)
         expect(applyCount).toBe(2)
         expect(maximumActive).toBe(1)
         expect(state).toMatchObject({ revision: 2, mutation: 2, confirmedMutation: 2, saveStatus: "clean" })

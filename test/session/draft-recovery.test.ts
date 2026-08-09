@@ -21,7 +21,7 @@ describe("CanvasSession draft recovery", () => {
       const client: CritClientShape = {
         load: () => Effect.succeed(stored),
         apply: (_id, incoming) => Effect.gen(function*() {
-          const canvas = yield* Canvas.open(stored)
+          const canvas = Canvas.fromDocument(stored)
           yield* Canvas.apply(canvas, ...incoming)
           stored = { ...Canvas.export(canvas), revision: stored.revision + 1 }
           return stored
