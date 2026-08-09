@@ -2,18 +2,16 @@ import * as NodeServices from "@effect/platform-node/NodeServices"
 import { open as openFile } from "node:fs/promises"
 import { Effect, FileSystem, Layer, Path } from "effect"
 
+import { Canvas, CanvasInternals, type CanvasDocument } from "../core/canvas.js"
 import {
-  Canvas,
+  CanvasAlreadyExists,
   CanvasCommandFailed,
   CanvasDocumentTooLarge,
-  CanvasInternals,
-  type CanvasDocument
-} from "../core/canvas.js"
+  CanvasInvalidDocument,
+  CanvasNotFound,
+  CanvasUnavailable
+} from "../core/canvas-errors.js"
 import {
-  DocumentAlreadyExists,
-  DocumentMalformed,
-  DocumentNotFound,
-  DocumentStorageFailed,
   CanvasRepository,
   type CanvasRepositoryShape
 } from "../runtime/canvas-repository.js"
@@ -22,10 +20,10 @@ import {
   serializeDocument
 } from "../runtime/internal/document-codec.js"
 
-const storageFailure = (operation: string, id: string, cause: unknown) =>
-  new DocumentStorageFailed({
+const storageFailure = (operation: string, canvasId: string, cause: unknown) =>
+  new CanvasUnavailable({
     operation,
-    id,
+    canvasId,
     detail: cause instanceof Error ? cause.message : String(cause)
   })
 
@@ -42,7 +40,7 @@ const make = (root: string) =>
         const exists = yield* fs
           .exists(target)
           .pipe(Effect.mapError((cause) => storageFailure("load", id, cause)))
-        if (!exists) return yield* new DocumentNotFound({ id })
+        if (!exists) return yield* new CanvasNotFound({ canvasId: id })
 
         const contents = yield* fs
           .readFileString(target)
@@ -50,8 +48,8 @@ const make = (root: string) =>
         const input = yield* Effect.try({
           try: () => JSON.parse(contents) as unknown,
           catch: (cause) =>
-            new DocumentMalformed({
-              id,
+            new CanvasInvalidDocument({
+              canvasId: id,
               detail: cause instanceof Error ? cause.message : String(cause)
             })
         })
@@ -70,7 +68,7 @@ const make = (root: string) =>
           .pipe(Effect.mapError((cause) => storageFailure("create", document.id, cause)))
         if (exists) {
           const current = yield* read(document.id).pipe(
-            Effect.catchTag("DocumentNotFound", () =>
+            Effect.catchTag("CanvasNotFound", () =>
               Effect.fail(
                 storageFailure(
                   "create",
@@ -80,8 +78,8 @@ const make = (root: string) =>
               )
             )
           )
-          return yield* new DocumentAlreadyExists({
-            id: document.id,
+          return yield* new CanvasAlreadyExists({
+            canvasId: document.id,
             currentRevision: current.revision
           })
         }
@@ -110,15 +108,15 @@ const make = (root: string) =>
             Effect.try({
               try: () => decodeURIComponent(entry.slice(0, -".json".length)),
               catch: (cause) =>
-                new DocumentMalformed({
-                  id: entry,
+                new CanvasInvalidDocument({
+                  canvasId: entry,
                   detail: cause instanceof Error ? cause.message : String(cause)
                 })
             })
         )
         const documents = yield* Effect.forEach(ids, (id) =>
           read(id).pipe(
-            Effect.catchTag("DocumentNotFound", () => Effect.succeed(undefined))
+            Effect.catchTag("CanvasNotFound", () => Effect.succeed(undefined))
           )
         )
         return documents
@@ -179,6 +177,7 @@ const make = (root: string) =>
       if (commands.length === 0) {
         return Effect.fail(
           new CanvasCommandFailed({
+            canvasId: id,
             reason: "invalid-command",
             detail: "A durable Canvas update requires at least one command"
           })

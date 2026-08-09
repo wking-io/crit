@@ -1,50 +1,16 @@
-import { Context, Effect, Schema } from "effect"
+import { Context, Effect } from "effect"
 
 import type {
+  CanvasAlreadyExists,
   CanvasChange,
   CanvasCommand,
   CanvasCommandFailed,
   CanvasDocument,
-  CanvasDocumentTooLarge
+  CanvasDocumentTooLarge,
+  CanvasInvalidDocument,
+  CanvasNotFound,
+  CanvasUnavailable
 } from "../core/index.js"
-
-export class DocumentNotFound extends Schema.TaggedError<DocumentNotFound>()(
-  "DocumentNotFound",
-  {
-    id: Schema.String
-  }
-) {}
-
-export class DocumentAlreadyExists extends Schema.TaggedError<DocumentAlreadyExists>()(
-  "DocumentAlreadyExists",
-  {
-    id: Schema.String,
-    currentRevision: Schema.Number
-  }
-) {}
-
-export class DocumentMalformed extends Schema.TaggedError<DocumentMalformed>()(
-  "DocumentMalformed",
-  {
-    id: Schema.String,
-    detail: Schema.String
-  }
-) {}
-
-export class DocumentStorageFailed extends Schema.TaggedError<DocumentStorageFailed>()(
-  "DocumentStorageFailed",
-  {
-    operation: Schema.String,
-    id: Schema.String,
-    detail: Schema.String
-  }
-) {}
-
-export type CanvasRepositoryError =
-  | DocumentNotFound
-  | DocumentAlreadyExists
-  | DocumentMalformed
-  | DocumentStorageFailed
 
 export interface CanvasRepositoryMutation {
   readonly document: CanvasDocument
@@ -54,22 +20,34 @@ export interface CanvasRepositoryMutation {
 export interface CanvasRepositoryShape {
   readonly create: (
     document: CanvasDocument
-  ) => Effect.Effect<CanvasDocument, DocumentAlreadyExists | DocumentMalformed | DocumentStorageFailed>
+  ) => Effect.Effect<
+    CanvasDocument,
+    | CanvasAlreadyExists
+    | CanvasInvalidDocument
+    | CanvasDocumentTooLarge
+    | CanvasUnavailable
+  >
   readonly load: (
     id: string
-  ) => Effect.Effect<CanvasDocument, DocumentNotFound | DocumentMalformed | DocumentStorageFailed>
+  ) => Effect.Effect<
+    CanvasDocument,
+    | CanvasNotFound
+    | CanvasInvalidDocument
+    | CanvasDocumentTooLarge
+    | CanvasUnavailable
+  >
   readonly list: () => Effect.Effect<
     ReadonlyArray<CanvasDocument>,
-    DocumentMalformed | DocumentStorageFailed
+    CanvasInvalidDocument | CanvasDocumentTooLarge | CanvasUnavailable
   >
   readonly apply: (
     id: string,
     commands: ReadonlyArray<CanvasCommand>
   ) => Effect.Effect<
     CanvasRepositoryMutation,
-    | DocumentNotFound
-    | DocumentMalformed
-    | DocumentStorageFailed
+    | CanvasNotFound
+    | CanvasInvalidDocument
+    | CanvasUnavailable
     | CanvasCommandFailed
     | CanvasDocumentTooLarge
   >

@@ -9,11 +9,6 @@ export {
 } from "./file-system-snapshot-archive.js"
 export {
   CanvasRepository,
-  DocumentAlreadyExists,
-  DocumentMalformed,
-  DocumentNotFound,
-  DocumentStorageFailed,
-  type CanvasRepositoryError,
   type CanvasRepositoryShape,
   type CanvasRepositoryMutation
 } from "../runtime/canvas-repository.js"

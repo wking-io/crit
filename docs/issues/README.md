@@ -10,6 +10,10 @@ unsandboxed archived-Frame iframes, missing cross-origin check on mutating HTTP
 routes, snapshot capture storing Vite's CSS-as-JS shim, and the `AddNote`
 width/height contradiction in `skills/crit/SKILL.md`.
 
+Resolved since: issue 011 (`Canvas.fromDocument` PR), issues 010 and 006 (the
+one-failure-vocabulary PR — 413 vs 400 is now decided by the error's `_tag`,
+never by message text).
+
 ## Correctness and robustness
 
 | # | Issue | Severity |

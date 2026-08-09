@@ -11,7 +11,7 @@ describe("Canvas lifecycle", () => {
         title: "Checkout iterations"
       })
 
-      const reopened = yield* Canvas.open(Canvas.export(created))
+      const reopened = Canvas.fromDocument(Canvas.export(created))
 
       expect(Canvas.summarize(reopened)).toEqual({
         id: "checkout-iterations",

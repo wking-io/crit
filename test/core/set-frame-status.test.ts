@@ -30,7 +30,7 @@ describe("Canvas SetFrameStatus command", () => {
           status: "ready-for-review"
         })
       )
-      const reopened = yield* Canvas.open(Canvas.export(canvas))
+      const reopened = Canvas.fromDocument(Canvas.export(canvas))
 
       expect(change).toEqual({
         commandCount: 1,

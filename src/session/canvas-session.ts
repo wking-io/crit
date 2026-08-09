@@ -12,6 +12,8 @@ import {
 import {
   Canvas,
   CanvasCommandFailed,
+  CanvasDocumentTooLarge,
+  CanvasUnavailable,
   type CanvasChange,
   type CanvasCommand,
   type CanvasDocument
@@ -23,10 +25,8 @@ import {
 } from "../runtime/agent-activity.js"
 import {
   CritClient,
-  CritClientCommandFailed,
-  CritClientInvalidDocument,
-  CritClientUnavailable,
-  type CritClientError
+  type CritClientError,
+  type CritClientSnapshotError
 } from "./crit-client.js"
 import {
   DraftJournal,
@@ -78,7 +78,7 @@ export interface CanvasSession {
   readonly discardLocalChanges: () => Effect.Effect<void, CritClientError>
   readonly snapshotFrame: (
     frameId: string
-  ) => Effect.Effect<CanvasDocument, CritClientError>
+  ) => Effect.Effect<CanvasDocument, CritClientSnapshotError>
   readonly refreshAgentActivity: () => Effect.Effect<boolean, CritClientError>
 }
 
@@ -88,15 +88,17 @@ export type CanvasSessionOptions = {
   readonly sessionId?: string
 }
 
-const invalidDocument = (canvasId: string, cause: unknown) =>
-  new CritClientInvalidDocument({
-    id: canvasId,
-    detail:
-      cause instanceof CanvasCommandFailed
-        ? cause.detail
-        : cause instanceof Error
-          ? cause.message
-          : String(cause)
+// Canvas.export fails only when the document outgrew the size limit (a real,
+// reportable condition); any other throw means the handle is foreign, which
+// stays a defect.
+const exportDocument = (canvas: Canvas): Effect.Effect<CanvasDocument, CanvasDocumentTooLarge> =>
+  Effect.suspend(() => {
+    try {
+      return Effect.succeed(Canvas.export(canvas))
+    } catch (cause) {
+      if (cause instanceof CanvasDocumentTooLarge) return Effect.fail(cause)
+      throw cause
+    }
   })
 
 type PendingBatch = {
@@ -157,10 +159,7 @@ const open = (
       }
     }
 
-    const exported = yield* Effect.try({
-      try: () => Canvas.export(canvas),
-      catch: (cause) => invalidDocument(canvasId, cause)
-    })
+    const exported = yield* exportDocument(canvas)
     const document = yield* SubscriptionRef.make(exported)
     const revision = yield* Ref.make(authoritative.revision)
     const mutation = yield* Ref.make(initialMutation)
@@ -193,10 +192,7 @@ const open = (
     const documentLock = yield* Semaphore.make(1)
     const refreshLock = yield* Semaphore.make(1)
 
-    const publishDocument = Effect.try({
-      try: () => Canvas.export(canvas),
-      catch: (cause) => invalidDocument(canvasId, cause)
-    }).pipe(
+    const publishDocument = exportDocument(canvas).pipe(
       Effect.flatMap((snapshot) => SubscriptionRef.set(document, snapshot))
     )
 
@@ -244,13 +240,10 @@ const open = (
               SubscriptionRef.update(state, (current): CanvasSessionState => ({
                 ...current,
                 saveStatus:
-                  cause instanceof CritClientCommandFailed
+                  cause instanceof CanvasCommandFailed
                     ? "conflict"
                     : "save-error",
-                detail:
-                  cause._tag === "CritClientNotFound"
-                      ? `Canvas not found: ${cause.id}`
-                      : cause.detail
+                detail: cause.message
               }))
             )
           )
@@ -260,10 +253,11 @@ const open = (
               pending = pending.filter((batch) => batch.mutation > throughMutation)
               const rebased = Canvas.fromDocument(saved)
               if (pending.length > 0) {
+                // A replay failure surfaces as the CanvasCommandFailed it is.
                 yield* Canvas.apply(
                   rebased,
                   ...pending.flatMap((batch) => batch.commands)
-                ).pipe(Effect.mapError((cause) => invalidDocument(canvasId, cause)))
+                )
               }
               CanvasInternals.adoptDocument(canvas, rebased)
               yield* Ref.set(revision, saved.revision)
@@ -384,9 +378,9 @@ const open = (
     const snapshotFrame = (frameId: string) =>
       Effect.gen(function*() {
         if (client.snapshot === undefined) {
-          return yield* new CritClientUnavailable({
+          return yield* new CanvasUnavailable({
             operation: "snapshot",
-            id: canvasId,
+            canvasId,
             detail: "This Crit client does not provide snapshot capture"
           })
         }
@@ -396,10 +390,11 @@ const open = (
           Effect.gen(function*() {
             const rebased = Canvas.fromDocument(saved)
             if (pending.length > 0) {
+              // A replay failure surfaces as the CanvasCommandFailed it is.
               yield* Canvas.apply(
                 rebased,
                 ...pending.flatMap((batch) => batch.commands)
-              ).pipe(Effect.mapError((cause) => invalidDocument(canvasId, cause)))
+              )
             }
             CanvasInternals.adoptDocument(canvas, rebased)
             yield* Ref.set(revision, saved.revision)
@@ -448,6 +443,7 @@ const open = (
         commands.length === 0
           ? Effect.fail(
               new CanvasCommandFailed({
+                canvasId,
                 reason: "invalid-command",
                 detail: "A Canvas Session dispatch requires at least one command"
               })
@@ -464,8 +460,9 @@ const open = (
                   Effect.mapError(
                     (cause) =>
                       new CanvasCommandFailed({
+                        canvasId,
                         reason: "apply-failed",
-                        detail: cause.detail
+                        detail: cause.message
                       })
                   )
                 )

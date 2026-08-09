@@ -1,11 +1,9 @@
 export {
   Canvas,
   CanvasChange,
-  CanvasCommandFailed,
   CanvasFrame,
   CanvasGeometry,
   CanvasNote,
-  CanvasDocumentTooLarge,
   CanvasDocument,
   FrameList,
   FrameNotFound,
@@ -13,11 +11,21 @@ export {
   NoteList,
   NoteNotFound,
   NoteSummary,
-  CanvasOpenFailed,
   CanvasSummary,
   MAX_CANVAS_DOCUMENT_BYTES,
   type Canvas as CanvasHandle
 } from "./canvas.js"
+export {
+  CanvasAlreadyExists,
+  CanvasCommandFailed,
+  CanvasCommandFailureReason,
+  CanvasDocumentTooLarge,
+  CanvasErrorSchema,
+  CanvasInvalidDocument,
+  CanvasNotFound,
+  CanvasUnavailable,
+  type CanvasError
+} from "./canvas-errors.js"
 export {
   AddNoteCommand,
   AddSnapshotFrameCommand,

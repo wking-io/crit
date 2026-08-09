@@ -8,6 +8,12 @@ import {
   FrameStatus,
   type CanvasCommand as CanvasCommandInput
 } from "./canvas-command.js"
+import {
+  CanvasCommandFailed,
+  CanvasDocumentTooLarge,
+  CanvasInvalidDocument,
+  type CanvasCommandFailureReason
+} from "./canvas-errors.js"
 
 const CanvasTypeId: unique symbol = Symbol.for("@riff-refine/crit/Canvas")
 const PositiveDimension = Schema.Finite.check(Schema.isGreaterThan(0))
@@ -95,53 +101,6 @@ export const CanvasChange = Schema.Struct({
   changedNoteIds: Schema.Array(Schema.String)
 })
 export type CanvasChange = typeof CanvasChange.Type
-
-export class CanvasOpenFailed extends Schema.TaggedError<CanvasOpenFailed>()(
-  "CanvasOpenFailed",
-  {
-    reason: Schema.Union([
-      Schema.Literal("invalid-envelope"),
-      Schema.Literal("invalid-document")
-    ]),
-    detail: Schema.String
-  }
-) {
-  override get message(): string {
-    return this.detail
-  }
-}
-
-export class CanvasDocumentTooLarge extends Schema.TaggedError<CanvasDocumentTooLarge>()(
-  "CanvasDocumentTooLarge",
-  {
-    actualBytes: Schema.Number,
-    maxBytes: Schema.Number
-  }
-) {
-  override get message(): string {
-    return `Canvas Document is ${this.actualBytes} bytes; maximum is ${this.maxBytes}`
-  }
-}
-
-export class CanvasCommandFailed extends Schema.TaggedError<CanvasCommandFailed>()(
-  "CanvasCommandFailed",
-  {
-    reason: Schema.Union([
-      Schema.Literal("invalid-command"),
-      Schema.Literal("duplicate-frame"),
-      Schema.Literal("frame-not-found"),
-      Schema.Literal("duplicate-note"),
-      Schema.Literal("note-not-found"),
-      Schema.Literal("note-conflict"),
-      Schema.Literal("snapshot-source-changed"),
-      Schema.Literal("snapshot-source-invalid"),
-      Schema.Literal("snapshot-frame-immutable"),
-      Schema.Literal("invalid-canvas"),
-      Schema.Literal("apply-failed")
-    ]),
-    detail: Schema.String
-  }
-) {}
 
 export class FrameNotFound extends Schema.TaggedError<FrameNotFound>()(
   "FrameNotFound",
@@ -271,20 +230,25 @@ const fromDocument = (document: CanvasDocument): Canvas => {
   })
 }
 
+// Opens untrusted bytes for the Canvas the caller expects. The size check
+// runs before decoding, when no id can be read from the input, so the caller
+// names the Canvas and every failure carries it.
 const open = (
+  canvasId: string,
   input: unknown
-): Effect.Effect<Canvas, CanvasOpenFailed | CanvasDocumentTooLarge> =>
+): Effect.Effect<Canvas, CanvasInvalidDocument | CanvasDocumentTooLarge> =>
   Effect.gen(function*() {
     const actualBytes = yield* Effect.try({
       try: () => encodedBytes(input),
       catch: (cause) =>
-        new CanvasOpenFailed({
-          reason: "invalid-envelope",
+        new CanvasInvalidDocument({
+          canvasId,
           detail: cause instanceof Error ? cause.message : String(cause)
         })
     })
     if (actualBytes > MAX_CANVAS_DOCUMENT_BYTES) {
       return yield* new CanvasDocumentTooLarge({
+        canvasId,
         actualBytes,
         maxBytes: MAX_CANVAS_DOCUMENT_BYTES
       })
@@ -293,8 +257,8 @@ const open = (
     const document = yield* Schema.decodeUnknownEffect(CanvasDocument)(input).pipe(
       Effect.mapError(
         (cause) =>
-          new CanvasOpenFailed({
-            reason: "invalid-envelope",
+          new CanvasInvalidDocument({
+            canvasId,
             detail: String(cause)
           })
       )
@@ -302,8 +266,8 @@ const open = (
     return yield* Effect.try({
       try: () => fromDocument(document),
       catch: (cause) =>
-        new CanvasOpenFailed({
-          reason: "invalid-document",
+        new CanvasInvalidDocument({
+          canvasId,
           detail: cause instanceof Error ? cause.message : String(cause)
         })
     })
@@ -314,6 +278,7 @@ const exportCanvas = (canvas: Canvas): CanvasDocument => {
   const actualBytes = encodedBytes(exported)
   if (actualBytes > MAX_CANVAS_DOCUMENT_BYTES) {
     throw new CanvasDocumentTooLarge({
+      canvasId: exported.id,
       actualBytes,
       maxBytes: MAX_CANVAS_DOCUMENT_BYTES
     })
@@ -398,11 +363,19 @@ const apply = (
   canvas: Canvas,
   ...commands: ReadonlyArray<CanvasCommandInput>
 ): Effect.Effect<CanvasChange, CanvasCommandFailed> =>
-  Effect.forEach(commands, (command) =>
+  Effect.suspend(() => {
+    // A handle that was not created by this module is a defect, not a failure.
+    const current = stateOf(canvas)
+    const commandFailed = (input: {
+      readonly reason: CanvasCommandFailureReason
+      readonly detail: string
+    }) => new CanvasCommandFailed({ canvasId: current.id, ...input })
+
+    return Effect.forEach(commands, (command) =>
     Schema.decodeUnknownEffect(CanvasCommandSchema)(command).pipe(
       Effect.mapError(
         (cause) =>
-          new CanvasCommandFailed({
+          commandFailed({
             reason: "invalid-command",
             detail: String(cause)
           })
@@ -412,7 +385,6 @@ const apply = (
     Effect.flatMap((decoded) =>
       Effect.try({
         try: () => {
-          const current = stateOf(canvas)
           const draft: CanvasState = {
             id: current.id,
             title: current.title,
@@ -431,7 +403,7 @@ const apply = (
           const frameAt = (id: string) => {
             const index = draft.frames.findIndex((frame) => frame.id === id)
             if (index < 0) {
-              throw new CanvasCommandFailed({
+              throw commandFailed({
                 reason: "frame-not-found",
                 detail: `Frame not found: ${id}`
               })
@@ -441,7 +413,7 @@ const apply = (
           const noteAt = (id: string) => {
             const index = draft.notes.findIndex((note) => note.id === id)
             if (index < 0) {
-              throw new CanvasCommandFailed({
+              throw commandFailed({
                 reason: "note-not-found",
                 detail: `Note not found: ${id}`
               })
@@ -455,13 +427,13 @@ const apply = (
                 draft.frames.some((frame) => frame.id === command.id) ||
                 draft.notes.some((note) => note.id === command.id)
               ) {
-                throw new CanvasCommandFailed({
+                throw commandFailed({
                   reason: "duplicate-frame",
                   detail: `Canvas item already exists: ${command.id}`
                 })
               }
               if (command.provenance.kind === "snapshot") {
-                throw new CanvasCommandFailed({
+                throw commandFailed({
                   reason: "snapshot-source-invalid",
                   detail: "Snapshot Frames must be created by AddSnapshotFrame"
                 })
@@ -491,7 +463,7 @@ const apply = (
                 draft.frames.some((frame) => frame.id === command.id) ||
                 draft.notes.some((note) => note.id === command.id)
               ) {
-                throw new CanvasCommandFailed({
+                throw commandFailed({
                   reason: "duplicate-frame",
                   detail: `Canvas item already exists: ${command.id}`
                 })
@@ -500,19 +472,19 @@ const apply = (
                 (frame) => frame.id === command.sourceFrameId
               )
               if (source === undefined || source.snapshot !== undefined) {
-                throw new CanvasCommandFailed({
+                throw commandFailed({
                   reason: "snapshot-source-invalid",
                   detail: `Snapshot source must be a live Frame: ${command.sourceFrameId}`
                 })
               }
               if (source.url !== command.expectedSourceUrl) {
-                throw new CanvasCommandFailed({
+                throw commandFailed({
                   reason: "snapshot-source-changed",
                   detail: `Frame ${command.sourceFrameId} changed URL while its snapshot was captured`
                 })
               }
               if (command.artifact.sourceUrl !== command.expectedSourceUrl) {
-                throw new CanvasCommandFailed({
+                throw commandFailed({
                   reason: "snapshot-source-invalid",
                   detail: "Snapshot artifact source URL does not match the captured Frame URL"
                 })
@@ -543,7 +515,7 @@ const apply = (
                 draft.frames.some((frame) => frame.id === command.id) ||
                 draft.notes.some((note) => note.id === command.id)
               ) {
-                throw new CanvasCommandFailed({
+                throw commandFailed({
                   reason: "duplicate-note",
                   detail: `Canvas item already exists: ${command.id}`
                 })
@@ -584,7 +556,7 @@ const apply = (
                       command.changes.status !== undefined ||
                       command.changes.provenance !== undefined)))
               ) {
-                throw new CanvasCommandFailed({
+                throw commandFailed({
                   reason: "snapshot-frame-immutable",
                   detail: `Snapshot Frame content is immutable: ${frame.id}`
                 })
@@ -594,7 +566,7 @@ const apply = (
                 command._tag === "UpdateFrame" &&
                 command.changes.provenance?.kind === "snapshot"
               ) {
-                throw new CanvasCommandFailed({
+                throw commandFailed({
                   reason: "snapshot-source-invalid",
                   detail: "Live Frames cannot use snapshot provenance"
                 })
@@ -616,7 +588,7 @@ const apply = (
                     (value) => value === undefined
                   )
                 ) {
-                  throw new CanvasCommandFailed({
+                  throw commandFailed({
                     reason: "invalid-command",
                     detail: `UpdateFrame requires at least one change: ${command.id}`
                   })
@@ -682,7 +654,7 @@ const apply = (
             const note = draft.notes[index]!
             if (command._tag === "UpdateNote") {
               if (note.text !== command.expectedText) {
-                throw new CanvasCommandFailed({
+                throw commandFailed({
                   reason: "note-conflict",
                   detail: `Note ${command.id} changed before this edit`
                 })
@@ -729,13 +701,14 @@ const apply = (
         catch: (cause) =>
           cause instanceof CanvasCommandFailed
             ? cause
-            : new CanvasCommandFailed({
+            : commandFailed({
                 reason: "apply-failed",
                 detail: cause instanceof Error ? cause.message : String(cause)
               })
       })
     )
   )
+  })
 
 export const Canvas = {
   create,

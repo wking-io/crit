@@ -1,12 +1,10 @@
 import { Effect, Schema } from "effect"
 
-import {
-  CritClientCommandFailed,
-  CritClientInvalidDocument,
-  CritClientNotFound,
-  CritClientUnavailable,
-  type CritClientError,
-  type CritClientShape
+import { CanvasUnavailable } from "../core/index.js"
+import type {
+  CritClientError,
+  CritClientShape,
+  CritClientSnapshotError
 } from "../session/crit-client.js"
 import {
   CritHttpErrorBody,
@@ -24,6 +22,8 @@ export interface HttpCritClientOptions {
   readonly fetch?: typeof globalThis.fetch
 }
 
+type Operation = "load" | "apply" | "snapshot" | "activity"
+
 const parseJson = (response: Response) =>
   Effect.tryPromise({
     try: () => response.json() as Promise<unknown>,
@@ -31,49 +31,48 @@ const parseJson = (response: Response) =>
       new Error(cause instanceof Error ? cause.message : "Invalid JSON response")
   })
 
+// The wire codec is the same schema the server encodes with, so errors arrive
+// as themselves. A RequestRejected means the transport refused a request this
+// client constructed — from the domain's point of view the adapter is broken,
+// which is what CanvasUnavailable says.
 const responseError = (
   response: Response,
   input: unknown,
-  operation: "load" | "apply" | "snapshot" | "activity",
+  operation: Operation,
   id: string
-): CritClientError => {
+): CritClientSnapshotError => {
   const parsed = Schema.decodeUnknownOption(CritHttpErrorBody)(input)
   if (parsed._tag === "Some") {
-    const body = parsed.value.error
-    if (body.code === "not-found") return new CritClientNotFound({ id })
-    if (body.code === "command-rejected") {
-      return new CritClientCommandFailed({
-        id,
-        reason: body.reason ?? "command-rejected",
-        detail: body.message
-      })
-    }
-    if (
-      body.code === "invalid-document" ||
-      body.code === "invalid-request"
-    ) {
-      return new CritClientInvalidDocument({ id, detail: body.message })
-    }
-    return new CritClientUnavailable({
-      operation,
-      id,
-      detail: body.message
-    })
+    const error = parsed.value.error
+    return error._tag === "RequestRejected"
+      ? new CanvasUnavailable({ operation, canvasId: id, detail: error.message })
+      : error
   }
-
-  return new CritClientUnavailable({
+  return new CanvasUnavailable({
     operation,
-    id,
+    canvasId: id,
     detail: `Crit HTTP adapter returned ${response.status}`
   })
 }
+
+// Snapshot capture failures on a load/apply/activity response would mean the
+// server answered a different question than was asked — unavailable is the
+// truthful domain-level description.
+const domainError = (
+  operation: Operation,
+  id: string,
+  error: CritClientSnapshotError
+): CritClientError =>
+  error._tag === "SnapshotCaptureFailed" || error._tag === "SnapshotStorageFailed"
+    ? new CanvasUnavailable({ operation, canvasId: id, detail: error.message })
+    : error
 
 const make = (options: HttpCritClientOptions = {}): CritClientShape => {
   const apiPath = options.apiPath ?? DEFAULT_CRIT_API_PATH
   const request = options.fetch ?? globalThis.fetch
 
   const execute = (
-    operation: "load" | "apply" | "snapshot" | "activity",
+    operation: Operation,
     id: string,
     init?: RequestInit,
     url = critCanvasUrl(apiPath, id)
@@ -81,9 +80,9 @@ const make = (options: HttpCritClientOptions = {}): CritClientShape => {
     Effect.tryPromise({
       try: () => request(url, init),
       catch: (cause) =>
-        new CritClientUnavailable({
+        new CanvasUnavailable({
           operation,
-          id,
+          canvasId: id,
           detail: cause instanceof Error ? cause.message : String(cause)
         })
     }).pipe(
@@ -91,9 +90,9 @@ const make = (options: HttpCritClientOptions = {}): CritClientShape => {
         parseJson(response).pipe(
           Effect.mapError(
             (cause) =>
-              new CritClientUnavailable({
+              new CanvasUnavailable({
                 operation,
-                id,
+                canvasId: id,
                 detail: cause.message
               })
           ),
@@ -107,13 +106,16 @@ const make = (options: HttpCritClientOptions = {}): CritClientShape => {
     )
 
   return {
-    load: (id) => execute("load", id),
+    load: (id) =>
+      execute("load", id).pipe(
+        Effect.mapError((cause) => domainError("load", id, cause))
+      ),
     apply: (id, commands) =>
       execute("apply", id, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(encodeApplyRequest(commands))
-      }),
+      }).pipe(Effect.mapError((cause) => domainError("apply", id, cause))),
     snapshot: (canvasId, frameId) =>
       execute("snapshot", canvasId, {
         method: "POST"
@@ -122,9 +124,9 @@ const make = (options: HttpCritClientOptions = {}): CritClientShape => {
       Effect.tryPromise({
         try: () => request(critCanvasActivityUrl(apiPath, canvasId)),
         catch: (cause) =>
-          new CritClientUnavailable({
+          new CanvasUnavailable({
             operation: "activity",
-            id: canvasId,
+            canvasId,
             detail: cause instanceof Error ? cause.message : String(cause)
           })
       }).pipe(
@@ -132,9 +134,9 @@ const make = (options: HttpCritClientOptions = {}): CritClientShape => {
           parseJson(response).pipe(
             Effect.mapError(
               (cause) =>
-                new CritClientUnavailable({
+                new CanvasUnavailable({
                   operation: "activity",
-                  id: canvasId,
+                  canvasId,
                   detail: cause.message
                 })
             ),
@@ -142,7 +144,11 @@ const make = (options: HttpCritClientOptions = {}): CritClientShape => {
               response.ok
                 ? decodeAgentActivity(body, canvasId)
                 : Effect.fail(
-                    responseError(response, body, "activity", canvasId)
+                    domainError(
+                      "activity",
+                      canvasId,
+                      responseError(response, body, "activity", canvasId)
+                    )
                   )
             )
           )

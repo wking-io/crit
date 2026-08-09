@@ -41,7 +41,7 @@ describe("CritRuntime.updateCanvas", () => {
         ]
       })
       const persisted = yield* runtime.readCanvas("review")
-      const opened = yield* Canvas.open(persisted)
+      const opened = Canvas.fromDocument(persisted)
       const rebased = yield* runtime.updateCanvas({
           id: "review",
           commands: [
@@ -118,7 +118,7 @@ describe("CritRuntime.updateCanvas", () => {
         })
       )
       const persisted = yield* runtime.readCanvas("review")
-      const opened = yield* Canvas.open(persisted)
+      const opened = Canvas.fromDocument(persisted)
 
       expect(commandFailure).toMatchObject({
         _tag: "CanvasCommandFailed",

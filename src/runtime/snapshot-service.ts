@@ -5,14 +5,12 @@ import {
   CanvasCommand,
   CanvasCommandFailed,
   type CanvasDocument,
-  type CanvasDocumentTooLarge
+  type CanvasDocumentTooLarge,
+  type CanvasInvalidDocument,
+  type CanvasNotFound,
+  type CanvasUnavailable
 } from "../core/index.js"
-import {
-  CanvasRepository,
-  type DocumentMalformed,
-  type DocumentNotFound,
-  type DocumentStorageFailed
-} from "./canvas-repository.js"
+import { CanvasRepository } from "./canvas-repository.js"
 import {
   SnapshotArchive,
   snapshotArtifactUrl,
@@ -22,9 +20,9 @@ import {
 } from "./snapshot-archive.js"
 
 export type SnapshotFrameError =
-  | DocumentNotFound
-  | DocumentMalformed
-  | DocumentStorageFailed
+  | CanvasNotFound
+  | CanvasInvalidDocument
+  | CanvasUnavailable
   | CanvasCommandFailed
   | CanvasDocumentTooLarge
   | SnapshotCaptureFailed
@@ -59,6 +57,7 @@ export const SnapshotServiceLive = Layer.effect(
             Effect.mapError(
               () =>
                 new CanvasCommandFailed({
+                  canvasId,
                   reason: "frame-not-found",
                   detail: `Frame not found: ${frameId}`
                 })
@@ -66,6 +65,7 @@ export const SnapshotServiceLive = Layer.effect(
           )
           if (source.snapshot !== undefined) {
             return yield* new CanvasCommandFailed({
+              canvasId,
               reason: "snapshot-source-invalid",
               detail: `Frame is already a snapshot: ${frameId}`
             })

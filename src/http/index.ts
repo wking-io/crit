@@ -1,7 +1,9 @@
 export {
   CritHttpErrorBody,
-  CritHttpErrorCode,
+  CritHttpErrorSchema,
   CritHttpApplyRequest,
+  RequestRejected,
+  type CritHttpError,
   DEFAULT_CRIT_API_PATH,
   MAX_CRIT_HTTP_BODY_BYTES,
   critCanvasUrl,

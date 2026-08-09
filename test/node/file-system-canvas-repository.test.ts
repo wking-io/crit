@@ -29,7 +29,7 @@ describe("FileSystemCanvasRepository", () => {
         ])
       )
 
-      expect(failure).toMatchObject({ _tag: "DocumentNotFound", id: "missing" })
+      expect(failure).toMatchObject({ _tag: "CanvasNotFound", canvasId: "missing" })
     }).pipe(Effect.provide(FileSystemCanvasRepository.layer({ root }))))
 
   it.effect("serializes semantic commands from concurrent local writers", () =>
@@ -63,7 +63,7 @@ describe("FileSystemCanvasRepository", () => {
       )
 
       const loaded = yield* store.load("checkout-iterations")
-      const canvas = yield* Canvas.open(loaded)
+      const canvas = Canvas.fromDocument(loaded)
 
       expect(loaded.revision).toBe(2)
       expect(Canvas.listFrames(canvas).map((frame) => frame.id).sort()).toEqual([
