@@ -44,6 +44,14 @@ const make = (
   const targetFor = (canvasId: string) =>
     path.join(directory, `${encodeURIComponent(canvasId)}.json`)
 
+  const removeFile = async (canvasId: string) => {
+    try {
+      await unlink(targetFor(canvasId))
+    } catch (cause) {
+      if (!isNodeError(cause, "ENOENT")) throw cause
+    }
+  }
+
   const read = (canvasId: string) =>
     Effect.tryPromise({
       try: async () => {
@@ -57,12 +65,14 @@ const make = (
         const decoded = Schema.decodeUnknownSync(AgentActivityStatus)(
           JSON.parse(source) as unknown
         )
-        return {
-          ...decoded,
-          active:
-            decoded.activeUntil !== null &&
-            Date.parse(decoded.activeUntil) > now().getTime()
+        const active =
+          decoded.activeUntil !== null &&
+          Date.parse(decoded.activeUntil) > now().getTime()
+        if (!active) {
+          await removeFile(canvasId)
+          return inactive(canvasId)
         }
+        return { ...decoded, active: true }
       },
       catch: (cause) => failure("read", canvasId, cause)
     })
@@ -113,7 +123,14 @@ const make = (
   return {
     read,
     signal,
-    clear: (canvasId) => write(inactive(canvasId))
+    clear: (canvasId) =>
+      Effect.tryPromise({
+        try: async () => {
+          await removeFile(canvasId)
+          return inactive(canvasId)
+        },
+        catch: (cause) => failure("clear", canvasId, cause)
+      })
   }
 }
 
@@ -124,4 +141,3 @@ export const FileSystemAgentActivity = { make, layer } as const
 
 const isNodeError = (cause: unknown, code: string) =>
   cause instanceof Error && "code" in cause && cause.code === code
-
