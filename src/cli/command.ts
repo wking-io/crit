@@ -57,7 +57,9 @@ const canvasView = (document: CanvasDocument) => {
   return {
     canvas: Canvas.summarize(canvas),
     frames: Canvas.listFrames(canvas),
-    notes: Canvas.listNotes(canvas)
+    notes: Canvas.listNotes(canvas),
+    owner: document.owner,
+    comments: Canvas.listCommentThreads(canvas)
   }
 }
 
@@ -306,14 +308,16 @@ const applyCommand = Command.make(
             command: "apply",
             mutation,
             frames: updated.frames,
-            notes: updated.notes
+            notes: updated.notes,
+            owner: updated.owner,
+            comments: updated.comments
           })
         : `Applied ${decoded.length} command(s) to "${updated.canvas.title}" at revision ${mutation.revision}.`
       yield* writeStdout(`${output}\n`)
     })
 ).pipe(
   Command.withDescription(
-    "Atomically apply semantic Frame and Note commands"
+    "Atomically apply semantic Frame, Note, and Comment commands"
   )
 )
 
@@ -458,7 +462,7 @@ const openCommand = Command.make(
         : `Canvas "${view.canvas.title}" (${view.canvas.id}), revision ${view.canvas.revision}, ${view.canvas.frameCount} Frame(s).`
       yield* writeStdout(`${output}\n`)
     })
-).pipe(Command.withDescription("Read a Crit Canvas and its Frames"))
+).pipe(Command.withDescription("Read a Crit Canvas, Frames, Notes, and Comments"))
 
 const snapshotCommand = Command.make(
   "snapshot",

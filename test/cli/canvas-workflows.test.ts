@@ -179,7 +179,9 @@ describe("crit Canvas workflows", () => {
         command: "open",
         canvas: added.mutation.canvas,
         frames: added.frames,
-        notes: []
+        notes: [],
+        owner: null,
+        comments: []
       })
       expect(snapshotted).toMatchObject({
         schemaVersion: 1,
@@ -283,7 +285,20 @@ describe("crit Canvas workflows", () => {
           status: "changes-requested",
           provenance: { kind: "agent", sourceId: "codex" }
         },
-        { _tag: "RemoveFrame", id: "discarded" }
+        { _tag: "RemoveFrame", id: "discarded" },
+        {
+          _tag: "AddCommentThread",
+          id: "thread-agent-1",
+          frameId: "candidate",
+          anchor: { kind: "frame", xRatio: 0.5, yRatio: 0.5 },
+          opening: {
+            id: "comment-agent-1",
+            body: "Check this state",
+            author: { id: "git:agent", name: "Agent User" },
+            createdAt: "2026-08-09T12:00:00.000Z",
+            editedAt: null
+          }
+        }
       ])
 
       yield* runCrit([
@@ -299,7 +314,7 @@ describe("crit Canvas workflows", () => {
         command: "apply",
         mutation: {
           revision: 1,
-          change: { commandCount: 7 },
+          change: { commandCount: 8 },
           canvas: {
             id: "review",
             frameCount: 1,
@@ -323,7 +338,15 @@ describe("crit Canvas workflows", () => {
             geometry: { x: 120, y: 240, width: 1440, height: 900 }
           }
         ],
-        notes: []
+        notes: [],
+        owner: { id: "git:agent", name: "Agent User" },
+        comments: [{
+          id: "thread-agent-1",
+          frameId: "candidate",
+          opening: { body: "Check this state" },
+          replies: [],
+          resolvedAt: null
+        }]
       })
     }).pipe(Effect.provide(cliLayer))
   })

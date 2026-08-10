@@ -53,6 +53,21 @@ array to `apply`:
 - `UpdateNote`: `id`, `expectedText`, and replacement `text`.
 - `MoveNote`, `ResizeNote`, `AttachNote`, `DetachNote`, and `RemoveNote`.
 - `BringNoteToFront` and `SendNoteToBack`: `id`.
+- `AddCommentThread`: `id`, `frameId`, an `anchor`, and an opening message.
+- `ReplyToCommentThread`: thread `id` and a flat `reply` message.
+- `EditComment`: thread `id`, `commentId`, `actorId`, `expectedBody`, replacement
+  `body`, and `editedAt`.
+- `SetCommentThreadResolved`: thread `id`, `actor`, `resolved`, and `at`.
+- `UpdateCommentAnchor`: thread `id`, `actorId`, and replacement `anchor`.
+
+Before writing Comments, request the current identity from
+`GET /__crit/api/identity` on the local Crit host. `open --json` includes the
+Canvas Owner plus active and resolved Comment threads. Use a normalized frame
+anchor when an agent does not have an element anchor from the browser:
+
+```json
+[{"_tag":"AddCommentThread","id":"thread-agent-1","frameId":"candidate","anchor":{"kind":"frame","xRatio":0.5,"yRatio":0.5},"opening":{"id":"comment-agent-1","body":"Check this state","author":{"id":"git:<hash>","name":"Current Git User"},"createdAt":"2026-08-09T12:00:00.000Z","editedAt":null}}]
+```
 
 ## Editing rules
 
@@ -70,6 +85,13 @@ array to `apply`:
   discovery declaration needs to change; sync never deletes absent Frames.
 - Attach Notes to their Frame when they should move together; detaching preserves
   their Canvas position.
+- Use Comments for feedback on a specific live Frame location or element. Use
+  Notes for general Canvas context. Archived snapshot Frames reject Comments.
+- Preserve the Git-derived Comment author ID and name reported by Crit. Never
+  impersonate a different author. Replies are flat; do not model nested replies.
+- Only edit a Comment when its author ID matches the current actor. Only the
+  Canvas Owner or opening Comment Author may resolve, reopen, or re-anchor a
+  thread.
 - Ask before replacing or discarding user-authored Canvas content.
 - Use `ready-for-review` when an implementation is complete and waiting for a
   person to assess it; use `approved` only after that assessment.

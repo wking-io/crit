@@ -157,10 +157,20 @@ All commands accept `--json` for machine-readable output where applicable.
 The command schema includes Frame operations (`AddFrame`, `UpdateFrame`,
 `SetFrameStatus`, `MoveFrame`, `ResizeFrame`, `RemoveFrame`) and Note operations
 (`AddNote`, `UpdateNote`, `MoveNote`, `ResizeNote`, `AttachNote`, `DetachNote`,
-`RemoveNote`). Frames and Notes also expose `Bring…ToFront` and `Send…ToBack`
+`RemoveNote`). Comment operations are `AddCommentThread`,
+`ReplyToCommentThread`, `EditComment`, `SetCommentThreadResolved`, and
+`UpdateCommentAnchor`. Frames and Notes also expose `Bring…ToFront` and `Send…ToBack`
 commands against one shared stacking order. Related commands commit as one batch. Per-Canvas filesystem locks
 serialize local writers against the latest revision, so unrelated agent and
 browser edits merge without manual revision wiring.
+
+Agents leave Comments through the same `apply` surface. Use the Git committer
+identity returned by `GET /__crit/api/identity` on the local Crit host for
+`author` / `actor` fields; do not invent another person's identity. `crit open
+<canvas> --json` returns the Canvas Owner and full active and resolved thread
+history. Frame-coordinate anchors work for every live Frame, while element
+anchors are created by the instrumented browser UI and may be reused or
+re-anchored by their owner. Archived snapshot Frames reject Comments.
 
 Canvas Documents live under `.crit/canvases`. Use Crit commands and interfaces
 instead of editing those files directly.
