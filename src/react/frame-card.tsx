@@ -33,6 +33,7 @@ import {
   CanvasSelection,
   type ResizeHandlePosition
 } from "./canvas-selection.js"
+import { CanvasCommentPin } from "./canvas-comment-pin.js"
 import {
   CanvasHelpPanel,
   NO_HELP_HOTKEY,
@@ -40,13 +41,6 @@ import {
 } from "./canvas-help.js"
 import {
   FRAME_STATUSES,
-  IconEditTitle,
-  IconCommentPin,
-  IconFullscreen,
-  IconMinimize,
-  IconOpenExternal,
-  IconSnapshot,
-  IconTrash,
   STATUS_PILL_HEIGHT,
   STATUS_PILL_MOTION,
   STATUS_PILL_STEP,
@@ -54,6 +48,7 @@ import {
   frameStatus,
   measureStatusPillWidth
 } from "./frame-chrome.js"
+import { Glyph } from "./glyph.js"
 
 export type FrameToolbarMode = "full" | "compact" | "minimal"
 export type FrameChromeAction =
@@ -106,6 +101,17 @@ export const frameToolbarMode = (
 }
 
 export const frameUiScale = (zoom: number) => canvasUiScale(zoom)
+
+export const statusFanProjection = (
+  zoom: number,
+  screenFrameGap: number
+) => {
+  const scale = frameUiScale(zoom)
+  return {
+    scale,
+    frameGap: screenFrameGap * scale
+  }
+}
 
 export interface FrameChromeMetrics {
   readonly screenHeight: number
@@ -191,6 +197,7 @@ export function FrameCard({
   zoom,
   commentMode,
   commentThreads,
+  openCommentId,
   onBringToFront,
   onFitContent,
   onMove,
@@ -218,6 +225,7 @@ export function FrameCard({
   readonly zoom: number
   readonly commentMode: boolean
   readonly commentThreads: ReadonlyArray<CanvasCommentThread>
+  readonly openCommentId?: string
   readonly onBringToFront: () => void
   readonly onFitContent: (height: number) => void
   readonly onMove: (event: ReactPointerEvent, item: CanvasFrame) => void
@@ -229,8 +237,8 @@ export function FrameCard({
   ) => void
   readonly onSelect: () => void
   readonly onInputIntent: (intent: FrameInputIntent) => void
-  readonly onCommentAnchor: (anchor: CommentAnchor, point: { readonly x: number; readonly y: number }) => void
-  readonly onOpenComment: (id: string, point: { readonly x: number; readonly y: number }) => void
+  readonly onCommentAnchor: (anchor: CommentAnchor) => void
+  readonly onOpenComment: (id: string) => void
   readonly onSnapshot?: () => Effect.Effect<unknown, unknown>
   readonly onSnapshotError: (cause: unknown) => void
   readonly onSendToBack: () => void
@@ -266,7 +274,6 @@ export function FrameCard({
     frameChrome
   )
   const status = frameStatus(frame.status)
-  const StatusIcon = status.icon
   const availableStatuses = FRAME_STATUSES.filter(
     (option) => option.id !== status.id
   )
@@ -282,12 +289,14 @@ export function FrameCard({
     STATUS_PILL_MOTION.frameGap +
     Math.max(0, rotatedBottomHalfHeight - STATUS_PILL_HEIGHT / 2)
   const uiScale = frameUiScale(zoom)
+  const statusFan = statusFanProjection(zoom, statusFrameGap)
+  const statusVariable = `--crit-frame-status-${frame.status}`
   const frameStyle = {
     ...canvasItemStyle(geometry, frame.zIndex),
     "--crit-ui": uiScale,
-    "--frame-ink": status.ink,
-    "--frame-shell": status.shell,
-    "--frame-stroke": status.stroke
+    "--frame-ink": `var(${statusVariable}-ink, ${status.ink})`,
+    "--frame-shell": `var(${statusVariable}-shell, ${status.shell})`,
+    "--frame-stroke": `var(${statusVariable}-stroke, ${status.stroke})`
   } as CSSProperties
 
   const measureContentHeight = useCallback((force = false) => {
@@ -400,19 +409,23 @@ export function FrameCard({
       frameElement: iframe,
       onEvent: (event) => {
         if (event.type === "ready") setCommentBridgeReady(true)
-        else if (event.type === "select") onCommentAnchorRef.current(event.anchor, { x: event.clientX, y: event.clientY })
-        else onOpenCommentRef.current(event.id, { x: event.clientX, y: event.clientY })
+        else if (event.type === "select") onCommentAnchorRef.current(event.anchor)
+        else onOpenCommentRef.current(event.id)
       }
     })
     commentBridgeRef.current = bridge
+    // Probe immediately in case the iframe's initial ready event fired before
+    // this effect subscribed. The bridge acknowledges configure with ready.
+    bridge.configure({ enabled: false, color: status.ink, pins: [] })
     return () => {
       bridge.disconnect()
       if (commentBridgeRef.current === bridge) commentBridgeRef.current = null
     }
-  }, [frame.snapshot, frame.url])
+  }, [frame.snapshot, frame.url, status.ink])
   useEffect(() => {
     if (!commentBridgeReady) return
     commentBridgeRef.current?.configure({
+      ...(openCommentId === undefined ? {} : { activeId: openCommentId }),
       enabled: commentMode,
       color: status.ink,
       pins: commentThreads.flatMap((thread) =>
@@ -421,7 +434,7 @@ export function FrameCard({
           : []
       )
     })
-  }, [commentBridgeReady, commentMode, commentThreads, status.ink])
+  }, [commentBridgeReady, commentMode, commentThreads, openCommentId, status.ink])
   const takeSnapshot = () => {
     if (onSnapshot === undefined || snapshotting) return
     setSnapshotting(true)
@@ -469,7 +482,8 @@ export function FrameCard({
           onPointerDown={(event) => event.stopPropagation()}
           role="menu"
           style={{
-            bottom: `calc(100% + ${statusFrameGap * uiScale}px)`,
+            ["--crit-status-ui" as string]: statusFan.scale,
+            bottom: `calc(100% + ${statusFan.frameGap}px)`,
             pointerEvents: statusMenuOpen ? "all" : "none"
           }}
         >
@@ -482,10 +496,9 @@ export function FrameCard({
                   finalY,
                   finalRotate
                 }) => {
-                  const OptionIcon = option.icon
                   const startY =
-                    (distanceFromFrame * STATUS_PILL_STEP +
-                    STATUS_PILL_MOTION.originOffset) * uiScale
+                    distanceFromFrame * STATUS_PILL_STEP +
+                    STATUS_PILL_MOTION.originOffset
                   const selectStatus = () => {
                     if (option.id === "archived") takeSnapshot()
                     else onStatus(option.id)
@@ -527,8 +540,8 @@ export function FrameCard({
                       animate={{
                         opacity: 1,
                         scale: 1,
-                        x: finalX * uiScale,
-                        y: finalY * uiScale,
+                        x: finalX,
+                        y: finalY,
                         rotate: [0, finalRotate]
                       }}
                       exit={{
@@ -543,7 +556,7 @@ export function FrameCard({
                       }}
                       type="button"
                     >
-                      <OptionIcon />
+                      <Glyph name={option.glyph} />
                       <span>{option.label}</span>
                     </motion.button>
                   )
@@ -552,7 +565,8 @@ export function FrameCard({
           </AnimatePresence>
         </div>
       ) : null}
-      <header
+      <div className="crit-frame__surface">
+        <header
         className="crit-frame__chrome"
         {...helpTarget({
           name: "Move frame",
@@ -581,32 +595,67 @@ export function FrameCard({
             onPointerDown={(event) => event.stopPropagation()}
             type="button"
           >
-            <StatusIcon />
+            <Glyph name={status.glyph} />
           </button>
           {titleVisible ? (
-            <span className="crit-frame__title-mask">
+            <span
+              className="crit-frame__title-mask"
+              data-editing={titleEditing || undefined}
+              title={titleEditing ? undefined : `${shortId}: ${frame.title}`}
+            >
               {titleEditing ? (
-                <input
-                  aria-label="Frame title"
-                  autoFocus
-                  {...helpTarget({
-                    name: "Frame title",
-                    hotkey: "Enter · Esc",
-                    description: "Rename the frame. Press Enter to save or Escape to cancel."
-                  })}
-                  onBlur={commitTitle}
-                  onChange={(event) => setTitleDraft(event.currentTarget.value)}
-                  onKeyDown={(event) => {
-                    event.stopPropagation()
-                    if (event.key === "Enter") commitTitle()
-                    if (event.key === "Escape") {
-                      setTitleDraft(frame.title)
-                      setTitleEditing(false)
-                    }
+                <div
+                  className="crit-frame__title-editor"
+                  onBlur={(event) => {
+                    const nextFocus = event.relatedTarget
+                    if (
+                      nextFocus instanceof Node &&
+                      event.currentTarget.contains(nextFocus)
+                    ) return
+                    commitTitle()
                   }}
                   onPointerDown={(event) => event.stopPropagation()}
-                  value={titleDraft}
-                />
+                >
+                  <span className="crit-frame__title-prefix">{shortId}:</span>
+                  <span
+                    className="crit-frame__title-input-sizer"
+                    data-value={titleDraft || " "}
+                  >
+                    <input
+                      aria-label="Frame title"
+                      autoComplete="off"
+                      autoFocus
+                      spellCheck={false}
+                      {...helpTarget({
+                        name: "Frame title",
+                        hotkey: "Enter · Esc",
+                        description: "Rename the frame. Press Enter to save or Escape to cancel."
+                      })}
+                      onChange={(event) => setTitleDraft(event.currentTarget.value)}
+                      onKeyDown={(event) => {
+                        event.stopPropagation()
+                        if (event.key === "Enter") {
+                          event.preventDefault()
+                          commitTitle()
+                        }
+                        if (event.key === "Escape") {
+                          event.preventDefault()
+                          setTitleDraft(frame.title)
+                          setTitleEditing(false)
+                        }
+                      }}
+                      value={titleDraft}
+                    />
+                  </span>
+                  <button
+                    aria-label="Save frame title"
+                    className="crit-frame__title-save"
+                    onClick={commitTitle}
+                    type="button"
+                  >
+                    <Glyph name="save" />
+                  </button>
+                </div>
               ) : (
                 <button
                   aria-label={`Edit frame title: ${frame.title}`}
@@ -624,7 +673,7 @@ export function FrameCard({
                     <strong>{shortId}: {frame.title}</strong>
                     <strong>{status.label}</strong>
                   </span>
-                  <IconEditTitle className="crit-frame__title-edit-icon" />
+                  <Glyph className="crit-frame__title-edit-icon" name="edit" />
                 </button>
               )}
             </span>
@@ -645,7 +694,7 @@ export function FrameCard({
                 onClick={takeSnapshot}
                 type="button"
               >
-                <IconSnapshot />
+                <Glyph name="snapshot" />
               </button>
             ) : null}
             {actions.open ? <a
@@ -660,7 +709,7 @@ export function FrameCard({
               rel="noreferrer"
               target="_blank"
             >
-              <IconOpenExternal />
+              <Glyph name="openExternal" />
             </a> : null}
             {actions.fullscreen ? <button
               aria-label={fullscreen ? `Collapse ${frame.title} to canvas` : `Enter ${frame.title} fullscreen`}
@@ -675,7 +724,7 @@ export function FrameCard({
               onClick={toggleFullscreen}
               type="button"
             >
-              {fullscreen ? <IconMinimize /> : <IconFullscreen />}
+              <Glyph name={fullscreen ? "minimize" : "fullscreen"} />
             </button> : null}
             {actions.delete ? <button
               aria-keyshortcuts="Backspace"
@@ -688,10 +737,10 @@ export function FrameCard({
               })}
               onClick={onRemove}
               type="button"
-            ><IconTrash /></button> : null}
+            ><Glyph name="trash" /></button> : null}
         </div>
-      </header>
-      <div className="crit-frame__viewport">
+        </header>
+        <div className="crit-frame__viewport">
         {iframeVisible ? (
           <iframe
             allow={iframeAllow}
@@ -719,19 +768,15 @@ export function FrameCard({
           .filter((thread) => thread.anchor.kind === "frame")
           .map((thread) => {
             if (thread.anchor.kind !== "frame") return null
-            return <button
-              aria-label={`Open comment by ${thread.opening.author.name}`}
-              className="crit-comment-pin"
+            return <CanvasCommentPin
+              active={openCommentId === thread.id}
+              authorName={thread.opening.author.name}
+              color={status.ink}
               key={thread.id}
-              onClick={(event) => {
-                event.preventDefault()
-                event.stopPropagation()
-                onOpenComment(thread.id, { x: event.clientX, y: event.clientY })
-              }}
-              onPointerDown={(event) => event.stopPropagation()}
-              style={{ color: status.ink, left: `${thread.anchor.xRatio * 100}%`, top: `${thread.anchor.yRatio * 100}%` }}
-              type="button"
-            ><IconCommentPin /></button>
+              onOpen={() => onOpenComment(thread.id)}
+              xRatio={thread.anchor.xRatio}
+              yRatio={thread.anchor.yRatio}
+            />
           }) : null}
         {commentMode && frame.snapshot === undefined && !commentBridgeReady ? (
           <button
@@ -743,13 +788,14 @@ export function FrameCard({
                 kind: "frame",
                 xRatio: Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width)),
                 yRatio: Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height))
-              }, { x: event.clientX, y: event.clientY })
+              })
             }}
             onContextMenu={(event) => event.preventDefault()}
             onPointerDown={(event) => event.stopPropagation()}
             type="button"
           />
         ) : null}
+        </div>
       </div>
       {selected ? (
         <CanvasSelection

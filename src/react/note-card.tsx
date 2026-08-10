@@ -16,6 +16,7 @@ import {
   type ResizeHandlePosition
 } from "./canvas-selection.js"
 import { frameStatus } from "./frame-chrome.js"
+import { Glyph } from "./glyph.js"
 import { OrderControls } from "./order-controls.js"
 
 export function NoteCard({
@@ -85,7 +86,7 @@ export function NoteCard({
             onClick={onRemove}
             onPointerDown={(event) => event.stopPropagation()}
             type="button"
-          >×</button>
+          ><Glyph name="trash" /></button>
         </span>
       </header>
       <textarea

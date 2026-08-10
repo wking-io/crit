@@ -41,6 +41,13 @@ export {
 } from "../session/draft-journal.js"
 export { Crit, type CritProps } from "./crit.js"
 export {
+  Glyph,
+  GlyphProvider,
+  glyphNames,
+  type GlyphName,
+  type GlyphProps
+} from "./glyph.js"
+export {
   DEFAULT_FRAME_CHROME_SETTINGS,
   type FrameChromeSettings
 } from "./frame-card.js"

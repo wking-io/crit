@@ -3,11 +3,13 @@ import {
   useCallback,
   useEffect,
   useRef,
-  useState
+  useState,
+  type ReactNode
 } from "react"
 import { createPortal } from "react-dom"
 
 import { NO_HELP_HOTKEY, helpTarget } from "./canvas-help.js"
+import { Glyph } from "./glyph.js"
 
 export type ContextMenuPosition = {
   readonly x: number
@@ -16,14 +18,14 @@ export type ContextMenuPosition = {
 
 export type ContextMenuActionItem =
   | {
-      readonly detail?: string
+      readonly detail?: ReactNode
       readonly help: string
       readonly label: string
       readonly onSelect: () => void
       readonly tone?: "danger"
     }
   | {
-      readonly detail?: string
+      readonly detail?: ReactNode
       readonly help: string
       readonly href: string
       readonly label: string
@@ -94,11 +96,13 @@ function ContextMenuAction({
 
 export function CritContextMenu({
   ariaLabel,
+  inline = false,
   items,
   onClose,
   position
 }: {
   readonly ariaLabel: string
+  readonly inline?: boolean
   readonly items: ReadonlyArray<ContextMenuItem>
   readonly onClose: () => void
   readonly position: ContextMenuPosition | null
@@ -134,7 +138,7 @@ export function CritContextMenu({
     setSubmenu({
       items: item.items,
       label: item.label,
-      position: {
+      position: inline ? { x: 0, y: 0 } : {
         x: opensRight ? rect.right + 4 : rect.left - menuWidth - 4,
         y: Math.max(8, Math.min(rect.top, window.innerHeight - submenuHeight - 8))
       }
@@ -167,10 +171,10 @@ export function CritContextMenu({
   }, [close, position])
 
   useEffect(() => {
-    if (position !== null) {
+    if (position !== null && !inline) {
       menuRef.current?.querySelector<HTMLElement>("[role=menuitem]")?.focus()
     }
-  }, [position])
+  }, [inline, position])
 
   if (position === null || typeof document === "undefined") return null
   const menuWidth = 208
@@ -178,11 +182,12 @@ export function CritContextMenu({
   const left = Math.max(8, Math.min(position.x, window.innerWidth - menuWidth - 8))
   const top = Math.max(8, Math.min(position.y, window.innerHeight - menuHeight - 8))
 
-  return createPortal(
+  const content = (
     <>
       <div
         aria-label={ariaLabel}
         className="crit-context-menu"
+        data-inline={inline || undefined}
         onContextMenu={(event) => {
           event.preventDefault()
           event.stopPropagation()
@@ -190,7 +195,7 @@ export function CritContextMenu({
         onPointerDown={(event) => event.stopPropagation()}
         ref={menuRef}
         role="menu"
-        style={{ left, top }}
+        style={inline ? undefined : { left, top }}
       >
         {items.map((item) =>
           "items" in item ? (
@@ -219,7 +224,7 @@ export function CritContextMenu({
               type="button"
             >
               <span>{item.label}</span>
-              <span aria-hidden="true" className="crit-context-menu__arrow">›</span>
+              <span aria-hidden="true" className="crit-context-menu__arrow"><Glyph name="chevronRight" /></span>
             </button>
           ) : (
             <ContextMenuAction
@@ -235,6 +240,7 @@ export function CritContextMenu({
         <div
           aria-label={submenu.label}
           className="crit-context-menu crit-context-menu--submenu"
+          data-inline={inline || undefined}
           onContextMenu={(event) => event.preventDefault()}
           onKeyDown={(event) => {
             if (event.key === "ArrowLeft") {
@@ -248,7 +254,7 @@ export function CritContextMenu({
           onPointerDown={(event) => event.stopPropagation()}
           ref={submenuRef}
           role="menu"
-          style={{ left: submenu.position.x, top: submenu.position.y }}
+          style={inline ? undefined : { left: submenu.position.x, top: submenu.position.y }}
         >
           {submenu.items.map((item) => (
             <ContextMenuAction
@@ -259,7 +265,9 @@ export function CritContextMenu({
           ))}
         </div>
       )}
-    </>,
-    document.body
+    </>
   )
+  return inline
+    ? <div className="crit-context-menu-cluster">{content}</div>
+    : createPortal(content, document.body)
 }

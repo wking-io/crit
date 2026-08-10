@@ -34,6 +34,12 @@ import {
   CanvasHelpPanel,
   CanvasHelpSurface
 } from "./canvas-help.js"
+import { GlyphProvider } from "./glyph.js"
+import {
+  AgentActivityIndicator,
+  CanvasSaveIndicator,
+  CritBoundaryMessage
+} from "./canvas-feedback.js"
 
 const rootStyle: CSSProperties = {
   background: "oklch(98.5% 0 none)",
@@ -46,19 +52,6 @@ const rootStyle: CSSProperties = {
   overscrollBehaviorX: "none",
   position: "relative",
   width: "100%"
-}
-
-const messageStyle: CSSProperties = {
-  alignItems: "center",
-  background: "oklch(98.5% 0 none)",
-  color: "#68655e",
-  display: "flex",
-  font: '500 12px/1.7 "JetBrains Mono", ui-monospace, monospace',
-  height: "100%",
-  justifyContent: "center",
-  minHeight: 420,
-  padding: 24,
-  textAlign: "center"
 }
 
 const classes = (...values: ReadonlyArray<string | undefined>) =>
@@ -271,25 +264,33 @@ export function Crit({
 
   if (error !== null) {
     return (
-      <div className={className} role="alert" style={{ ...messageStyle, ...style }}>
+      <CritBoundaryMessage
+        error
+        {...(className === undefined ? {} : { className })}
+        {...(style === undefined ? {} : { style })}
+      >
         {errorFallback?.(error) ?? `Crit could not open this canvas: ${error}`}
-      </div>
+      </CritBoundaryMessage>
     )
   }
 
   if (session === null || document === null) {
     return (
-      <div className={className} style={{ ...messageStyle, ...style }}>
+      <CritBoundaryMessage
+        {...(className === undefined ? {} : { className })}
+        {...(style === undefined ? {} : { style })}
+      >
         {loadingFallback ?? "Opening canvas…"}
-      </div>
+      </CritBoundaryMessage>
     )
   }
 
   return (
-    <CanvasHelpSurface
-      className={classes("crit-root", className)}
-      style={{ ...rootStyle, ...style }}
-    >
+    <GlyphProvider>
+      <CanvasHelpSurface
+        className={classes("crit-root", className)}
+        style={{ ...rootStyle, ...style }}
+      >
       <CanvasViewport
         author={resolvedAuthor}
         dispatch={session.dispatch}
@@ -303,43 +304,24 @@ export function Crit({
       />
       <CanvasHelpPanel />
       {sessionState?.agentActivity.active ? (
-        <div
-          aria-live="polite"
-          className="crit-presence"
-          role="status"
-        >
-          <span className="crit-presence__dot" />
-          Agent working
-          {sessionState.agentActivity.detail === null
-            ? ""
-            : ` · ${sessionState.agentActivity.detail}`}
-        </div>
+        <AgentActivityIndicator detail={sessionState.agentActivity.detail} />
       ) : null}
       {sessionState === null ? null : (
-        <button
-          aria-live="polite"
-          className="crit-save-state"
-          disabled={sessionState.saveStatus !== "conflict"}
-          onClick={() => {
-            if (sessionState.saveStatus === "conflict") {
-              Effect.runFork(
-                session.discardLocalChanges().pipe(
-                  Effect.catch((cause) =>
-                    Effect.sync(() => setError(errorMessage(cause)))
-                  )
+        <CanvasSaveIndicator
+          onDiscardLocalChanges={() => {
+            Effect.runFork(
+              session.discardLocalChanges().pipe(
+                Effect.catch((cause) =>
+                  Effect.sync(() => setError(errorMessage(cause)))
                 )
               )
-            }
+            )
           }}
-          type="button"
-        >
-          {sessionState.saveStatus === "clean"
-            ? "Saved"
-            : sessionState.saveStatus.replace("-", " ")}
-          {sessionState.recoveryStatus === "recovered" ? " · draft recovered" : ""}
-          {sessionState.saveStatus === "conflict" ? " · discard local changes" : ""}
-        </button>
+          recoveryStatus={sessionState.recoveryStatus}
+          saveStatus={sessionState.saveStatus}
+        />
       )}
-    </CanvasHelpSurface>
+      </CanvasHelpSurface>
+    </GlyphProvider>
   )
 }

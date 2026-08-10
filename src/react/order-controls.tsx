@@ -1,4 +1,5 @@
 import { NO_HELP_HOTKEY, helpTarget } from "./canvas-help.js"
+import { Glyph } from "./glyph.js"
 
 export function OrderControls({
   label,
@@ -22,7 +23,7 @@ export function OrderControls({
         onPointerDown={(event) => event.stopPropagation()}
         type="button"
       >
-        ⇩
+        <Glyph name="layerBack" />
       </button>
       <button
         aria-label={`Bring ${label} to front`}
@@ -35,7 +36,7 @@ export function OrderControls({
         onPointerDown={(event) => event.stopPropagation()}
         type="button"
       >
-        ⇧
+        <Glyph name="layerFront" />
       </button>
     </span>
   )

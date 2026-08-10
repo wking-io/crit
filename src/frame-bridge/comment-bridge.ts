@@ -1,18 +1,19 @@
 import type { ElementCommentAnchor } from "../core/comment.js"
+import { glyphSvgMarkup } from "../glyphs/index.js"
 
 export const CRIT_FRAME_COMMENT_SOURCE = "@riff-refine/crit/frame-comments"
+const COMMENT_PIN_GLYPH_SOURCE = JSON.stringify(glyphSvgMarkup("commentPin"))
 
 export type FrameCommentPin = { readonly id: string; readonly anchor: ElementCommentAnchor }
 export type FrameCommentEvent =
   | { readonly type: "ready" }
-  | { readonly type: "select"; readonly anchor: ElementCommentAnchor; readonly clientX: number; readonly clientY: number }
-  | { readonly type: "open"; readonly id: string; readonly clientX: number; readonly clientY: number }
+  | { readonly type: "select"; readonly anchor: ElementCommentAnchor }
+  | { readonly type: "open"; readonly id: string }
 
-const finite = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value)
 const isEvent = (value: unknown): value is FrameCommentEvent & { readonly source: string } => {
   if (typeof value !== "object" || value === null || !("source" in value) || value.source !== CRIT_FRAME_COMMENT_SOURCE || !("type" in value)) return false
   if (value.type === "ready") return true
-  if ((value.type !== "select" && value.type !== "open") || !("clientX" in value) || !finite(value.clientX) || !("clientY" in value) || !finite(value.clientY)) return false
+  if (value.type !== "select" && value.type !== "open") return false
   return value.type === "open"
     ? "id" in value && typeof value.id === "string"
     : "anchor" in value && typeof value.anchor === "object" && value.anchor !== null
@@ -26,13 +27,11 @@ export const connectBridgedFrameComments = (input: {
   const receive = (event: MessageEvent) => {
     if (event.source !== input.frameElement.contentWindow || !isEvent(event.data)) return
     const { source: _source, ...message } = event.data
-    if (message.type === "ready") return input.onEvent(message)
-    const rect = input.frameElement.getBoundingClientRect()
-    input.onEvent({ ...message, clientX: rect.left + message.clientX, clientY: rect.top + message.clientY })
+    input.onEvent(message)
   }
   input.target.addEventListener("message", receive)
   return {
-    configure: (value: { readonly enabled: boolean; readonly color: string; readonly pins: ReadonlyArray<FrameCommentPin> }) =>
+    configure: (value: { readonly activeId?: string; readonly enabled: boolean; readonly color: string; readonly pins: ReadonlyArray<FrameCommentPin> }) =>
       input.frameElement.contentWindow?.postMessage({ source: CRIT_FRAME_COMMENT_SOURCE, type: "configure", ...value }, "*"),
     disconnect: () => input.target.removeEventListener("message", receive)
   }
@@ -52,10 +51,11 @@ export const critFrameCommentBridgeScript = String.raw`
   document.documentElement.appendChild(layer)
   let enabled = false
   let color = "#77746c"
+  let activeId = null
   let hovered = null
   let pins = []
   let queued = false
-  const icon = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 18 18" aria-hidden="true"><path fill-rule="evenodd" clip-rule="evenodd" d="M9 1.75C12.3137 1.75 15 4.438 15 7.75C15 12.25 10.5833 15.75 9 16.25C7.4167 15.75 3 12.25 3 7.75C3 4.438 5.6863 1.75 9 1.75ZM9 5.75C7.8954 5.75 7 6.646 7 7.75C7 8.854 7.8954 9.75 9 9.75C10.1046 9.75 11 8.854 11 7.75C11 6.646 10.1046 5.75 9 5.75Z" fill="currentColor" fill-opacity="0.3"></path><path d="M9 9.75C10.1046 9.75 11 8.854 11 7.75C11 6.646 10.1046 5.75 9 5.75C7.8954 5.75 7 6.646 7 7.75C7 8.854 7.8954 9.75 9 9.75Z" stroke="currentColor" fill="none"></path><path d="M9 16.25C10.5833 15.75 15 12.25 15 7.75C15 4.438 12.3137 1.75 9 1.75C5.6863 1.75 3 4.438 3 7.75C3 12.25 7.4167 15.75 9 16.25Z" stroke="currentColor" fill="none"></path></svg>'
+  const icon = ${COMMENT_PIN_GLYPH_SOURCE}
   const pageUrl = () => { const url = new URL(location.href); url.hash = ""; return url.toString() }
   const escape = (value) => CSS.escape ? CSS.escape(value) : value.replace(/[^a-zA-Z0-9_-]/g, (character) => "\\\\" + character)
   const selectorFor = (element) => {
@@ -110,21 +110,34 @@ export const critFrameCommentBridgeScript = String.raw`
     const ids = new Set(pins.map((pin) => pin.id))
     for (const node of layer.querySelectorAll("[data-crit-comment-pin]")) if (!ids.has(node.dataset.critCommentPin)) node.remove()
     for (const pin of pins) {
-      if (layer.querySelector('[data-crit-comment-pin="' + pin.id + '"]')) continue
-      const button = document.createElement("button")
-      button.type = "button"; button.dataset.critCommentPin = pin.id; button.setAttribute("aria-label", "Open comment"); button.innerHTML = icon
-      Object.assign(button.style, { alignItems: "center", background: "white", border: "1px solid currentColor", borderRadius: "999px", boxShadow: "0 2px 6px rgba(0,0,0,.18)", cursor: "pointer", height: "24px", justifyContent: "center", padding: "3px", pointerEvents: "auto", position: "fixed", transform: "translate(-50%, -100%)", width: "24px" })
-      button.addEventListener("click", (event) => { event.preventDefault(); event.stopImmediatePropagation(); send({ type: "open", id: pin.id, clientX: event.clientX, clientY: event.clientY }) }, true)
-      layer.appendChild(button)
+      let button = layer.querySelector('[data-crit-comment-pin="' + pin.id + '"]')
+      if (!button) {
+        button = document.createElement("button")
+        button.type = "button"; button.dataset.critCommentPin = pin.id; button.setAttribute("aria-label", "Open comment"); button.innerHTML = icon + '<span data-crit-comment-dot></span>'
+        Object.assign(button.style, { alignItems: "center", background: "white", border: "1px solid currentColor", borderRadius: "999px", boxShadow: "0 2px 6px rgba(0,0,0,.18)", cursor: "pointer", height: "24px", justifyContent: "center", padding: "3px", pointerEvents: "auto", position: "fixed", transform: "translate(-50%, -100%)", transition: "background 80ms ease, border-color 80ms ease, box-shadow 80ms ease", width: "24px" })
+        const svg = button.querySelector("svg"); if (svg) Object.assign(svg.style, { transition: "opacity 80ms ease, transform 80ms cubic-bezier(.22,1,.36,1)" })
+        const dot = button.querySelector("[data-crit-comment-dot]"); if (dot) Object.assign(dot.style, { background: "currentColor", borderRadius: "999px", height: "7px", left: "50%", opacity: "0", position: "absolute", top: "50%", transform: "translate(-50%,-50%) scale(.35)", transition: "opacity 80ms ease, transform 80ms cubic-bezier(.22,1,.36,1)", width: "7px" })
+        button.addEventListener("click", (event) => { event.preventDefault(); event.stopImmediatePropagation(); send({ type: "open", id: pin.id }) }, true)
+        layer.appendChild(button)
+      }
+      const active = pin.id === activeId
+      button.setAttribute("aria-expanded", active ? "true" : "false")
+      Object.assign(button.style, { background: active ? "transparent" : "white", borderColor: active ? "transparent" : "currentColor", boxShadow: active ? "none" : "0 2px 6px rgba(0,0,0,.18)" })
+      const svg = button.querySelector("svg"); if (svg) Object.assign(svg.style, { opacity: active ? "0" : "1", transform: active ? "scale(.35)" : "scale(1)" })
+      const dot = button.querySelector("[data-crit-comment-dot]"); if (dot) Object.assign(dot.style, { opacity: active ? "1" : "0", transform: active ? "translate(-50%,-50%) scale(1)" : "translate(-50%,-50%) scale(.35)" })
     }
     queue()
   }
   addEventListener("message", (event) => {
     const message = event.data
-    if (!message || message.source !== source || message.type !== "configure") return
-    enabled = message.enabled === true; color = typeof message.color === "string" ? message.color : color; pins = Array.isArray(message.pins) ? message.pins : []
+    if (event.source !== window.parent || !message || message.source !== source || message.type !== "configure") return
+    enabled = message.enabled === true; color = typeof message.color === "string" ? message.color : color; pins = Array.isArray(message.pins) ? message.pins : []; activeId = typeof message.activeId === "string" ? message.activeId : null
     if (!enabled) hovered = null
     syncPins()
+    // The initial ready event can race the parent's React effect on a cached
+    // frame. A configure message doubles as a handshake so the parent can
+    // reliably distinguish an instrumented frame from the fallback overlay.
+    send({ type: "ready" })
   })
   addEventListener("pointermove", (event) => { if (!enabled || !(event.target instanceof Element) || event.target.closest("[data-crit-comment-layer]")) return; hovered = event.target; queue() }, true)
   addEventListener("pointerleave", () => { hovered = null; queue() }, true)
@@ -133,7 +146,7 @@ export const critFrameCommentBridgeScript = String.raw`
     if (!enabled || !(target instanceof Element) || target.closest("[data-crit-comment-layer]")) return
     event.preventDefault(); event.stopImmediatePropagation()
     const rect = target.getBoundingClientRect(); if (!rect.width || !rect.height) return
-    send({ type: "select", anchor: { kind: "element", documentUrl: pageUrl(), selector: selectorFor(target), fingerprint: fingerprintFor(target), xRatio: Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width)), yRatio: Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height)) }, clientX: event.clientX, clientY: event.clientY })
+    send({ type: "select", anchor: { kind: "element", documentUrl: pageUrl(), selector: selectorFor(target), fingerprint: fingerprintFor(target), xRatio: Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width)), yRatio: Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height)) } })
   }, true)
   addEventListener("scroll", queue, { capture: true, passive: true })
   addEventListener("resize", queue, { passive: true })

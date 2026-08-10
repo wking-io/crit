@@ -1,6 +1,5 @@
 import { useHotkey } from "@tanstack/react-hotkeys"
 import {
-  useEffect,
   useState,
   type FormEvent
 } from "react"
@@ -8,34 +7,21 @@ import { createPortal } from "react-dom"
 
 import { NO_HELP_HOTKEY, helpTarget } from "./canvas-help.js"
 
-export function NewFrameDialog({
-  onCancel,
-  onCreate,
-  onError,
-  open
-}: {
+export interface NewFrameFormProps {
+  readonly autoFocus?: boolean
   readonly onCancel: () => void
   readonly onCreate: (url: string, title: string) => void
   readonly onError: (message: string) => void
-  readonly open: boolean
-}) {
+}
+
+export function NewFrameForm({
+  autoFocus = false,
+  onCancel,
+  onCreate,
+  onError
+}: NewFrameFormProps) {
   const [title, setTitle] = useState("")
   const [url, setUrl] = useState("")
-
-  useHotkey("Escape", onCancel, {
-    conflictBehavior: "allow",
-    enabled: open,
-    ignoreInputs: false
-  })
-
-  useEffect(() => {
-    if (!open) {
-      setTitle("")
-      setUrl("")
-    }
-  }, [open])
-
-  if (!open || typeof document === "undefined") return null
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -52,6 +38,82 @@ export function NewFrameDialog({
     }
   }
 
+  return (
+    <form className="crit-new-frame-dialog" onSubmit={submit}>
+      <h2 id="crit-new-frame-title">New frame</h2>
+      <label>
+        URL
+        <input
+          autoFocus={autoFocus}
+          {...helpTarget({
+            name: "Frame URL",
+            hotkey: NO_HELP_HOTKEY,
+            description: "Enter the url to load in a new live frame."
+          })}
+          onChange={(event) => setUrl(event.currentTarget.value)}
+          placeholder="https://example.com/iteration"
+          required
+          type="text"
+          value={url}
+        />
+      </label>
+      <label>
+        Title <span>(optional)</span>
+        <input
+          {...helpTarget({
+            name: "Frame title",
+            hotkey: NO_HELP_HOTKEY,
+            description: "Name the frame. Optional, title is inferred when left blank."
+          })}
+          onChange={(event) => setTitle(event.currentTarget.value)}
+          placeholder="Inferred from URL"
+          type="text"
+          value={title}
+        />
+      </label>
+      <div className="crit-new-frame-dialog__actions">
+        <button
+          {...helpTarget({
+            name: "Cancel",
+            hotkey: "Esc",
+            description: "Close the dialog without adding a frame."
+          })}
+          onClick={onCancel}
+          type="button"
+        >Cancel</button>
+        <button
+          data-primary=""
+          {...helpTarget({
+            name: "Add frame",
+            hotkey: "Enter",
+            description: "Create a live frame using the entered URL and title."
+          })}
+          type="submit"
+        >Add frame</button>
+      </div>
+    </form>
+  )
+}
+
+export function NewFrameDialog({
+  onCancel,
+  onCreate,
+  onError,
+  open
+}: {
+  readonly onCancel: () => void
+  readonly onCreate: (url: string, title: string) => void
+  readonly onError: (message: string) => void
+  readonly open: boolean
+}) {
+  useHotkey("Escape", onCancel, {
+    conflictBehavior: "allow",
+    enabled: open,
+    ignoreInputs: false
+  })
+
+  if (!open || typeof document === "undefined") return null
+
   return createPortal(
     <div
       aria-labelledby="crit-new-frame-title"
@@ -62,59 +124,12 @@ export function NewFrameDialog({
       }}
       role="dialog"
     >
-      <form className="crit-new-frame-dialog" onSubmit={submit}>
-        <h2 id="crit-new-frame-title">New frame</h2>
-        <label>
-          URL
-          <input
-            autoFocus
-            {...helpTarget({
-              name: "Frame URL",
-              hotkey: NO_HELP_HOTKEY,
-              description: "Enter the url to load in a new live frame."
-            })}
-            onChange={(event) => setUrl(event.currentTarget.value)}
-            placeholder="https://example.com/iteration"
-            required
-            type="text"
-            value={url}
-          />
-        </label>
-        <label>
-          Title <span>(optional)</span>
-          <input
-            {...helpTarget({
-              name: "Frame title",
-              hotkey: NO_HELP_HOTKEY,
-              description: "Name the frame. Optional, title is inferred when left blank."
-            })}
-            onChange={(event) => setTitle(event.currentTarget.value)}
-            placeholder="Inferred from URL"
-            type="text"
-            value={title}
-          />
-        </label>
-        <div className="crit-new-frame-dialog__actions">
-          <button
-            {...helpTarget({
-              name: "Cancel",
-              hotkey: "Esc",
-              description: "Close the dialog without adding a frame."
-            })}
-            onClick={onCancel}
-            type="button"
-          >Cancel</button>
-          <button
-            data-primary=""
-            {...helpTarget({
-              name: "Add frame",
-              hotkey: "Enter",
-              description: "Create a live frame using the entered URL and title."
-            })}
-            type="submit"
-          >Add frame</button>
-        </div>
-      </form>
+      <NewFrameForm
+        autoFocus
+        onCancel={onCancel}
+        onCreate={onCreate}
+        onError={onError}
+      />
     </div>,
     document.body
   )

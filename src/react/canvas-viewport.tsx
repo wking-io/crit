@@ -40,26 +40,12 @@ import {
 } from "./canvas-cursors.js"
 import type { ResizeHandlePosition } from "./canvas-selection.js"
 import { beginCanvasInteraction } from "./canvas-interaction.js"
-import {
-  NO_HELP_HOTKEY,
-  helpTarget
-} from "./canvas-help.js"
+import { CanvasToolbar } from "./canvas-toolbar.js"
 import {
   FrameCard,
   type FrameChromeSettings
 } from "./frame-card.js"
-import {
-  IconAddFrame,
-  IconComment,
-  IconNote,
-  IconPan,
-  IconPointer,
-  IconRedo,
-  IconSwitcher,
-  IconUndo,
-  frameStatus,
-  shortIdForIndex
-} from "./frame-chrome.js"
+import { frameStatus, shortIdForIndex } from "./frame-chrome.js"
 import {
   initialCanvasCameraState,
   updateCanvasCamera,
@@ -201,7 +187,6 @@ export function CanvasViewport({
     readonly frameId: string
     readonly anchor?: CommentAnchor
     readonly threadId?: string
-    readonly point: { readonly x: number; readonly y: number }
   } | null>(null)
   const commitCameraState = useCallback(
     (next: ReturnType<typeof initialCanvasCameraState>) => {
@@ -529,6 +514,7 @@ export function CanvasViewport({
   const activeComments = useMemo(() => document.comments.filter((thread) => thread.resolvedAt === null), [document.comments])
   const commentThread = commentTarget?.threadId === undefined ? undefined : document.comments.find((thread) => thread.id === commentTarget.threadId)
   const commentFrame = commentTarget === null ? undefined : document.frames.find((frame) => frame.id === commentTarget.frameId)
+  const commentGeometry = commentFrame === undefined ? undefined : geometryOf(commentFrame)
   const commentStatusColor = frameStatus(commentFrame?.status ?? "archived").ink
   const makeCommentMessage = (body: string): CommentMessage => ({ id: localId("comment"), body, author: author!, createdAt: new Date().toISOString(), editedAt: null })
 
@@ -589,11 +575,14 @@ export function CanvasViewport({
               selected={selectedId === item.id}
               commentMode={tool === "comment"}
               commentThreads={activeComments.filter((thread) => thread.frameId === item.id)}
-              onCommentAnchor={(anchor, point) => {
+              {...(commentTarget?.frameId === item.id && commentTarget.threadId !== undefined
+                ? { openCommentId: commentTarget.threadId }
+                : {})}
+              onCommentAnchor={(anchor) => {
                 if (author === null) return onCommandError?.("Configure Git user.name and user.email to leave comments")
-                setCommentTarget({ frameId: item.id, anchor, point })
+                setCommentTarget({ frameId: item.id, anchor })
               }}
-              onOpenComment={(threadId, point) => setCommentTarget({ frameId: item.id, threadId, point })}
+              onOpenComment={(threadId) => setCommentTarget({ frameId: item.id, threadId })}
               onSelect={() => setSelectedId(item.id)}
               onInputIntent={(intent) => {
                 if (intent.type === "select") {
@@ -686,6 +675,59 @@ export function CanvasViewport({
             />
           )
         )}
+        {commentTarget !== null &&
+        author !== null &&
+        commentFrame?.snapshot === undefined &&
+        commentGeometry !== undefined &&
+        (commentTarget.anchor !== undefined || commentThread !== undefined) ? (
+          <CommentPopover
+            key={commentTarget.threadId ?? "new-comment"}
+            author={author}
+            frameGeometry={commentGeometry}
+            owner={document.owner}
+            statusColor={commentStatusColor}
+            {...(commentThread === undefined ? {} : { thread: commentThread })}
+            zoom={camera.zoom}
+            onClose={() => setCommentTarget(null)}
+            onCreate={(body) => {
+              if (commentTarget.anchor === undefined) return
+              run(CanvasCommand.addCommentThread({
+                id: localId("thread"),
+                frameId: commentTarget.frameId,
+                anchor: commentTarget.anchor,
+                opening: makeCommentMessage(body)
+              }))
+              setCommentTarget(null)
+            }}
+            onEdit={(message, expectedBody, body) => {
+              if (commentThread === undefined) return
+              run(CanvasCommand.editComment({
+                id: commentThread.id,
+                commentId: message.id,
+                actorId: author.id,
+                expectedBody,
+                body,
+                editedAt: new Date().toISOString()
+              }))
+            }}
+            onReply={(body) => {
+              if (commentThread === undefined) return
+              run(CanvasCommand.replyToCommentThread({
+                id: commentThread.id,
+                reply: makeCommentMessage(body)
+              }))
+            }}
+            onResolve={(resolved) => {
+              if (commentThread === undefined) return
+              run(CanvasCommand.setCommentThreadResolved({
+                id: commentThread.id,
+                actor: author,
+                resolved,
+                at: new Date().toISOString()
+              }))
+            }}
+          />
+        ) : null}
       </div>
       {tool === "pan" ? (
         <div
@@ -696,115 +738,18 @@ export function CanvasViewport({
           onPointerDown={startPan}
         />
       ) : null}
-      <div
-        className="crit-toolbar"
-        onPointerDown={(event) => event.stopPropagation()}
-      >
-        <span
-          className="crit-toolbar__title"
-          {...helpTarget({
-            name: document.title,
-            hotkey: NO_HELP_HOTKEY,
-            description: "The canvas currently open for arranging and reviewing work."
-          })}
-        >
-          <span>{document.title}</span>
-          <IconSwitcher />
-        </span>
-        <span aria-hidden="true" className="crit-toolbar__divider" />
-        <span className="crit-toolbar__group">
-            <button
-              aria-disabled="true"
-              aria-label="Undo"
-              className="crit-icon-button"
-              {...helpTarget({
-                name: "Undo",
-                hotkey: NO_HELP_HOTKEY,
-                description: "Undo is not available yet."
-              })}
-              type="button"
-            ><IconUndo /></button>
-            <button
-              aria-disabled="true"
-              aria-label="Redo"
-              className="crit-icon-button"
-              {...helpTarget({
-                name: "Redo",
-                hotkey: NO_HELP_HOTKEY,
-                description: "Redo is not available yet."
-              })}
-              type="button"
-            ><IconRedo /></button>
-          </span>
-          <span aria-hidden="true" className="crit-toolbar__divider" />
-          <span className="crit-toolbar__group">
-            <button
-              aria-keyshortcuts="V"
-              aria-label="Select"
-              aria-pressed={tool === "select"}
-              className="crit-icon-button"
-              {...helpTarget({
-                name: "Select",
-                hotkey: "V",
-                description: "Select, move, resize, and interact with frames and notes."
-              })}
-              onClick={() => setTool("select")}
-              type="button"
-            ><IconPointer /></button>
-            <button
-              aria-keyshortcuts="H"
-              aria-label="Hand"
-              aria-pressed={tool === "pan"}
-              className="crit-icon-button"
-              {...helpTarget({
-                name: "Hand",
-                hotkey: "H",
-                description: "Drag the canvas to pan without selecting an item."
-              })}
-              onClick={() => setTool("pan")}
-              type="button"
-            ><IconPan /></button>
-            <button
-              aria-keyshortcuts="F"
-              aria-label="Add frame"
-              className="crit-icon-button"
-              {...helpTarget({
-                name: "Add frame",
-                hotkey: "F",
-                description: "Add a live web page to the center of the current view."
-              })}
-              onClick={openNewFrameAtCenter}
-              type="button"
-            ><IconAddFrame /></button>
-            <button
-              aria-keyshortcuts="N"
-              aria-label="Add note"
-              className="crit-icon-button"
-              {...helpTarget({
-                name: "Add note",
-                hotkey: "N",
-                description: "Add an editable note to the center of the current view."
-              })}
-              onClick={addNoteAtCenter}
-              type="button"
-            ><IconNote /></button>
-            <button
-              aria-label="Comment"
-              aria-pressed={tool === "comment"}
-              className="crit-icon-button"
-              disabled={author === null}
-              {...helpTarget({
-                name: "Comment",
-                hotkey: NO_HELP_HOTKEY,
-                description: author === null
-                  ? "Configure Git user.name and user.email to leave comments."
-                  : "Pin feedback to an element or location inside a live frame."
-              })}
-              onClick={() => setTool("comment")}
-              type="button"
-            ><IconComment /></button>
-          </span>
-      </div>
+      <CanvasToolbar
+        commentAvailable={author !== null}
+        onAction={(action) => {
+          if (action === "select") setTool("select")
+          else if (action === "pan") setTool("pan")
+          else if (action === "add-frame") openNewFrameAtCenter()
+          else if (action === "add-note") addNoteAtCenter()
+          else if (action === "comment") setTool("comment")
+        }}
+        title={document.title}
+        tool={tool}
+      />
       <CritContextMenu
         ariaLabel="Canvas actions"
         items={canvasMenu === null ? [] : [

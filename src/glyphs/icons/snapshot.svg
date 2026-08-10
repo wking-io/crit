@@ -1,0 +1,5 @@
+<svg viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg">
+  <path d="M13.25 4.25H11.6L10.85 3H7.15L6.4 4.25H4.75C3.645 4.25 2.75 5.145 2.75 6.25V13.25C2.75 14.355 3.645 15.25 4.75 15.25H13.25C14.355 15.25 15.25 14.355 15.25 13.25V6.25C15.25 5.145 14.355 4.25 13.25 4.25Z" fill="currentColor" fill-opacity=".3" />
+  <path d="M13.25 4.25H11.6L10.85 3H7.15L6.4 4.25H4.75C3.645 4.25 2.75 5.145 2.75 6.25V13.25C2.75 14.355 3.645 15.25 4.75 15.25H13.25C14.355 15.25 15.25 14.355 15.25 13.25V6.25C15.25 5.145 14.355 4.25 13.25 4.25Z" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" />
+  <circle cx="9" cy="9.75" r="2.5" fill="none" stroke="currentColor" />
+</svg>

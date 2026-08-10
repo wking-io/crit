@@ -75,6 +75,13 @@ serves immutable snapshot artifacts. The React
 component, Vite plugin, CLI, discovery manifest, and installed agent skill are
 thin adapters around the same core, repository, and archive boundaries.
 
+Visible UI icons cross one generated Glyph seam. Individual SVG sources compile
+to a renderer-neutral typed map; React roots render uniquely prefixed inline
+symbol sheets, while isolated documents such as the Frame comment bridge
+serialize the same definitions directly. Sheet ownership belongs to
+`GlyphProvider`, so nested and sibling Crit roots cannot create ambiguous global
+fragment IDs.
+
 Effect v4 owns schemas, typed failures, services, Layers, concurrency, and scoped
 lifecycle. Pure synchronous document transitions remain ordinary TypeScript.
 
