@@ -1,7 +1,17 @@
-import { StrictMode, useMemo, useState, type CSSProperties } from "react"
+import {
+  StrictMode,
+  Suspense,
+  lazy,
+  useMemo,
+  useState,
+  type CSSProperties
+} from "react"
 import { createRoot } from "react-dom/client"
+import { Glyph, GlyphProvider } from "../../src/react/glyph.js"
 
 import "./styles.css"
+
+const UiLab = lazy(() => import("./ui-lab.js"))
 
 type FrameVariant = "draft" | "ready" | "approved" | "changes"
 
@@ -41,9 +51,9 @@ function QuantityControl() {
   const [quantity, setQuantity] = useState(1)
   return (
     <div className="quantity" aria-label="Quantity">
-      <button onClick={() => setQuantity(Math.max(1, quantity - 1))} type="button">−</button>
+      <button aria-label="Decrease quantity" onClick={() => setQuantity(Math.max(1, quantity - 1))} type="button"><Glyph name="minus" /></button>
       <output>{quantity}</output>
-      <button onClick={() => setQuantity(quantity + 1)} type="button">+</button>
+      <button aria-label="Increase quantity" onClick={() => setQuantity(quantity + 1)} type="button"><Glyph name="plus" /></button>
     </div>
   )
 }
@@ -70,7 +80,7 @@ function FramePage({ variant }: { readonly variant: FrameVariant }) {
 
           {variant === "approved" ? (
             <div className="confirmation-card">
-              <span className="confirmation-icon">✓</span>
+              <span className="confirmation-icon"><Glyph name="success" /></span>
               <div>
                 <strong>Thanks, Alex.</strong>
                 <p>Confirmation RR-2048 is headed to your inbox.</p>
@@ -129,12 +139,19 @@ function FramePage({ variant }: { readonly variant: FrameVariant }) {
 }
 
 function App() {
+  if (window.location.pathname.replace(/\/+$/, "") === "/ui") {
+    return (
+      <Suspense fallback={<main className="ui-lab-loading">Opening UI lab…</main>}>
+        <UiLab />
+      </Suspense>
+    )
+  }
   const match = window.location.pathname.match(/^\/frames\/(draft|ready|approved|changes)\/?$/)
   return match === null ? null : <FramePage variant={match[1] as FrameVariant} />
 }
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <App />
+    <GlyphProvider><App /></GlyphProvider>
   </StrictMode>
 )

@@ -1,0 +1,61 @@
+:root {
+  --crit-color-s1: oklch(99% 0 none);
+  --crit-color-s2: oklch(97.5% 0 none);
+  --crit-color-c1: oklch(95.25% 0 none);
+  --crit-color-c2: oklch(94% 0 none);
+  --crit-color-c3: oklch(92.75% 0 none);
+  --crit-color-p1: oklch(67% 0 none);
+  --crit-color-p2: oklch(65% 0 none);
+  --crit-color-t1: oklch(52% 0 none);
+  --crit-color-t2: oklch(28% 0 none);
+
+  --crit-color-orange-s1: oklch(99% 0.003 41.1);
+  --crit-color-orange-s2: oklch(97.5% 0.009 41.1);
+  --crit-color-orange-c1: oklch(95.25% 0.024 41.1);
+  --crit-color-orange-c2: oklch(94% 0.028 41.1);
+  --crit-color-orange-c3: oklch(92.75% 0.036 41.1);
+  --crit-color-orange-p1: oklch(67% 0.18 41.1);
+  --crit-color-orange-p2: oklch(65% 0.2 41.1);
+  --crit-color-orange-t1: oklch(52% 0.2 41.1);
+  --crit-color-orange-t2: oklch(28% 0.1 41.1);
+
+  --crit-color-blue-s1: oklch(99% 0.003 245.3);
+  --crit-color-blue-s2: oklch(97.5% 0.009 245.3);
+  --crit-color-blue-c1: oklch(95.25% 0.024 245.3);
+  --crit-color-blue-c2: oklch(94% 0.028 245.3);
+  --crit-color-blue-c3: oklch(92.75% 0.036 245.3);
+  --crit-color-blue-p1: oklch(67% 0.18 245.3);
+  --crit-color-blue-p2: oklch(65% 0.2 245.3);
+  --crit-color-blue-t1: oklch(52% 0.2 245.3);
+  --crit-color-blue-t2: oklch(28% 0.1 245.3);
+
+  --crit-color-green-s1: oklch(99% 0.003 156.3);
+  --crit-color-green-s2: oklch(97.5% 0.009 156.3);
+  --crit-color-green-c1: oklch(95.25% 0.024 156.3);
+  --crit-color-green-c2: oklch(94% 0.028 156.3);
+  --crit-color-green-c3: oklch(92.75% 0.036 156.3);
+  --crit-color-green-p1: oklch(67% 0.18 156.3);
+  --crit-color-green-p2: oklch(65% 0.2 156.3);
+  --crit-color-green-t1: oklch(52% 0.2 156.3);
+  --crit-color-green-t2: oklch(28% 0.1 156.3);
+
+  --crit-color-purple-s1: oklch(99% 0.003 302);
+  --crit-color-purple-s2: oklch(97.5% 0.009 302);
+  --crit-color-purple-c1: oklch(95.25% 0.024 302);
+  --crit-color-purple-c2: oklch(94% 0.028 302);
+  --crit-color-purple-c3: oklch(92.75% 0.036 302);
+  --crit-color-purple-p1: oklch(67% 0.18 302);
+  --crit-color-purple-p2: oklch(65% 0.2 302);
+  --crit-color-purple-t1: oklch(52% 0.2 302);
+  --crit-color-purple-t2: oklch(28% 0.1 302);
+
+  --crit-color-red-s1: oklch(99% 0.003 27.3);
+  --crit-color-red-s2: oklch(97.5% 0.009 27.3);
+  --crit-color-red-c1: oklch(95.25% 0.024 27.3);
+  --crit-color-red-c2: oklch(94% 0.028 27.3);
+  --crit-color-red-c3: oklch(92.75% 0.036 27.3);
+  --crit-color-red-p1: oklch(67% 0.18 27.3);
+  --crit-color-red-p2: oklch(65% 0.2 27.3);
+  --crit-color-red-t1: oklch(52% 0.2 27.3);
+  --crit-color-red-t2: oklch(28% 0.1 27.3);
+}
