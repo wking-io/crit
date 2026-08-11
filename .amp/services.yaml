@@ -1,0 +1,6 @@
+services:
+  playground:
+    command: npm run dev
+    portal:
+      title: Crit playground
+      description: Open the seeded Crit feature lab.

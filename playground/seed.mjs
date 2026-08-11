@@ -6,8 +6,11 @@ import { fileURLToPath } from "node:url"
 const playground = path.dirname(fileURLToPath(import.meta.url))
 const repository = path.dirname(playground)
 const cli = path.join(repository, "dist", "cli.js")
-const port = process.env.CRIT_PLAYGROUND_PORT ?? "5173"
-const origin = process.env.PORTLESS_URL ?? `http://127.0.0.1:${port}`
+const port = process.env.PORT ?? process.env.CRIT_PLAYGROUND_PORT ?? "5173"
+const origin =
+  process.env.PUBLIC_URL ??
+  process.env.PORTLESS_URL ??
+  `http://127.0.0.1:${port}`
 const seedCommands = JSON.parse(
   readFileSync(path.join(playground, "feature-lab.commands.json"), "utf8")
 )
