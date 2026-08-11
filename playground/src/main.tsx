@@ -13,6 +13,10 @@ import "./styles.css"
 
 const UiLab = lazy(() => import("./ui-lab.js"))
 
+export const frameRouteUrl = () =>
+  document.querySelector<HTMLMetaElement>('meta[name="crit-frame-url"]')?.content ??
+  window.location.href
+
 type FrameVariant = "draft" | "ready" | "approved" | "changes"
 
 const variants: Record<FrameVariant, {
@@ -139,14 +143,15 @@ function FramePage({ variant }: { readonly variant: FrameVariant }) {
 }
 
 function App() {
-  if (window.location.pathname.replace(/\/+$/, "") === "/ui") {
+  const pathname = new URL(frameRouteUrl(), window.location.href).pathname
+  if (pathname.replace(/\/+$/, "") === "/ui") {
     return (
       <Suspense fallback={<main className="ui-lab-loading">Opening UI lab…</main>}>
         <UiLab />
       </Suspense>
     )
   }
-  const match = window.location.pathname.match(/^\/frames\/(draft|ready|approved|changes)\/?$/)
+  const match = pathname.match(/^\/frames\/(draft|ready|approved|changes)\/?$/)
   return match === null ? null : <FramePage variant={match[1] as FrameVariant} />
 }
 

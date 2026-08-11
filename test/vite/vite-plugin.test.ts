@@ -171,6 +171,19 @@ describe("crit Vite plugin", () => {
     expect(editorModule).toContain("panSpeed")
     expect(editorModule).toContain("zoomSpeed")
     expect(editorModule).toContain("bottom-right")
+    expect(editorModule).toContain('frameLoadMode: "navigate"')
+  })
+
+  it("serializes the configured Frame loading mode into the editor", async () => {
+    const origin = await start({
+      root,
+      frameLoadMode: "same-origin-srcdoc"
+    }, process.cwd())
+    const editorModule = await (await fetch(
+      `${origin}/@id/virtual:crit-editor.js`
+    )).text()
+
+    expect(editorModule).toContain('frameLoadMode: "same-origin-srcdoc"')
   })
 
   it("pushes Canvas change hints to the served editor over the HMR WebSocket", async () => {

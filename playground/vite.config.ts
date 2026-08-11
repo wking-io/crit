@@ -29,6 +29,7 @@ export default defineConfig({
       }
     },
     crit({
+      ...(process.env.AMP_ORB ? { frameLoadMode: "same-origin-srcdoc" as const } : {}),
       title: (canvasId) =>
         canvasId === "feature-lab" ? "Crit feature lab" : canvasId
     })

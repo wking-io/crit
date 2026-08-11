@@ -177,6 +177,27 @@ export const FRAME_SIZE_PRESETS = [
   { id: "widescreen", label: "Widescreen", width: 2560, height: 1440 }
 ] as const
 
+export type FrameLoadMode = "navigate" | "same-origin-srcdoc"
+
+export const prepareSameOriginFrameHtml = (
+  html: string,
+  responseUrl: string,
+  requestedUrl: string
+) => {
+  const document = new DOMParser().parseFromString(html, "text/html")
+  const head = document.head
+  const base = document.querySelector("base") ?? document.createElement("base")
+  base.setAttribute("href", responseUrl)
+  const metadata = document.createElement("meta")
+  metadata.setAttribute("name", "crit-frame-url")
+  metadata.setAttribute("content", requestedUrl)
+  // Prepend both so URL resolution and logical routing are established before
+  // any module scripts in the fetched document are encountered.
+  head.prepend(metadata)
+  head.prepend(base)
+  return `<!doctype html>\n${document.documentElement.outerHTML}`
+}
+
 const statusHelpDescriptions: Readonly<Record<FrameStatus, string>> = {
   "changes-requested": "Mark this frame as needing another iteration.",
   "in-progress": "Mark this frame as actively being worked on.",
@@ -192,6 +213,7 @@ export function FrameCard({
   iframeAllow,
   iframeSandbox,
   iframeVisible,
+  frameLoadMode = "navigate",
   selected,
   shortId,
   zoom,
@@ -220,6 +242,7 @@ export function FrameCard({
   readonly iframeAllow: string
   readonly iframeSandbox?: string
   readonly iframeVisible: boolean
+  readonly frameLoadMode?: FrameLoadMode
   readonly selected: boolean
   readonly shortId: string
   readonly zoom: number
@@ -255,6 +278,56 @@ export function FrameCard({
   const [titleDraft, setTitleDraft] = useState(frame.title)
   const [titleEditing, setTitleEditing] = useState(false)
   const [commentBridgeReady, setCommentBridgeReady] = useState(false)
+  const [srcdocState, setSrcdocState] = useState<
+    { readonly status: "idle" | "loading" | "error"; readonly error?: string } |
+    { readonly status: "ready"; readonly html: string }
+  >({ status: "idle" })
+  const [srcdocAttempt, setSrcdocAttempt] = useState(0)
+  const requestedFrameUrl = typeof window === "undefined"
+    ? null
+    : (() => {
+        try { return new URL(frame.url, window.location.href) } catch { return null }
+      })()
+  const usesSrcdoc = frame.snapshot === undefined &&
+    frameLoadMode === "same-origin-srcdoc" &&
+    typeof window !== "undefined" &&
+    requestedFrameUrl?.origin === window.location.origin
+
+  useEffect(() => {
+    if (!iframeVisible || !usesSrcdoc || requestedFrameUrl === null) {
+      setSrcdocState({ status: "idle" })
+      return
+    }
+    const controller = new AbortController()
+    setSrcdocState({ status: "loading" })
+    fetch(requestedFrameUrl.href, {
+      credentials: "same-origin",
+      referrerPolicy: "same-origin",
+      signal: controller.signal
+    }).then(async (response) => {
+      if (!response.ok) throw new Error(`Frame request failed (${response.status})`)
+      if (!response.headers.get("content-type")?.toLowerCase().includes("text/html")) {
+        throw new Error("Frame response is not HTML")
+      }
+      const finalUrl = new URL(response.url)
+      if (finalUrl.origin !== window.location.origin) {
+        throw new Error("Frame request redirected to another origin")
+      }
+      const logicalUrl = new URL(requestedFrameUrl.href)
+      if (logicalUrl.hash && !finalUrl.hash) finalUrl.hash = logicalUrl.hash
+      const html = prepareSameOriginFrameHtml(
+        await response.text(), finalUrl.href, logicalUrl.href
+      )
+      if (!controller.signal.aborted) setSrcdocState({ status: "ready", html })
+    }).catch((cause: unknown) => {
+      if (controller.signal.aborted) return
+      setSrcdocState({
+        status: "error",
+        error: cause instanceof Error ? cause.message : "Unable to load frame"
+      })
+    })
+    return () => controller.abort()
+  }, [frame.url, iframeVisible, srcdocAttempt, usesSrcdoc])
   const commentBridgeRef = useRef<ReturnType<typeof connectBridgedFrameComments> | null>(null)
   const onCommentAnchorRef = useRef(onCommentAnchor)
   const onOpenCommentRef = useRef(onOpenComment)
@@ -395,7 +468,8 @@ export function FrameCard({
     frame.url,
     measureContentHeight,
     onInputIntent,
-    onSelect
+    onSelect,
+    srcdocState.status
   ])
   useEffect(() => {
     const iframe = iframeRef.current
@@ -421,7 +495,7 @@ export function FrameCard({
       bridge.disconnect()
       if (commentBridgeRef.current === bridge) commentBridgeRef.current = null
     }
-  }, [frame.snapshot, frame.url, status.ink])
+  }, [frame.snapshot, frame.url, srcdocState.status, status.ink])
   useEffect(() => {
     if (!commentBridgeReady) return
     commentBridgeRef.current?.configure({
@@ -706,6 +780,14 @@ export function FrameCard({
                 description: "Open this frame's page in a separate browser tab."
               })}
               href={frame.url}
+              onClick={usesSrcdoc && srcdocState.status === "ready" ? (event) => {
+                event.preventDefault()
+                const blobUrl = URL.createObjectURL(new Blob(
+                  [srcdocState.html], { type: "text/html" }
+                ))
+                window.open(blobUrl, "_blank", "noopener")
+                window.setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000)
+              } : undefined}
               referrerPolicy="same-origin"
               rel="noopener"
               target="_blank"
@@ -742,7 +824,16 @@ export function FrameCard({
         </div>
         </header>
         <div className="crit-frame__viewport">
-        {iframeVisible ? (
+        {iframeVisible && usesSrcdoc && srcdocState.status !== "ready" ? (
+          <div className="crit-frame__paused" role={srcdocState.status === "error" ? "alert" : "status"}>
+            {srcdocState.status === "error" ? (
+              <><span>Unable to load frame: {srcdocState.error}</span>{" "}<button
+                onClick={() => setSrcdocAttempt((attempt) => attempt + 1)}
+                type="button"
+              >Retry</button></>
+            ) : "Loading frame…"}
+          </div>
+        ) : iframeVisible ? (
           <iframe
             allow={iframeAllow}
             ref={iframeRef}
@@ -754,7 +845,9 @@ export function FrameCard({
               iframeSandbox ??
               (frame.snapshot === undefined ? undefined : "allow-scripts")
             }
-            src={frame.url}
+            {...(usesSrcdoc && srcdocState.status === "ready"
+              ? { srcDoc: srcdocState.html }
+              : { src: frame.url })}
             title={frame.title}
           />
         ) : <div

@@ -10,6 +10,7 @@ import { Effect, Layer, ManagedRuntime } from "effect"
 import type { Plugin, ResolvedConfig, ViteDevServer } from "vite"
 
 import type { CanvasLiveRefreshEndpoint } from "../browser/canvas-live-refresh.js"
+import type { FrameLoadMode } from "../react/frame-card.js"
 
 import {
   CRIT_MANIFEST_FILE,
@@ -47,6 +48,7 @@ export interface CritVitePluginOptions {
   readonly manifestPath?: string
   readonly editorPath?: string | false
   readonly frameInputBridge?: boolean
+  readonly frameLoadMode?: FrameLoadMode
 }
 
 type CritViteServer = Pick<ViteDevServer, "middlewares" | "httpServer"> &
@@ -238,7 +240,8 @@ const resolvedVirtualEditorId = () =>
 
 const editorModuleSource = (
   reactEntry: string,
-  delivery: "vite" | "bundle"
+  delivery: "vite" | "bundle",
+  frameLoadMode: FrameLoadMode = "navigate"
 ) => {
   return `
   import { createElement, Fragment } from "react"
@@ -310,6 +313,7 @@ const editorModuleSource = (
     return createElement(Fragment, null,
       createElement(Crit, {
         canvasId,
+        frameLoadMode: ${JSON.stringify(frameLoadMode)},
         onSession: attachLiveRefresh,
         frameChrome: {
           titleMinimumCharacters: chrome.titleMinimumCharacters,
@@ -338,11 +342,11 @@ const editorModuleSource = (
 `
 }
 
-const buildEditorBundle = async () => {
+const buildEditorBundle = async (frameLoadMode: FrameLoadMode) => {
   const reactEntry = resolveReactEntry()
   const result = await build({
     stdin: {
-      contents: editorModuleSource(reactEntry, "bundle"),
+      contents: editorModuleSource(reactEntry, "bundle", frameLoadMode),
       loader: "js",
       resolveDir: path.dirname(reactEntry),
       sourcefile: "crit-editor.js"
@@ -368,6 +372,7 @@ export const crit = (options: CritVitePluginOptions = {}): Plugin => {
   const manifestPath = options.manifestPath ?? CRIT_MANIFEST_PATH
   const editorPath = options.editorPath ?? "/crit"
   const enabled = options.enabled ?? true
+  const frameLoadMode = options.frameLoadMode ?? "navigate"
   let resolvedRoot = options.root ?? process.cwd()
   let liveRefreshEndpoint: CanvasLiveRefreshEndpoint = { enabled: false }
   let isPreview = false
@@ -395,7 +400,7 @@ export const crit = (options: CritVitePluginOptions = {}): Plugin => {
           ? `${editorBase}/__assets/editor.js`
           : VIRTUAL_EDITOR_PATH
     const editorBundle =
-      editorBase === undefined || !isPreview ? undefined : buildEditorBundle()
+      editorBase === undefined || !isPreview ? undefined : buildEditorBundle(frameLoadMode)
     const runtime = ManagedRuntime.make(
       Layer.mergeAll(
         documentLayer,
@@ -655,7 +660,7 @@ export const crit = (options: CritVitePluginOptions = {}): Plugin => {
     },
     load(id) {
       if (id === resolvedVirtualEditorId()) {
-        return editorModuleSource(resolveReactEntry(), "vite")
+        return editorModuleSource(resolveReactEntry(), "vite", frameLoadMode)
       }
     },
     transformIndexHtml() {

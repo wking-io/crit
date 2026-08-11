@@ -49,6 +49,7 @@ export {
 } from "./glyph.js"
 export {
   DEFAULT_FRAME_CHROME_SETTINGS,
+  type FrameLoadMode,
   type FrameChromeSettings
 } from "./frame-card.js"
 export {

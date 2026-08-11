@@ -347,6 +347,27 @@ describe("Crit", () => {
     expect(open).toContain('target="_blank"')
   })
 
+  it("keeps src navigation during SSR when srcdoc loading is requested", async () => {
+    const canvas = Canvas.create({ id: "review", title: "Review" })
+    await Effect.runPromise(Canvas.apply(canvas, CanvasCommand.addFrame({
+      id: "candidate",
+      url: "/frames/ready#details",
+      title: "Candidate",
+      provenance: { kind: "manual", sourceId: "test" }
+    })))
+
+    const html = renderToStaticMarkup(
+      <CanvasViewport
+        dispatch={() => Effect.void}
+        document={Canvas.export(canvas)}
+        frameLoadMode="same-origin-srcdoc"
+      />
+    )
+
+    expect(html).toContain('src="/frames/ready#details"')
+    expect(html).not.toContain("srcDoc=")
+  })
+
   it("keeps an explicit iframeSandbox policy for archived Frames", async () => {
     const canvas = Canvas.create({ id: "review", title: "Review" })
     await Effect.runPromise(
