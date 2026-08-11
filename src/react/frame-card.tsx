@@ -177,20 +177,24 @@ export const FRAME_SIZE_PRESETS = [
   { id: "widescreen", label: "Widescreen", width: 2560, height: 1440 }
 ] as const
 
-export type FrameLoadMode = "navigate" | "same-origin-srcdoc"
+export type FrameLoadingPolicy =
+  | { readonly strategy: "navigate" }
+  | { readonly strategy: "parent-fetch"; readonly aliasOrigin?: string }
+
+const DEFAULT_FRAME_LOADING_POLICY: FrameLoadingPolicy = { strategy: "navigate" }
 
 /** @internal Selects a safe parent fetch without treating an alias as the page origin. */
 export const frameFetchTarget = (
   requestedUrl: URL,
   pageOrigin: string,
-  frameLoadOrigin?: string
+  policy: Extract<FrameLoadingPolicy, { readonly strategy: "parent-fetch" }>
 ) => {
   if (requestedUrl.origin === pageOrigin) {
     return { target: requestedUrl.href, fetchOrigin: pageOrigin }
   }
-  if (frameLoadOrigin === undefined) return null
+  if (policy.aliasOrigin === undefined) return null
   try {
-    const trusted = new URL(frameLoadOrigin)
+    const trusted = new URL(policy.aliasOrigin)
     if ((trusted.protocol !== "http:" && trusted.protocol !== "https:") ||
       requestedUrl.origin !== trusted.origin) return null
   } catch {
@@ -236,8 +240,7 @@ export function FrameCard({
   iframeAllow,
   iframeSandbox,
   iframeVisible,
-  frameLoadMode = "navigate",
-  frameLoadOrigin,
+  frameLoading = DEFAULT_FRAME_LOADING_POLICY,
   selected,
   shortId,
   zoom,
@@ -266,8 +269,7 @@ export function FrameCard({
   readonly iframeAllow: string
   readonly iframeSandbox?: string
   readonly iframeVisible: boolean
-  readonly frameLoadMode?: FrameLoadMode
-  readonly frameLoadOrigin?: string
+  readonly frameLoading?: FrameLoadingPolicy
   readonly selected: boolean
   readonly shortId: string
   readonly zoom: number
@@ -315,9 +317,11 @@ export function FrameCard({
       })()
   const fetchTarget = requestedFrameUrl === null || typeof window === "undefined"
     ? null
-    : frameFetchTarget(requestedFrameUrl, window.location.origin, frameLoadOrigin)
+    : frameLoading.strategy === "parent-fetch"
+      ? frameFetchTarget(requestedFrameUrl, window.location.origin, frameLoading)
+      : null
   const usesSrcdoc = frame.snapshot === undefined &&
-    frameLoadMode === "same-origin-srcdoc" &&
+    frameLoading.strategy === "parent-fetch" &&
     typeof window !== "undefined" &&
     fetchTarget !== null
 
@@ -808,16 +812,7 @@ export function FrameCard({
                 description: "Open this frame's page in a separate browser tab."
               })}
               href={frame.url}
-              onClick={usesSrcdoc && srcdocState.status === "ready" ? (event) => {
-                event.preventDefault()
-                const blobUrl = URL.createObjectURL(new Blob(
-                  [srcdocState.html], { type: "text/html" }
-                ))
-                window.open(blobUrl, "_blank", "noopener")
-                window.setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000)
-              } : undefined}
-              referrerPolicy="same-origin"
-              rel="noopener"
+              rel="noreferrer"
               target="_blank"
             >
               <Glyph name="openExternal" />
@@ -865,7 +860,7 @@ export function FrameCard({
           <iframe
             allow={iframeAllow}
             ref={iframeRef}
-            referrerPolicy="same-origin"
+            referrerPolicy="no-referrer"
             // Snapshot Artifacts are captured foreign pages with their CSP
             // stripped, served from the dev-server origin — never let their
             // scripts run same-origin with the host app and the Crit API.

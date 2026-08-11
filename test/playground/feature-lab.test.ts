@@ -9,11 +9,19 @@ import { createServer } from "vite"
 
 import { CanvasCommandSchema } from "../../src/core/index.js"
 import { CritManifest } from "../../src/discovery/index.js"
+import { isOrbFrameSource } from "../../playground/vite.config.js"
 
 const readJson = async (file: string) =>
   JSON.parse(await readFile(path.resolve(file), "utf8")) as unknown
 
 describe("Crit feature lab", () => {
+  it("reloads inline orb frames for first-party frame dependencies", () => {
+    expect(isOrbFrameSource(path.resolve("playground/src/frame-entry.tsx"))).toBe(true)
+    expect(isOrbFrameSource(path.resolve("src/react/frame-card.tsx"))).toBe(true)
+    expect(isOrbFrameSource(path.resolve("src/frame-bridge/index.ts"))).toBe(true)
+    expect(isOrbFrameSource(path.resolve("docs/example.css"))).toBe(false)
+  })
+
   it("serves orb frame routes as self-contained HTML", async () => {
     const previous = process.env.AMP_ORB
     process.env.AMP_ORB = "1"

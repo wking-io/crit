@@ -338,12 +338,12 @@ describe("Crit", () => {
     expect(archived[0]).toContain('sandbox="allow-scripts"')
     expect(live[0]).not.toContain("sandbox")
     for (const tag of iframes) {
-      expect(tag).toContain('referrerPolicy="same-origin"')
+      expect(tag).toContain('referrerPolicy="no-referrer"')
     }
 
     const open = html.match(/<a[^>]*href="https:\/\/example\.com\/candidate"[^>]*>/)?.[0]
-    expect(open).toContain('referrerPolicy="same-origin"')
-    expect(open).toContain('rel="noopener"')
+    expect(open).not.toContain("referrerPolicy")
+    expect(open).toContain('rel="noreferrer"')
     expect(open).toContain('target="_blank"')
   })
 
@@ -360,7 +360,7 @@ describe("Crit", () => {
       <CanvasViewport
         dispatch={() => Effect.void}
         document={Canvas.export(canvas)}
-        frameLoadMode="same-origin-srcdoc"
+        frameLoading={{ strategy: "parent-fetch" }}
       />
     )
 

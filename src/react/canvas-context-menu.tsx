@@ -67,8 +67,7 @@ function ContextMenuAction({
       })}
       onClick={onClose}
       {...(onPointerEnter === undefined ? {} : { onPointerEnter })}
-      referrerPolicy="same-origin"
-      rel="noopener"
+      rel="noreferrer"
       role="menuitem"
       target="_blank"
     >

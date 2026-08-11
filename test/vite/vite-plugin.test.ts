@@ -171,21 +171,20 @@ describe("crit Vite plugin", () => {
     expect(editorModule).toContain("panSpeed")
     expect(editorModule).toContain("zoomSpeed")
     expect(editorModule).toContain("bottom-right")
-    expect(editorModule).toContain('frameLoadMode: "navigate"')
+    expect(editorModule).toContain('frameLoading: {"strategy":"navigate"}')
   })
 
-  it("serializes the configured Frame loading mode into the editor", async () => {
+  it("serializes the configured Frame loading policy into the editor", async () => {
     const origin = await start({
       root,
-      frameLoadMode: "same-origin-srcdoc",
+      frameLoading: "parent-fetch",
       publicOrigin: "https://portal.example/some/path?ignored=true#fragment"
     }, process.cwd())
     const editorModule = await (await fetch(
       `${origin}/@id/virtual:crit-editor.js`
     )).text()
 
-    expect(editorModule).toContain('frameLoadMode: "same-origin-srcdoc"')
-    expect(editorModule).toContain('frameLoadOrigin: "https://portal.example"')
+    expect(editorModule).toContain('frameLoading: {"strategy":"parent-fetch","aliasOrigin":"https://portal.example"}')
   })
 
   it("pushes Canvas change hints to the served editor over the HMR WebSocket", async () => {
@@ -300,7 +299,7 @@ describe("crit Vite plugin", () => {
     expect(html).toContain("window.parent.postMessage")
   })
 
-  it("serves and reconciles the project discovery manifest", async () => {
+  it("ignores forwarded headers when resolving the project discovery manifest", async () => {
     await writeFile(
       path.join(root, "crit.manifest.json"),
       JSON.stringify({
@@ -345,13 +344,13 @@ describe("crit Vite plugin", () => {
     const canvas = await Effect.runPromise(Canvas.open(second))
 
     expect(manifestResponse.status).toBe(200)
-    expect(manifest.canvases[0]?.frames[0]?.url).toBe("https://crit.example/checkout")
+    expect(manifest.canvases[0]?.frames[0]?.url).toBe(`${origin}/checkout`)
     expect(first.revision).toBe(1)
     expect(second.revision).toBe(1)
     expect(Canvas.listFrames(canvas)).toMatchObject([
       {
         id: "app",
-        url: "https://crit.example/checkout",
+        url: `${origin}/checkout`,
         title: "Checkout",
         status: "changes-requested",
         provenance: {

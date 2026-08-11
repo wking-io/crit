@@ -10,8 +10,6 @@ import { Effect, Layer, ManagedRuntime } from "effect"
 import type { Plugin, ResolvedConfig, ViteDevServer } from "vite"
 
 import type { CanvasLiveRefreshEndpoint } from "../browser/canvas-live-refresh.js"
-import type { FrameLoadMode } from "../react/frame-card.js"
-
 import {
   CRIT_MANIFEST_FILE,
   CRIT_MANIFEST_PATH,
@@ -48,7 +46,7 @@ export interface CritVitePluginOptions {
   readonly manifestPath?: string
   readonly editorPath?: string | false
   readonly frameInputBridge?: boolean
-  readonly frameLoadMode?: FrameLoadMode
+  readonly frameLoading?: "navigate" | "parent-fetch"
   /** Trusted browser-visible origin used for manifest URLs and frame loading. */
   readonly publicOrigin?: string
 }
@@ -69,11 +67,6 @@ const normalizePublicOrigin = (value: string | undefined) => {
 
 type CritViteServer = Pick<ViteDevServer, "middlewares" | "httpServer"> &
   Partial<Pick<ViteDevServer, "watcher" | "ws">>
-
-const firstForwardedValue = (value: string | ReadonlyArray<string> | undefined) => {
-  const header = Array.isArray(value) ? value[0] : value
-  return header?.split(",", 1)[0]?.trim() || undefined
-}
 
 const webHeaders = (input: IncomingHttpHeaders) => {
   const headers = new Headers()
@@ -257,9 +250,12 @@ const resolvedVirtualEditorId = () =>
 const editorModuleSource = (
   reactEntry: string,
   delivery: "vite" | "bundle",
-  frameLoadMode: FrameLoadMode = "navigate",
-  frameLoadOrigin?: string
+  frameLoading: "navigate" | "parent-fetch" = "navigate",
+  publicOrigin?: string
 ) => {
+  const frameLoadingPolicy = frameLoading === "parent-fetch"
+    ? { strategy: "parent-fetch", ...(publicOrigin === undefined ? {} : { aliasOrigin: publicOrigin }) }
+    : { strategy: "navigate" }
   return `
   import { createElement, Fragment } from "react"
   import { createRoot } from "react-dom/client"
@@ -330,8 +326,7 @@ const editorModuleSource = (
     return createElement(Fragment, null,
       createElement(Crit, {
         canvasId,
-        frameLoadMode: ${JSON.stringify(frameLoadMode)},
-        frameLoadOrigin: ${JSON.stringify(frameLoadOrigin)},
+        frameLoading: ${JSON.stringify(frameLoadingPolicy)},
         onSession: attachLiveRefresh,
         frameChrome: {
           titleMinimumCharacters: chrome.titleMinimumCharacters,
@@ -361,13 +356,13 @@ const editorModuleSource = (
 }
 
 const buildEditorBundle = async (
-  frameLoadMode: FrameLoadMode,
-  frameLoadOrigin?: string
+  frameLoading: "navigate" | "parent-fetch",
+  publicOrigin?: string
 ) => {
   const reactEntry = resolveReactEntry()
   const result = await build({
     stdin: {
-      contents: editorModuleSource(reactEntry, "bundle", frameLoadMode, frameLoadOrigin),
+      contents: editorModuleSource(reactEntry, "bundle", frameLoading, publicOrigin),
       loader: "js",
       resolveDir: path.dirname(reactEntry),
       sourcefile: "crit-editor.js"
@@ -393,7 +388,7 @@ export const crit = (options: CritVitePluginOptions = {}): Plugin => {
   const manifestPath = options.manifestPath ?? CRIT_MANIFEST_PATH
   const editorPath = options.editorPath ?? "/crit"
   const enabled = options.enabled ?? true
-  const frameLoadMode = options.frameLoadMode ?? "navigate"
+  const frameLoading = options.frameLoading ?? "navigate"
   const publicOrigin = normalizePublicOrigin(options.publicOrigin)
   let resolvedRoot = options.root ?? process.cwd()
   let liveRefreshEndpoint: CanvasLiveRefreshEndpoint = { enabled: false }
@@ -424,7 +419,7 @@ export const crit = (options: CritVitePluginOptions = {}): Plugin => {
     const editorBundle =
       editorBase === undefined || !isPreview
         ? undefined
-        : buildEditorBundle(frameLoadMode, publicOrigin)
+        : buildEditorBundle(frameLoading, publicOrigin)
     const runtime = ManagedRuntime.make(
       Layer.mergeAll(
         documentLayer,
@@ -523,16 +518,9 @@ export const crit = (options: CritVitePluginOptions = {}): Plugin => {
         }
         throw cause
       }
-      const host =
-        firstForwardedValue(request.headers["x-forwarded-host"]) ??
-        request.headers.host ??
-        "crit.local"
-      const forwardedProtocol = firstForwardedValue(
-        request.headers["x-forwarded-proto"]
-      )
+      const host = request.headers.host ?? "crit.local"
       const protocol =
-        forwardedProtocol === "https" ||
-        ("encrypted" in request.socket && request.socket.encrypted)
+        "encrypted" in request.socket && request.socket.encrypted
           ? "https:"
           : "http:"
       return Effect.runPromise(
@@ -687,7 +675,7 @@ export const crit = (options: CritVitePluginOptions = {}): Plugin => {
     load(id) {
       if (id === resolvedVirtualEditorId()) {
         return editorModuleSource(
-          resolveReactEntry(), "vite", frameLoadMode, publicOrigin
+          resolveReactEntry(), "vite", frameLoading, publicOrigin
         )
       }
     },

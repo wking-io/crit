@@ -30,7 +30,7 @@ import {
   type FrameChromeSettings
 } from "./canvas-viewport.js"
 import type { CanvasCameraOptions } from "./canvas-camera.js"
-import type { FrameLoadMode } from "./frame-card.js"
+import type { FrameLoadingPolicy } from "./frame-card.js"
 import {
   CanvasHelpPanel,
   CanvasHelpSurface
@@ -91,8 +91,7 @@ export interface CritProps {
   readonly style?: CSSProperties
   readonly iframeAllow?: string
   readonly iframeSandbox?: string
-  readonly frameLoadMode?: FrameLoadMode
-  readonly frameLoadOrigin?: string
+  readonly frameLoading?: FrameLoadingPolicy
   readonly frameChrome?: Partial<FrameChromeSettings>
   readonly cameraOptions?: Partial<CanvasCameraOptions>
   readonly author?: CommentAuthor
@@ -114,8 +113,7 @@ export function Crit({
   style,
   iframeAllow,
   iframeSandbox,
-  frameLoadMode = "navigate",
-  frameLoadOrigin,
+  frameLoading,
   frameChrome,
   cameraOptions,
   author,
@@ -305,8 +303,7 @@ export function Crit({
         {...(cameraOptions === undefined ? {} : { cameraOptions })}
         {...(iframeAllow === undefined ? {} : { iframeAllow })}
         {...(iframeSandbox === undefined ? {} : { iframeSandbox })}
-        frameLoadMode={frameLoadMode}
-        {...(frameLoadOrigin === undefined ? {} : { frameLoadOrigin })}
+        {...(frameLoading === undefined ? {} : { frameLoading })}
         {...(onCommandError === undefined ? {} : { onCommandError })}
       />
       <CanvasHelpPanel />

@@ -1,5 +1,6 @@
 import { defineConfig } from "vite"
 import { fileURLToPath } from "node:url"
+import { relative as pathRelative } from "node:path"
 import { build } from "esbuild"
 import type { Plugin } from "vite"
 
@@ -10,6 +11,10 @@ import { critFrameCommentBridgeScript } from "../src/frame-bridge/comment-bridge
 const framePattern = /^\/frames\/(draft|ready|approved|changes)\/?$/
 const escapeInline = (value: string, element: "script" | "style") =>
   value.replace(new RegExp(`</${element}`, "gi"), `<\\/${element}`)
+export const isOrbFrameSource = (file: string) =>
+  /^(?:playground\/src|src)\/.*\.(?:ts|tsx|css|svg)$/.test(
+    pathRelative(fileURLToPath(new URL("..", import.meta.url)), file)
+  )
 
 export const orbFramePlugin = (): Plugin => {
   let bundlePromise: Promise<{ readonly javascript: string; readonly css: string }> | undefined
@@ -29,6 +34,12 @@ export const orbFramePlugin = (): Plugin => {
   return {
     name: "crit-orb-inline-frames",
     apply: "serve",
+    handleHotUpdate(context) {
+      if (!isOrbFrameSource(context.file)) return
+      bundlePromise = undefined
+      context.server.ws.send({ type: "full-reload", path: "*" })
+      return []
+    },
     configureServer(server) {
       server.middlewares.use((request, response, next) => {
         const pathname = new URL(request.url ?? "/", "http://crit.localhost").pathname
@@ -80,7 +91,7 @@ export default defineConfig({
       }
     },
     crit({
-      ...(process.env.AMP_ORB ? { frameLoadMode: "same-origin-srcdoc" as const } : {}),
+      ...(process.env.AMP_ORB ? { frameLoading: "parent-fetch" as const } : {}),
       ...(process.env.PUBLIC_URL ? { publicOrigin: process.env.PUBLIC_URL } : {}),
       title: (canvasId) =>
         canvasId === "feature-lab" ? "Crit feature lab" : canvasId

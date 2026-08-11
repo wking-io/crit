@@ -9,7 +9,7 @@ describe("frameFetchTarget", () => {
     expect(frameFetchTarget(
       new URL("https://portal.example/frames/ready?variant=2#section"),
       pageOrigin,
-      "https://portal.example"
+      { strategy: "parent-fetch", aliasOrigin: "https://portal.example" }
     )).toEqual({
       target: "/frames/ready?variant=2",
       fetchOrigin: pageOrigin
@@ -20,7 +20,7 @@ describe("frameFetchTarget", () => {
     expect(frameFetchTarget(
       new URL("https://actual-portal.example/frames/ready?variant=2"),
       pageOrigin,
-      "https://portal.example"
+      { strategy: "parent-fetch", aliasOrigin: "https://portal.example" }
     )).toEqual({
       target: "https://actual-portal.example/frames/ready?variant=2",
       fetchOrigin: pageOrigin
@@ -31,7 +31,7 @@ describe("frameFetchTarget", () => {
     expect(frameFetchTarget(
       new URL("https://untrusted.example/frames/ready"),
       pageOrigin,
-      "https://portal.example"
+      { strategy: "parent-fetch", aliasOrigin: "https://portal.example" }
     )).toBeNull()
   })
 })

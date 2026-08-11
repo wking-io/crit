@@ -43,7 +43,7 @@ import { beginCanvasInteraction } from "./canvas-interaction.js"
 import { CanvasToolbar } from "./canvas-toolbar.js"
 import {
   FrameCard,
-  type FrameLoadMode,
+  type FrameLoadingPolicy,
   type FrameChromeSettings
 } from "./frame-card.js"
 import { frameStatus, shortIdForIndex } from "./frame-chrome.js"
@@ -114,8 +114,7 @@ export interface CanvasViewportProps {
   ) => Effect.Effect<unknown, CanvasCommandFailed>
   readonly iframeAllow?: string
   readonly iframeSandbox?: string
-  readonly frameLoadMode?: FrameLoadMode
-  readonly frameLoadOrigin?: string
+  readonly frameLoading?: FrameLoadingPolicy
   readonly onCommandError?: (message: string) => void
   readonly snapshotFrame?: (
     frameId: string
@@ -163,8 +162,7 @@ export function CanvasViewport({
   dispatch,
   iframeAllow = "clipboard-read; clipboard-write; fullscreen",
   iframeSandbox,
-  frameLoadMode = "navigate",
-  frameLoadOrigin,
+  frameLoading,
   onCommandError,
   snapshotFrame,
   frameChrome,
@@ -573,8 +571,7 @@ export function CanvasViewport({
               geometry={geometryOf(item)}
               zoom={camera.zoom}
               iframeAllow={iframeAllow}
-              frameLoadMode={frameLoadMode}
-              {...(frameLoadOrigin === undefined ? {} : { frameLoadOrigin })}
+              {...(frameLoading === undefined ? {} : { frameLoading })}
               {...(iframeSandbox === undefined ? {} : { iframeSandbox })}
               iframeVisible={intersectsViewport(
                 geometryOf(item), camera, viewport.width, viewport.height
