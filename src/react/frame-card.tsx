@@ -246,6 +246,7 @@ export function FrameCard({
   zoom,
   commentMode,
   commentThreads,
+  defaultStatusMenuOpen = false,
   openCommentId,
   onBringToFront,
   onFitContent,
@@ -275,6 +276,7 @@ export function FrameCard({
   readonly zoom: number
   readonly commentMode: boolean
   readonly commentThreads: ReadonlyArray<CanvasCommentThread>
+  readonly defaultStatusMenuOpen?: boolean
   readonly openCommentId?: string
   readonly onBringToFront: () => void
   readonly onFitContent: (height: number) => void
@@ -301,7 +303,7 @@ export function FrameCard({
   const [contextMenu, setContextMenu] = useState<ContextMenuPosition | null>(null)
   const [fullscreen, setFullscreen] = useState(false)
   const [snapshotting, setSnapshotting] = useState(false)
-  const [statusMenuOpen, setStatusMenuOpen] = useState(false)
+  const [statusMenuOpen, setStatusMenuOpen] = useState(defaultStatusMenuOpen)
   const [titleDraft, setTitleDraft] = useState(frame.title)
   const [titleEditing, setTitleEditing] = useState(false)
   const [commentBridgeReady, setCommentBridgeReady] = useState(false)
@@ -916,7 +918,7 @@ export function FrameCard({
       </div>
       {selected ? (
         <CanvasSelection
-          ink={status.ink}
+          ink="var(--frame-ink)"
           label={frame.title}
           onResize={(event, handle) => onResize(event, frame, handle)}
           zoom={zoom}

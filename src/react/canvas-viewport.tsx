@@ -21,7 +21,7 @@ import {
   type CanvasGeometry,
   type CanvasNote,
   type CommentAnchor,
-  type CommentAuthor,
+  type Author,
   type CommentMessage,
   type CanvasCommand as CanvasCommandValue
 } from "../core/index.js"
@@ -108,7 +108,7 @@ const CRIT_HOTKEYS = {
 
 export interface CanvasViewportProps {
   readonly document: CanvasDocument
-  readonly author?: CommentAuthor | null
+  readonly author?: Author | null
   readonly dispatch: (
     ...commands: ReadonlyArray<CanvasCommandValue>
   ) => Effect.Effect<unknown, CanvasCommandFailed>
@@ -247,10 +247,14 @@ export function CanvasViewport({
   )
 
   const addNoteAt = useCallback((x: number, y: number) => {
+    if (author === null) {
+      onCommandError?.("Configure Git user.name and user.email to add notes")
+      return
+    }
     const id = localId("note")
-    run(CanvasCommand.addNote({ id, text: "", x, y }))
+    run(CanvasCommand.addNote({ id, text: "", author, x, y }))
     setSelectedId(id)
-  }, [run])
+  }, [author, onCommandError, run])
 
   const addFrameAt = useCallback((url: string, title: string, x: number, y: number) => {
     const id = localId("frame")
@@ -336,11 +340,18 @@ export function CanvasViewport({
     if (selectedId === null) return
     if (document.frames.some((frame) => frame.id === selectedId)) {
       run(CanvasCommand.removeFrame({ id: selectedId }))
-    } else if (document.notes.some((note) => note.id === selectedId)) {
-      run(CanvasCommand.removeNote({ id: selectedId }))
+    } else {
+      const note = document.notes.find((candidate) => candidate.id === selectedId)
+      if (note !== undefined) {
+        if (author?.id !== note.author.id) {
+          onCommandError?.("Only the Note Author may remove it")
+          return
+        }
+        run(CanvasCommand.removeNote({ id: selectedId, actorId: author.id }))
+      }
     }
     setSelectedId(null)
-  }, [document.frames, document.notes, run, selectedId])
+  }, [author, document.frames, document.notes, onCommandError, run, selectedId])
 
   useHotkeys([
     {
@@ -658,6 +669,8 @@ export function CanvasViewport({
             />
           ) : (
             <NoteCard
+              author={author}
+              commit={run}
               key={item.id}
               note={item}
               geometry={geometryOf(item)}
@@ -668,13 +681,9 @@ export function CanvasViewport({
                 run(CanvasCommand.bringNoteToFront({ id: item.id }))
               }
               onMove={startMove}
-              onRemove={() => run(CanvasCommand.removeNote({ id: item.id }))}
               onResize={startResize}
               onSendToBack={() =>
                 run(CanvasCommand.sendNoteToBack({ id: item.id }))
-              }
-              onText={(expectedText, text) =>
-                run(CanvasCommand.updateNote({ id: item.id, expectedText, text }))
               }
             />
           )
@@ -744,6 +753,7 @@ export function CanvasViewport({
       ) : null}
       <CanvasToolbar
         commentAvailable={author !== null}
+        noteAvailable={author !== null}
         onAction={(action) => {
           if (action === "select") setTool("select")
           else if (action === "pan") setTool("pan")
@@ -765,11 +775,11 @@ export function CanvasViewport({
               y: canvasMenu.worldY
             })
           },
-          {
+          ...(author === null ? [] : [{
             help: "Add an editable note at the point where the canvas menu opened.",
             label: "New note",
             onSelect: () => addNoteAt(canvasMenu.worldX, canvasMenu.worldY)
-          },
+          }]),
           {
             help: "Adjust the view so every frame and note is visible.",
             label: "Zoom to fit",

@@ -3,6 +3,8 @@ import { readFileSync } from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
+import { gitAuthor } from "../dist/node/index.js"
+
 const playground = path.dirname(fileURLToPath(import.meta.url))
 const repository = path.dirname(playground)
 const cli = path.join(repository, "dist", "cli.js")
@@ -36,10 +38,14 @@ const canvas = run(["open", "feature-lab"])
 const hasSeed = canvas.notes.some((note) => note.id === "feature-checklist")
 
 if (!hasSeed) {
+  const author = await gitAuthor(playground)
+  const authoredSeedCommands = seedCommands.map((command) =>
+    command._tag === "AddNote" ? { ...command, author } : command
+  )
   run([
     "apply",
     "feature-lab",
-    JSON.stringify(seedCommands)
+    JSON.stringify(authoredSeedCommands)
   ])
 }
 

@@ -54,20 +54,20 @@ export const critStyles = String.raw`
   gap: 8px;
   height: 40px;
   left: 20px;
+  max-width: calc(100% - 40px);
   padding: 0 8px 0 14px;
   pointer-events: auto;
   position: absolute;
   top: 17px;
-  width: 395px;
+  width: max-content;
   z-index: 1000;
 }
 
 .crit-toolbar__title {
   align-items: flex-start;
   display: flex;
-  flex: 0 0 142px;
+  flex: 0 1 auto;
   gap: 6px;
-  max-width: 142px;
   min-width: 0;
   overflow: hidden;
   font-size: 14px;
@@ -429,41 +429,32 @@ export const critStyles = String.raw`
 .crit-status-option svg { height: 16px; width: 16px; }
 
 .crit-note {
-  background: #eeece5;
-  border: calc(1px * var(--crit-ui)) solid #191918;
-  box-shadow: calc(6px * var(--crit-ui)) calc(6px * var(--crit-ui)) 0 rgba(25,25,24,.18);
+  background: oklch(97% 0.001 106.4);
+  border: 0;
+  border-radius: calc(8px * var(--crit-ui));
+  box-shadow: #d8d5cc 0 0 0 calc(1px * var(--crit-ui));
   color: #191918;
   overflow: visible;
   position: absolute;
 }
-.crit-note__chrome {
-  align-items: center;
-  background: #191918;
-  color: #fff;
-  cursor: ${MOVE_CANVAS_CURSOR};
-  display: flex;
-  font: 700 calc(9px * var(--crit-ui))/1 system-ui, sans-serif;
-  height: calc(28px * var(--crit-ui));
-  justify-content: space-between;
-  letter-spacing: .08em;
-  padding: 0 calc(8px * var(--crit-ui));
-  text-transform: uppercase;
+.crit-note::after {
+  border-radius: inherit;
+  box-shadow: oklch(100% 0 0 / 50%) 0 0 0 calc(1px * var(--crit-ui)) inset, oklch(100% 0 0 / 60%) 0 calc(1px * var(--crit-ui)) 0 inset;
+  content: "";
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+  z-index: 2;
 }
-.crit-note__label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.crit-note__actions { display: flex; gap: calc(3px * var(--crit-ui)); }
-.crit-note__actions button { background: transparent; border: 0; color: #fff; cursor: pointer; height: calc(18px * var(--crit-ui)); padding: 0; width: calc(18px * var(--crit-ui)); }
-.crit-note textarea { background: transparent; border: 0; color: #191918; font: calc(12px * var(--crit-ui))/1.65 "JetBrains Mono", ui-monospace, monospace; height: calc(100% - 28px * var(--crit-ui)); outline: 0; padding: calc(12px * var(--crit-ui)); resize: none; width: 100%; }
+.crit-note textarea { background: transparent; border: 0; border-radius: inherit; color: #191918; display: block; font: 400 calc(14px * var(--crit-ui))/calc(20px * var(--crit-ui)) system-ui, -apple-system, sans-serif; min-height: calc(84px * var(--crit-ui)); outline: 0; overflow: hidden; padding: calc(12px * var(--crit-ui)); position: relative; resize: none; width: 100%; z-index: 1; }
 
 .crit-note__select-shield {
   background: transparent;
   border: 0;
-  bottom: 0;
   cursor: var(--crit-canvas-cursor);
-  left: 0;
+  inset: 0;
   padding: 0;
   position: absolute;
-  right: 0;
-  top: calc(28px * var(--crit-ui));
   z-index: 3;
 }
 
@@ -500,33 +491,32 @@ export const critStyles = String.raw`
 .crit-selection__handle[data-resize-handle="west"] { bottom: calc(8px * var(--selection-ui)); cursor: ${resizeCursors.ew}; left: 0; top: calc(8px * var(--selection-ui)); transform: translateX(-50%); width: calc(12px * var(--selection-ui)); }
 
 .crit-help {
+  --crit-help-inset: 8px;
+  --crit-help-radius: 12px;
   background: oklch(97% 0.001 106.4);
-  border-radius: 8px;
+  border-radius: var(--crit-help-radius);
   bottom: 16px;
   box-shadow:
     #ffffff80 0 0 0 1px inset,
     #fff 0 1px 0 inset,
     oklch(14.7% 0.004 49.3 / 10%) 0 2px 4px,
     oklch(14.7% 0.004 49.3 / 20%) 0 0 0 .5px;
-  color: var(--crit-ink);
   display: grid;
   font-family: system-ui, -apple-system, sans-serif;
-  gap: 12px;
-  height: 128px;
+  font-weight: 400;
+  gap: 8px;
   left: 16px;
-  padding: 14px 16px;
+  min-height: 88px;
+  padding: var(--crit-help-inset);
   pointer-events: none;
   position: absolute;
   width: 320px;
   z-index: 4900;
 }
-.crit-help__header { display: flex; gap: 16px; justify-content: space-between; min-width: 0; }
-.crit-help__field { display: grid; gap: 3px; min-width: 0; }
-.crit-help__field--hotkey { flex: 0 0 auto; text-align: right; }
-.crit-help__label { color: #77746c; font-size: 9px; font-weight: 700; letter-spacing: .08em; line-height: 11px; text-transform: uppercase; }
-.crit-help strong { font-size: 13px; font-weight: 650; line-height: 17px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.crit-help kbd { color: #77746c; font: 600 10px/17px "JetBrains Mono", ui-monospace, monospace; white-space: nowrap; }
-.crit-help__description p { font-size: 11px; line-height: 15px; margin: 0; }
+.crit-help__header { align-items: start; display: flex; gap: 16px; justify-content: space-between; min-width: 0; }
+.crit-help__title { color: var(--crit-help-title-ink, var(--crit-ink)); font-size: 13px; font-weight: 400; line-height: 17px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.crit-help__shortcut { background: var(--crit-help-shortcut-surface, oklch(95% 0.001 106.4)); border: 1px solid var(--crit-help-shortcut-border, var(--crit-line)); border-radius: calc(var(--crit-help-radius) - var(--crit-help-inset)); color: var(--crit-help-shortcut-ink, var(--crit-muted)); flex: 0 0 auto; font: 400 10px/16px system-ui, -apple-system, sans-serif; min-width: 24px; padding: 0 6px; text-align: center; white-space: nowrap; }
+.crit-help__description { color: var(--crit-help-description-ink, var(--crit-muted)); font-size: 11px; font-weight: 400; line-height: 15px; margin: 0; }
 
 .crit-frame:fullscreen {
   --crit-frame-chrome-height: 36px;

@@ -4,7 +4,7 @@ import { Effect } from "effect"
 import { Canvas, CanvasCommand } from "../../src/core/index.js"
 
 describe("Canvas RemoveFrame command", () => {
-  it.effect("removes a Frame and its attached Notes", () =>
+  it.effect("removes a Frame and detaches its Notes in place", () =>
     Effect.gen(function*() {
       const canvas = Canvas.create({ id: "review", title: "Review" })
       yield* Canvas.apply(
@@ -18,6 +18,7 @@ describe("Canvas RemoveFrame command", () => {
         CanvasCommand.addNote({
           id: "checkout-note",
           text: "Attached feedback",
+          author: { id: "author", name: "Test Author" },
           x: 20,
           y: 20
         }),
@@ -37,7 +38,12 @@ describe("Canvas RemoveFrame command", () => {
       })
       expect(Canvas.summarize(canvas)).toMatchObject({
         frameCount: 0,
-        noteCount: 0
+        noteCount: 1
       })
+      expect(Canvas.listNotes(canvas)).toMatchObject([{
+        id: "checkout-note",
+        attachedTo: null,
+        geometry: { x: 20, y: 20 }
+      }])
     }))
 })

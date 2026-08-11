@@ -15,7 +15,13 @@ describe("Canvas item ordering", () => {
           title: "Candidate",
           provenance: { kind: "manual", sourceId: "test" }
         }),
-        CanvasCommand.addNote({ id: "feedback", text: "Review", x: 20, y: 30 })
+        CanvasCommand.addNote({
+          id: "feedback",
+          text: "Review",
+          author: { id: "author", name: "Test Author" },
+          x: 20,
+          y: 30
+        })
       )
 
       const broughtForward = yield* Canvas.apply(

@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react"
-import type { CanvasCommentThread, CanvasGeometry, CommentAuthor, CommentMessage } from "../core/index.js"
+import type { Author, CanvasCommentThread, CanvasGeometry, CommentMessage } from "../core/index.js"
 import { frameUiScale } from "./frame-card.js"
 import { Glyph } from "./glyph.js"
 
@@ -18,7 +18,7 @@ export const commentPopoverProjection = (
   }
 }
 
-const Message = ({ actor, message, onEdit }: { readonly actor: CommentAuthor; readonly message: CommentMessage; readonly onEdit: (expected: string, body: string) => void }) => {
+const Message = ({ actor, message, onEdit }: { readonly actor: Author; readonly message: CommentMessage; readonly onEdit: (expected: string, body: string) => void }) => {
   const [editing, setEditing] = useState(false)
   const [body, setBody] = useState(message.body)
   useEffect(() => setBody(message.body), [message.body])
@@ -32,10 +32,10 @@ const Message = ({ actor, message, onEdit }: { readonly actor: CommentAuthor; re
 }
 
 export function CommentPopover(props: {
-  readonly author: CommentAuthor
+  readonly author: Author
   readonly frameGeometry?: CanvasGeometry
   readonly inline?: boolean
-  readonly owner: CommentAuthor | null
+  readonly owner: Author | null
   readonly statusColor: string
   readonly thread?: CanvasCommentThread
   readonly zoom?: number

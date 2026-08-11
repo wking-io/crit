@@ -18,6 +18,7 @@ describe("Canvas Frame geometry commands", () => {
         CanvasCommand.addNote({
           id: "checkout-note",
           text: "Align this copy",
+          author: { id: "author", name: "Test Author" },
           x: 20,
           y: 20
         }),

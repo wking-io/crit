@@ -1,44 +1,88 @@
 import {
   useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
   useState,
   type CSSProperties,
   type PointerEvent as ReactPointerEvent
 } from "react"
 
-import type {
-  CanvasGeometry,
-  CanvasNote
+import {
+  CanvasCommand,
+  type Author,
+  type CanvasCommand as CanvasCommandValue,
+  type CanvasGeometry,
+  type CanvasNote
 } from "../core/index.js"
+import {
+  CritContextMenu,
+  type ContextMenuItem,
+  type ContextMenuPosition
+} from "./canvas-context-menu.js"
 import { canvasItemStyle } from "./canvas-item-style.js"
 import { NO_HELP_HOTKEY, helpTarget } from "./canvas-help.js"
 import {
   CanvasSelection,
   type ResizeHandlePosition
 } from "./canvas-selection.js"
-import { frameStatus } from "./frame-chrome.js"
-import { Glyph } from "./glyph.js"
-import { OrderControls } from "./order-controls.js"
+import {
+  createNoteEditingSession,
+  type NoteCommandCommit
+} from "./note-editing.js"
+
+export const NOTE_MINIMUM_ROWS = 3
+const NOTE_BORDER_HEIGHT = 2
+const NOTE_RESIZE_HANDLES = ["west", "east"] as const
+
+export const noteHeightForContent = (scrollHeight: number) =>
+  Math.ceil(scrollHeight + NOTE_BORDER_HEIGHT)
+
+export const noteContextMenuItems = (actions: {
+  readonly onBringToFront: () => void
+  readonly onRemove?: () => void
+  readonly onSendToBack: () => void
+}): ReadonlyArray<ContextMenuItem> => {
+  const ordering: ReadonlyArray<ContextMenuItem> = [{
+    help: "Place this note above every other canvas item.",
+    label: "Bring to front",
+    onSelect: actions.onBringToFront
+  }, {
+    help: "Place this note behind every other canvas item.",
+    label: "Send to back",
+    onSelect: actions.onSendToBack
+  }]
+  return actions.onRemove === undefined
+    ? ordering
+    : [...ordering, {
+        help: "Remove this note from the canvas.",
+        label: "Delete",
+        onSelect: actions.onRemove,
+        tone: "danger"
+      }]
+}
 
 export function NoteCard({
+  author,
+  commit,
   note,
   geometry,
   selected,
   zoom,
   onBringToFront,
   onMove,
-  onRemove,
   onResize,
   onSelect,
-  onSendToBack,
-  onText
+  onSendToBack
 }: {
+  readonly author: Author | null
+  readonly commit: (...commands: ReadonlyArray<CanvasCommandValue>) => void
   readonly note: CanvasNote
   readonly geometry: CanvasGeometry
   readonly selected: boolean
   readonly zoom: number
   readonly onBringToFront: () => void
   readonly onMove: (event: ReactPointerEvent, item: CanvasNote) => void
-  readonly onRemove: () => void
   readonly onResize: (
     event: ReactPointerEvent,
     item: CanvasNote,
@@ -46,85 +90,139 @@ export function NoteCard({
   ) => void
   readonly onSelect: () => void
   readonly onSendToBack: () => void
-  readonly onText: (expectedText: string, text: string) => void
 }) {
+  const [contextMenu, setContextMenu] = useState<ContextMenuPosition | null>(null)
+  const [height, setHeight] = useState(geometry.height)
   const [text, setText] = useState(note.text)
-  useEffect(() => setText(note.text), [note.text])
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const textRef = useRef(note.text)
+  const commitRef = useRef<NoteCommandCommit>(commit)
+  commitRef.current = commit
+  const canEdit = author?.id === note.author.id
+  const editing = useMemo(() => createNoteEditingSession({
+    actorId: author?.id ?? null,
+    commit: (...commands) => commitRef.current(...commands),
+    note
+  }), [author?.id, note.id])
+
+  useEffect(() => () => editing.dispose(), [editing])
+
+  useLayoutEffect(() => {
+    const wasDirty = editing.isTextDirty(textRef.current)
+    editing.synchronize(note, textRef.current)
+    if (wasDirty && note.text !== textRef.current) return
+    textRef.current = note.text
+    setText(note.text)
+  }, [editing, note])
+
+  useLayoutEffect(() => {
+    const frame = globalThis.requestAnimationFrame(() => {
+      const textarea = textareaRef.current
+      if (textarea === null) return
+      textarea.style.height = "auto"
+      const nextHeight = noteHeightForContent(textarea.scrollHeight)
+      textarea.style.height = `${nextHeight - NOTE_BORDER_HEIGHT}px`
+      setHeight((current) => current === nextHeight ? current : nextHeight)
+      editing.schedule({
+        text: textRef.current,
+        width: geometry.width,
+        height: nextHeight
+      })
+    })
+    return () => globalThis.cancelAnimationFrame(frame)
+  }, [editing, geometry.height, geometry.width, text])
+
+  const measureAndFlush = () => {
+    const textarea = textareaRef.current
+    if (textarea === null) return
+    textarea.style.height = "auto"
+    const nextHeight = noteHeightForContent(textarea.scrollHeight)
+    textarea.style.height = `${nextHeight - NOTE_BORDER_HEIGHT}px`
+    setHeight(nextHeight)
+    editing.flush({
+      text: textRef.current,
+      width: geometry.width,
+      height: nextHeight
+    })
+  }
+
+  const remove = canEdit
+    ? () => commit(CanvasCommand.removeNote({
+        id: note.id,
+        actorId: author.id
+      }))
+    : undefined
+
   return (
     <article
       className="crit-note"
       data-selected={selected || undefined}
-      style={{ ...canvasItemStyle(geometry, note.zIndex), "--crit-ui": 1 } as CSSProperties}
+      onContextMenu={(event) => {
+        event.preventDefault()
+        event.stopPropagation()
+        setContextMenu({ x: event.clientX, y: event.clientY })
+        onSelect()
+      }}
+      onPointerDown={onSelect}
+      style={{
+        ...canvasItemStyle({ ...geometry, height }, note.zIndex),
+        "--crit-ui": 1
+      } as CSSProperties}
     >
-      <header
-        className="crit-note__chrome"
-        {...helpTarget({
-          name: "Move note",
-          hotkey: NO_HELP_HOTKEY,
-          description: "Drag the note header to reposition it on the canvas."
-        })}
-        onPointerDown={(event) => {
-          onSelect()
-          onMove(event, note)
-        }}
-      >
-        <span className="crit-note__label">{note.attachedTo === null ? "Note" : `Attached to ${note.attachedTo}`}</span>
-        <span className="crit-note__actions">
-          <OrderControls
-            label="note"
-            onBringToFront={onBringToFront}
-            onSendToBack={onSendToBack}
-          />
-          <button
-            aria-keyshortcuts="Backspace"
-            aria-label="Delete note"
-            {...helpTarget({
-              name: "Remove note",
-              hotkey: "Del",
-              description: "Remove this note from the canvas."
-            })}
-            onClick={onRemove}
-            onPointerDown={(event) => event.stopPropagation()}
-            type="button"
-          ><Glyph name="trash" /></button>
-        </span>
-      </header>
       <textarea
         aria-label="Note"
         {...helpTarget({
-          name: "Edit note",
+          name: canEdit ? "Edit note" : `Note by ${note.author.name}`,
           hotkey: NO_HELP_HOTKEY,
-          description: "Write review feedback. Changes save when focus leaves the note."
+          description: canEdit
+            ? "Write review feedback. The note grows to keep every line visible."
+            : "Only the Author can edit this note. You can select, move, and resize its width."
         })}
-        onBlur={() => text !== note.text && onText(note.text, text)}
-        onChange={(event) => setText(event.currentTarget.value)}
+        onBlur={measureAndFlush}
+        onChange={(event) => {
+          textRef.current = event.currentTarget.value
+          setText(event.currentTarget.value)
+        }}
+        readOnly={!canEdit}
+        ref={textareaRef}
+        rows={NOTE_MINIMUM_ROWS}
         value={text}
       />
       {!selected ? (
         <button
-          aria-label="Select note"
+          aria-label="Select and move note"
           className="crit-note__select-shield"
           {...helpTarget({
-            name: "Select note",
+            name: "Select and move note",
             hotkey: "V",
-            description: "Select this note so it can be moved or resized."
+            description: "Click to select this note or drag to reposition it."
           })}
           onPointerDown={(event) => {
-            event.preventDefault()
-            event.stopPropagation()
             onSelect()
+            onMove(event, note)
           }}
           type="button"
         />
       ) : null}
       {selected ? (
         <CanvasSelection
-          ink={frameStatus("archived").ink}
+          handles={NOTE_RESIZE_HANDLES}
+          ink="var(--crit-note-selection-ink, var(--crit-muted))"
           label="note"
           onResize={(event, handle) => onResize(event, note, handle)}
           zoom={zoom}
         />
       ) : null}
+      <CritContextMenu
+        ariaLabel="Note actions"
+        items={noteContextMenuItems({
+          onBringToFront,
+          ...(remove === undefined ? {} : { onRemove: remove }),
+          onSendToBack
+        })}
+        onClose={() => setContextMenu(null)}
+        position={contextMenu}
+      />
     </article>
   )
 }

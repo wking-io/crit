@@ -20,6 +20,7 @@ const reviewDocument = async () => {
       CanvasCommand.addNote({
         id: "attached",
         text: "Attached",
+        author: { id: "author", name: "Test Author" },
         x: 150,
         y: 150,
         width: 200,
@@ -29,6 +30,7 @@ const reviewDocument = async () => {
       CanvasCommand.addNote({
         id: "loose",
         text: "Loose",
+        author: { id: "author", name: "Test Author" },
         x: 900,
         y: 500,
         width: 200,

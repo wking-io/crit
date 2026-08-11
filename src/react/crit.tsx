@@ -16,7 +16,7 @@ import {
 } from "react"
 
 import { IndexedDbDraftJournal } from "../browser/indexeddb-draft-journal.js"
-import type { CanvasDocument, CommentAuthor } from "../core/index.js"
+import type { Author, CanvasDocument } from "../core/index.js"
 import { HttpCritClient } from "../http/client.js"
 import {
   CanvasSession,
@@ -94,7 +94,7 @@ export interface CritProps {
   readonly frameLoading?: FrameLoadingPolicy
   readonly frameChrome?: Partial<FrameChromeSettings>
   readonly cameraOptions?: Partial<CanvasCameraOptions>
-  readonly author?: CommentAuthor
+  readonly author?: Author
   readonly onSession?: (session: CanvasSessionHandle) => void
   readonly onCommandError?: (message: string) => void
   readonly loadingFallback?: ReactNode
@@ -126,7 +126,7 @@ export function Crit({
   const [sessionState, setSessionState] = useState<CanvasSessionState | null>(null)
   const [document, setDocument] = useState<CanvasDocument | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [resolvedAuthor, setResolvedAuthor] = useState<CommentAuthor | null>(
+  const [resolvedAuthor, setResolvedAuthor] = useState<Author | null>(
     author ?? null
   )
   const onSessionRef = useRef(onSession)
@@ -154,7 +154,7 @@ export function Crit({
     void fetch(`${base}/identity`, { signal: controller.signal })
       .then(async (response) => {
         if (!response.ok) throw new Error("Git comment identity is unavailable")
-        const value = await response.json() as Partial<CommentAuthor>
+        const value = await response.json() as Partial<Author>
         if (typeof value.id !== "string" || typeof value.name !== "string") {
           throw new Error("Git comment identity is invalid")
         }

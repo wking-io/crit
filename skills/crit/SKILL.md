@@ -47,11 +47,13 @@ array to `apply`:
 - `MoveFrame`: `id`, `x`, and `y`.
 - `ResizeFrame`: `id`, positive `width`, and positive `height`.
 - `BringFrameToFront` and `SendFrameToBack`: `id`.
-- `RemoveFrame`: `id`; this also removes Notes attached to the Frame.
-- `AddNote`: `id`, `text`, `x`, `y`, positive `width`, and positive `height`
+- `RemoveFrame`: `id`; this detaches and preserves Notes attached to the Frame.
+- `AddNote`: `id`, `text`, `author`, `x`, `y`, positive `width`, and positive `height`
   (all required; 280×160 is a reasonable default size).
-- `UpdateNote`: `id`, `expectedText`, and replacement `text`.
-- `MoveNote`, `ResizeNote`, `AttachNote`, `DetachNote`, and `RemoveNote`.
+- `EditNote`: `id`, the Note Author's `actorId`, `expectedText`, and replacement
+  `text`.
+- `MoveNote`, `ResizeNote`, `AttachNote`, and `DetachNote` arrange any Note.
+- `RemoveNote`: `id` and the Note Author's `actorId`.
 - `BringNoteToFront` and `SendNoteToBack`: `id`.
 - `AddCommentThread`: `id`, `frameId`, an `anchor`, and an opening message.
 - `ReplyToCommentThread`: thread `id` and a flat `reply` message.
@@ -60,7 +62,7 @@ array to `apply`:
 - `SetCommentThreadResolved`: thread `id`, `actor`, `resolved`, and `at`.
 - `UpdateCommentAnchor`: thread `id`, `actorId`, and replacement `anchor`.
 
-Before writing Comments, request the current identity from
+Before writing Notes or Comments, request the current identity from
 `GET /__crit/api/identity` on the local Crit host. `open --json` includes the
 Canvas Owner plus active and resolved Comment threads. Use a normalized frame
 anchor when an agent does not have an element anchor from the browser:

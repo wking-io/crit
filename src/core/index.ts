@@ -20,9 +20,9 @@ export {
   type Canvas as CanvasHandle
 } from "./canvas.js"
 export {
+  Author,
   CanvasCommentThread,
   CommentAnchor,
-  CommentAuthor,
   CommentMessage,
   ElementCommentAnchor,
   ElementFingerprint,
@@ -31,7 +31,7 @@ export {
   commentMessageById,
   type CanvasCommentThread as CanvasCommentThreadValue,
   type CommentAnchor as CommentAnchorValue,
-  type CommentAuthor as CommentAuthorValue,
+  type Author as AuthorValue,
   type CommentMessage as CommentMessageValue,
   type ElementCommentAnchor as ElementCommentAnchorValue,
   type ElementFingerprint as ElementFingerprintValue,
@@ -63,7 +63,7 @@ export {
   SendNoteToBackCommand,
   SetFrameStatusCommand,
   UpdateFrameCommand,
-  UpdateNoteCommand,
+  EditNoteCommand,
   ReplyToCommentThreadCommand,
   EditCommentCommand,
   SetCommentThreadResolvedCommand,
@@ -88,5 +88,5 @@ export {
   type ResizeNoteInput,
   type SetFrameStatusInput,
   type UpdateFrameInput,
-  type UpdateNoteInput
+  type EditNoteInput
 } from "./canvas-command.js"

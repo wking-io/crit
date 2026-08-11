@@ -1,8 +1,8 @@
 import { Schema } from "effect"
 
 import {
+  Author,
   CommentAnchor,
-  CommentAuthor,
   CommentMessage
 } from "./comment.js"
 
@@ -128,6 +128,7 @@ export type SendFrameToBackCommand = typeof SendFrameToBackCommand.Type
 export const AddNoteCommand = Schema.TaggedStruct("AddNote", {
   id: Schema.String,
   text: Schema.String,
+  author: Author,
   x: Schema.Finite,
   y: Schema.Finite,
   width: PositiveDimension,
@@ -135,12 +136,13 @@ export const AddNoteCommand = Schema.TaggedStruct("AddNote", {
 })
 export type AddNoteCommand = typeof AddNoteCommand.Type
 
-export const UpdateNoteCommand = Schema.TaggedStruct("UpdateNote", {
+export const EditNoteCommand = Schema.TaggedStruct("EditNote", {
   id: Schema.String,
+  actorId: Schema.String,
   expectedText: Schema.String,
   text: Schema.String
 })
-export type UpdateNoteCommand = typeof UpdateNoteCommand.Type
+export type EditNoteCommand = typeof EditNoteCommand.Type
 
 export const MoveNoteCommand = Schema.TaggedStruct("MoveNote", {
   id: Schema.String,
@@ -180,7 +182,8 @@ export const DetachNoteCommand = Schema.TaggedStruct("DetachNote", {
 export type DetachNoteCommand = typeof DetachNoteCommand.Type
 
 export const RemoveNoteCommand = Schema.TaggedStruct("RemoveNote", {
-  id: Schema.String
+  id: Schema.String,
+  actorId: Schema.String
 })
 export type RemoveNoteCommand = typeof RemoveNoteCommand.Type
 
@@ -215,7 +218,7 @@ export const SetCommentThreadResolvedCommand = Schema.TaggedStruct(
   "SetCommentThreadResolved",
   {
     id: Schema.String,
-    actor: CommentAuthor,
+    actor: Author,
     resolved: Schema.Boolean,
     at: Schema.String
   }
@@ -335,6 +338,7 @@ const sendFrameToBack = (
 export type AddNoteInput = {
   readonly id: string
   readonly text: string
+  readonly author: Author
   readonly x: number
   readonly y: number
   readonly width?: number
@@ -345,20 +349,22 @@ const addNote = (input: AddNoteInput): AddNoteCommand => ({
   _tag: "AddNote",
   id: input.id,
   text: input.text,
+  author: input.author,
   x: input.x,
   y: input.y,
   width: input.width ?? 280,
   height: input.height ?? 160
 })
 
-export type UpdateNoteInput = {
+export type EditNoteInput = {
   readonly id: string
+  readonly actorId: string
   readonly expectedText: string
   readonly text: string
 }
 
-const updateNote = (input: UpdateNoteInput): UpdateNoteCommand => ({
-  _tag: "UpdateNote",
+const editNote = (input: EditNoteInput): EditNoteCommand => ({
+  _tag: "EditNote",
   ...input
 })
 
@@ -411,7 +417,10 @@ const detachNote = (input: DetachNoteInput): DetachNoteCommand => ({
   ...input
 })
 
-export type RemoveNoteInput = { readonly id: string }
+export type RemoveNoteInput = {
+  readonly id: string
+  readonly actorId: string
+}
 
 const removeNote = (input: RemoveNoteInput): RemoveNoteCommand => ({
   _tag: "RemoveNote",
@@ -454,7 +463,7 @@ const editComment = (input: EditCommentInput): EditCommentCommand => ({
 
 export type SetCommentThreadResolvedInput = {
   readonly id: string
-  readonly actor: CommentAuthor
+  readonly actor: Author
   readonly resolved: boolean
   readonly at: string
 }
@@ -490,7 +499,7 @@ export const CanvasCommandSchema = Schema.Union([
   BringFrameToFrontCommand,
   SendFrameToBackCommand,
   AddNoteCommand,
-  UpdateNoteCommand,
+  EditNoteCommand,
   MoveNoteCommand,
   ResizeNoteCommand,
   BringNoteToFrontCommand,
@@ -517,7 +526,7 @@ export const CanvasCommand = {
   BringFrameToFront: BringFrameToFrontCommand,
   SendFrameToBack: SendFrameToBackCommand,
   AddNote: AddNoteCommand,
-  UpdateNote: UpdateNoteCommand,
+  EditNote: EditNoteCommand,
   MoveNote: MoveNoteCommand,
   ResizeNote: ResizeNoteCommand,
   BringNoteToFront: BringNoteToFrontCommand,
@@ -540,7 +549,7 @@ export const CanvasCommand = {
   bringFrameToFront,
   sendFrameToBack,
   addNote,
-  updateNote,
+  editNote,
   moveNote,
   resizeNote,
   bringNoteToFront,

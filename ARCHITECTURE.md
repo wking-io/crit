@@ -15,15 +15,16 @@ details are browser-session state and are never persisted.
 Frames own URL, title, review status, provenance, geometry, display policy, and
 stacking order. An archived Frame additionally owns immutable snapshot metadata:
 artifact ID, original URL, capture time, and byte size. Notes own text, geometry,
-optional Frame attachment, and stacking order. Attached Notes use absolute
+Author, optional Frame attachment, and stacking order. Attached Notes use absolute
 Canvas coordinates; moving their Frame moves them by the same delta, and
-detaching preserves their position. Removing a Frame also removes its attached
-Notes.
+detaching preserves their position. Removing a Frame detaches its attached Notes
+and preserves their Canvas positions.
 
 Every mutation is an atomic semantic command batch. The core applies a batch to
 a draft and publishes it only if every command succeeds. Conflicts are expressed
-at the narrowest meaningful boundary: for example, `UpdateNote` includes the
-expected prior text, while unrelated commands can safely serialize.
+at the narrowest meaningful boundary: for example, `EditNote` includes the
+Author's actor ID and expected prior text, while unrelated arrangement commands
+can safely serialize.
 
 ## Local coordination
 

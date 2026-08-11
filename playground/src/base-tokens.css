@@ -9,15 +9,25 @@
   --crit-color-t1: oklch(52% 0 none);
   --crit-color-t2: oklch(28% 0 none);
 
-  --crit-color-orange-s1: oklch(99% 0.003 41.1);
-  --crit-color-orange-s2: oklch(97.5% 0.009 41.1);
-  --crit-color-orange-c1: oklch(95.25% 0.024 41.1);
-  --crit-color-orange-c2: oklch(94% 0.028 41.1);
-  --crit-color-orange-c3: oklch(92.75% 0.036 41.1);
-  --crit-color-orange-p1: oklch(67% 0.18 41.1);
-  --crit-color-orange-p2: oklch(65% 0.2 41.1);
-  --crit-color-orange-t1: oklch(52% 0.2 41.1);
-  --crit-color-orange-t2: oklch(28% 0.1 41.1);
+  --crit-color-red-s1: oklch(99% 0.003 9);
+  --crit-color-red-s2: oklch(97.5% 0.009 9);
+  --crit-color-red-c1: oklch(95.25% 0.024 9);
+  --crit-color-red-c2: oklch(94% 0.028 9);
+  --crit-color-red-c3: oklch(92.75% 0.036 9);
+  --crit-color-red-p1: oklch(67% 0.18 9);
+  --crit-color-red-p2: oklch(65% 0.2 9);
+  --crit-color-red-t1: oklch(52% 0.2 9);
+  --crit-color-red-t2: oklch(28% 0.1 9);
+
+  --crit-color-orange-s1: oklch(99% 0.003 55);
+  --crit-color-orange-s2: oklch(97.5% 0.009 55);
+  --crit-color-orange-c1: oklch(95.25% 0.024 55);
+  --crit-color-orange-c2: oklch(94% 0.028 55);
+  --crit-color-orange-c3: oklch(92.75% 0.036 55);
+  --crit-color-orange-p1: oklch(67% 0.18 55);
+  --crit-color-orange-p2: oklch(65% 0.2 55);
+  --crit-color-orange-t1: oklch(52% 0.2 55);
+  --crit-color-orange-t2: oklch(28% 0.1 55);
 
   --crit-color-blue-s1: oklch(99% 0.003 245.3);
   --crit-color-blue-s2: oklch(97.5% 0.009 245.3);
@@ -49,13 +59,4 @@
   --crit-color-purple-t1: oklch(52% 0.2 302);
   --crit-color-purple-t2: oklch(28% 0.1 302);
 
-  --crit-color-red-s1: oklch(99% 0.003 27.3);
-  --crit-color-red-s2: oklch(97.5% 0.009 27.3);
-  --crit-color-red-c1: oklch(95.25% 0.024 27.3);
-  --crit-color-red-c2: oklch(94% 0.028 27.3);
-  --crit-color-red-c3: oklch(92.75% 0.036 27.3);
-  --crit-color-red-p1: oklch(67% 0.18 27.3);
-  --crit-color-red-p2: oklch(65% 0.2 27.3);
-  --crit-color-red-t1: oklch(52% 0.2 27.3);
-  --crit-color-red-t2: oklch(28% 0.1 27.3);
 }

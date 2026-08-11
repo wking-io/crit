@@ -156,13 +156,18 @@ All commands accept `--json` for machine-readable output where applicable.
 
 The command schema includes Frame operations (`AddFrame`, `UpdateFrame`,
 `SetFrameStatus`, `MoveFrame`, `ResizeFrame`, `RemoveFrame`) and Note operations
-(`AddNote`, `UpdateNote`, `MoveNote`, `ResizeNote`, `AttachNote`, `DetachNote`,
+(`AddNote`, `EditNote`, `MoveNote`, `ResizeNote`, `AttachNote`, `DetachNote`,
 `RemoveNote`). Comment operations are `AddCommentThread`,
 `ReplyToCommentThread`, `EditComment`, `SetCommentThreadResolved`, and
 `UpdateCommentAnchor`. Frames and Notes also expose `Bring…ToFront` and `Send…ToBack`
 commands against one shared stacking order. Related commands commit as one batch. Per-Canvas filesystem locks
 serialize local writers against the latest revision, so unrelated agent and
 browser edits merge without manual revision wiring.
+
+Every Note records its Author. `EditNote` and `RemoveNote` require that Author's
+actor ID; collaborators can still move, reorder, attach, detach, and resize its
+width. Note height is measured from its rendered text, and removing a Frame
+detaches its Notes without deleting them.
 
 Agents leave Comments through the same `apply` surface. Use the Git committer
 identity returned by `GET /__crit/api/identity` on the local Crit host for

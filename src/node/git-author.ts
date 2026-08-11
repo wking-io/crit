@@ -2,7 +2,7 @@ import { execFile } from "node:child_process"
 import { createHash } from "node:crypto"
 import { promisify } from "node:util"
 
-import type { CommentAuthor } from "../core/index.js"
+import type { Author } from "../core/index.js"
 
 const execFileAsync = promisify(execFile)
 
@@ -16,7 +16,7 @@ const gitConfig = async (root: string, key: "user.name" | "user.email") => {
   return value
 }
 
-export const gitCommentAuthor = async (root: string): Promise<CommentAuthor> => {
+export const gitAuthor = async (root: string): Promise<Author> => {
   const [name, email] = await Promise.all([
     gitConfig(root, "user.name"),
     gitConfig(root, "user.email")

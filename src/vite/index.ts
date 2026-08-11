@@ -24,7 +24,7 @@ import {
 import { FileSystemCanvasRepository } from "../node/file-system-canvas-repository.js"
 import { FileSystemAgentActivity } from "../node/file-system-agent-activity.js"
 import { FileSystemSnapshotArchive } from "../node/file-system-snapshot-archive.js"
-import { gitCommentAuthor } from "../node/git-comment-author.js"
+import { gitAuthor } from "../node/git-author.js"
 import { CanvasRepositoryCritClient } from "../runtime/canvas-repository-crit-client.js"
 import { CanvasRepository } from "../runtime/canvas-repository.js"
 import { AgentActivityStore } from "../runtime/agent-activity.js"
@@ -536,14 +536,14 @@ export const crit = (options: CritVitePluginOptions = {}): Plugin => {
     server.middlewares.use((request, response, next) => {
       if (requestPathname(request) === identityPath) {
         if (!requireGet(request, response)) return
-        void gitCommentAuthor(resolvedRoot)
+        void gitAuthor(resolvedRoot)
           .then((author) => sendJson(response, 200, author))
           .catch((cause: unknown) => sendJson(response, 503, {
             error: {
               code: "unavailable",
               message: cause instanceof Error
                 ? cause.message
-                : "Git comment identity is unavailable"
+                : "Git Author identity is unavailable"
             }
           }))
         return

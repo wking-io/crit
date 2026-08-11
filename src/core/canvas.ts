@@ -10,8 +10,8 @@ import {
   type CanvasCommand as CanvasCommandInput
 } from "./canvas-command.js"
 import {
+  Author,
   CanvasCommentThread,
-  CommentAuthor,
   canManageCommentThread,
   commentMessageById
 } from "./comment.js"
@@ -52,6 +52,7 @@ export type CanvasFrame = typeof CanvasFrame.Type
 export const CanvasNote = Schema.Struct({
   id: Schema.String,
   text: Schema.String,
+  author: Author,
   geometry: CanvasGeometry,
   attachedTo: Schema.NullOr(Schema.String),
   zIndex: Schema.Finite.check(Schema.isInt())
@@ -66,7 +67,7 @@ export const CanvasDocument = Schema.Struct({
   revision: NonNegativeInteger,
   frames: Schema.Array(CanvasFrame),
   notes: Schema.Array(CanvasNote),
-  owner: Schema.NullOr(CommentAuthor).pipe(
+  owner: Schema.NullOr(Author).pipe(
     Schema.withDecodingDefaultKey(Effect.succeed(null))
   ),
   comments: Schema.Array(CanvasCommentThread).pipe(
@@ -142,6 +143,7 @@ export class CanvasCommandFailed extends Schema.TaggedError<CanvasCommandFailed>
       Schema.Literal("duplicate-note"),
       Schema.Literal("note-not-found"),
       Schema.Literal("note-conflict"),
+      Schema.Literal("note-forbidden"),
       Schema.Literal("duplicate-comment-thread"),
       Schema.Literal("comment-thread-not-found"),
       Schema.Literal("comment-not-found"),
@@ -179,7 +181,7 @@ type CanvasState = {
   revision: number
   frames: Array<CanvasFrame>
   notes: Array<CanvasNote>
-  owner: CommentAuthor | null
+  owner: Author | null
   comments: Array<CanvasCommentThread>
 }
 
@@ -237,7 +239,7 @@ export const CanvasInternals = {
 const create = (input: {
   readonly id: string
   readonly title: string
-  readonly owner?: CommentAuthor
+  readonly owner?: Author
 }): Canvas =>
   makeCanvas({
     id: input.id,
@@ -277,6 +279,9 @@ const validateDocument = (document: CanvasDocument) => {
     if (note.id.trim().length === 0) throw new Error("Note IDs cannot be empty")
     if (ids.has(note.id)) throw new Error(`Duplicate Canvas item ID: ${note.id}`)
     ids.add(note.id)
+    if (note.author.id.trim().length === 0 || note.author.name.trim().length === 0) {
+      throw new Error(`Note ${note.id} has an invalid Author`)
+    }
     if (
       note.attachedTo !== null &&
       !document.frames.some((frame) => frame.id === note.attachedTo)
@@ -638,9 +643,19 @@ const apply = (
                   detail: `Canvas item already exists: ${command.id}`
                 })
               }
+              if (
+                command.author.id.trim().length === 0 ||
+                command.author.name.trim().length === 0
+              ) {
+                throw new CanvasCommandFailed({
+                  reason: "invalid-command",
+                  detail: "A Note Author requires a non-empty ID and name"
+                })
+              }
               draft.notes.push({
                 id: command.id,
                 text: command.text,
+                author: command.author,
                 geometry: {
                   x: command.x,
                   y: command.y,
@@ -691,13 +706,11 @@ const apply = (
               }
               if (command._tag === "RemoveFrame") {
                 draft.frames.splice(index, 1)
-                const attached = draft.notes.filter(
-                  (note) => note.attachedTo === command.id
-                )
-                draft.notes = draft.notes.filter(
-                  (note) => note.attachedTo !== command.id
-                )
-                for (const note of attached) markNote(note.id)
+                draft.notes = draft.notes.map((note) => {
+                  if (note.attachedTo !== command.id) return note
+                  markNote(note.id)
+                  return { ...note, attachedTo: null }
+                })
                 const removedThreads = draft.comments.filter(
                   (thread) => thread.frameId === command.id
                 )
@@ -905,7 +918,13 @@ const apply = (
 
             const index = noteAt(command.id)
             const note = draft.notes[index]!
-            if (command._tag === "UpdateNote") {
+            if (command._tag === "EditNote") {
+              if (note.author.id !== command.actorId) {
+                throw new CanvasCommandFailed({
+                  reason: "note-forbidden",
+                  detail: "Only the Note Author may edit it"
+                })
+              }
               if (note.text !== command.expectedText) {
                 throw new CanvasCommandFailed({
                   reason: "note-conflict",
@@ -936,7 +955,13 @@ const apply = (
               draft.notes[index] = { ...note, attachedTo: command.frameId }
             } else if (command._tag === "DetachNote") {
               draft.notes[index] = { ...note, attachedTo: null }
-            } else {
+            } else if (command._tag === "RemoveNote") {
+              if (note.author.id !== command.actorId) {
+                throw new CanvasCommandFailed({
+                  reason: "note-forbidden",
+                  detail: "Only the Note Author may remove it"
+                })
+              }
               draft.notes.splice(index, 1)
             }
             markNote(command.id)

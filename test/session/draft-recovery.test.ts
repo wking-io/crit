@@ -50,7 +50,12 @@ describe("CanvasSession draft recovery", () => {
       const stored = Canvas.export(Canvas.create({ id: "review", title: "Review" }))
       const draft: CanvasDraft = {
         schemaVersion: 1, canvasId: "review", sessionId: "browser", baseRevision: 0, mutation: 1,
-        commands: [CanvasCommand.updateNote({ id: "missing", expectedText: "", text: "lost" })]
+        commands: [CanvasCommand.editNote({
+          id: "missing",
+          actorId: "author",
+          expectedText: "",
+          text: "lost"
+        })]
       }
       const client: CritClientShape = { load: () => Effect.succeed(stored), apply: () => Effect.succeed(stored) }
       const journal: DraftJournalShape = {

@@ -79,21 +79,29 @@ describe("crit Vite plugin", () => {
     )
     const initial = initialLoads[0]!
     const saved = await Effect.runPromise(client.apply("homepage", [
-      CanvasCommand.addNote({ id: "note", text: "Review this", x: 10, y: 20 })
+      CanvasCommand.addNote({
+        id: "note",
+        text: "Review this",
+        author: { id: "author", name: "Test Author" },
+        x: 10,
+        y: 20
+      })
     ]))
     const second = await Effect.runPromise(client.apply("homepage", [
       CanvasCommand.moveNote({ id: "note", x: 30, y: 40 })
     ]))
     const updated = await Effect.runPromise(client.apply("homepage", [
-      CanvasCommand.updateNote({
+      CanvasCommand.editNote({
         id: "note",
+        actorId: "author",
         expectedText: "Review this",
         text: "Agent updated this"
       })
     ]))
     const stale = await Effect.runPromise(Effect.flip(client.apply("homepage", [
-      CanvasCommand.updateNote({
+      CanvasCommand.editNote({
         id: "note",
+        actorId: "author",
         expectedText: "Review this",
         text: "Browser updated this"
       })
@@ -249,7 +257,13 @@ describe("crit Vite plugin", () => {
       socket.addEventListener("open", () => resolve())
     )
     await Effect.runPromise(client.apply("homepage", [
-      CanvasCommand.addNote({ id: "note", text: "Ping", x: 0, y: 0 })
+      CanvasCommand.addNote({
+        id: "note",
+        text: "Ping",
+        author: { id: "author", name: "Test Author" },
+        x: 0,
+        y: 0
+      })
     ]))
     const payload = await hint
     socket.close()

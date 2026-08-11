@@ -101,19 +101,12 @@ export function CanvasHelpPanel({
   return (
     <aside aria-label="Control help" aria-live="polite" className="crit-help">
       <div className="crit-help__header">
-        <div className="crit-help__field">
-          <span className="crit-help__label">Name</span>
-          <strong>{details.name}</strong>
-        </div>
-        <div className="crit-help__field crit-help__field--hotkey">
-          <span className="crit-help__label">Hotkey</span>
-          <kbd>{details.hotkey}</kbd>
-        </div>
+        <div className="crit-help__title">{details.name}</div>
+        {details.hotkey === NO_HELP_HOTKEY ? null : (
+          <div className="crit-help__shortcut">{details.hotkey}</div>
+        )}
       </div>
-      <div className="crit-help__field crit-help__description">
-        <span className="crit-help__label">Description</span>
-        <p>{details.description}</p>
-      </div>
+      <p className="crit-help__description">{details.description}</p>
     </aside>
   )
 }

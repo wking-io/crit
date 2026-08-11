@@ -26,7 +26,13 @@ describe("FileSystemCanvasRepository", () => {
       const store = yield* CanvasRepository
       const failure = yield* Effect.flip(
         store.apply("missing", [
-          CanvasCommand.addNote({ id: "note", text: "", x: 0, y: 0 })
+          CanvasCommand.addNote({
+            id: "note",
+            text: "",
+            author: { id: "author", name: "Test Author" },
+            x: 0,
+            y: 0
+          })
         ])
       )
 
@@ -123,7 +129,15 @@ describe("FileSystemCanvasRepository", () => {
       yield* Effect.promise(() => writeFile(lock, `${child.pid}\n`, { mode: 0o600 }))
 
       const { document } = yield* store.apply("wedged", [
-        CanvasCommand.addNote({ id: "note", text: "", x: 0, y: 0, width: 200, height: 120 })
+        CanvasCommand.addNote({
+          id: "note",
+          text: "",
+          author: { id: "author", name: "Test Author" },
+          x: 0,
+          y: 0,
+          width: 200,
+          height: 120
+        })
       ])
 
       expect(document.revision).toBe(1)
@@ -144,7 +158,15 @@ describe("FileSystemCanvasRepository", () => {
       })
 
       const { document } = yield* store.apply("abandoned", [
-        CanvasCommand.addNote({ id: "note", text: "", x: 0, y: 0, width: 200, height: 120 })
+        CanvasCommand.addNote({
+          id: "note",
+          text: "",
+          author: { id: "author", name: "Test Author" },
+          x: 0,
+          y: 0,
+          width: 200,
+          height: 120
+        })
       ])
 
       expect(document.revision).toBe(1)

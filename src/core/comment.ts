@@ -5,16 +5,16 @@ const Ratio = Schema.Finite.check(
   Schema.isLessThanOrEqualTo(1)
 )
 
-export const CommentAuthor = Schema.Struct({
+export const Author = Schema.Struct({
   id: Schema.String,
   name: Schema.String
 })
-export type CommentAuthor = typeof CommentAuthor.Type
+export type Author = typeof Author.Type
 
 export const CommentMessage = Schema.Struct({
   id: Schema.String,
   body: Schema.String,
-  author: CommentAuthor,
+  author: Author,
   createdAt: Schema.String,
   editedAt: Schema.NullOr(Schema.String)
 })
@@ -59,12 +59,12 @@ export const CanvasCommentThread = Schema.Struct({
   opening: CommentMessage,
   replies: Schema.Array(CommentMessage),
   resolvedAt: Schema.NullOr(Schema.String),
-  resolvedBy: Schema.NullOr(CommentAuthor)
+  resolvedBy: Schema.NullOr(Author)
 })
 export type CanvasCommentThread = typeof CanvasCommentThread.Type
 
 export const canManageCommentThread = (
-  owner: CommentAuthor | null,
+  owner: Author | null,
   thread: CanvasCommentThread,
   actorId: string
 ) => owner?.id === actorId || thread.opening.author.id === actorId

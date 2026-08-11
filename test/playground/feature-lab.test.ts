@@ -62,7 +62,7 @@ describe("Crit feature lab", () => {
       })
       const port = (http.address() as AddressInfo).port
       const origin = `http://127.0.0.1:${port}`
-      const [home, ui, mainSource, uiSource, uiStyles, baseTokens] = await Promise.all([
+      const [home, ui, mainSource, uiSource, uiStyles, baseTokens, frameCardSource] = await Promise.all([
         fetch(origin, {
           headers: { Connection: "close" },
           redirect: "manual"
@@ -74,7 +74,8 @@ describe("Crit feature lab", () => {
         readFile(path.resolve("playground/src/main.tsx"), "utf8"),
         readFile(path.resolve("playground/src/ui-lab.tsx"), "utf8"),
         readFile(path.resolve("playground/src/ui-lab.css"), "utf8"),
-        readFile(path.resolve("playground/src/base-tokens.css"), "utf8")
+        readFile(path.resolve("playground/src/base-tokens.css"), "utf8"),
+        readFile(path.resolve("src/react/frame-card.tsx"), "utf8")
       ])
 
       expect(home.status).toBe(200)
@@ -92,12 +93,27 @@ describe("Crit feature lab", () => {
       expect(uiSource).toContain("chroma: slider(")
       expect(uiSource).toContain("orange: slider(HUE_DEFAULTS.orange")
       expect(uiSource).toContain("red: slider(HUE_DEFAULTS.red")
+      expect(uiSource).toContain("red: 9")
+      expect(uiSource).toContain("orange: 55")
+      expect(uiSource.indexOf('{ id: "red"')).toBeLessThan(
+        uiSource.indexOf('{ id: "orange"')
+      )
+      expect(uiSource.indexOf("red: slider(HUE_DEFAULTS.red")).toBeLessThan(
+        uiSource.indexOf("orange: slider(HUE_DEFAULTS.orange")
+      )
       expect(uiSource).toContain("frameStatus: {")
+      expect(uiSource).toContain('title: tokenSelect("--crit-color-t2")')
+      expect(uiSource).toContain('description: tokenSelect("--crit-color-t1")')
+      expect(uiSource).toContain('shortcutSurface: tokenSelect("--crit-color-c1")')
+      expect(uiSource).toContain('shortcutBorder: tokenSelect("--crit-color-c3")')
+      expect(uiSource).toContain('ink="var(--crit-frame-status-in-progress-ink)"')
+      expect(uiSource).not.toContain('selectedOutline: tokenSelect("--crit-color-t1")')
       expect(uiSource).toContain('from "../../src/react/canvas-toolbar.js"')
       expect(uiSource).toContain('from "../../src/react/canvas-feedback.js"')
       expect(uiSource).toContain('from "../../src/react/canvas-context-menu.js"')
       expect(uiSource).toContain('from "../../src/react/comment-popover.js"')
       expect(uiSource).toContain("<FrameCard")
+      expect(uiSource).toContain("defaultStatusMenuOpen")
       expect(uiSource).toContain("<NoteCard")
       expect(uiSource).toContain("<CanvasToolbar")
       expect(uiSource).toContain("<NewFrameForm")
@@ -115,8 +131,17 @@ describe("Crit feature lab", () => {
       expect(uiStyles).toContain(
         "--crit-frame-status-in-progress-shell: var(--ui-frame-status-in-progress-shell)"
       )
+      expect(uiStyles).not.toContain(".ui-lab .crit-status-option")
       expect(uiStyles).toContain(".ui-lab .crit-comment-popover")
       expect(uiStyles).toContain(".ui-lab .crit-new-frame-dialog")
+      expect(uiStyles).toContain("--crit-note-selection-ink: var(--crit-color-t1)")
+      expect(uiStyles).toContain(
+        ".ui-lab .crit-note .crit-selection__handle[data-visible-handle] { background: var(--crit-color-s1); }"
+      )
+      expect(uiStyles).not.toContain(
+        ".ui-lab .crit-selection { box-shadow: 0 0 0 1.5px var(--ui-frame-selected-outline); }"
+      )
+      expect(frameCardSource).toContain('ink="var(--frame-ink)"')
       expect(baseTokens).toContain("--crit-color-s1")
       expect(baseTokens).toContain("--crit-color-t2")
       expect(baseTokens).toContain("--crit-color-orange-s1")
@@ -125,6 +150,11 @@ describe("Crit feature lab", () => {
       expect(baseTokens).toContain("--crit-color-purple-t2")
       expect(baseTokens).toContain("--crit-color-red-s1")
       expect(baseTokens).toContain("--crit-color-red-t2")
+      expect(baseTokens).toContain("--crit-color-red-p2: oklch(65% 0.2 9)")
+      expect(baseTokens).toContain("--crit-color-orange-p2: oklch(65% 0.2 55)")
+      expect(baseTokens.indexOf("--crit-color-red-s1")).toBeLessThan(
+        baseTokens.indexOf("--crit-color-orange-s1")
+      )
     } finally {
       if (http.listening) {
         await new Promise<void>((resolve, reject) => {

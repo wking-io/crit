@@ -46,7 +46,7 @@ export const resizeGeometry = (
   }
 }
 
-const handles: ReadonlyArray<ResizeHandlePosition> = [
+const allHandles: ReadonlyArray<ResizeHandlePosition> = [
   "north-west",
   "north",
   "north-east",
@@ -65,11 +65,13 @@ const cornerHandles = new Set<ResizeHandlePosition>([
 ])
 
 export function CanvasSelection({
+  handles = allHandles,
   ink,
   label,
   onResize,
   zoom
 }: {
+  readonly handles?: ReadonlyArray<ResizeHandlePosition>
   readonly ink: string
   readonly label: string
   readonly onResize: (
@@ -94,10 +96,12 @@ export function CanvasSelection({
           {...helpTarget({
             name: "Resize",
             hotkey: NO_HELP_HOTKEY,
-            description: "Drag to resize the frame in this direction."
+            description: `Drag to resize the ${label} in this direction.`
           })}
           data-resize-handle={handle}
-          data-visible-handle={cornerHandles.has(handle) || undefined}
+          data-visible-handle={
+            (handles === allHandles ? cornerHandles.has(handle) : true) || undefined
+          }
           key={handle}
           onPointerDown={(event) => onResize(event, handle)}
           type="button"

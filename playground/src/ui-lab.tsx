@@ -15,7 +15,7 @@ import type {
   CanvasCommentThread,
   CanvasFrame,
   CanvasNote,
-  CommentAuthor,
+  Author,
   FrameReviewStatus
 } from "../../src/core/index.js"
 import { CritContextMenu, type ContextMenuItem } from "../../src/react/canvas-context-menu.js"
@@ -74,11 +74,11 @@ const COLUMN_DEFAULTS: Record<TokenStep, {
 }
 
 const HUE_DEFAULTS: Record<ChromaticPalette, number> = {
-  orange: 41.1,
+  red: 9,
+  orange: 55,
   blue: 245.3,
   green: 156.3,
-  purple: 302,
-  red: 27.3
+  purple: 302
 }
 
 const slider = (
@@ -98,11 +98,11 @@ const BASE_PALETTES: ReadonlyArray<{
   readonly label: string
 }> = [
   { id: "neutral", label: "Neutral · Archived" },
+  { id: "red", label: "Red · Destructive" },
   { id: "orange", label: "Orange · Changes" },
   { id: "blue", label: "Blue · Progress" },
   { id: "green", label: "Green · Approved" },
-  { id: "purple", label: "Purple · Review" },
-  { id: "red", label: "Red · Destructive" }
+  { id: "purple", label: "Purple · Review" }
 ]
 
 const BASE_TOKENS: ReadonlyArray<{
@@ -132,11 +132,11 @@ const BASE_SCALE_CONFIG = {
   greyscale: false,
   hues: {
     _collapsed: true,
+    red: slider(HUE_DEFAULTS.red, 0, 360, 0.1),
     orange: slider(HUE_DEFAULTS.orange, 0, 360, 0.1),
     blue: slider(HUE_DEFAULTS.blue, 0, 360, 0.1),
     green: slider(HUE_DEFAULTS.green, 0, 360, 0.1),
-    purple: slider(HUE_DEFAULTS.purple, 0, 360, 0.1),
-    red: slider(HUE_DEFAULTS.red, 0, 360, 0.1)
+    purple: slider(HUE_DEFAULTS.purple, 0, 360, 0.1)
   },
   ...Object.fromEntries(TOKEN_STEPS.map((step) => [step, {
     _collapsed: true,
@@ -176,7 +176,6 @@ const RECIPE_CONFIG = {
   frame: {
     _collapsed: true,
     viewportSurface: tokenSelect("--crit-color-s1"),
-    selectedOutline: tokenSelect("--crit-color-t1"),
     handleSurface: tokenSelect("--crit-color-s1")
   },
   frameStatus: {
@@ -223,16 +222,17 @@ const RECIPE_CONFIG = {
     chromeSurface: tokenSelect("--crit-color-t2"),
     chromeText: tokenSelect("--crit-color-s1"),
     text: tokenSelect("--crit-color-t2"),
-    border: tokenSelect("--crit-color-t2"),
-    selectedOutline: tokenSelect("--crit-color-t1"),
-    handleSurface: tokenSelect("--crit-color-s1")
+    border: tokenSelect("--crit-color-t2")
   },
   help: {
     _collapsed: true,
     surface: tokenSelect("--crit-color-s2"),
     border: tokenSelect("--crit-color-c3"),
-    label: tokenSelect("--crit-color-t1"),
-    text: tokenSelect("--crit-color-t2")
+    title: tokenSelect("--crit-color-t2"),
+    description: tokenSelect("--crit-color-t1"),
+    shortcutSurface: tokenSelect("--crit-color-c1"),
+    shortcutText: tokenSelect("--crit-color-t1"),
+    shortcutBorder: tokenSelect("--crit-color-c3")
   },
   presence: {
     _collapsed: true,
@@ -395,6 +395,7 @@ function ToolbarSpecimens() {
       <div className="ui-toolbar-stage">
         <CanvasToolbar
           commentAvailable
+          noteAvailable
           onAction={() => {}}
           title="Feature lab"
           tool="select"
@@ -419,18 +420,25 @@ function ToolbarSpecimens() {
 }
 
 function FrameSpecimen({
+  defaultStatusMenuOpen = false,
   mode = "full",
   selected = false,
   state = "loaded",
   status
 }: {
+  readonly defaultStatusMenuOpen?: boolean
   readonly mode?: "full" | "compact" | "minimal"
   readonly selected?: boolean
   readonly state?: "loaded" | "editing" | "snapshotting" | "paused" | "fullscreen"
   readonly status: (typeof FRAME_STATUSES)[number]
 }) {
   const width = mode === "full" ? 330 : mode === "compact" ? 170 : 90
-  const geometry = { x: 12, y: 42, width, height: 176 }
+  const geometry = {
+    x: defaultStatusMenuOpen ? 190 : 12,
+    y: defaultStatusMenuOpen ? 220 : 42,
+    width,
+    height: 176
+  }
   const frame: CanvasFrame = {
     id: `lab-${status.id}-${mode}-${state}`,
     url: "about:blank",
@@ -447,11 +455,16 @@ function FrameSpecimen({
       data-mode={mode}
       data-selected={selected || undefined}
       data-state={state}
-      style={{ width: width + 24 }}
+      data-status-menu={defaultStatusMenuOpen || undefined}
+      style={{
+        width: defaultStatusMenuOpen ? width + 214 : width + 24,
+        ...(defaultStatusMenuOpen ? { minHeight: 420 } : {})
+      }}
     >
       <FrameCard
         commentMode={false}
         commentThreads={[]}
+        defaultStatusMenuOpen={defaultStatusMenuOpen}
         frame={frame}
         geometry={geometry}
         iframeAllow=""
@@ -512,23 +525,9 @@ function FramesSpecimens() {
       </div>
 
       <h3 className="ui-subsection-heading">Status menu</h3>
-      <div className="ui-status-menu-grid">
-        {FRAME_STATUSES.map((status, index) => {
-          const state = (["default", "hover", "selected", "disabled", "default"] as const)[index]!
-          return (
-            <div className="ui-state-cell" key={status.id}>
-              <StateLabel>{state}</StateLabel>
-              <button
-                aria-checked={state === "selected"}
-                className="crit-status-option"
-                data-state={state}
-                disabled={state === "disabled"}
-                style={{ "--status-ink": status.ink, "--status-shell": status.shell } as LabStyle}
-                type="button"
-              ><Glyph name={status.glyph} />{status.label}</button>
-            </div>
-          )
-        })}
+      <div className="ui-status-fan-specimen">
+        <StateLabel>Open · In progress</StateLabel>
+        <FrameSpecimen defaultStatusMenuOpen status={inProgress} />
       </div>
     </SpecimenSection>
   )
@@ -539,7 +538,7 @@ function SelectionSpecimen() {
     <div className="crit-canvas ui-selection-demo">
       <span>Eight resize hit areas</span>
       <CanvasSelection
-        ink={frameStatus("in-progress").ink}
+        ink="var(--crit-frame-status-in-progress-ink)"
         label="frame"
         onResize={() => {}}
         zoom={1}
@@ -563,6 +562,7 @@ function NoteSpecimen({
   const note: CanvasNote = {
     id: `lab-note-${attached}-${empty}`,
     text: empty ? "" : "Tighten the hierarchy around the primary action before review.",
+    author: { id: "wes", name: "Wes King" },
     geometry,
     attachedTo: attached ? "Checkout candidate" : null,
     zIndex: 1
@@ -570,15 +570,15 @@ function NoteSpecimen({
   return (
     <div className="crit-canvas ui-production-canvas ui-note-stage" data-editing={editing || undefined}>
       <NoteCard
+        author={{ id: "wes", name: "Wes King" }}
+        commit={() => {}}
         geometry={geometry}
         note={note}
         onBringToFront={() => {}}
         onMove={() => {}}
-        onRemove={() => {}}
         onResize={() => {}}
         onSelect={() => {}}
         onSendToBack={() => {}}
-        onText={() => {}}
         selected={selected}
         zoom={1}
       />
@@ -721,9 +721,9 @@ function CommentPinSpecimen({ active = false, label, color }: { readonly active?
 }
 
 function CommentSpecimens() {
-  const owner: CommentAuthor = { id: "wes", name: "Wes King" }
-  const collaborator: CommentAuthor = { id: "alex", name: "Alex Morgan" }
-  const viewer: CommentAuthor = { id: "sam", name: "Sam Lee" }
+  const owner: Author = { id: "wes", name: "Wes King" }
+  const collaborator: Author = { id: "alex", name: "Alex Morgan" }
+  const viewer: Author = { id: "sam", name: "Sam Lee" }
   const thread: CanvasCommentThread = {
     id: "lab-thread",
     frameId: "lab-frame",

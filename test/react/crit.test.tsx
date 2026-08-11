@@ -23,6 +23,11 @@ import { CanvasCommentPin } from "../../src/react/canvas-comment-pin.js"
 import { critStyles } from "../../src/react/crit-styles.js"
 import { CanvasSelection } from "../../src/react/canvas-selection.js"
 import { CanvasToolbar } from "../../src/react/canvas-toolbar.js"
+import {
+  NOTE_MINIMUM_ROWS,
+  noteContextMenuItems,
+  noteHeightForContent
+} from "../../src/react/note-card.js"
 import { Canvas, CanvasCommand } from "../../src/core/index.js"
 import { Effect } from "effect"
 
@@ -38,6 +43,7 @@ describe("Crit", () => {
     const html = renderToStaticMarkup(
       <CanvasToolbar
         commentAvailable
+        noteAvailable
         onAction={() => {}}
         title="Feature lab"
         tool="select"
@@ -50,6 +56,17 @@ describe("Crit", () => {
     expect(html).toContain('aria-label="Redo"')
     expect(html).toContain('aria-pressed="true"')
     expect(html).not.toContain("Layers")
+  })
+
+  it("sizes the canvas toolbar from its title and controls", () => {
+    const toolbar = cssRule(".crit-toolbar")
+    const title = cssRule(".crit-toolbar__title")
+
+    expect(toolbar).toContain("width: max-content")
+    expect(toolbar).toContain("max-width: calc(100% - 40px)")
+    expect(toolbar).not.toContain("width: 395px")
+    expect(title).toContain("flex: 0 1 auto")
+    expect(title).not.toContain("142px")
   })
 
   it("keeps the title until fewer than ten characters fit", () => {
@@ -198,6 +215,27 @@ describe("Crit", () => {
     expect(new Set(detailCounts).size).toBe(1)
   })
 
+  it("renders help without field labels and uses an inset-matched shortcut", () => {
+    const html = renderToStaticMarkup(
+      <CanvasHelpPanel details={{
+        name: "Add frame",
+        hotkey: "F",
+        description: "Create a frame."
+      }} />
+    )
+
+    expect(html).toContain('class="crit-help__title"')
+    expect(html).toContain('class="crit-help__shortcut"')
+    expect(html).toContain('class="crit-help__description"')
+    expect(html).not.toContain(">Name<")
+    expect(html).not.toContain(">Hotkey<")
+    expect(html).not.toContain(">Description<")
+    expect(html).not.toContain("<kbd")
+    expect(cssRule(".crit-help__shortcut")).toContain(
+      "border-radius: calc(var(--crit-help-radius) - var(--crit-help-inset))"
+    )
+  })
+
   it("describes resize handles through contextual help", () => {
     const html = renderToStaticMarkup(
       <CanvasSelection
@@ -212,6 +250,51 @@ describe("Crit", () => {
     expect(html).toContain(
       'data-crit-help-description="Drag to resize the frame in this direction."'
     )
+    expect(html.match(/class="crit-selection__handle"/g)).toHaveLength(8)
+    expect(html.match(/data-visible-handle="true"/g)).toHaveLength(4)
+
+    const noteHandles = renderToStaticMarkup(
+      <CanvasSelection
+        handles={["west", "east"]}
+        ink="#000"
+        label="note"
+        onResize={() => undefined}
+        zoom={1}
+      />
+    )
+    expect(noteHandles.match(/class="crit-selection__handle"/g)).toHaveLength(2)
+    expect(noteHandles).toContain('data-resize-handle="west"')
+    expect(noteHandles).toContain('data-resize-handle="east"')
+  })
+
+  it("keeps Note sizing content-driven and actions in its context menu", () => {
+    const items = noteContextMenuItems({
+      onBringToFront: () => {},
+      onRemove: () => {},
+      onSendToBack: () => {}
+    })
+
+    expect(NOTE_MINIMUM_ROWS).toBe(3)
+    expect(noteHeightForContent(84)).toBe(86)
+    expect(items.map((item) => item.label)).toEqual([
+      "Bring to front",
+      "Send to back",
+      "Delete"
+    ])
+    expect(noteContextMenuItems({
+      onBringToFront: () => {},
+      onSendToBack: () => {}
+    }).map((item) => item.label)).toEqual([
+      "Bring to front",
+      "Send to back"
+    ])
+    expect(cssRule(".crit-note textarea")).toContain("overflow: hidden")
+    expect(cssRule(".crit-note textarea")).toContain("min-height:")
+    expect(cssRule(".crit-note textarea")).toContain(
+      "font: 400 calc(14px * var(--crit-ui))/calc(20px * var(--crit-ui)) system-ui, -apple-system, sans-serif"
+    )
+    expect(cssRule(".crit-note::after")).toContain("box-shadow:")
+    expect(critStyles).not.toContain(".crit-note__chrome")
   })
 
   it("renders Frames and attached Notes without a canvas framework", async () => {
@@ -232,12 +315,19 @@ describe("Crit", () => {
         status: "ready-for-review",
         provenance: { kind: "manual", sourceId: "test" }
       }),
-      CanvasCommand.addNote({ id: "feedback", text: "Tighten spacing", x: 40, y: 50 }),
+      CanvasCommand.addNote({
+        id: "feedback",
+        text: "Tighten spacing",
+        author: { id: "author", name: "Test Author" },
+        x: 40,
+        y: 50
+      }),
       CanvasCommand.attachNote({ id: "feedback", frameId: "candidate" })
     ))
 
     const html = renderToStaticMarkup(
       <CanvasViewport
+        author={{ id: "author", name: "Test Author" }}
         dispatch={() => Effect.void}
         document={Canvas.export(canvas)}
       />
@@ -254,14 +344,12 @@ describe("Crit", () => {
     )
     expect(html).toContain("Status: Approved. Change status")
     expect(html).toContain("A: Candidate")
-    expect(html).toContain("Attached to candidate")
     expect(html).toContain("Tighten spacing")
-    expect(html).toContain("Send note to back")
-    expect(html).toContain("Bring note to front")
+    expect(html).toContain('rows="3"')
+    expect(html).not.toContain("Attached to candidate")
     expect(html).toContain('data-crit-help-name="Frame status"')
     expect(html).toContain('data-crit-help-name="Edit frame title"')
     expect(html).toContain('data-crit-help-name="Edit note"')
-    expect(html).toContain('data-crit-help-name="Send to back"')
     expect(html).not.toContain("Layer options for Candidate")
     expect(html).toContain('aria-label="Undo"')
     expect(html).toContain('aria-label="Redo"')
@@ -276,6 +364,26 @@ describe("Crit", () => {
       html.indexOf('aria-label="Hand"')
     )
     expect(html).toContain('aria-label="Select" aria-pressed="true"')
+
+    const collaboratorHtml = renderToStaticMarkup(
+      <CanvasViewport
+        author={{ id: "collaborator", name: "Collaborator" }}
+        dispatch={() => Effect.void}
+        document={Canvas.export(canvas)}
+      />
+    )
+    expect(collaboratorHtml).toContain('data-crit-help-name="Note by Test Author"')
+    expect(collaboratorHtml).toContain('readOnly=""')
+
+    const unidentifiedHtml = renderToStaticMarkup(
+      <CanvasViewport
+        dispatch={() => Effect.void}
+        document={Canvas.export(canvas)}
+      />
+    )
+    expect(unidentifiedHtml).toContain(
+      'aria-label="Add note" class="crit-icon-button" disabled=""'
+    )
     expect(html).toContain('aria-label="Hand" aria-pressed="false"')
     expect(html).toContain('aria-label="Add frame"')
     expect(html).toContain('aria-label="Add note"')

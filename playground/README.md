@@ -51,4 +51,5 @@ npm run dev:agent -- activity feature-lab --clear --json
 ```
 
 The browser and CLI operate on the same Canvas Document. `npm run dev:seed`
-rebuilds the CLI and adds the feature Canvas if it has not been seeded yet.
+rebuilds the CLI and adds the feature Canvas if it has not been seeded yet. The
+seed replaces its Note Author placeholders with the current Git-derived Author.

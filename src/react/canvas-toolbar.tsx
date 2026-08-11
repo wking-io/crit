@@ -15,6 +15,7 @@ export interface CanvasToolbarProps {
   readonly title: string
   readonly tool: CanvasTool
   readonly commentAvailable: boolean
+  readonly noteAvailable: boolean
   readonly onAction: (action: CanvasToolbarAction) => void
   readonly undoAvailable?: boolean
   readonly redoAvailable?: boolean
@@ -24,6 +25,7 @@ export function CanvasToolbar({
   title,
   tool,
   commentAvailable,
+  noteAvailable,
   onAction,
   undoAvailable = false,
   redoAvailable = false
@@ -117,12 +119,15 @@ export function CanvasToolbar({
           aria-keyshortcuts="N"
           aria-label="Add note"
           className="crit-icon-button"
+          disabled={!noteAvailable}
           {...helpTarget({
             name: "Add note",
             hotkey: "N",
-            description: "Add an editable note to the center of the current view."
+            description: noteAvailable
+              ? "Add an editable note to the center of the current view."
+              : "Configure Git user.name and user.email to add notes."
           })}
-          onClick={() => onAction("add-note")}
+          onClick={() => noteAvailable && onAction("add-note")}
           type="button"
         ><Glyph name="note" /></button>
         <button
