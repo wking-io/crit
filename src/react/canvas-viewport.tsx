@@ -115,6 +115,7 @@ export interface CanvasViewportProps {
   readonly iframeAllow?: string
   readonly iframeSandbox?: string
   readonly frameLoadMode?: FrameLoadMode
+  readonly frameLoadOrigin?: string
   readonly onCommandError?: (message: string) => void
   readonly snapshotFrame?: (
     frameId: string
@@ -163,6 +164,7 @@ export function CanvasViewport({
   iframeAllow = "clipboard-read; clipboard-write; fullscreen",
   iframeSandbox,
   frameLoadMode = "navigate",
+  frameLoadOrigin,
   onCommandError,
   snapshotFrame,
   frameChrome,
@@ -572,6 +574,7 @@ export function CanvasViewport({
               zoom={camera.zoom}
               iframeAllow={iframeAllow}
               frameLoadMode={frameLoadMode}
+              {...(frameLoadOrigin === undefined ? {} : { frameLoadOrigin })}
               {...(iframeSandbox === undefined ? {} : { iframeSandbox })}
               iframeVisible={intersectsViewport(
                 geometryOf(item), camera, viewport.width, viewport.height

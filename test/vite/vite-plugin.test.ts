@@ -177,13 +177,15 @@ describe("crit Vite plugin", () => {
   it("serializes the configured Frame loading mode into the editor", async () => {
     const origin = await start({
       root,
-      frameLoadMode: "same-origin-srcdoc"
+      frameLoadMode: "same-origin-srcdoc",
+      publicOrigin: "https://portal.example/some/path?ignored=true#fragment"
     }, process.cwd())
     const editorModule = await (await fetch(
       `${origin}/@id/virtual:crit-editor.js`
     )).text()
 
     expect(editorModule).toContain('frameLoadMode: "same-origin-srcdoc"')
+    expect(editorModule).toContain('frameLoadOrigin: "https://portal.example"')
   })
 
   it("pushes Canvas change hints to the served editor over the HMR WebSocket", async () => {
@@ -358,6 +360,41 @@ describe("crit Vite plugin", () => {
         }
       }
     ])
+  })
+
+  it("uses publicOrigin for manifest reconciliation without forwarded headers", async () => {
+    await writeFile(
+      path.join(root, "crit.manifest.json"),
+      JSON.stringify({
+        schemaVersion: 1,
+        id: "orb",
+        canvases: [{
+          id: "default",
+          title: "Orb review",
+          frames: [{
+            id: "app",
+            url: "/frames/ready",
+            title: "Ready",
+            status: "changes-requested"
+          }]
+        }]
+      })
+    )
+    const origin = await start({ publicOrigin: "https://portal.example" })
+    const headers = { Host: "32043-sandbox.e2b.app" }
+    const manifestResponse = await fetch(`${origin}/.well-known/crit.json`, { headers })
+    const manifest = await manifestResponse.json() as {
+      canvases: Array<{ frames: Array<{ url: string }> }>
+    }
+    const client = HttpCritClient.make({
+      apiPath: `${origin}/__crit/api`
+    })
+    const document = await Effect.runPromise(client.load("default"))
+
+    expect(manifest.canvases[0]?.frames[0]?.url).toBe(
+      "https://portal.example/frames/ready"
+    )
+    expect(document.frames[0]?.url).toBe("https://portal.example/frames/ready")
   })
 
   it("captures and serves an immutable self-contained Frame snapshot", async () => {

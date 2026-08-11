@@ -179,6 +179,29 @@ export const FRAME_SIZE_PRESETS = [
 
 export type FrameLoadMode = "navigate" | "same-origin-srcdoc"
 
+/** @internal Selects a safe parent fetch without treating an alias as the page origin. */
+export const frameFetchTarget = (
+  requestedUrl: URL,
+  pageOrigin: string,
+  frameLoadOrigin?: string
+) => {
+  if (requestedUrl.origin === pageOrigin) {
+    return { target: requestedUrl.href, fetchOrigin: pageOrigin }
+  }
+  if (frameLoadOrigin === undefined) return null
+  try {
+    const trusted = new URL(frameLoadOrigin)
+    if ((trusted.protocol !== "http:" && trusted.protocol !== "https:") ||
+      requestedUrl.origin !== trusted.origin) return null
+  } catch {
+    return null
+  }
+  return {
+    target: `${requestedUrl.pathname}${requestedUrl.search}`,
+    fetchOrigin: pageOrigin
+  }
+}
+
 export const prepareSameOriginFrameHtml = (
   html: string,
   responseUrl: string,
@@ -214,6 +237,7 @@ export function FrameCard({
   iframeSandbox,
   iframeVisible,
   frameLoadMode = "navigate",
+  frameLoadOrigin,
   selected,
   shortId,
   zoom,
@@ -243,6 +267,7 @@ export function FrameCard({
   readonly iframeSandbox?: string
   readonly iframeVisible: boolean
   readonly frameLoadMode?: FrameLoadMode
+  readonly frameLoadOrigin?: string
   readonly selected: boolean
   readonly shortId: string
   readonly zoom: number
@@ -288,10 +313,13 @@ export function FrameCard({
     : (() => {
         try { return new URL(frame.url, window.location.href) } catch { return null }
       })()
+  const fetchTarget = requestedFrameUrl === null || typeof window === "undefined"
+    ? null
+    : frameFetchTarget(requestedFrameUrl, window.location.origin, frameLoadOrigin)
   const usesSrcdoc = frame.snapshot === undefined &&
     frameLoadMode === "same-origin-srcdoc" &&
     typeof window !== "undefined" &&
-    requestedFrameUrl?.origin === window.location.origin
+    fetchTarget !== null
 
   useEffect(() => {
     if (!iframeVisible || !usesSrcdoc || requestedFrameUrl === null) {
@@ -300,7 +328,7 @@ export function FrameCard({
     }
     const controller = new AbortController()
     setSrcdocState({ status: "loading" })
-    fetch(requestedFrameUrl.href, {
+    fetch(fetchTarget!.target, {
       credentials: "same-origin",
       referrerPolicy: "same-origin",
       signal: controller.signal
@@ -310,7 +338,7 @@ export function FrameCard({
         throw new Error("Frame response is not HTML")
       }
       const finalUrl = new URL(response.url)
-      if (finalUrl.origin !== window.location.origin) {
+      if (finalUrl.origin !== fetchTarget!.fetchOrigin) {
         throw new Error("Frame request redirected to another origin")
       }
       const logicalUrl = new URL(requestedFrameUrl.href)
@@ -327,7 +355,7 @@ export function FrameCard({
       })
     })
     return () => controller.abort()
-  }, [frame.url, iframeVisible, srcdocAttempt, usesSrcdoc])
+  }, [fetchTarget?.fetchOrigin, fetchTarget?.target, frame.url, iframeVisible, srcdocAttempt, usesSrcdoc])
   const commentBridgeRef = useRef<ReturnType<typeof connectBridgedFrameComments> | null>(null)
   const onCommentAnchorRef = useRef(onCommentAnchor)
   const onOpenCommentRef = useRef(onOpenComment)

@@ -49,6 +49,22 @@ export interface CritVitePluginOptions {
   readonly editorPath?: string | false
   readonly frameInputBridge?: boolean
   readonly frameLoadMode?: FrameLoadMode
+  /** Trusted browser-visible origin used for manifest URLs and frame loading. */
+  readonly publicOrigin?: string
+}
+
+const normalizePublicOrigin = (value: string | undefined) => {
+  if (value === undefined) return undefined
+  let url: URL
+  try {
+    url = new URL(value)
+  } catch {
+    throw new TypeError("Crit publicOrigin must be a valid HTTP(S) URL")
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    throw new TypeError("Crit publicOrigin must be an HTTP(S) URL")
+  }
+  return url.origin
 }
 
 type CritViteServer = Pick<ViteDevServer, "middlewares" | "httpServer"> &
@@ -241,7 +257,8 @@ const resolvedVirtualEditorId = () =>
 const editorModuleSource = (
   reactEntry: string,
   delivery: "vite" | "bundle",
-  frameLoadMode: FrameLoadMode = "navigate"
+  frameLoadMode: FrameLoadMode = "navigate",
+  frameLoadOrigin?: string
 ) => {
   return `
   import { createElement, Fragment } from "react"
@@ -314,6 +331,7 @@ const editorModuleSource = (
       createElement(Crit, {
         canvasId,
         frameLoadMode: ${JSON.stringify(frameLoadMode)},
+        frameLoadOrigin: ${JSON.stringify(frameLoadOrigin)},
         onSession: attachLiveRefresh,
         frameChrome: {
           titleMinimumCharacters: chrome.titleMinimumCharacters,
@@ -342,11 +360,14 @@ const editorModuleSource = (
 `
 }
 
-const buildEditorBundle = async (frameLoadMode: FrameLoadMode) => {
+const buildEditorBundle = async (
+  frameLoadMode: FrameLoadMode,
+  frameLoadOrigin?: string
+) => {
   const reactEntry = resolveReactEntry()
   const result = await build({
     stdin: {
-      contents: editorModuleSource(reactEntry, "bundle", frameLoadMode),
+      contents: editorModuleSource(reactEntry, "bundle", frameLoadMode, frameLoadOrigin),
       loader: "js",
       resolveDir: path.dirname(reactEntry),
       sourcefile: "crit-editor.js"
@@ -373,6 +394,7 @@ export const crit = (options: CritVitePluginOptions = {}): Plugin => {
   const editorPath = options.editorPath ?? "/crit"
   const enabled = options.enabled ?? true
   const frameLoadMode = options.frameLoadMode ?? "navigate"
+  const publicOrigin = normalizePublicOrigin(options.publicOrigin)
   let resolvedRoot = options.root ?? process.cwd()
   let liveRefreshEndpoint: CanvasLiveRefreshEndpoint = { enabled: false }
   let isPreview = false
@@ -400,7 +422,9 @@ export const crit = (options: CritVitePluginOptions = {}): Plugin => {
           ? `${editorBase}/__assets/editor.js`
           : VIRTUAL_EDITOR_PATH
     const editorBundle =
-      editorBase === undefined || !isPreview ? undefined : buildEditorBundle(frameLoadMode)
+      editorBase === undefined || !isPreview
+        ? undefined
+        : buildEditorBundle(frameLoadMode, publicOrigin)
     const runtime = ManagedRuntime.make(
       Layer.mergeAll(
         documentLayer,
@@ -513,7 +537,9 @@ export const crit = (options: CritVitePluginOptions = {}): Plugin => {
           : "http:"
       return Effect.runPromise(
         CritManifest.resolve(JSON.parse(source) as unknown, {
-          baseUrl: `${protocol}//${host}/`,
+          baseUrl: publicOrigin === undefined
+            ? `${protocol}//${host}/`
+            : `${publicOrigin}/`,
           source: manifestFile
         })
       )
@@ -660,7 +686,9 @@ export const crit = (options: CritVitePluginOptions = {}): Plugin => {
     },
     load(id) {
       if (id === resolvedVirtualEditorId()) {
-        return editorModuleSource(resolveReactEntry(), "vite", frameLoadMode)
+        return editorModuleSource(
+          resolveReactEntry(), "vite", frameLoadMode, publicOrigin
+        )
       }
     },
     transformIndexHtml() {

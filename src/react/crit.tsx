@@ -92,6 +92,7 @@ export interface CritProps {
   readonly iframeAllow?: string
   readonly iframeSandbox?: string
   readonly frameLoadMode?: FrameLoadMode
+  readonly frameLoadOrigin?: string
   readonly frameChrome?: Partial<FrameChromeSettings>
   readonly cameraOptions?: Partial<CanvasCameraOptions>
   readonly author?: CommentAuthor
@@ -114,6 +115,7 @@ export function Crit({
   iframeAllow,
   iframeSandbox,
   frameLoadMode = "navigate",
+  frameLoadOrigin,
   frameChrome,
   cameraOptions,
   author,
@@ -304,6 +306,7 @@ export function Crit({
         {...(iframeAllow === undefined ? {} : { iframeAllow })}
         {...(iframeSandbox === undefined ? {} : { iframeSandbox })}
         frameLoadMode={frameLoadMode}
+        {...(frameLoadOrigin === undefined ? {} : { frameLoadOrigin })}
         {...(onCommandError === undefined ? {} : { onCommandError })}
       />
       <CanvasHelpPanel />
