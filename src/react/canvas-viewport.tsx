@@ -20,9 +20,7 @@ import {
   type CanvasFrame,
   type CanvasGeometry,
   type CanvasNote,
-  type CommentAnchor,
   type Author,
-  type CommentMessage,
   type CanvasCommand as CanvasCommandValue
 } from "../core/index.js"
 import {
@@ -56,7 +54,15 @@ import {
 } from "./canvas-camera.js"
 import { NewFrameDialog } from "./new-frame-dialog.js"
 import { NoteCard } from "./note-card.js"
-import { CommentPopover } from "./comment-popover.js"
+import {
+  CommentPopover,
+  type CommentDraftClear
+} from "./comment-popover.js"
+import {
+  makeCommentThreadReview,
+  type CommentThreadReviewTarget,
+  type CommentThreadReviewTransition
+} from "../session/comment-thread-review.js"
 
 export {
   DEFAULT_FRAME_CHROME_SETTINGS,
@@ -186,11 +192,23 @@ export function CanvasViewport({
     readonly x: number
     readonly y: number
   } | null>(null)
-  const [commentTarget, setCommentTarget] = useState<{
-    readonly frameId: string
-    readonly anchor?: CommentAnchor
-    readonly threadId?: string
-  } | null>(null)
+  const commentReviewRef = useRef<ReturnType<typeof makeCommentThreadReview> | null>(null)
+  commentReviewRef.current ??= makeCommentThreadReview({
+    document,
+    currentAuthor: author,
+    clock: { now: () => new Date().toISOString() },
+    ids: {
+      commentThreadId: () => localId("thread"),
+      commentId: () => localId("comment")
+    }
+  })
+  const [commentReview, setCommentReview] = useState(
+    commentReviewRef.current.state()
+  )
+  const [commentDraftDirty, setCommentDraftDirty] = useState(false)
+  const [commentDraftClear, setCommentDraftClear] =
+    useState<CommentDraftClear | null>(null)
+  const commentDraftClearVersion = useRef(0)
   const commitCameraState = useCallback(
     (next: ReturnType<typeof initialCanvasCameraState>) => {
       cameraStateRef.current = next
@@ -240,6 +258,80 @@ export function CanvasViewport({
     },
     [dispatch, onCommandError]
   )
+
+  const presentCommentReview = useCallback((
+    transition: CommentThreadReviewTransition
+  ) => {
+    const adopt = (next: CommentThreadReviewTransition) => {
+      setCommentReview(next.state)
+      if (next.type === "changed" && next.clearDraft !== undefined) {
+        commentDraftClearVersion.current += 1
+        setCommentDraftClear({
+          version: commentDraftClearVersion.current,
+          scope: next.clearDraft
+        })
+      }
+    }
+
+    adopt(transition)
+    if (transition.type !== "dispatch") return
+
+    Effect.runFork(
+      dispatch(...transition.commands).pipe(
+        Effect.match({
+          onFailure: (cause) => {
+            adopt(commentReviewRef.current!.settle(transition.key, {
+              type: "rejected",
+              cause
+            }))
+            onCommandError?.(messageOf(cause))
+          },
+          onSuccess: () => {
+            adopt(commentReviewRef.current!.settle(transition.key, {
+              type: "accepted"
+            }))
+          }
+        })
+      )
+    )
+  }, [dispatch, onCommandError])
+
+  const focusCommentReview = useCallback((
+    target: CommentThreadReviewTarget | null
+  ) => {
+    let transition = commentReviewRef.current!.focus(target, {
+      draft: commentDraftDirty ? "dirty" : "clean"
+    })
+    if (
+      transition.type === "blocked" &&
+      transition.reason === "dirty-draft" &&
+      typeof globalThis.confirm === "function" &&
+      globalThis.confirm("Discard the unfinished comment?")
+    ) {
+      transition = commentReviewRef.current!.focus(target, {
+        draft: "dirty",
+        discardDraft: true
+      })
+    }
+    presentCommentReview(transition)
+    if (transition.type !== "blocked" || transition.reason === "dirty-draft") {
+      return
+    }
+    const detail = transition.reason === "current-author-required"
+      ? "Configure Git user.name and user.email to leave comments"
+      : transition.reason === "archived-frame"
+        ? "Archived Frames do not support comments"
+        : transition.reason === "dispatch-pending"
+          ? "Wait for the current Comment action to finish"
+          : "The Comment target is no longer available"
+    onCommandError?.(detail)
+  }, [commentDraftDirty, onCommandError, presentCommentReview])
+
+  useEffect(() => {
+    presentCommentReview(
+      commentReviewRef.current!.reconcile(document, author)
+    )
+  }, [author, document, presentCommentReview])
 
   const geometryOf = useCallback(
     (item: CanvasFrame | CanvasNote) => preview[item.id] ?? item.geometry,
@@ -526,11 +618,14 @@ export function CanvasViewport({
     [document]
   )
   const activeComments = useMemo(() => document.comments.filter((thread) => thread.resolvedAt === null), [document.comments])
-  const commentThread = commentTarget?.threadId === undefined ? undefined : document.comments.find((thread) => thread.id === commentTarget.threadId)
-  const commentFrame = commentTarget === null ? undefined : document.frames.find((frame) => frame.id === commentTarget.frameId)
+  const commentThread = commentReview.kind === "thread"
+    ? commentReview.thread
+    : undefined
+  const commentFrame = commentReview.kind === "idle"
+    ? undefined
+    : document.frames.find((frame) => frame.id === commentReview.frameId)
   const commentGeometry = commentFrame === undefined ? undefined : geometryOf(commentFrame)
   const commentStatusColor = frameStatus(commentFrame?.status ?? "archived").ink
-  const makeCommentMessage = (body: string): CommentMessage => ({ id: localId("comment"), body, author: author!, createdAt: new Date().toISOString(), editedAt: null })
 
   return (
     <div
@@ -590,14 +685,15 @@ export function CanvasViewport({
               selected={selectedId === item.id}
               commentMode={tool === "comment"}
               commentThreads={activeComments.filter((thread) => thread.frameId === item.id)}
-              {...(commentTarget?.frameId === item.id && commentTarget.threadId !== undefined
-                ? { openCommentId: commentTarget.threadId }
+              {...(commentReview.kind === "thread" && commentReview.frameId === item.id
+                ? { openCommentId: commentReview.threadId }
                 : {})}
               onCommentAnchor={(anchor) => {
-                if (author === null) return onCommandError?.("Configure Git user.name and user.email to leave comments")
-                setCommentTarget({ frameId: item.id, anchor })
+                focusCommentReview({ kind: "new", frameId: item.id, anchor })
               }}
-              onOpenComment={(threadId) => setCommentTarget({ frameId: item.id, threadId })}
+              onOpenComment={(threadId) => {
+                focusCommentReview({ kind: "thread", threadId })
+              }}
               onSelect={() => setSelectedId(item.id)}
               onInputIntent={(intent) => {
                 if (intent.type === "select") {
@@ -688,55 +784,49 @@ export function CanvasViewport({
             />
           )
         )}
-        {commentTarget !== null &&
-        author !== null &&
+        {commentReview.kind !== "idle" &&
         commentFrame?.snapshot === undefined &&
         commentGeometry !== undefined &&
-        (commentTarget.anchor !== undefined || commentThread !== undefined) ? (
+        (commentReview.kind === "composing" || commentThread !== undefined) ? (
           <CommentPopover
-            key={commentTarget.threadId ?? "new-comment"}
-            author={author}
+            key={commentReview.kind === "thread"
+              ? commentReview.threadId
+              : "new-comment"}
+            canSubmit={commentReview.kind === "composing"
+              ? commentReview.canCreate
+              : commentReview.canReply}
+            clearDraft={commentDraftClear}
+            editableCommentIds={commentReview.kind === "thread"
+              ? commentReview.editableCommentIds
+              : new Set()}
             frameGeometry={commentGeometry}
-            owner={document.owner}
+            pending={commentReview.pending !== null}
+            resolution={commentReview.kind === "thread"
+              ? commentReview.resolution
+              : null}
             statusColor={commentStatusColor}
             {...(commentThread === undefined ? {} : { thread: commentThread })}
             zoom={camera.zoom}
-            onClose={() => setCommentTarget(null)}
-            onCreate={(body) => {
-              if (commentTarget.anchor === undefined) return
-              run(CanvasCommand.addCommentThread({
-                id: localId("thread"),
-                frameId: commentTarget.frameId,
-                anchor: commentTarget.anchor,
-                opening: makeCommentMessage(body)
-              }))
-              setCommentTarget(null)
-            }}
-            onEdit={(message, expectedBody, body) => {
-              if (commentThread === undefined) return
-              run(CanvasCommand.editComment({
-                id: commentThread.id,
-                commentId: message.id,
-                actorId: author.id,
+            onClose={() => focusCommentReview(null)}
+            onDraftStatus={setCommentDraftDirty}
+            onEdit={(commentId, expectedBody, body) => {
+              presentCommentReview(commentReviewRef.current!.perform({
+                type: "edit",
+                commentId,
                 expectedBody,
-                body,
-                editedAt: new Date().toISOString()
-              }))
-            }}
-            onReply={(body) => {
-              if (commentThread === undefined) return
-              run(CanvasCommand.replyToCommentThread({
-                id: commentThread.id,
-                reply: makeCommentMessage(body)
+                body
               }))
             }}
             onResolve={(resolved) => {
-              if (commentThread === undefined) return
-              run(CanvasCommand.setCommentThreadResolved({
-                id: commentThread.id,
-                actor: author,
-                resolved,
-                at: new Date().toISOString()
+              presentCommentReview(commentReviewRef.current!.perform({
+                type: "set-resolved",
+                resolved
+              }))
+            }}
+            onSubmit={(body) => {
+              presentCommentReview(commentReviewRef.current!.perform({
+                type: "submit",
+                body
               }))
             }}
           />

@@ -1,7 +1,11 @@
 import { describe, expect, it } from "@effect/vitest"
 import { Effect } from "effect"
 
-import { Canvas, CanvasCommand } from "../../src/core/index.js"
+import {
+  Canvas,
+  CanvasCommand,
+  canEditComment
+} from "../../src/core/index.js"
 
 const alice = { id: "git-alice", name: "Alice" }
 const bob = { id: "git-bob", name: "Bob" }
@@ -26,6 +30,13 @@ const addLiveFrame = (canvas: ReturnType<typeof Canvas.create>) => Canvas.apply(
 )
 
 describe("Canvas Comments", () => {
+  it("projects Comment editing capability from authorship", () => {
+    const comment = message("comment-1", "Tighten this spacing")
+
+    expect(canEditComment(comment, alice.id)).toBe(true)
+    expect(canEditComment(comment, bob.id)).toBe(false)
+  })
+
   it.effect("persists flat threads and enforces author and owner permissions", () =>
     Effect.gen(function*() {
       const canvas = Canvas.create({ id: "review", title: "Review" })

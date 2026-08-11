@@ -69,6 +69,11 @@ export const canManageCommentThread = (
   actorId: string
 ) => owner?.id === actorId || thread.opening.author.id === actorId
 
+export const canEditComment = (
+  comment: CommentMessage,
+  actorId: string
+) => comment.author.id === actorId
+
 export const commentMessageById = (
   thread: CanvasCommentThread,
   messageId: string

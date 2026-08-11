@@ -27,6 +27,7 @@ export {
   ElementCommentAnchor,
   ElementFingerprint,
   FrameCommentAnchor,
+  canEditComment,
   canManageCommentThread,
   commentMessageById,
   type CanvasCommentThread as CanvasCommentThreadValue,

@@ -17,6 +17,7 @@ import { statusFanProjection } from "../../src/react/frame-card.js"
 import {
   COMMENT_POPOVER_GAP,
   COMMENT_POPOVER_WIDTH,
+  CommentPopover,
   commentPopoverProjection
 } from "../../src/react/comment-popover.js"
 import { CanvasCommentPin } from "../../src/react/canvas-comment-pin.js"
@@ -134,6 +135,44 @@ describe("Crit", () => {
       )
       expect(projection.top).toBe(frame.y)
     }
+  })
+
+  it("renders an existing Comment Thread read-only without a Current Author", () => {
+    const html = renderToStaticMarkup(
+      <CommentPopover
+        canSubmit={false}
+        clearDraft={null}
+        editableCommentIds={new Set()}
+        inline
+        pending={false}
+        resolution={null}
+        statusColor="rebeccapurple"
+        thread={{
+          id: "thread-1",
+          frameId: "candidate",
+          anchor: { kind: "frame", xRatio: 0.5, yRatio: 0.5 },
+          opening: {
+            id: "comment-1",
+            body: "Tighten this spacing",
+            author: { id: "git-alice", name: "Alice" },
+            createdAt: "2026-08-11T12:00:00.000Z",
+            editedAt: null
+          },
+          replies: [],
+          resolvedAt: null,
+          resolvedBy: null
+        }}
+        onClose={() => {}}
+        onDraftStatus={() => {}}
+        onEdit={() => {}}
+        onResolve={() => {}}
+        onSubmit={() => {}}
+      />
+    )
+
+    expect(html).toContain("Tighten this spacing")
+    expect(html).not.toContain('aria-label="Reply"')
+    expect(html).not.toContain(">Edit</button>")
   })
 
   it("exposes an open comment pin as the reduced dot state", () => {

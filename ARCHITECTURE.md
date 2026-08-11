@@ -9,8 +9,8 @@ freehand drawing, generic shapes, and asset upload.
 
 `Canvas` is the platform-neutral authority for the Canvas Document, validation,
 summaries, and semantic commands. The durable document contains only identity,
-revision, Frames, and Notes. Camera, selection, iframe state, and other viewport
-details are browser-session state and are never persisted.
+revision, Frames, Notes, and Comment Threads. Camera, selection, iframe state,
+and other viewport details are browser-session state and are never persisted.
 
 Frames own URL, title, review status, provenance, geometry, display policy, and
 stacking order. An archived Frame additionally owns immutable snapshot metadata:
@@ -19,6 +19,11 @@ Author, optional Frame attachment, and stacking order. Attached Notes use absolu
 Canvas coordinates; moving their Frame moves them by the same delta, and
 detaching preserves their position. Removing a Frame detaches its attached Notes
 and preserves their Canvas positions.
+
+Comment Threads belong to live Frames and contain one opening Comment followed
+by flat Replies. Canvas-core predicates project Comment editing and thread
+resolution capabilities, and the semantic commands enforce those same durable
+invariants.
 
 Every mutation is an atomic semantic command batch. The core applies a batch to
 a draft and publishes it only if every command succeeds. Conflicts are expressed
@@ -45,6 +50,10 @@ to the immutable artifact. Snapshot bytes do not bloat the Canvas Document.
 CLI and discovery adapters use the Canvas Repository directly and derive views
 through the Canvas core. `CanvasSession` adds optimistic browser state,
 single-flight autosave, semantic-command draft recovery, and revision adoption.
+`CommentThreadReview` is a separate per-session module that owns the transient
+create/read/edit/reply/resolve workflow. It reconciles stable identities from
+each optimistic or authoritative Canvas Document and constructs command batches,
+while `CanvasSession` remains responsible for dispatch and persistence.
 The Vite plugin watches the Canvas directory and sends change hints to browser
 windows; polling remains a fallback. Notifications are only an optimization—the
 file and its revision are authoritative.
@@ -68,6 +77,13 @@ Global Canvas shortcuts are centralized through TanStack Hotkeys. The iframe
 input bridge only transports input intent—keyboard shortcuts, wheel, pinch,
 and pointer selection—across document and origin boundaries; shortcut matching
 and actions remain owned by the React viewport.
+
+Element and Frame comment adapters terminate after producing a normalized
+Comment Anchor or Comment Thread identity. React owns draft text, focus,
+geometry, animation, and iframe readiness; `CommentThreadReview` owns workflow
+state, capability projection, identity and timestamp allocation, and accepted or
+rejected dispatch transitions. Resolved threads are omitted from Frame pins but
+remain in the Canvas Document for future Canvas-level discovery.
 
 The HTTP adapter supports `GET` for authoritative documents and agent activity,
 `PATCH` for semantic command batches, and `POST` on a Frame snapshot route. Vite adapts it

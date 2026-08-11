@@ -12,6 +12,7 @@ import {
 import {
   Author,
   CanvasCommentThread,
+  canEditComment,
   canManageCommentThread,
   commentMessageById
 } from "./comment.js"
@@ -864,7 +865,7 @@ const apply = (
                     detail: `Comment not found: ${command.commentId}`
                   })
                 }
-                if (message.author.id !== command.actorId) {
+                if (!canEditComment(message, command.actorId)) {
                   throw new CanvasCommandFailed({
                     reason: "comment-forbidden",
                     detail: "Only the Comment Author may edit it"

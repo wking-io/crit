@@ -723,7 +723,6 @@ function CommentPinSpecimen({ active = false, label, color }: { readonly active?
 function CommentSpecimens() {
   const owner: Author = { id: "wes", name: "Wes King" }
   const collaborator: Author = { id: "alex", name: "Alex Morgan" }
-  const viewer: Author = { id: "sam", name: "Sam Lee" }
   const thread: CanvasCommentThread = {
     id: "lab-thread",
     frameId: "lab-frame",
@@ -755,9 +754,9 @@ function CommentSpecimens() {
         <div><StateLabel>Open thread · dot</StateLabel><CommentPinSpecimen active color={color} label="Open comment thread" /></div>
       </div>
       <div className="ui-comment-grid">
-        <div><StateLabel>New · empty submit disabled</StateLabel><CommentPopover author={owner} inline owner={owner} statusColor={color} onClose={() => {}} onCreate={() => {}} onEdit={() => {}} onReply={() => {}} onResolve={() => {}} /></div>
-        <div><StateLabel>Thread · owner can resolve</StateLabel><CommentPopover author={owner} inline owner={owner} statusColor={color} thread={thread} onClose={() => {}} onCreate={() => {}} onEdit={() => {}} onReply={() => {}} onResolve={() => {}} /></div>
-        <div><StateLabel>Thread · no resolve permission</StateLabel><CommentPopover author={viewer} inline owner={owner} statusColor={color} thread={thread} onClose={() => {}} onCreate={() => {}} onEdit={() => {}} onReply={() => {}} onResolve={() => {}} /></div>
+        <div><StateLabel>New · empty submit disabled</StateLabel><CommentPopover canSubmit clearDraft={null} editableCommentIds={new Set()} inline pending={false} resolution={null} statusColor={color} onClose={() => {}} onDraftStatus={() => {}} onEdit={() => {}} onResolve={() => {}} onSubmit={() => {}} /></div>
+        <div><StateLabel>Thread · owner can resolve</StateLabel><CommentPopover canSubmit clearDraft={null} editableCommentIds={new Set([thread.opening.id])} inline pending={false} resolution="resolve" statusColor={color} thread={thread} onClose={() => {}} onDraftStatus={() => {}} onEdit={() => {}} onResolve={() => {}} onSubmit={() => {}} /></div>
+        <div><StateLabel>Thread · no resolve permission</StateLabel><CommentPopover canSubmit clearDraft={null} editableCommentIds={new Set()} inline pending={false} resolution={null} statusColor={color} thread={thread} onClose={() => {}} onDraftStatus={() => {}} onEdit={() => {}} onResolve={() => {}} onSubmit={() => {}} /></div>
       </div>
     </SpecimenSection>
   )
