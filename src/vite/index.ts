@@ -52,6 +52,11 @@ export interface CritVitePluginOptions {
 type CritViteServer = Pick<ViteDevServer, "middlewares" | "httpServer"> &
   Partial<Pick<ViteDevServer, "watcher" | "ws">>
 
+const firstForwardedValue = (value: string | ReadonlyArray<string> | undefined) => {
+  const header = Array.isArray(value) ? value[0] : value
+  return header?.split(",", 1)[0]?.trim() || undefined
+}
+
 const webHeaders = (input: IncomingHttpHeaders) => {
   const headers = new Headers()
   for (const [name, value] of Object.entries(input)) {
@@ -489,8 +494,13 @@ export const crit = (options: CritVitePluginOptions = {}): Plugin => {
         }
         throw cause
       }
-      const host = request.headers.host ?? "crit.local"
-      const forwardedProtocol = request.headers["x-forwarded-proto"]
+      const host =
+        firstForwardedValue(request.headers["x-forwarded-host"]) ??
+        request.headers.host ??
+        "crit.local"
+      const forwardedProtocol = firstForwardedValue(
+        request.headers["x-forwarded-proto"]
+      )
       const protocol =
         forwardedProtocol === "https" ||
         ("encrypted" in request.socket && request.socket.encrypted)

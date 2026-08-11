@@ -308,23 +308,35 @@ describe("crit Vite plugin", () => {
       })
     )
     const origin = await start()
-    const manifestResponse = await fetch(`${origin}/.well-known/crit.json`)
+    const forwardedHeaders = {
+      "x-forwarded-host": "crit.example",
+      "x-forwarded-proto": "https"
+    }
+    const manifestResponse = await fetch(`${origin}/.well-known/crit.json`, {
+      headers: forwardedHeaders
+    })
     const manifest = await manifestResponse.json() as {
       canvases: Array<{ frames: Array<{ url: string }> }>
     }
-    const client = HttpCritClient.make({ apiPath: `${origin}/__crit/api` })
+    const client = HttpCritClient.make({
+      apiPath: `${origin}/__crit/api`,
+      fetch: (input, init) => fetch(input, {
+        ...init,
+        headers: forwardedHeaders
+      })
+    })
     const first = await Effect.runPromise(client.load("default"))
     const second = await Effect.runPromise(client.load("default"))
     const canvas = await Effect.runPromise(Canvas.open(second))
 
     expect(manifestResponse.status).toBe(200)
-    expect(manifest.canvases[0]?.frames[0]?.url).toBe(`${origin}/checkout`)
+    expect(manifest.canvases[0]?.frames[0]?.url).toBe("https://crit.example/checkout")
     expect(first.revision).toBe(1)
     expect(second.revision).toBe(1)
     expect(Canvas.listFrames(canvas)).toMatchObject([
       {
         id: "app",
-        url: `${origin}/checkout`,
+        url: "https://crit.example/checkout",
         title: "Checkout",
         status: "changes-requested",
         provenance: {
