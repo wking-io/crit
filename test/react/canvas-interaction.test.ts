@@ -5,7 +5,7 @@ import { Canvas, CanvasCommand } from "../../src/core/index.js"
 import { beginCanvasInteraction } from "../../src/react/canvas-interaction.js"
 
 const reviewDocument = async () => {
-  const canvas = Canvas.create({ id: "review", title: "Review" })
+  const canvas = Canvas.create({ id: "review", title: "Review", owner: { id: "git:test", name: "Test Author" } })
   await Effect.runPromise(
     Canvas.apply(
       canvas,

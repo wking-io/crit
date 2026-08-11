@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest"
 
 import { runCrit } from "../../src/cli/command.js"
 import { FileSystemCanvasRepository } from "../../src/node/file-system-canvas-repository.js"
+import { TEST_AUTHOR, TestAuthorIdentityLayer } from "../support/author-identity.js"
 
 describe("crit init", () => {
   let root = ""
@@ -45,6 +46,7 @@ export default defineConfig({})
   it("exposes the initializer through the CLI with machine-readable output", async () => {
     const storeLayer = FileSystemCanvasRepository.layer({ root })
     const cliLayer = Layer.mergeAll(
+      TestAuthorIdentityLayer,
       NodeFileSystem.layer,
       Path.layer,
       Stdio.layerTest({
@@ -77,6 +79,18 @@ export default defineConfig({})
     )
 
     await Effect.runPromise(
+      runCrit(["identity", "--root", root, "--json"]).pipe(
+        Effect.provide(cliLayer)
+      )
+    )
+    expect(JSON.parse(stdout.join(""))).toEqual({
+      schemaVersion: 1,
+      command: "identity",
+      author: TEST_AUTHOR
+    })
+    stdout = []
+
+    await Effect.runPromise(
       runCrit([
         "init",
         "--root",
@@ -100,6 +114,7 @@ export default defineConfig({})
       project: "vite-react",
       install: { command: "npm", args: ["install"] }
     })
+    expect(output).toMatchObject({ author: TEST_AUTHOR })
     expect(packageJson.dependencies["@riff-refine/crit"]).toBe("^0.0.0")
   })
 })

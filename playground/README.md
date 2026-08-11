@@ -44,10 +44,10 @@ Keep the Portless dev server running, then use another terminal:
 
 ```sh
 npm run dev:agent -- open feature-lab --json
-npm run dev:agent -- activity feature-lab --for 120 --detail "Testing agent edits" --json
+npm run dev:agent -- activity feature-lab --id dev-agent --harness Terminal --detail "Testing agent edits" --json
 npm run dev:agent -- apply feature-lab '[{"_tag":"SetFrameStatus","id":"checkout-draft","status":"ready-for-review"}]' --json
 npm run dev:agent -- snapshot feature-lab checkout-ready --json
-npm run dev:agent -- activity feature-lab --clear --json
+npm run dev:agent -- activity feature-lab --id dev-agent --clear --json
 ```
 
 The browser and CLI operate on the same Canvas Document. `npm run dev:seed`

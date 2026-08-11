@@ -9,6 +9,7 @@ import { ChildProcessSpawner } from "effect/unstable/process"
 import { runCrit } from "../../src/cli/command.js"
 import { FileSystemCanvasRepository } from "../../src/node/file-system-canvas-repository.js"
 import { CanvasRepository } from "../../src/runtime/canvas-repository.js"
+import { TEST_AUTHOR, TestAuthorIdentityLayer } from "../support/author-identity.js"
 
 describe("crit create", () => {
   let root = ""
@@ -26,6 +27,7 @@ describe("crit create", () => {
   it.effect("creates a Canvas and reports a versioned JSON result", () => {
     const storeLayer = FileSystemCanvasRepository.layer({ root })
     const cliLayer = Layer.mergeAll(
+      TestAuthorIdentityLayer,
       FileSystem.layerNoop({}),
       Path.layer,
       Stdio.layerTest({
@@ -86,6 +88,7 @@ describe("crit create", () => {
         }
       })
       expect(persisted.id).toBe("checkout-iterations")
+      expect(persisted.owner).toEqual(TEST_AUTHOR)
     }).pipe(Effect.provide(cliLayer))
   })
 })

@@ -16,6 +16,7 @@ import {
   CritManifestInvalid
 } from "../discovery/index.js"
 import { CritInitFailed, CritInitializer } from "../init/project-initializer.js"
+import { AuthorIdentity } from "../runtime/author-identity.js"
 import { AgentActivityStore } from "../runtime/agent-activity.js"
 import {
   CanvasRepository,
@@ -34,23 +35,6 @@ const writeStdout = (value: string) =>
     const stdio = yield* Stdio.Stdio
     yield* Stream.run(Stream.make(value), stdio.stdout())
   })
-
-const pulseAgentActivity = (
-  canvasId: string,
-  detail: string,
-  activeForSeconds = 20
-) =>
-  Effect.serviceOption(AgentActivityStore).pipe(
-    Effect.flatMap(
-      Option.match({
-        onNone: () => Effect.void,
-        onSome: (activity) =>
-          activity
-            .signal({ canvasId, activeForSeconds, detail })
-            .pipe(Effect.catch(() => Effect.void), Effect.asVoid)
-      })
-    )
-  )
 
 const canvasView = (document: CanvasDocument) => {
   const canvas = Canvas.fromDocument(document)
@@ -217,6 +201,23 @@ const initCommand = Command.make(
     })
 ).pipe(Command.withDescription("Configure Crit in a Vite + React project"))
 
+const identityCommand = Command.make(
+  "identity",
+  {
+    root: Flag.directory("root").pipe(Flag.withDefault(".")),
+    json: Flag.boolean("json")
+  },
+  ({ root, json }) =>
+    Effect.gen(function*() {
+      const identities = yield* AuthorIdentity
+      const author = yield* identities.resolve(root)
+      const output = json
+        ? JSON.stringify({ schemaVersion: 1, command: "identity", author })
+        : `Git Author: ${author.name} (${author.id})`
+      yield* writeStdout(`${output}\n`)
+    })
+).pipe(Command.withDescription("Verify the Git Author identity used by Crit"))
+
 const syncCommand = Command.make(
   "sync",
   {
@@ -228,15 +229,14 @@ const syncCommand = Command.make(
   ({ source, baseUrl, canvas, json }) =>
     Effect.gen(function*() {
       const manifest = yield* loadManifest(source, baseUrl)
+      const identities = yield* AuthorIdentity
+      const owner = yield* identities.resolve(process.cwd())
       const result = yield* CritManifest.sync(
         manifest,
         Option.match(canvas, {
-          onNone: () => ({}),
-          onSome: (canvasId) => ({ canvasId })
+          onNone: () => ({ owner }),
+          onSome: (canvasId) => ({ canvasId, owner })
         })
-      )
-      yield* Effect.forEach(result.canvases, (item) =>
-        pulseAgentActivity(item.id, "Syncing manifest")
       )
       const output = json
         ? JSON.stringify({ ...result, command: "sync", source })
@@ -291,7 +291,6 @@ const applyCommand = Command.make(
   ({ id, commands, json }) =>
     Effect.gen(function*() {
       const documents = yield* CanvasRepository
-      yield* pulseAgentActivity(id, "Applying Canvas edits")
       const decoded: ReadonlyArray<CanvasCommandInput> =
         yield* decodeCanvasCommands(commands)
       if (decoded.length === 0) {
@@ -331,10 +330,11 @@ const createCommand = Command.make(
   ({ id, title, json }) =>
     Effect.gen(function*() {
       const documents = yield* CanvasRepository
-      const created = Canvas.create({ id, title })
+      const identities = yield* AuthorIdentity
+      const owner = yield* identities.resolve(process.cwd())
+      const created = Canvas.create({ id, title, owner })
       const canvas = Canvas.summarize(created)
       yield* documents.create(Canvas.export(created))
-      yield* pulseAgentActivity(id, "Created Canvas")
       const output = json
         ? JSON.stringify({
             schemaVersion: 1,
@@ -396,7 +396,6 @@ const addCommand = Command.make(
   ({ id, urls, json }) =>
     Effect.gen(function*() {
       const documents = yield* CanvasRepository
-      yield* pulseAgentActivity(id, "Adding Frames")
       const current = canvasView(yield* documents.load(id))
       const usedIds = new Set(current.frames.map((frame) => frame.id))
       const normalized = yield* Effect.forEach(urls, normalizeUrl)
@@ -455,7 +454,6 @@ const openCommand = Command.make(
   ({ id, json }) =>
     Effect.gen(function*() {
       const documents = yield* CanvasRepository
-      yield* pulseAgentActivity(id, "Reading Canvas")
       const view = canvasView(yield* documents.load(id))
       const output = json
         ? JSON.stringify({ schemaVersion: 1, command: "open", ...view })
@@ -481,7 +479,6 @@ const snapshotCommand = Command.make(
           detail: "Snapshot capture is unavailable in this Crit runtime"
         })
       }
-      yield* pulseAgentActivity(canvas, "Capturing Frame snapshot", 120)
       const document = yield* snapshots.snapshotFrame(canvas, frame)
       const archived = [...document.frames].reverse().find(
         (candidate) =>
@@ -514,12 +511,28 @@ const activityCommand = Command.make(
   "activity",
   {
     canvas: Argument.string("canvas"),
-    activeForSeconds: Flag.integer("for").pipe(Flag.withDefault(120)),
+    activityId: Flag.string("id"),
+    harness: Flag.string("harness").pipe(Flag.optional),
+    model: Flag.string("model").pipe(Flag.optional),
     clear: Flag.boolean("clear"),
     detail: Flag.string("detail").pipe(Flag.optional),
+    referenceKind: Flag.string("reference-kind").pipe(Flag.optional),
+    referenceId: Flag.string("reference-id").pipe(Flag.optional),
+    referenceUri: Flag.string("reference-uri").pipe(Flag.optional),
     json: Flag.boolean("json")
   },
-  ({ canvas, activeForSeconds, clear, detail, json }) =>
+  ({
+    canvas,
+    activityId,
+    harness,
+    model,
+    clear,
+    detail,
+    referenceKind,
+    referenceId,
+    referenceUri,
+    json
+  }) =>
     Effect.gen(function*() {
       const activity = Option.getOrUndefined(
         yield* Effect.serviceOption(AgentActivityStore)
@@ -529,21 +542,67 @@ const activityCommand = Command.make(
           detail: "Agent activity is unavailable in this Crit runtime"
         })
       }
-      const status = clear
-        ? yield* activity.clear(canvas)
-        : yield* activity.signal({
-            canvasId: canvas,
-            activeForSeconds,
-            ...Option.match(detail, {
-              onNone: () => ({}),
-              onSome: (value) => ({ detail: value })
+      if (clear) {
+        yield* activity.clear(canvas, activityId)
+        const output = json
+          ? JSON.stringify({
+              schemaVersion: 1,
+              command: "activity",
+              cleared: { canvasId: canvas, activityId }
             })
-          })
+          : `Agent activity "${activityId}" cleared from "${canvas}".`
+        yield* writeStdout(`${output}\n`)
+        return
+      }
+      const harnessName = Option.getOrUndefined(harness)
+      if (harnessName === undefined) {
+        return yield* new InvalidCliInput({
+          detail: "--harness is required when signaling Agent Activity"
+        })
+      }
+      const referenceKindValue = Option.getOrUndefined(referenceKind)
+      const referenceIdValue = Option.getOrUndefined(referenceId)
+      const referenceUriValue = Option.getOrUndefined(referenceUri)
+      if (
+        (referenceKindValue === undefined) !==
+        (referenceIdValue === undefined)
+      ) {
+        return yield* new InvalidCliInput({
+          detail: "--reference-kind and --reference-id must be provided together"
+        })
+      }
+      if (referenceUriValue !== undefined && referenceKindValue === undefined) {
+        return yield* new InvalidCliInput({
+          detail: "--reference-uri requires --reference-kind and --reference-id"
+        })
+      }
+      const signaled = yield* activity.signal({
+        canvasId: canvas,
+        activityId,
+        harness: harnessName,
+        ...Option.match(model, {
+          onNone: () => ({}),
+          onSome: (value) => ({ model: value })
+        }),
+        ...Option.match(detail, {
+          onNone: () => ({}),
+          onSome: (value) => ({ detail: value })
+        }),
+        ...(referenceKindValue === undefined || referenceIdValue === undefined
+          ? {}
+          : {
+              reference: {
+                kind: referenceKindValue,
+                id: referenceIdValue,
+                ...(referenceUriValue === undefined
+                  ? {}
+                  : { uri: referenceUriValue })
+              }
+            })
+      })
       const output = json
-        ? JSON.stringify({ schemaVersion: 1, command: "activity", activity: status })
-        : status.active
-          ? `Agent activity is visible on "${canvas}" until ${status.activeUntil}.`
-          : `Agent activity cleared for "${canvas}".`
+        ? JSON.stringify({ schemaVersion: 1, command: "activity", activity: signaled })
+        : `Agent activity "${activityId}" is visible on "${canvas}" until ${signaled.activeUntil}.`
       yield* writeStdout(`${output}\n`)
     })
 ).pipe(
@@ -556,6 +615,7 @@ export const critCommand = Command.make("crit").pipe(
   Command.withDescription("Arrange and assess live web iterations"),
   Command.withSubcommands([
     initCommand,
+    identityCommand,
     syncCommand,
     applyCommand,
     createCommand,

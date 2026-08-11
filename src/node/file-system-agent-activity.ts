@@ -1,136 +1,179 @@
 import { randomUUID } from "node:crypto"
-import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises"
+import { mkdir, readFile, readdir, rename, unlink, writeFile } from "node:fs/promises"
 import path from "node:path"
 
 import { Effect, Layer, Schema } from "effect"
 
 import {
+  AGENT_ACTIVITY_LEASE_SECONDS,
+  AgentActivity,
+  AgentActivityReference,
   AgentActivityFailed,
-  AgentActivityStatus,
   AgentActivityStore,
+  type AgentActivityCollection,
   type AgentActivityStoreShape,
   type SignalAgentActivityInput
 } from "../runtime/agent-activity.js"
 import { hasNodeErrorCode } from "./internal/node-error.js"
 
 const ACTIVITY_DIRECTORY = ".crit/activity"
-const MAX_ACTIVITY_SECONDS = 60 * 60
 
 export interface FileSystemAgentActivityOptions {
   readonly root: string
   readonly now?: () => Date
 }
 
-const inactive = (canvasId: string): AgentActivityStatus => ({
-  schemaVersion: 1,
-  canvasId,
-  active: false,
-  updatedAt: null,
-  activeUntil: null,
-  detail: null
-})
-
-const failure = (operation: string, canvasId: string, cause: unknown) =>
+const failure = (
+  operation: string,
+  canvasId: string,
+  cause: unknown,
+  activityId?: string
+) =>
   new AgentActivityFailed({
     operation,
     canvasId,
+    ...(activityId === undefined ? {} : { activityId }),
     detail: cause instanceof Error ? cause.message : String(cause)
   })
+
+const required = (value: string, label: string) => {
+  const trimmed = value.trim()
+  if (trimmed.length === 0) throw new Error(`${label} cannot be empty`)
+  return trimmed
+}
+
+const optional = (value: string | undefined) => value?.trim() || null
 
 const make = (
   options: FileSystemAgentActivityOptions
 ): AgentActivityStoreShape => {
   const directory = path.join(options.root, ACTIVITY_DIRECTORY)
   const now = options.now ?? (() => new Date())
-  const targetFor = (canvasId: string) =>
-    path.join(directory, `${encodeURIComponent(canvasId)}.json`)
+  const directoryFor = (canvasId: string) =>
+    path.join(directory, encodeURIComponent(canvasId))
+  const targetFor = (canvasId: string, activityId: string) =>
+    path.join(directoryFor(canvasId), `${encodeURIComponent(activityId)}.json`)
 
-  const removeFile = async (canvasId: string) => {
+  const removeFile = async (canvasId: string, activityId: string) => {
     try {
-      await unlink(targetFor(canvasId))
+      await unlink(targetFor(canvasId, activityId))
     } catch (cause) {
       if (!hasNodeErrorCode(cause, "ENOENT")) throw cause
     }
   }
 
+  const readStored = async (canvasId: string, activityId: string) => {
+    try {
+      const source = await readFile(targetFor(canvasId, activityId), "utf8")
+      const decoded = Schema.decodeUnknownSync(AgentActivity)(
+        JSON.parse(source) as unknown
+      )
+      if (decoded.canvasId !== canvasId || decoded.activityId !== activityId) {
+        throw new Error("Agent Activity identity does not match its path")
+      }
+      return decoded
+    } catch (cause) {
+      if (hasNodeErrorCode(cause, "ENOENT")) return undefined
+      throw cause
+    }
+  }
+
+  const write = async (activity: AgentActivity) => {
+    const targetDirectory = directoryFor(activity.canvasId)
+    await mkdir(targetDirectory, { recursive: true })
+    const target = targetFor(activity.canvasId, activity.activityId)
+    const temporary = `${target}.${process.pid}.${randomUUID()}.tmp`
+    try {
+      await writeFile(temporary, `${JSON.stringify(activity)}\n`, { mode: 0o600 })
+      await rename(temporary, target)
+    } finally {
+      await unlink(temporary).catch(() => undefined)
+    }
+  }
+
   const read = (canvasId: string) =>
     Effect.tryPromise({
-      try: async () => {
-        let source: string
+      try: async (): Promise<AgentActivityCollection> => {
+        let entries
         try {
-          source = await readFile(targetFor(canvasId), "utf8")
+          entries = await readdir(directoryFor(canvasId), { withFileTypes: true })
         } catch (cause) {
-          if (hasNodeErrorCode(cause, "ENOENT")) return inactive(canvasId)
+          if (hasNodeErrorCode(cause, "ENOENT")) {
+            return { schemaVersion: 1, canvasId, activities: [] }
+          }
           throw cause
         }
-        const decoded = Schema.decodeUnknownSync(AgentActivityStatus)(
-          JSON.parse(source) as unknown
-        )
-        const active =
-          decoded.activeUntil !== null &&
-          Date.parse(decoded.activeUntil) > now().getTime()
-        if (!active) {
-          await removeFile(canvasId)
-          return inactive(canvasId)
+        const currentTime = now().getTime()
+        const activities: Array<AgentActivity> = []
+        for (const entry of entries) {
+          if (!entry.isFile() || !entry.name.endsWith(".json")) continue
+          const encodedId = entry.name.slice(0, -".json".length)
+          const activityId = decodeURIComponent(encodedId)
+          const activity = await readStored(canvasId, activityId)
+          if (activity === undefined) continue
+          if (Date.parse(activity.activeUntil) <= currentTime) {
+            await removeFile(canvasId, activityId)
+            continue
+          }
+          activities.push(activity)
         }
-        return { ...decoded, active: true }
+        activities.sort(
+          (left, right) =>
+            left.createdAt.localeCompare(right.createdAt) ||
+            left.activityId.localeCompare(right.activityId)
+        )
+        return { schemaVersion: 1, canvasId, activities }
       },
       catch: (cause) => failure("read", canvasId, cause)
     })
 
-  const write = (status: AgentActivityStatus) =>
+  const signal = (input: SignalAgentActivityInput) =>
     Effect.tryPromise({
       try: async () => {
-        await mkdir(directory, { recursive: true })
-        const target = targetFor(status.canvasId)
-        const temporary = `${target}.${process.pid}.${randomUUID()}.tmp`
-        try {
-          await writeFile(temporary, `${JSON.stringify(status)}\n`, { mode: 0o600 })
-          await rename(temporary, target)
-        } finally {
-          await unlink(temporary).catch(() => undefined)
+        const canvasId = required(input.canvasId, "Canvas ID")
+        const activityId = required(input.activityId, "Activity ID")
+        const harness = required(input.harness, "Harness name")
+        const reference = input.reference === undefined
+          ? null
+          : {
+              kind: required(input.reference.kind, "Reference kind"),
+              id: required(input.reference.id, "Reference ID"),
+              ...(input.reference.uri === undefined
+                ? {}
+                : { uri: input.reference.uri })
+            }
+        if (reference !== null) {
+          Schema.decodeUnknownSync(AgentActivityReference)(reference)
         }
-        return status
+        const existing = await readStored(canvasId, activityId)
+        const updatedAt = now()
+        const activity: AgentActivity = {
+          schemaVersion: 1,
+          canvasId,
+          activityId,
+          harness,
+          model: optional(input.model),
+          detail: optional(input.detail),
+          reference,
+          createdAt: existing?.createdAt ?? updatedAt.toISOString(),
+          updatedAt: updatedAt.toISOString(),
+          activeUntil: new Date(
+            updatedAt.getTime() + AGENT_ACTIVITY_LEASE_SECONDS * 1_000
+          ).toISOString()
+        }
+        await write(activity)
+        return activity
       },
-      catch: (cause) => failure("write", status.canvasId, cause)
-    })
-
-  const signal = (input: SignalAgentActivityInput) =>
-    Effect.gen(function*() {
-      if (
-        !Number.isInteger(input.activeForSeconds) ||
-        input.activeForSeconds < 1 ||
-        input.activeForSeconds > MAX_ACTIVITY_SECONDS
-      ) {
-        return yield* new AgentActivityFailed({
-          operation: "signal",
-          canvasId: input.canvasId,
-          detail: `Activity duration must be between 1 and ${MAX_ACTIVITY_SECONDS} seconds`
-        })
-      }
-      const updatedAt = now()
-      return yield* write({
-        schemaVersion: 1,
-        canvasId: input.canvasId,
-        active: true,
-        updatedAt: updatedAt.toISOString(),
-        activeUntil: new Date(
-          updatedAt.getTime() + input.activeForSeconds * 1_000
-        ).toISOString(),
-        detail: input.detail?.trim() || null
-      })
+      catch: (cause) => failure("signal", input.canvasId, cause, input.activityId)
     })
 
   return {
     read,
     signal,
-    clear: (canvasId) =>
+    clear: (canvasId, activityId) =>
       Effect.tryPromise({
-        try: async () => {
-          await removeFile(canvasId)
-          return inactive(canvasId)
-        },
-        catch: (cause) => failure("clear", canvasId, cause)
+        try: () => removeFile(canvasId, activityId),
+        catch: (cause) => failure("clear", canvasId, cause, activityId)
       })
   }
 }

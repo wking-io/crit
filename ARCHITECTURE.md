@@ -2,14 +2,14 @@
 
 Crit is a local canvas for live web Frames and plain-text Notes. Its V1 design
 optimizes for one person working with multiple local browser windows and agents.
-It deliberately excludes remote collaboration, presence, CRDTs, authentication,
+It deliberately excludes remote collaboration, remote-user presence, CRDTs, authentication,
 freehand drawing, generic shapes, and asset upload.
 
 ## Domain core
 
 `Canvas` is the platform-neutral authority for the Canvas Document, validation,
-summaries, and semantic commands. The durable document contains only identity,
-revision, Frames, Notes, and Comment Threads. Camera, selection, iframe state,
+summaries, and semantic commands. The durable document contains its creation-time
+Owner, revision, Frames, Notes, and Comment Threads. Camera, selection, iframe state,
 and other viewport details are browser-session state and are never persisted.
 
 Frames own URL, title, review status, provenance, geometry, display policy, and
@@ -58,14 +58,20 @@ The Vite plugin watches the Canvas directory and sends change hints to browser
 windows; polling remains a fallback. Notifications are only an optimization—the
 file and its revision are authoritative.
 
+Every Canvas Document has one immutable creation-time Owner. Explicit CLI or
+manifest creation resolves that Owner through the Git Author identity service;
+loading never creates or assigns ownership. A Canvas Session separately resolves
+one Current Author through its client and keeps that identity fixed for the
+session lifetime.
+
 `AgentActivityStore` is a separate ephemeral coordination boundary. Its
-filesystem adapter writes renewable, automatically expiring signals under
-`.crit/activity`; those files never enter the Canvas Document or revision
-history. The CLI emits short pulses for Canvas work and exposes an explicit
-renew/clear command for longer sessions. Browser sessions read the signal through
-the HTTP adapter, show activity without implying remote presence, and tighten
-revision polling from two seconds to 500 ms while an agent is active. Vite file
-events remain the immediate path.
+filesystem adapter writes one 60-second lease per harness-supplied run under
+`.crit/activity/<canvas>/<activity>.json`; those files never enter the Canvas
+Document, lock, or revision history. Renewals replace descriptive metadata while
+preserving run identity and creation time. Browser sessions combine the Current
+Author with all active runs as Canvas Presence, refreshed by Vite events with an
+independent five-second fallback. Retrieval failures are logged and represented
+by anonymous presence rather than an empty agent list.
 
 ## UI and adapters
 
@@ -85,7 +91,7 @@ state, capability projection, identity and timestamp allocation, and accepted or
 rejected dispatch transitions. Resolved threads are omitted from Frame pins but
 remain in the Canvas Document for future Canvas-level discovery.
 
-The HTTP adapter supports `GET` for authoritative documents and agent activity,
+The HTTP adapter supports `GET` for Current Author, authoritative documents, and Agent Activities,
 `PATCH` for semantic command batches, and `POST` on a Frame snapshot route. Vite adapts it
 to local Connect middleware, owns the router-independent Crit editor route, and
 serves immutable snapshot artifacts. The React

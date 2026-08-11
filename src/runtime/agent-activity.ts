@@ -1,40 +1,69 @@
 import { Context, Effect, Schema } from "effect"
 
-export const AgentActivityStatus = Schema.Struct({
+export const AGENT_ACTIVITY_LEASE_SECONDS = 60
+
+export const AgentActivityReference = Schema.Struct({
+  kind: Schema.String,
+  id: Schema.String,
+  uri: Schema.optionalKey(
+    Schema.String.check(
+      Schema.isPattern(/^(?:https?|codex|claude):\/\//)
+    )
+  )
+})
+export type AgentActivityReference = typeof AgentActivityReference.Type
+
+export const AgentActivity = Schema.Struct({
   schemaVersion: Schema.Literal(1),
   canvasId: Schema.String,
-  active: Schema.Boolean,
-  updatedAt: Schema.NullOr(Schema.String),
-  activeUntil: Schema.NullOr(Schema.String),
-  detail: Schema.NullOr(Schema.String)
+  activityId: Schema.String,
+  harness: Schema.String,
+  model: Schema.NullOr(Schema.String),
+  detail: Schema.NullOr(Schema.String),
+  reference: Schema.NullOr(AgentActivityReference),
+  createdAt: Schema.String,
+  updatedAt: Schema.String,
+  activeUntil: Schema.String
 })
-export type AgentActivityStatus = typeof AgentActivityStatus.Type
+export type AgentActivity = typeof AgentActivity.Type
+
+export const AgentActivityCollection = Schema.Struct({
+  schemaVersion: Schema.Literal(1),
+  canvasId: Schema.String,
+  activities: Schema.Array(AgentActivity)
+})
+export type AgentActivityCollection = typeof AgentActivityCollection.Type
 
 export class AgentActivityFailed extends Schema.TaggedError<AgentActivityFailed>()(
   "AgentActivityFailed",
   {
     operation: Schema.String,
     canvasId: Schema.String,
+    activityId: Schema.optional(Schema.String),
     detail: Schema.String
   }
 ) {}
 
 export type SignalAgentActivityInput = {
   readonly canvasId: string
-  readonly activeForSeconds: number
+  readonly activityId: string
+  readonly harness: string
+  readonly model?: string
   readonly detail?: string
+  readonly reference?: AgentActivityReference
 }
 
 export interface AgentActivityStoreShape {
   readonly read: (
     canvasId: string
-  ) => Effect.Effect<AgentActivityStatus, AgentActivityFailed>
+  ) => Effect.Effect<AgentActivityCollection, AgentActivityFailed>
   readonly signal: (
     input: SignalAgentActivityInput
-  ) => Effect.Effect<AgentActivityStatus, AgentActivityFailed>
+  ) => Effect.Effect<AgentActivity, AgentActivityFailed>
   readonly clear: (
-    canvasId: string
-  ) => Effect.Effect<AgentActivityStatus, AgentActivityFailed>
+    canvasId: string,
+    activityId: string
+  ) => Effect.Effect<void, AgentActivityFailed>
 }
 
 export class AgentActivityStore extends Context.Service<

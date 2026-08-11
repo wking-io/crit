@@ -1,6 +1,7 @@
 import { Effect, Schema } from "effect"
 
 import {
+  Author,
   CanvasCommandSchema,
   CanvasDocument,
   MAX_CANVAS_DOCUMENT_BYTES
@@ -14,7 +15,7 @@ import {
   type CritClientError,
   type CritClientShape
 } from "../session/crit-client.js"
-import { AgentActivityStatus } from "../runtime/agent-activity.js"
+import { AgentActivityCollection } from "../runtime/agent-activity.js"
 
 export const DEFAULT_CRIT_API_PATH = "/__crit/api"
 export const MAX_CRIT_HTTP_BODY_BYTES = MAX_CANVAS_DOCUMENT_BYTES + 64_000
@@ -43,6 +44,7 @@ export const CritHttpErrorBody = Schema.Struct({
 export type CritHttpErrorBody = typeof CritHttpErrorBody.Type
 
 export type CritHttpRoute =
+  | { readonly _tag: "CurrentAuthor" }
   | { readonly _tag: "Canvas"; readonly id: string }
   | { readonly _tag: "CanvasActivity"; readonly id: string }
   | {
@@ -67,6 +69,9 @@ const stripTrailingSlash = (value: string) => value.replace(/\/+$/, "")
 export const critCanvasUrl = (apiPath: string, canvasId: string) =>
   `${stripTrailingSlash(apiPath)}/canvases/${encodeURIComponent(canvasId)}`
 
+export const critCurrentAuthorUrl = (apiPath: string) =>
+  `${stripTrailingSlash(apiPath)}/identity`
+
 export const critFrameSnapshotUrl = (
   apiPath: string,
   canvasId: string,
@@ -87,6 +92,9 @@ export const parseCritHttpRoute = (
     pathname = new URL(requestUrl, "http://crit.local").pathname
   } catch {
     return undefined
+  }
+  if (pathname === critCurrentAuthorUrl(apiPath)) {
+    return { _tag: "CurrentAuthor" }
   }
   const prefix = `${stripTrailingSlash(apiPath)}/canvases/`
   if (!pathname.startsWith(prefix)) return undefined
@@ -251,13 +259,23 @@ export const makeCritHttpHandler = (
         json(400, errorBody("invalid-request", "A Canvas ID is required"))
       )
     }
+
+    if (route._tag === "CurrentAuthor") {
+      if (request.method !== "GET") {
+        return Effect.succeed(methodNotAllowed("current-author", ["GET"]))
+      }
+      return client.currentAuthor().pipe(
+        Effect.map((author) => json(200, author)),
+        Effect.catch((cause) => Effect.succeed(clientErrorResponse(cause)))
+      )
+    }
     const id = route.id
 
     if (route._tag === "CanvasActivity") {
       if (request.method !== "GET") {
         return Effect.succeed(methodNotAllowed(id, ["GET"]))
       }
-      if (client.activity === undefined) {
+      if (client.activities === undefined) {
         return Effect.succeed(
           clientErrorResponse(
             new CritClientUnavailable({
@@ -268,8 +286,8 @@ export const makeCritHttpHandler = (
           )
         )
       }
-      return client.activity(id).pipe(
-        Effect.map((activity) => json(200, activity)),
+      return client.activities(id).pipe(
+        Effect.map((activities) => json(200, activities)),
         Effect.catch((cause) => Effect.succeed(clientErrorResponse(cause)))
       )
     }
@@ -366,8 +384,19 @@ export const decodeCanvasDocument = (input: unknown, id: string) =>
     )
   )
 
-export const decodeAgentActivity = (input: unknown, id: string) =>
-  Schema.decodeUnknownEffect(AgentActivityStatus)(input).pipe(
+export const decodeCurrentAuthor = (input: unknown) =>
+  Schema.decodeUnknownEffect(Author)(input).pipe(
+    Effect.mapError(
+      (cause) =>
+        new CritClientInvalidDocument({
+          id: "current-author",
+          detail: String(cause)
+        })
+    )
+  )
+
+export const decodeAgentActivities = (input: unknown, id: string) =>
+  Schema.decodeUnknownEffect(AgentActivityCollection)(input).pipe(
     Effect.mapError(
       (cause) =>
         new CritClientInvalidDocument({ id, detail: String(cause) })

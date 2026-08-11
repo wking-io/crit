@@ -6,7 +6,7 @@ import { Canvas, CanvasCommand } from "../../src/core/index.js"
 describe("Canvas snapshot Frames", () => {
   it.effect("adds an immutable archived Frame beside its live source", () =>
     Effect.gen(function*() {
-      const canvas = Canvas.create({ id: "review", title: "Review" })
+      const canvas = Canvas.create({ id: "review", title: "Review", owner: { id: "git:test", name: "Test Author" } })
       yield* Canvas.apply(
         canvas,
         CanvasCommand.addFrame({
@@ -67,7 +67,7 @@ describe("Canvas snapshot Frames", () => {
 
   it.effect("rejects a capture when the source URL changed", () =>
     Effect.gen(function*() {
-      const canvas = Canvas.create({ id: "review", title: "Review" })
+      const canvas = Canvas.create({ id: "review", title: "Review", owner: { id: "git:test", name: "Test Author" } })
       yield* Canvas.apply(
         canvas,
         CanvasCommand.addFrame({

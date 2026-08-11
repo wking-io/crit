@@ -19,7 +19,7 @@ import type {
   FrameReviewStatus
 } from "../../src/core/index.js"
 import { CritContextMenu, type ContextMenuItem } from "../../src/react/canvas-context-menu.js"
-import { AgentActivityIndicator, CanvasSaveIndicator, CritBoundaryMessage } from "../../src/react/canvas-feedback.js"
+import { CanvasPresenceIndicator, CanvasSaveIndicator, CritBoundaryMessage } from "../../src/react/canvas-feedback.js"
 import { CanvasHelpPanel } from "../../src/react/canvas-help.js"
 import { CanvasCommentPin } from "../../src/react/canvas-comment-pin.js"
 import { CanvasSelection } from "../../src/react/canvas-selection.js"
@@ -608,8 +608,31 @@ function FeedbackSpecimens() {
         <div><StateLabel>Help · no hotkey / long copy</StateLabel><CanvasHelpPanel details={{ name: "Resize Checkout candidate", hotkey: "—", description: "Drag this handle to resize the frame while preserving its opposite edge and minimum dimensions." }} /></div>
         <div className="ui-feedback-badges">
           <StateLabel>Agent presence</StateLabel>
-          <AgentActivityIndicator detail="arranging frames" />
-          <AgentActivityIndicator detail={null} />
+          <CanvasPresenceIndicator
+            presence={{
+              currentAuthor: { id: "git:ui-lab", name: "Willa King" },
+              availability: "available",
+              activities: [{
+                schemaVersion: 1,
+                canvasId: "feature-lab",
+                activityId: "codex-thread",
+                harness: "Codex",
+                model: "GPT-5",
+                detail: "arranging frames",
+                reference: null,
+                createdAt: "2026-08-11T12:00:00.000Z",
+                updatedAt: "2026-08-11T12:00:20.000Z",
+                activeUntil: "2026-08-11T12:01:20.000Z"
+              }]
+            }}
+          />
+          <CanvasPresenceIndicator
+            presence={{
+              currentAuthor: { id: "git:ui-lab", name: "Willa King" },
+              availability: "unavailable",
+              activities: []
+            }}
+          />
         </div>
         <div className="ui-feedback-badges">
           <StateLabel>Save lifecycle</StateLabel>

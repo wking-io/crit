@@ -6,7 +6,7 @@ import { Canvas, CanvasCommand } from "../../src/core/index.js"
 describe("Canvas item ordering", () => {
   it.effect("moves Frames and Notes across one shared front-to-back stack", () =>
     Effect.gen(function*() {
-      const canvas = Canvas.create({ id: "review", title: "Review" })
+      const canvas = Canvas.create({ id: "review", title: "Review", owner: { id: "git:test", name: "Test Author" } })
       yield* Canvas.apply(
         canvas,
         CanvasCommand.addFrame({

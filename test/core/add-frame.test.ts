@@ -8,7 +8,8 @@ describe("Canvas AddFrame command", () => {
     Effect.gen(function*() {
       const canvas = Canvas.create({
         id: "checkout-iterations",
-        title: "Checkout iterations"
+        title: "Checkout iterations",
+        owner: { id: "git:test", name: "Test Author" }
       })
 
       const change = yield* Canvas.apply(
@@ -51,7 +52,7 @@ describe("Canvas AddFrame command", () => {
 
   it.effect("leaves the Canvas unchanged when any command in a batch fails", () =>
     Effect.gen(function*() {
-      const canvas = Canvas.create({ id: "review", title: "Review" })
+      const canvas = Canvas.create({ id: "review", title: "Review", owner: { id: "git:test", name: "Test Author" } })
       const before = Canvas.export(canvas)
 
       const failure = yield* Effect.flip(

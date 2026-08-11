@@ -10,7 +10,7 @@ describe("Canvas Document size policy", () => {
   it.effect("rejects an oversized document before opening it", () =>
     Effect.gen(function*() {
       const exported = Canvas.export(
-        Canvas.create({ id: "review", title: "Review" })
+        Canvas.create({ id: "review", title: "Review", owner: { id: "git:test", name: "Test Author" } })
       )
       const oversized = {
         ...exported,

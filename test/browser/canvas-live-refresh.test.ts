@@ -47,7 +47,7 @@ const makeSession = () => {
           counts.canvas += 1
           return true
         }),
-      refreshAgentActivity: () =>
+      refreshPresence: () =>
         Effect.sync(() => {
           counts.activity += 1
           return true

@@ -9,15 +9,23 @@ export {
   type CanvasLiveRefreshSocket
 } from "../browser/canvas-live-refresh.js"
 export {
-  AgentActivityStatus,
-  type AgentActivityStatus as AgentActivityStatusValue
+  AGENT_ACTIVITY_LEASE_SECONDS,
+  AgentActivity,
+  AgentActivityCollection,
+  AgentActivityReference
 } from "../runtime/agent-activity.js"
+export {
+  AuthorIdentityFailed,
+  GIT_AUTHOR_REMEDIATION_PROMPT
+} from "../runtime/author-identity.js"
 export {
   HttpCritClient,
   type HttpCritClientOptions
 } from "../http/client.js"
 export {
   CanvasSession,
+  CanvasPresence,
+  CanvasPresenceAvailability,
   CanvasSessionRecoveryStatus,
   CanvasSessionSaveStatus,
   CanvasSessionState,

@@ -39,7 +39,7 @@ describe("Canvas Comments", () => {
 
   it.effect("persists flat threads and enforces author and owner permissions", () =>
     Effect.gen(function*() {
-      const canvas = Canvas.create({ id: "review", title: "Review" })
+      const canvas = Canvas.create({ id: "review", title: "Review", owner: alice })
       yield* addLiveFrame(canvas)
       yield* Canvas.apply(
         canvas,
@@ -117,7 +117,7 @@ describe("Canvas Comments", () => {
 
   it.effect("lets the Canvas Owner manage a thread opened by another author", () =>
     Effect.gen(function*() {
-      const canvas = Canvas.create({ id: "review", title: "Review" })
+      const canvas = Canvas.create({ id: "review", title: "Review", owner: alice })
       yield* addLiveFrame(canvas)
       yield* Canvas.apply(
         canvas,
@@ -145,11 +145,12 @@ describe("Canvas Comments", () => {
         id: "bob-thread",
         resolvedBy: alice
       })
+      expect(Canvas.export(canvas).owner).toEqual(alice)
     }))
 
   it.effect("rejects Comments on archived snapshot Frames", () =>
     Effect.gen(function*() {
-      const canvas = Canvas.create({ id: "review", title: "Review" })
+      const canvas = Canvas.create({ id: "review", title: "Review", owner: alice })
       yield* addLiveFrame(canvas)
       yield* Canvas.apply(
         canvas,

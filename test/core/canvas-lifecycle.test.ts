@@ -4,9 +4,25 @@ import { Effect } from "effect"
 import { Canvas, type CanvasDocument } from "../../src/core/index.js"
 
 describe("Canvas lifecycle", () => {
+  it.effect("rejects a Canvas Document without its creation-time owner", () =>
+    Effect.gen(function*() {
+      const document = Canvas.export(
+        Canvas.create({
+          id: "owned",
+          title: "Owned",
+          owner: { id: "git:owner", name: "Owner" }
+        })
+      )
+      const { owner: _owner, ...ownerless } = document
+
+      const failure = yield* Effect.flip(Canvas.open(ownerless))
+
+      expect(failure).toMatchObject({ reason: "invalid-envelope" })
+    }))
+
   it("opens an already-decoded document synchronously and owns its state", () => {
     const document = Canvas.export(
-      Canvas.create({ id: "trusted", title: "Trusted" })
+      Canvas.create({ id: "trusted", title: "Trusted", owner: { id: "git:test", name: "Test Author" } })
     )
 
     const opened = Canvas.fromDocument(document)
@@ -17,7 +33,7 @@ describe("Canvas lifecycle", () => {
 
   it("treats broken trusted-document invariants as defects", () => {
     const document = Canvas.export(
-      Canvas.create({ id: "trusted", title: "Trusted" })
+      Canvas.create({ id: "trusted", title: "Trusted", owner: { id: "git:test", name: "Test Author" } })
     )
     const broken = {
       ...document,
@@ -54,7 +70,8 @@ describe("Canvas lifecycle", () => {
     Effect.gen(function*() {
       const created = Canvas.create({
         id: "checkout-iterations",
-        title: "Checkout iterations"
+        title: "Checkout iterations",
+        owner: { id: "git:test", name: "Test Author" }
       })
 
       const reopened = yield* Canvas.open(Canvas.export(created))

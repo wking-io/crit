@@ -13,9 +13,11 @@ import {
   DEFAULT_CRIT_API_PATH,
   critCanvasActivityUrl,
   critCanvasUrl,
+  critCurrentAuthorUrl,
   critFrameSnapshotUrl,
-  decodeAgentActivity,
+  decodeAgentActivities,
   decodeCanvasDocument,
+  decodeCurrentAuthor,
   encodeApplyRequest
 } from "./contract.js"
 
@@ -34,7 +36,7 @@ const parseJson = (response: Response) =>
 const responseError = (
   response: Response,
   input: unknown,
-  operation: "load" | "apply" | "snapshot" | "activity",
+  operation: "current-author" | "load" | "apply" | "snapshot" | "activity",
   id: string
 ): CritClientError => {
   const parsed = Schema.decodeUnknownOption(CritHttpErrorBody)(input)
@@ -101,6 +103,41 @@ const make = (options: HttpCritClientOptions = {}): CritClientShape => {
     )
 
   return {
+    currentAuthor: () =>
+      Effect.tryPromise({
+        try: () => request(critCurrentAuthorUrl(apiPath)),
+        catch: (cause) =>
+          new CritClientUnavailable({
+            operation: "current-author",
+            id: "current-author",
+            detail: cause instanceof Error ? cause.message : String(cause)
+          })
+      }).pipe(
+        Effect.flatMap((response) =>
+          parseJson(response).pipe(
+            Effect.mapError(
+              (cause) =>
+                new CritClientUnavailable({
+                  operation: "current-author",
+                  id: "current-author",
+                  detail: cause.message
+                })
+            ),
+            Effect.flatMap((body) =>
+              response.ok
+                ? decodeCurrentAuthor(body)
+                : Effect.fail(
+                    responseError(
+                      response,
+                      body,
+                      "current-author",
+                      "current-author"
+                    )
+                  )
+            )
+          )
+        )
+      ),
     load: (id) => execute("load", id),
     apply: (id, commands) =>
       execute("apply", id, {
@@ -112,7 +149,7 @@ const make = (options: HttpCritClientOptions = {}): CritClientShape => {
       execute("snapshot", canvasId, {
         method: "POST"
       }, critFrameSnapshotUrl(apiPath, canvasId, frameId)),
-    activity: (canvasId) =>
+    activities: (canvasId) =>
       Effect.tryPromise({
         try: () => request(critCanvasActivityUrl(apiPath, canvasId)),
         catch: (cause) =>
@@ -134,7 +171,7 @@ const make = (options: HttpCritClientOptions = {}): CritClientShape => {
             ),
             Effect.flatMap((body) =>
               response.ok
-                ? decodeAgentActivity(body, canvasId)
+                ? decodeAgentActivities(body, canvasId)
                 : Effect.fail(
                     responseError(response, body, "activity", canvasId)
                   )

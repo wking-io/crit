@@ -43,7 +43,7 @@ describe("FileSystemCanvasRepository", () => {
     Effect.gen(function*() {
       const store = yield* CanvasRepository
       const initial = Canvas.export(
-        Canvas.create({ id: "checkout-iterations", title: "Checkout iterations" })
+        Canvas.create({ id: "checkout-iterations", title: "Checkout iterations", owner: { id: "git:test", name: "Test Author" } })
       )
 
       yield* store.create(initial)
@@ -83,7 +83,7 @@ describe("FileSystemCanvasRepository", () => {
     Effect.gen(function*() {
       const store = yield* CanvasRepository
       yield* store.create(
-        Canvas.export(Canvas.create({ id: "review", title: "Review" }))
+        Canvas.export(Canvas.create({ id: "review", title: "Review", owner: { id: "git:test", name: "Test Author" } }))
       )
 
       const commandFailure = yield* Effect.flip(
@@ -120,7 +120,7 @@ describe("FileSystemCanvasRepository", () => {
     Effect.gen(function*() {
       const store = yield* CanvasRepository
       yield* store.create(
-        Canvas.export(Canvas.create({ id: "wedged", title: "Wedged" }))
+        Canvas.export(Canvas.create({ id: "wedged", title: "Wedged", owner: { id: "git:test", name: "Test Author" } }))
       )
 
       // A short-lived child process yields a PID that is guaranteed dead.
@@ -147,7 +147,7 @@ describe("FileSystemCanvasRepository", () => {
     Effect.gen(function*() {
       const store = yield* CanvasRepository
       yield* store.create(
-        Canvas.export(Canvas.create({ id: "abandoned", title: "Abandoned" }))
+        Canvas.export(Canvas.create({ id: "abandoned", title: "Abandoned", owner: { id: "git:test", name: "Test Author" } }))
       )
 
       const lock = path.join(root, ".crit", "canvases", "abandoned.json.lock")

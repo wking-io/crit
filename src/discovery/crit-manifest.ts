@@ -5,6 +5,7 @@ import {
   CanvasCommand,
   FrameDisplay,
   FrameReviewStatus,
+  type Author,
   type CanvasCommand as CanvasCommandInput,
   type CanvasFrame
 } from "../core/index.js"
@@ -309,7 +310,7 @@ const planFrameCommands = (
 const syncWith = (
   documents: CanvasRepositoryShape,
   manifest: ResolvedCritManifest,
-  options: { readonly canvasId?: string } = {}
+  options: { readonly owner: Author; readonly canvasId?: string }
 ) => {
   const selected =
     options.canvasId === undefined
@@ -332,7 +333,13 @@ const syncWith = (
       const current = yield* documents.load(canvas.id).pipe(
         Effect.catchTag("CritClientNotFound", () =>
           documents.create(
-            Canvas.export(Canvas.create({ id: canvas.id, title: canvas.title }))
+            Canvas.export(
+              Canvas.create({
+                id: canvas.id,
+                title: canvas.title,
+                owner: options.owner
+              })
+            )
           ).pipe(
             Effect.tap(() =>
               Effect.sync(() => {
@@ -384,7 +391,7 @@ const syncWith = (
 
 const sync = (
   manifest: ResolvedCritManifest,
-  options: { readonly canvasId?: string } = {}
+  options: { readonly owner: Author; readonly canvasId?: string }
 ) => Effect.flatMap(CanvasRepository, (documents) =>
   syncWith(documents, manifest, options)
 )

@@ -1,5 +1,5 @@
 export { FileSystemCanvasRepository } from "./file-system-canvas-repository.js"
-export { gitAuthor } from "./git-author.js"
+export { GitAuthorIdentity, gitAuthor } from "./git-author.js"
 export {
   FileSystemAgentActivity,
   type FileSystemAgentActivityOptions
@@ -25,12 +25,21 @@ export {
 } from "../runtime/canvas-failure.js"
 export { SnapshotArtifact } from "../core/index.js"
 export {
+  AGENT_ACTIVITY_LEASE_SECONDS,
+  AgentActivity,
+  AgentActivityCollection,
   AgentActivityFailed,
-  AgentActivityStatus,
+  AgentActivityReference,
   AgentActivityStore,
   type AgentActivityStoreShape,
   type SignalAgentActivityInput
 } from "../runtime/agent-activity.js"
+export {
+  AuthorIdentity,
+  AuthorIdentityFailed,
+  GIT_AUTHOR_REMEDIATION_PROMPT,
+  type AuthorIdentityShape
+} from "../runtime/author-identity.js"
 export {
   CRIT_SNAPSHOT_PATH,
   SnapshotArchive,

@@ -42,7 +42,7 @@ export interface CanvasLiveRefreshSocket {
 
 export interface CanvasLiveRefreshOptions {
   readonly canvasId: string
-  readonly session: Pick<CanvasSession, "refresh" | "refreshAgentActivity">
+  readonly session: Pick<CanvasSession, "refresh" | "refreshPresence">
   readonly endpoint?: CanvasLiveRefreshEndpoint
   readonly location?: CanvasLiveRefreshLocation
   readonly createSocket?: (url: string) => CanvasLiveRefreshSocket
@@ -124,7 +124,7 @@ export const connectCanvasLiveRefresh = (
       )
     } else if (payload.event === "crit:agent-activity") {
       Effect.runFork(
-        options.session.refreshAgentActivity().pipe(
+        options.session.refreshPresence().pipe(
           Effect.catch(() => Effect.void)
         )
       )

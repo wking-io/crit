@@ -8,6 +8,7 @@ import { runCrit } from "./cli/command.js"
 import { FileSystemCanvasRepository } from "./node/file-system-canvas-repository.js"
 import { FileSystemAgentActivity } from "./node/file-system-agent-activity.js"
 import { FileSystemSnapshotArchive } from "./node/file-system-snapshot-archive.js"
+import { GitAuthorIdentity } from "./node/git-author.js"
 import { SnapshotServiceLive } from "./runtime/snapshot-service.js"
 
 const documentStoreLayer = FileSystemCanvasRepository.layer({ root: process.cwd() })
@@ -18,6 +19,7 @@ const snapshotServiceLayer = SnapshotServiceLive.pipe(
 )
 const mainLayer = Layer.mergeAll(
   NodeServices.layer,
+  GitAuthorIdentity.layer,
   documentStoreLayer,
   agentActivityLayer,
   snapshotServiceLayer

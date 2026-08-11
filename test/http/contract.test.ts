@@ -11,9 +11,10 @@ import {
   CritClientCommandFailed,
   type CritClientShape
 } from "../../src/session/crit-client.js"
+import { TEST_AUTHOR } from "../support/author-identity.js"
 
 const document = Canvas.export(
-  Canvas.create({ id: "homepage", title: "Homepage" })
+  Canvas.create({ id: "homepage", title: "Homepage", owner: { id: "git:test", name: "Test Author" } })
 )
 
 const makeClient = (): CritClientShape & {
@@ -25,6 +26,7 @@ const makeClient = (): CritClientShape & {
   return {
     applied,
     snapshots,
+    currentAuthor: () => Effect.succeed(TEST_AUTHOR),
     load: () => Effect.succeed(document),
     apply: (_id, commands) => {
       applied.push(commands)
@@ -46,6 +48,10 @@ const applyBody = JSON.stringify({
 
 describe("parseCritHttpRoute", () => {
   it.each([
+    [
+      "/__crit/api/identity",
+      { _tag: "CurrentAuthor" }
+    ],
     [
       "/__crit/api/canvases/home%20page",
       { _tag: "Canvas", id: "home page" }
@@ -82,6 +88,15 @@ describe("parseCritHttpRoute", () => {
 })
 
 describe("makeCritHttpHandler", () => {
+  it("serves Current Author through the shared client contract", async () => {
+    const handler = makeCritHttpHandler(makeClient())
+    const response = await Effect.runPromise(
+      handler(new Request("http://localhost:5173/__crit/api/identity"))
+    )
+    expect(response?.status).toBe(200)
+    expect(await response?.json()).toEqual(TEST_AUTHOR)
+  })
+
   it("round-trips durable failures through HTTP without translating them", async () => {
     const client: CritClientShape = {
       ...makeClient(),

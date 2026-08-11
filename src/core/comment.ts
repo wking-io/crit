@@ -64,10 +64,10 @@ export const CanvasCommentThread = Schema.Struct({
 export type CanvasCommentThread = typeof CanvasCommentThread.Type
 
 export const canManageCommentThread = (
-  owner: Author | null,
+  owner: Author,
   thread: CanvasCommentThread,
   actorId: string
-) => owner?.id === actorId || thread.opening.author.id === actorId
+) => owner.id === actorId || thread.opening.author.id === actorId
 
 export const canEditComment = (
   comment: CommentMessage,

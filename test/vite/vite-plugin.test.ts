@@ -1,8 +1,10 @@
+import { execFile } from "node:child_process"
 import { readFile, rm, mkdtemp, writeFile } from "node:fs/promises"
 import { createServer as createHttpServer, type Server } from "node:http"
 import type { AddressInfo } from "node:net"
 import { tmpdir } from "node:os"
 import path from "node:path"
+import { promisify } from "node:util"
 
 import { Effect } from "effect"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
@@ -12,11 +14,16 @@ import { canvasLiveRefreshSocketUrl } from "../../src/browser/canvas-live-refres
 import { HttpCritClient } from "../../src/http/client.js"
 import { Canvas, CanvasCommand } from "../../src/core/index.js"
 import { FileSystemAgentActivity } from "../../src/node/file-system-agent-activity.js"
+import { FileSystemCanvasRepository } from "../../src/node/file-system-canvas-repository.js"
+import { CanvasRepository } from "../../src/runtime/canvas-repository.js"
 import {
   CritClientCommandFailed,
   CritClientNotFound
 } from "../../src/session/crit-client.js"
 import { crit } from "../../src/vite/index.js"
+import { TEST_AUTHOR } from "../support/author-identity.js"
+
+const execFileAsync = promisify(execFile)
 
 describe("crit Vite plugin", () => {
   let root = ""
@@ -25,6 +32,13 @@ describe("crit Vite plugin", () => {
 
   beforeEach(async () => {
     root = await mkdtemp(path.join(tmpdir(), "crit-vite-"))
+    await execFileAsync("git", ["init"], { cwd: root })
+    await execFileAsync("git", ["config", "user.name", TEST_AUTHOR.name], {
+      cwd: root
+    })
+    await execFileAsync("git", ["config", "user.email", "test@example.com"], {
+      cwd: root
+    })
   })
 
   afterEach(async () => {
@@ -59,18 +73,30 @@ describe("crit Vite plugin", () => {
     return `http://127.0.0.1:${address.port}`
   }
 
-  it("creates, loads, and applies commands to a real Canvas over HTTP", async () => {
+  const createCanvas = (id: string, title = id) =>
+    Effect.runPromise(
+      Effect.flatMap(CanvasRepository, (documents) =>
+        documents.create(
+          Canvas.export(Canvas.create({ id, title, owner: TEST_AUTHOR }))
+        )
+      ).pipe(Effect.provide(FileSystemCanvasRepository.layer({ root })))
+    )
+
+  it("loads and applies commands to an explicitly created Canvas over HTTP", async () => {
+    await createCanvas("homepage")
     const origin = await start()
     const client = HttpCritClient.make({ apiPath: `${origin}/__crit/api` })
+    const currentAuthor = await Effect.runPromise(client.currentAuthor())
     const editorResponse = await fetch(`${origin}/crit/homepage`)
     const editorHtml = await editorResponse.text()
     const activityStore = FileSystemAgentActivity.make({ root })
     await Effect.runPromise(activityStore.signal({
       canvasId: "homepage",
-      activeForSeconds: 120,
+      activityId: "codex-1",
+      harness: "Codex",
       detail: "Agent is arranging Frames"
     }))
-    const activity = await Effect.runPromise(client.activity!("homepage"))
+    const activity = await Effect.runPromise(client.activities!("homepage"))
 
     const initialLoads = await Promise.all(
       Array.from({ length: 8 }, () =>
@@ -132,6 +158,7 @@ describe("crit Vite plugin", () => {
       title: "homepage",
       revision: 0
     })
+    expect(currentAuthor.name).toBe(TEST_AUTHOR.name)
     expect(editorResponse.status).toBe(200)
     expect(editorResponse.headers.get("content-type")).toContain("text/html")
     expect(editorHtml).toContain("<title>Crit · homepage</title>")
@@ -141,8 +168,11 @@ describe("crit Vite plugin", () => {
     expect(editorHtml).toContain("data-crit-live-refresh=")
     expect(activity).toMatchObject({
       canvasId: "homepage",
-      active: true,
-      detail: "Agent is arranging Frames"
+      activities: [{
+        activityId: "codex-1",
+        harness: "Codex",
+        detail: "Agent is arranging Frames"
+      }]
     })
     expect(initialLoads).toHaveLength(8)
     expect(initialLoads.every((document) => document.revision === 0)).toBe(true)
@@ -199,6 +229,7 @@ describe("crit Vite plugin", () => {
     // Mirror the served editor: attach Vite's HMR socket to the page origin,
     // read the endpoint the plugin injects into the editor HTML, and connect
     // the way the editor bundle does.
+    await createCanvas("homepage")
     httpServer = createHttpServer()
     server = await createServer({
       root,
@@ -273,8 +304,8 @@ describe("crit Vite plugin", () => {
     expect(payload.data?.id).toBe("homepage")
   })
 
-  it("can require explicit Canvas creation", async () => {
-    const origin = await start({ createIfMissing: false })
+  it("requires explicit Canvas creation", async () => {
+    const origin = await start()
     const client = HttpCritClient.make({ apiPath: `${origin}/__crit/api` })
 
     const failure = await Effect.runPromise(
@@ -313,7 +344,7 @@ describe("crit Vite plugin", () => {
     expect(html).toContain("window.parent.postMessage")
   })
 
-  it("ignores forwarded headers when resolving the project discovery manifest", async () => {
+  it("publishes the project manifest without trusting forwarded headers or creating on load", async () => {
     await writeFile(
       path.join(root, "crit.manifest.json"),
       JSON.stringify({
@@ -346,36 +377,15 @@ describe("crit Vite plugin", () => {
     const manifest = await manifestResponse.json() as {
       canvases: Array<{ frames: Array<{ url: string }> }>
     }
-    const client = HttpCritClient.make({
-      apiPath: `${origin}/__crit/api`,
-      fetch: (input, init) => fetch(input, {
-        ...init,
-        headers: forwardedHeaders
-      })
-    })
-    const first = await Effect.runPromise(client.load("default"))
-    const second = await Effect.runPromise(client.load("default"))
-    const canvas = await Effect.runPromise(Canvas.open(second))
+    const client = HttpCritClient.make({ apiPath: `${origin}/__crit/api` })
+    const failure = await Effect.runPromise(Effect.flip(client.load("default")))
 
     expect(manifestResponse.status).toBe(200)
     expect(manifest.canvases[0]?.frames[0]?.url).toBe(`${origin}/checkout`)
-    expect(first.revision).toBe(1)
-    expect(second.revision).toBe(1)
-    expect(Canvas.listFrames(canvas)).toMatchObject([
-      {
-        id: "app",
-        url: `${origin}/checkout`,
-        title: "Checkout",
-        status: "changes-requested",
-        provenance: {
-          kind: "manifest",
-          sourceId: "storefront:default:app"
-        }
-      }
-    ])
+    expect(failure).toBeInstanceOf(CritClientNotFound)
   })
 
-  it("uses publicOrigin for manifest reconciliation without forwarded headers", async () => {
+  it("uses publicOrigin for the published manifest without forwarded headers", async () => {
     await writeFile(
       path.join(root, "crit.manifest.json"),
       JSON.stringify({
@@ -399,15 +409,9 @@ describe("crit Vite plugin", () => {
     const manifest = await manifestResponse.json() as {
       canvases: Array<{ frames: Array<{ url: string }> }>
     }
-    const client = HttpCritClient.make({
-      apiPath: `${origin}/__crit/api`
-    })
-    const document = await Effect.runPromise(client.load("default"))
-
     expect(manifest.canvases[0]?.frames[0]?.url).toBe(
       "https://portal.example/frames/ready"
     )
-    expect(document.frames[0]?.url).toBe("https://portal.example/frames/ready")
   })
 
   it("captures and serves an immutable self-contained Frame snapshot", async () => {
@@ -423,6 +427,7 @@ describe("crit Vite plugin", () => {
       path.join(root, "app.js"),
       'document.querySelector("#app").dataset.ready = "true"'
     )
+    await createCanvas("review")
     const origin = await start()
     const client = HttpCritClient.make({ apiPath: `${origin}/__crit/api` })
     await Effect.runPromise(client.load("review"))

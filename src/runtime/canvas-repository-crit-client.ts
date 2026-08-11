@@ -1,6 +1,5 @@
 import { Effect } from "effect"
 
-import { Canvas } from "../core/index.js"
 import {
   CritClientUnavailable,
   type CritClientShape
@@ -10,38 +9,18 @@ import type { AgentActivityStoreShape } from "./agent-activity.js"
 import type { SnapshotServiceShape } from "./snapshot-service.js"
 
 export interface CanvasRepositoryCritClientOptions {
-  readonly createIfMissing?: boolean
-  readonly title?: (id: string) => string
+  readonly currentAuthor: CritClientShape["currentAuthor"]
   readonly snapshotFrame?: SnapshotServiceShape["snapshotFrame"]
-  readonly loadAgentActivity?: AgentActivityStoreShape["read"]
+  readonly loadAgentActivities?: AgentActivityStoreShape["read"]
 }
 
 const make = (
   documents: CanvasRepositoryShape,
-  options: CanvasRepositoryCritClientOptions = {}
+  options: CanvasRepositoryCritClientOptions
 ): CritClientShape => {
-  const createIfMissing = options.createIfMissing ?? false
-  const title = options.title ?? ((id: string) => id)
-
-  const createCanvas = (id: string) =>
-    documents
-      .create(Canvas.export(Canvas.create({ id, title: title(id) })))
-      .pipe(
-        Effect.catchTag("DocumentAlreadyExists", () => documents.load(id)),
-        Effect.catchTag("CritClientUnavailable", (createFailure) =>
-          documents.load(id).pipe(
-            Effect.catch(() => Effect.fail(createFailure))
-          )
-        )
-      )
-
   return {
-    load: (id) =>
-      documents.load(id).pipe(
-        Effect.catchTag("CritClientNotFound", (cause) =>
-          createIfMissing ? createCanvas(id) : Effect.fail(cause)
-        )
-      ),
+    currentAuthor: options.currentAuthor,
+    load: (id) => documents.load(id),
     apply: (id, commands) =>
       documents.apply(id, commands).pipe(
         Effect.map((mutation) => mutation.document)
@@ -52,11 +31,11 @@ const make = (
           snapshot: (id: string, frameId: string) =>
             options.snapshotFrame!(id, frameId)
         }),
-    ...(options.loadAgentActivity === undefined
+    ...(options.loadAgentActivities === undefined
       ? {}
       : {
-          activity: (id: string) =>
-            options.loadAgentActivity!(id).pipe(
+          activities: (id: string) =>
+            options.loadAgentActivities!(id).pipe(
               Effect.mapError(
                 (cause) =>
                   new CritClientUnavailable({

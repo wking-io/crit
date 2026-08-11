@@ -3,6 +3,11 @@ import { describe, expect, it } from "vitest"
 
 import { Crit } from "../../src/react/crit.js"
 import {
+  CanvasPresenceIndicator,
+  GitIdentityBoundary
+} from "../../src/react/canvas-feedback.js"
+import { GIT_AUTHOR_REMEDIATION_PROMPT } from "../../src/runtime/author-identity.js"
+import {
   CanvasHelpPanel,
   CanvasHelpSurface
 } from "../../src/react/canvas-help.js"
@@ -222,7 +227,7 @@ describe("Crit", () => {
   })
 
   it("hides inactive help and emits complete details for canvas controls", () => {
-    const canvas = Canvas.create({ id: "review", title: "Review" })
+    const canvas = Canvas.create({ id: "review", title: "Review", owner: { id: "git:test", name: "Test Author" } })
     const html = renderToStaticMarkup(
       <CanvasHelpSurface>
         <CanvasViewport
@@ -337,7 +342,7 @@ describe("Crit", () => {
   })
 
   it("renders Frames and attached Notes without a canvas framework", async () => {
-    const canvas = Canvas.create({ id: "review", title: "Review" })
+    const canvas = Canvas.create({ id: "review", title: "Review", owner: { id: "git:test", name: "Test Author" } })
     await Effect.runPromise(Canvas.apply(
       canvas,
       CanvasCommand.addFrame({
@@ -442,7 +447,7 @@ describe("Crit", () => {
   })
 
   it("sandboxes archived Frame artifacts while leaving live Frames unsandboxed", async () => {
-    const canvas = Canvas.create({ id: "review", title: "Review" })
+    const canvas = Canvas.create({ id: "review", title: "Review", owner: { id: "git:test", name: "Test Author" } })
     await Effect.runPromise(
       Canvas.apply(
         canvas,
@@ -516,7 +521,7 @@ describe("Crit", () => {
   })
 
   it("keeps an explicit iframeSandbox policy for archived Frames", async () => {
-    const canvas = Canvas.create({ id: "review", title: "Review" })
+    const canvas = Canvas.create({ id: "review", title: "Review", owner: { id: "git:test", name: "Test Author" } })
     await Effect.runPromise(
       Canvas.apply(
         canvas,
@@ -560,7 +565,7 @@ describe("Crit", () => {
   })
 
   it("offers snapshot capture for live Frames", async () => {
-    const canvas = Canvas.create({ id: "review", title: "Review" })
+    const canvas = Canvas.create({ id: "review", title: "Review", owner: { id: "git:test", name: "Test Author" } })
     await Effect.runPromise(
       Canvas.apply(
         canvas,
@@ -582,5 +587,61 @@ describe("Crit", () => {
     )
 
     expect(html).toContain("Take snapshot")
+  })
+
+  it("renders letter avatars and hover details for unified Canvas Presence", () => {
+    const html = renderToStaticMarkup(
+      <CanvasPresenceIndicator
+        presence={{
+          currentAuthor: { id: "git:willa", name: "Willa King" },
+          availability: "available",
+          activities: [{
+            schemaVersion: 1,
+            canvasId: "review",
+            activityId: "codex-1",
+            harness: "Codex",
+            model: "GPT-5",
+            detail: "Refining checkout",
+            reference: {
+              kind: "thread",
+              id: "thread-1",
+              uri: "codex://threads/thread-1"
+            },
+            createdAt: "2026-08-11T12:00:00.000Z",
+            updatedAt: "2026-08-11T12:00:20.000Z",
+            activeUntil: "2026-08-11T12:01:20.000Z"
+          }]
+        }}
+      />
+    )
+
+    expect(html).toContain("Current author: Willa King")
+    expect(html).toContain(">W<")
+    expect(html).toContain(">C<")
+    expect(html).toContain("GPT-5")
+    expect(html).toContain('href="codex://threads/thread-1"')
+  })
+
+  it("renders anonymous presence and a copy-ready Git identity remediation", () => {
+    const presence = renderToStaticMarkup(
+      <CanvasPresenceIndicator
+        presence={{
+          currentAuthor: { id: "git:willa", name: "Willa King" },
+          availability: "unavailable",
+          activities: []
+        }}
+      />
+    )
+    const identity = renderToStaticMarkup(
+      <GitIdentityBoundary
+        detail="Git user.email is not configured"
+        prompt={GIT_AUTHOR_REMEDIATION_PROMPT}
+      />
+    )
+
+    expect(presence).toContain("Anonymous agent")
+    expect(identity).toContain("Git identity required")
+    expect(identity).toContain("Copy fix prompt")
+    expect(identity).toContain("crit-identity")
   })
 })

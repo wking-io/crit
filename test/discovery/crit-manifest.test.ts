@@ -11,6 +11,7 @@ import {
 } from "../../src/discovery/index.js"
 import { Canvas } from "../../src/core/index.js"
 import { FileSystemCanvasRepository } from "../../src/node/file-system-canvas-repository.js"
+import { TEST_AUTHOR } from "../support/author-identity.js"
 import { CanvasRepository } from "../../src/runtime/canvas-repository.js"
 
 describe("CritManifest", () => {
@@ -78,10 +79,10 @@ describe("CritManifest", () => {
     )
 
     const first = await Effect.runPromise(
-      CritManifest.sync(resolved).pipe(Effect.provide(storeLayer))
+      CritManifest.sync(resolved, { owner: TEST_AUTHOR }).pipe(Effect.provide(storeLayer))
     )
     const second = await Effect.runPromise(
-      CritManifest.sync(resolved).pipe(Effect.provide(storeLayer))
+      CritManifest.sync(resolved, { owner: TEST_AUTHOR }).pipe(Effect.provide(storeLayer))
     )
     const changed = await Effect.runPromise(
       CritManifest.resolve(
@@ -105,7 +106,7 @@ describe("CritManifest", () => {
     )
     const third = await Effect.runPromise(
       Effect.gen(function*() {
-        const sync = yield* CritManifest.sync(changed)
+        const sync = yield* CritManifest.sync(changed, { owner: TEST_AUTHOR })
         const documents = yield* CanvasRepository
         const canvas = Canvas.fromDocument(yield* documents.load("checkout-review"))
         return { sync, frames: Canvas.listFrames(canvas) }
@@ -134,7 +135,7 @@ describe("CritManifest", () => {
     )
     const fourth = await Effect.runPromise(
       Effect.gen(function*() {
-        const sync = yield* CritManifest.sync(statusUnmanaged)
+        const sync = yield* CritManifest.sync(statusUnmanaged, { owner: TEST_AUTHOR })
         const documents = yield* CanvasRepository
         const canvas = Canvas.fromDocument(yield* documents.load("checkout-review"))
         return { sync, frames: Canvas.listFrames(canvas) }
@@ -151,7 +152,7 @@ describe("CritManifest", () => {
     )
     const fifth = await Effect.runPromise(
       Effect.gen(function*() {
-        const sync = yield* CritManifest.sync(empty)
+        const sync = yield* CritManifest.sync(empty, { owner: TEST_AUTHOR })
         const documents = yield* CanvasRepository
         const canvas = Canvas.fromDocument(yield* documents.load("checkout-review"))
         return { sync, frames: Canvas.listFrames(canvas) }

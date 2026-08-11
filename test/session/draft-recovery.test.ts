@@ -5,11 +5,12 @@ import { Canvas, CanvasCommand, type CanvasCommand as CanvasCommandValue } from 
 import { CanvasSession } from "../../src/session/canvas-session.js"
 import { CritClient, type CritClientShape } from "../../src/session/crit-client.js"
 import { DraftJournal, type CanvasDraft, type DraftJournalShape } from "../../src/session/draft-journal.js"
+import { TEST_AUTHOR } from "../support/author-identity.js"
 
 describe("CanvasSession draft recovery", () => {
   it.effect("replays semantic draft commands over a newer authoritative revision", () =>
     Effect.scoped(Effect.gen(function*() {
-      let stored = { ...Canvas.export(Canvas.create({ id: "review", title: "Review" })), revision: 3 }
+      let stored = { ...Canvas.export(Canvas.create({ id: "review", title: "Review", owner: { id: "git:test", name: "Test Author" } })), revision: 3 }
       const commands: ReadonlyArray<CanvasCommandValue> = [CanvasCommand.addFrame({
         id: "recovered", url: "/recovered", title: "Recovered",
         provenance: { kind: "agent", sourceId: "codex" }
@@ -19,6 +20,7 @@ describe("CanvasSession draft recovery", () => {
         baseRevision: 1, mutation: 7, commands
       }
       const client: CritClientShape = {
+        currentAuthor: () => Effect.succeed(TEST_AUTHOR),
         load: () => Effect.succeed(stored),
         apply: (_id, incoming) => Effect.gen(function*() {
           const canvas = yield* Canvas.open(stored)
@@ -47,7 +49,7 @@ describe("CanvasSession draft recovery", () => {
 
   it.effect("keeps an unreplayable draft as an explicit recovery conflict", () =>
     Effect.scoped(Effect.gen(function*() {
-      const stored = Canvas.export(Canvas.create({ id: "review", title: "Review" }))
+      const stored = Canvas.export(Canvas.create({ id: "review", title: "Review", owner: { id: "git:test", name: "Test Author" } }))
       const draft: CanvasDraft = {
         schemaVersion: 1, canvasId: "review", sessionId: "browser", baseRevision: 0, mutation: 1,
         commands: [CanvasCommand.editNote({
@@ -57,7 +59,11 @@ describe("CanvasSession draft recovery", () => {
           text: "lost"
         })]
       }
-      const client: CritClientShape = { load: () => Effect.succeed(stored), apply: () => Effect.succeed(stored) }
+      const client: CritClientShape = {
+        currentAuthor: () => Effect.succeed(TEST_AUTHOR),
+        load: () => Effect.succeed(stored),
+        apply: () => Effect.succeed(stored)
+      }
       const journal: DraftJournalShape = {
         load: () => Effect.succeed(Option.some(draft)), save: () => Effect.void, clear: () => Effect.void
       }

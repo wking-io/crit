@@ -12,12 +12,13 @@ consume the result.
 
 ```sh
 npx @riff-refine/crit list --json
+npx @riff-refine/crit identity --json
 npx @riff-refine/crit sync --from https://app.localhost --json
 npx @riff-refine/crit apply checkout-review '[{"_tag":"SetFrameStatus","id":"candidate","status":"approved"}]' --json
 npx @riff-refine/crit create checkout-review --title "Checkout review" --json
 npx @riff-refine/crit add checkout-review https://checkout.localhost --json
 npx @riff-refine/crit snapshot checkout-review candidate --json
-npx @riff-refine/crit activity checkout-review --for 120 --detail "Refining checkout" --json
+npx @riff-refine/crit activity checkout-review --id <run-id> --harness <harness> --detail "Refining checkout" --json
 ```
 
 Open `/crit/checkout-review` in the host application after adding frames.
@@ -62,10 +63,10 @@ array to `apply`:
 - `SetCommentThreadResolved`: thread `id`, `actor`, `resolved`, and `at`.
 - `UpdateCommentAnchor`: thread `id`, `actorId`, and replacement `anchor`.
 
-Before writing Notes or Comments, request the current identity from
-`GET /__crit/api/identity` on the local Crit host. `open --json` includes the
-Canvas Owner plus active and resolved Comment threads. Use a normalized frame
-anchor when an agent does not have an element anchor from the browser:
+Before creating a Canvas or writing Notes or Comments, run `identity --json`.
+If it fails, use the `crit-identity` skill. `open --json` includes the Canvas
+Owner plus active and resolved Comment threads. Use a normalized frame anchor
+when an agent does not have an element anchor from the browser:
 
 ```json
 [{"_tag":"AddCommentThread","id":"thread-agent-1","frameId":"candidate","anchor":{"kind":"frame","xRatio":0.5,"yRatio":0.5},"opening":{"id":"comment-agent-1","body":"Check this state","author":{"id":"git:<hash>","name":"Current Git User"},"createdAt":"2026-08-09T12:00:00.000Z","editedAt":null}}]
@@ -73,10 +74,10 @@ anchor when an agent does not have an element anchor from the browser:
 
 ## Editing rules
 
-- Before a task that may take longer than a normal command, signal activity with
-  `activity <canvas> --for <seconds> --detail <work> --json`. Renew it before it
-  expires, and run `activity <canvas> --clear --json` when the work ends. Normal
-  Canvas CLI commands already emit a short pulse.
+- A harness may signal a running agent with `activity <canvas> --id <run-id>
+  --harness <harness> --detail <work> --json`. Renew the same identity about
+  every 20 seconds and clear it with `activity <canvas> --id <run-id> --clear
+  --json` when work ends. Ordinary Canvas commands do not create presence.
 - Use Crit commands and interfaces; never edit `.crit/canvases/*.json`.
 - Use one `apply` call for related `AddFrame`, `UpdateFrame`, `SetFrameStatus`,
   `MoveFrame`, `ResizeFrame`, `RemoveFrame`, and Note operations so they commit
@@ -91,6 +92,7 @@ anchor when an agent does not have an element anchor from the browser:
   Notes for general Canvas context. Archived snapshot Frames reject Comments.
 - Preserve the Git-derived Comment author ID and name reported by Crit. Never
   impersonate a different author. Replies are flat; do not model nested replies.
+- Canvas creation records the verified Git Author as immutable Canvas Owner.
 - Only edit a Comment when its author ID matches the current actor. Only the
   Canvas Owner or opening Comment Author may resolve, reopen, or re-anchor a
   thread.
@@ -105,7 +107,8 @@ anchor when an agent does not have an element anchor from the browser:
 
 Run `npx @riff-refine/crit init` when Crit is not configured. The initializer
 installs the Vite adapter, reusable React surface, ignore rule, default manifest,
-and this project skill. The Vite plugin owns `/crit/:canvasId?`, independent of
+this project skill, and the independent `crit-identity` skill. Init verifies the
+current user's Git identity before writing setup files. The Vite plugin owns `/crit/:canvasId?`, independent of
 the host router. If discovery fails, verify that
 `GET /.well-known/crit.json` returns a manifest. If the editor cannot load,
 verify the Vite plugin is enabled and that `GET /__crit/api/canvases/<id>`

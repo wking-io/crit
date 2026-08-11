@@ -24,10 +24,11 @@ import {
 import { FileSystemCanvasRepository } from "../node/file-system-canvas-repository.js"
 import { FileSystemAgentActivity } from "../node/file-system-agent-activity.js"
 import { FileSystemSnapshotArchive } from "../node/file-system-snapshot-archive.js"
-import { gitAuthor } from "../node/git-author.js"
+import { GitAuthorIdentity } from "../node/git-author.js"
 import { CanvasRepositoryCritClient } from "../runtime/canvas-repository-crit-client.js"
 import { CanvasRepository } from "../runtime/canvas-repository.js"
 import { AgentActivityStore } from "../runtime/agent-activity.js"
+import { CritClientUnavailable } from "../runtime/canvas-failure.js"
 import { critFrameInputBridgeScript } from "../frame-bridge/index.js"
 import { critFrameCommentBridgeScript } from "../frame-bridge/comment-bridge.js"
 import {
@@ -40,8 +41,6 @@ export interface CritVitePluginOptions {
   readonly enabled?: boolean
   readonly root?: string
   readonly apiPath?: string
-  readonly createIfMissing?: boolean
-  readonly title?: (canvasId: string) => string
   readonly manifest?: string | false
   readonly manifestPath?: string
   readonly editorPath?: string | false
@@ -384,7 +383,6 @@ const buildEditorBundle = async (
 
 export const crit = (options: CritVitePluginOptions = {}): Plugin => {
   const apiPath = options.apiPath ?? DEFAULT_CRIT_API_PATH
-  const identityPath = `${apiPath.replace(/\/+$/, "")}/identity`
   const manifestPath = options.manifestPath ?? CRIT_MANIFEST_PATH
   const editorPath = options.editorPath ?? "/crit"
   const enabled = options.enabled ?? true
@@ -408,6 +406,7 @@ export const crit = (options: CritVitePluginOptions = {}): Plugin => {
     const snapshotServiceLayer = SnapshotServiceLive.pipe(
       Layer.provide(Layer.mergeAll(documentLayer, archiveLayer))
     )
+    const authorIdentity = GitAuthorIdentity.make()
     const editorBase =
       editorPath === false ? undefined : normalizedEditorPath(editorPath)
     const editorAssetPath =
@@ -438,10 +437,19 @@ export const crit = (options: CritVitePluginOptions = {}): Plugin => {
           snapshots,
           handler: makeCritHttpHandler(
             CanvasRepositoryCritClient.make(documents, {
-              createIfMissing: options.createIfMissing ?? true,
-              loadAgentActivity: activity.read,
-              snapshotFrame: snapshots.snapshotFrame,
-              ...(options.title === undefined ? {} : { title: options.title })
+              currentAuthor: () =>
+                authorIdentity.resolve(resolvedRoot).pipe(
+                  Effect.mapError(
+                    (cause) =>
+                      new CritClientUnavailable({
+                        operation: "current-author",
+                        id: "current-author",
+                        detail: cause.detail
+                      })
+                  )
+                ),
+              loadAgentActivities: activity.read,
+              snapshotFrame: snapshots.snapshotFrame
             }),
             { apiPath }
           )
@@ -474,19 +482,17 @@ export const crit = (options: CritVitePluginOptions = {}): Plugin => {
       }
       watcher.on("add", notify)
       watcher.on("change", notify)
+      watcher.on("unlink", notify)
       const notifyActivity = (changedPath: string) => {
-        if (
-          path.dirname(changedPath) !== activityDirectory ||
-          !changedPath.endsWith(".json")
-        ) {
-          return
-        }
+        const relative = path.relative(activityDirectory, changedPath)
+        const segments = relative.split(path.sep)
+        if (segments.length !== 2 || !segments[1]!.endsWith(".json")) return
         try {
           ws.send({
             type: "custom",
             event: "crit:agent-activity",
             data: {
-              id: decodeURIComponent(path.basename(changedPath, ".json"))
+              id: decodeURIComponent(segments[0]!)
             }
           })
         } catch {
@@ -495,6 +501,7 @@ export const crit = (options: CritVitePluginOptions = {}): Plugin => {
       }
       watcher.on("add", notifyActivity)
       watcher.on("change", notifyActivity)
+      watcher.on("unlink", notifyActivity)
     }
 
     const loadManifest = async (
@@ -534,20 +541,6 @@ export const crit = (options: CritVitePluginOptions = {}): Plugin => {
     }
 
     server.middlewares.use((request, response, next) => {
-      if (requestPathname(request) === identityPath) {
-        if (!requireGet(request, response)) return
-        void gitAuthor(resolvedRoot)
-          .then((author) => sendJson(response, 200, author))
-          .catch((cause: unknown) => sendJson(response, 503, {
-            error: {
-              code: "unavailable",
-              message: cause instanceof Error
-                ? cause.message
-                : "Git Author identity is unavailable"
-            }
-          }))
-        return
-      }
       if (
         editorBundle !== undefined &&
         editorAssetPath !== undefined &&
@@ -634,17 +627,9 @@ export const crit = (options: CritVitePluginOptions = {}): Plugin => {
         return
       }
       void services
-        .then(async (resolved) => {
-          if (request.method === "GET" && route._tag === "Canvas") {
-            const manifest = await loadManifest(request)
-            if (manifest?.canvases.some((canvas) => canvas.id === route.id)) {
-              await runtime.runPromise(
-                CritManifest.sync(manifest, { canvasId: route.id })
-              )
-            }
-          }
-          return Effect.runPromise(resolved.handler(webRequest(request), route))
-        })
+        .then((resolved) =>
+          Effect.runPromise(resolved.handler(webRequest(request), route))
+        )
         .then((output) =>
           output === null ? next() : sendWebResponse(output, response)
         )

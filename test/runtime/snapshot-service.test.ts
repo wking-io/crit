@@ -55,7 +55,7 @@ describe("SnapshotService", () => {
     return Effect.gen(function*() {
       const repository = yield* CanvasRepository
       const snapshots = yield* SnapshotService
-      const canvas = Canvas.create({ id: "review", title: "Review" })
+      const canvas = Canvas.create({ id: "review", title: "Review", owner: { id: "git:test", name: "Test Author" } })
       yield* Canvas.apply(
         canvas,
         CanvasCommand.addFrame({
@@ -137,7 +137,7 @@ describe("SnapshotService", () => {
     return Effect.gen(function*() {
       const repository = yield* CanvasRepository
       const snapshots = yield* SnapshotService
-      const canvas = Canvas.create({ id: "review", title: "Review" })
+      const canvas = Canvas.create({ id: "review", title: "Review", owner: { id: "git:test", name: "Test Author" } })
       yield* Canvas.apply(
         canvas,
         CanvasCommand.addFrame({

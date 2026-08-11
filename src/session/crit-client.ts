@@ -1,7 +1,7 @@
 import { Context, Effect } from "effect"
 
-import type { CanvasCommand, CanvasDocument } from "../core/index.js"
-import type { AgentActivityStatus } from "../runtime/agent-activity.js"
+import type { Author, CanvasCommand, CanvasDocument } from "../core/index.js"
+import type { AgentActivityCollection } from "../runtime/agent-activity.js"
 import type { CritClientError } from "../runtime/canvas-failure.js"
 
 export {
@@ -14,6 +14,7 @@ export {
 } from "../runtime/canvas-failure.js"
 
 export interface CritClientShape {
+  readonly currentAuthor: () => Effect.Effect<Author, CritClientError>
   readonly load: (id: string) => Effect.Effect<CanvasDocument, CritClientError>
   readonly apply: (
     id: string,
@@ -23,9 +24,9 @@ export interface CritClientShape {
     canvasId: string,
     frameId: string
   ) => Effect.Effect<CanvasDocument, CritClientError>
-  readonly activity?: (
+  readonly activities?: (
     canvasId: string
-  ) => Effect.Effect<AgentActivityStatus, CritClientError>
+  ) => Effect.Effect<AgentActivityCollection, CritClientError>
 }
 
 export class CritClient extends Context.Service<CritClient, CritClientShape>()(

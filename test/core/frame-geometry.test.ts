@@ -6,7 +6,7 @@ import { Canvas, CanvasCommand } from "../../src/core/index.js"
 describe("Canvas Frame geometry commands", () => {
   it.effect("moves attached Notes and resizes only the Frame", () =>
     Effect.gen(function*() {
-      const canvas = Canvas.create({ id: "review", title: "Review" })
+      const canvas = Canvas.create({ id: "review", title: "Review", owner: { id: "git:test", name: "Test Author" } })
       yield* Canvas.apply(
         canvas,
         CanvasCommand.addFrame({
@@ -57,7 +57,7 @@ describe("Canvas Frame geometry commands", () => {
 
   it.effect("rejects invalid geometry without applying earlier commands", () =>
     Effect.gen(function*() {
-      const canvas = Canvas.create({ id: "review", title: "Review" })
+      const canvas = Canvas.create({ id: "review", title: "Review", owner: { id: "git:test", name: "Test Author" } })
       yield* Canvas.apply(
         canvas,
         CanvasCommand.addFrame({

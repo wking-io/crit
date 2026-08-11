@@ -12,14 +12,14 @@ import {
 import {
   Canvas,
   CanvasCommandFailed,
+  Author,
   type CanvasChange,
   type CanvasCommand,
   type CanvasDocument
 } from "../core/index.js"
 import { CanvasInternals } from "../core/canvas.js"
 import {
-  AgentActivityStatus,
-  type AgentActivityStatus as AgentActivityStatusValue
+  AgentActivity
 } from "../runtime/agent-activity.js"
 import {
   CritClient,
@@ -53,6 +53,20 @@ export const CanvasSessionRecoveryStatus = Schema.Union([
 export type CanvasSessionRecoveryStatus =
   typeof CanvasSessionRecoveryStatus.Type
 
+export const CanvasPresenceAvailability = Schema.Union([
+  Schema.Literal("available"),
+  Schema.Literal("unavailable")
+])
+export type CanvasPresenceAvailability =
+  typeof CanvasPresenceAvailability.Type
+
+export const CanvasPresence = Schema.Struct({
+  currentAuthor: Author,
+  activities: Schema.Array(AgentActivity),
+  availability: CanvasPresenceAvailability
+})
+export type CanvasPresence = typeof CanvasPresence.Type
+
 export const CanvasSessionState = Schema.Struct({
   canvasId: Schema.String,
   revision: Schema.Number,
@@ -62,7 +76,7 @@ export const CanvasSessionState = Schema.Struct({
   detail: Schema.NullOr(Schema.String),
   recoveryStatus: CanvasSessionRecoveryStatus,
   recoveryDetail: Schema.NullOr(Schema.String),
-  agentActivity: AgentActivityStatus
+  presence: CanvasPresence
 })
 export type CanvasSessionState = typeof CanvasSessionState.Type
 
@@ -79,12 +93,13 @@ export interface CanvasSession {
   readonly snapshotFrame: (
     frameId: string
   ) => Effect.Effect<CanvasDocument, CritClientError>
-  readonly refreshAgentActivity: () => Effect.Effect<boolean, CritClientError>
+  readonly refreshPresence: () => Effect.Effect<boolean>
 }
 
 export type CanvasSessionOptions = {
   readonly autosaveDelay?: Duration.Input
   readonly refreshInterval?: Duration.Input | false
+  readonly presenceRefreshInterval?: Duration.Input | false
   readonly sessionId?: string
 }
 
@@ -111,7 +126,12 @@ const open = (
   Effect.gen(function*() {
     const client = yield* CritClient
     const scope = yield* Effect.scope
-    const authoritative = yield* client.load(canvasId)
+    const opened = yield* Effect.all({
+      authoritative: client.load(canvasId),
+      currentAuthor: client.currentAuthor()
+    }, { concurrency: "unbounded" })
+    const authoritative = opened.authoritative
+    const currentAuthor = opened.currentAuthor
     const journalOption = yield* Effect.serviceOption(DraftJournal)
     const journal: DraftJournalShape | undefined = Option.getOrUndefined(journalOption)
     const sessionId = options.sessionId ?? crypto.randomUUID()
@@ -178,13 +198,10 @@ const open = (
       detail: initialRecoveryStatus === "conflict" ? recoveryDetail : null,
       recoveryStatus: initialRecoveryStatus,
       recoveryDetail,
-      agentActivity: {
-        schemaVersion: 1,
-        canvasId,
-        active: false,
-        updatedAt: null,
-        activeUntil: null,
-        detail: null
+      presence: {
+        currentAuthor,
+        activities: [],
+        availability: "available"
       }
     })
     const saveLock = yield* Semaphore.make(1)
@@ -327,20 +344,58 @@ const open = (
       })
     )
 
-    const refreshAgentActivity = () =>
-      client.activity === undefined
-        ? Effect.succeed(false)
-        : client.activity(canvasId).pipe(
-            Effect.tap((activity: AgentActivityStatusValue) =>
+    const markPresenceUnavailable = (cause?: unknown) =>
+      Effect.gen(function*() {
+        const current = yield* SubscriptionRef.get(state)
+        yield* SubscriptionRef.update(
+          state,
+          (latest): CanvasSessionState => ({
+            ...latest,
+            presence: {
+              ...latest.presence,
+              activities: [],
+              availability: "unavailable"
+            }
+          })
+        )
+        if (
+          cause !== undefined &&
+          current.presence.availability !== "unavailable"
+        ) {
+          yield* Effect.logWarning(
+            `Canvas Presence is unavailable for ${canvasId}: ${
+              cause instanceof Error
+                ? cause.message
+                : typeof cause === "object" &&
+                    cause !== null &&
+                    "detail" in cause
+                  ? String(cause.detail)
+                  : String(cause)
+            }`
+          )
+        }
+        return false
+      })
+
+    const refreshPresence = () =>
+      client.activities === undefined
+        ? markPresenceUnavailable()
+        : client.activities(canvasId).pipe(
+            Effect.tap((collection) =>
               SubscriptionRef.update(
                 state,
                 (current): CanvasSessionState => ({
                   ...current,
-                  agentActivity: activity
+                  presence: {
+                    ...current.presence,
+                    activities: collection.activities,
+                    availability: "available"
+                  }
                 })
               )
             ),
-            Effect.map((activity) => activity.active)
+            Effect.map((collection) => collection.activities.length > 0),
+            Effect.catch(markPresenceUnavailable)
           )
 
     const discardLocalChanges = saveLock.withPermit(
@@ -419,7 +474,7 @@ const open = (
       yield* Effect.forkIn(saveUntilClean.pipe(Effect.catch(() => Effect.void)), scope)
     }
     yield* Effect.forkIn(
-      refreshAgentActivity().pipe(Effect.catch(() => Effect.void)),
+      refreshPresence().pipe(Effect.asVoid),
       scope
     )
     if (options.refreshInterval !== false) {
@@ -427,11 +482,20 @@ const open = (
       yield* Effect.forkIn(
         Effect.gen(function*() {
           while (true) {
-            const agentActive = yield* refreshAgentActivity().pipe(
-              Effect.catch(() => Effect.succeed(false))
-            )
-            yield* Effect.sleep(agentActive ? 500 : interval)
+            yield* Effect.sleep(interval)
             yield* refresh.pipe(Effect.catch(() => Effect.void))
+          }
+        }),
+        scope
+      )
+    }
+    if (options.presenceRefreshInterval !== false) {
+      const interval = options.presenceRefreshInterval ?? 5_000
+      yield* Effect.forkIn(
+        Effect.gen(function*() {
+          while (true) {
+            yield* Effect.sleep(interval)
+            yield* refreshPresence()
           }
         }),
         scope
@@ -487,7 +551,7 @@ const open = (
       refresh: () => refresh,
       discardLocalChanges: () => discardLocalChanges,
       snapshotFrame,
-      refreshAgentActivity
+      refreshPresence
     }
   })
 

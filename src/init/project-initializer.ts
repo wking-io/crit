@@ -2,7 +2,9 @@ import { fileURLToPath } from "node:url"
 
 import { Effect, FileSystem, Path, Schema } from "effect"
 
+import type { Author } from "../core/index.js"
 import { CRIT_MANIFEST_FILE } from "../discovery/index.js"
+import { AuthorIdentity } from "../runtime/author-identity.js"
 import { PACKAGE_VERSION } from "../version.js"
 
 const PACKAGE_NAME = "@riff-refine/crit"
@@ -13,7 +15,8 @@ export class CritInitFailed extends Schema.TaggedError<CritInitFailed>()(
   {
     operation: Schema.String,
     path: Schema.String,
-    detail: Schema.String
+    detail: Schema.String,
+    remediationPrompt: Schema.optional(Schema.String)
   }
 ) {}
 
@@ -35,6 +38,7 @@ export type CritInitResult = {
   readonly actions: ReadonlyArray<CritInitAction>
   readonly warnings: ReadonlyArray<string>
   readonly install: CritInstallCommand
+  readonly author: Author
 }
 
 export type CritInitOptions = {
@@ -230,7 +234,7 @@ const init = (
 ): Effect.Effect<
   CritInitResult,
   CritInitFailed,
-  FileSystem.FileSystem | Path.Path
+  AuthorIdentity | FileSystem.FileSystem | Path.Path
 > =>
   Effect.gen(function*() {
     const fs = yield* FileSystem.FileSystem
@@ -301,6 +305,19 @@ const init = (
       })
     }
 
+    const identities = yield* AuthorIdentity
+    const author = yield* identities.resolve(root).pipe(
+      Effect.mapError(
+        (cause) =>
+          new CritInitFailed({
+            operation: "identity",
+            path: root,
+            detail: cause.detail,
+            remediationPrompt: cause.remediationPrompt
+          })
+      )
+    )
+
     const isReactRouter = hasDependency(packageJson, "@react-router/dev")
     const warnings: Array<string> = []
     let appDirectory = "src"
@@ -326,6 +343,10 @@ const init = (
       new URL("../../skills/crit/SKILL.md", import.meta.url)
     )
     const skillSource = yield* read(skillSourcePath)
+    const identitySkillSourcePath = fileURLToPath(
+      new URL("../../skills/crit-identity/SKILL.md", import.meta.url)
+    )
+    const identitySkillSource = yield* read(identitySkillSourcePath)
     const writes = new Map<string, string>()
     const actions: Array<CritInitAction> = []
 
@@ -393,6 +414,15 @@ const init = (
     const skillPath = path.join(root, ".agents", "skills", "crit", "SKILL.md")
     yield* planGenerated(skillPath, skillSource)
 
+    const identitySkillPath = path.join(
+      root,
+      ".agents",
+      "skills",
+      "crit-identity",
+      "SKILL.md"
+    )
+    yield* planGenerated(identitySkillPath, identitySkillSource)
+
     const manifestPath = path.join(root, CRIT_MANIFEST_FILE)
     yield* planGenerated(manifestPath, manifestTemplate(packageJson))
 
@@ -422,7 +452,8 @@ const init = (
       project: isReactRouter ? "react-router" : "vite-react",
       actions,
       warnings,
-      install: installCommand(root, packageJson, lockfiles)
+      install: installCommand(root, packageJson, lockfiles),
+      author
     }
   })
 

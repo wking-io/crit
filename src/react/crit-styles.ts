@@ -532,15 +532,32 @@ export const critStyles = String.raw`
 .crit-presence, .crit-save-state {
   border: 0;
   border-radius: 999px;
-  color: #fff;
   font-family: system-ui, -apple-system, sans-serif;
   position: absolute;
   z-index: 1100;
 }
-.crit-presence { align-items: center; background: #191918; display: flex; font-size: 11px; font-weight: 600; gap: 7px; padding: 8px 11px; right: 24px; top: 24px; }
-.crit-presence__dot { background: #d9ff6f; border-radius: 999px; height: 8px; width: 8px; }
-.crit-save-state { background: rgba(25,25,24,.86); bottom: 16px; cursor: default; font-size: 10px; padding: 7px 9px; right: 16px; text-transform: capitalize; }
+.crit-presence { align-items: center; display: flex; flex-direction: row-reverse; right: 24px; top: 24px; }
+.crit-presence__item { margin-left: -7px; position: relative; }
+.crit-presence__item:last-child { margin-left: 0; }
+.crit-presence__avatar { align-items: center; border: 2px solid #fff; border-radius: 999px; box-shadow: 0 1px 5px rgba(25,25,24,.18); color: #fff; display: flex; font-size: 11px; font-weight: 750; height: 30px; justify-content: center; letter-spacing: -.02em; width: 30px; }
+.crit-presence__avatar[data-anonymous] { background: #77736b; }
+.crit-presence__card { background: #191918; border-radius: 9px; box-shadow: 0 8px 24px rgba(25,25,24,.2); color: #fff; display: flex; flex-direction: column; font-size: 11px; gap: 4px; min-width: 190px; opacity: 0; padding: 10px 12px; pointer-events: none; position: absolute; right: 0; top: calc(100% + 8px); transform: translateY(-3px); transition: opacity 120ms ease, transform 120ms ease; visibility: hidden; z-index: 2; }
+.crit-presence__item:hover .crit-presence__card, .crit-presence__item:focus-within .crit-presence__card { opacity: 1; pointer-events: auto; transform: translateY(0); visibility: visible; }
+.crit-presence__card strong { font-size: 12px; }
+.crit-presence__card span { color: #c9c5bd; }
+.crit-presence__card p { line-height: 1.4; margin: 2px 0; }
+.crit-presence__card code { color: #d9ff6f; font: 10px/1.4 "JetBrains Mono", ui-monospace, monospace; overflow-wrap: anywhere; }
+.crit-presence__card a { color: #d9ff6f; overflow-wrap: anywhere; }
+.crit-save-state { background: rgba(25,25,24,.86); bottom: 16px; color: #fff; cursor: default; font-size: 10px; padding: 7px 9px; right: 16px; text-transform: capitalize; }
 .crit-save-state:enabled { cursor: pointer; }
+
+.crit-identity-error { align-items: center; display: flex; flex-direction: column; gap: 10px; max-width: 620px; }
+.crit-identity-error strong { color: #191918; font-size: 15px; }
+.crit-identity-error p { margin: 0; }
+.crit-identity-error button { background: #191918; border: 0; border-radius: 999px; color: #fff; cursor: pointer; font: inherit; padding: 8px 12px; }
+.crit-identity-error details { max-width: 100%; }
+.crit-identity-error summary { cursor: pointer; }
+.crit-identity-error pre { background: #eeece7; border-radius: 8px; overflow: auto; padding: 10px; text-align: left; white-space: pre-wrap; }
 
 .crit-message { background: var(--crit-paper); color: #68655e; font: 500 12px/1.7 "JetBrains Mono", ui-monospace, monospace; }
 

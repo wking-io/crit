@@ -92,9 +92,7 @@ export default defineConfig({
     },
     crit({
       ...(process.env.AMP_ORB ? { frameLoading: "parent-fetch" as const } : {}),
-      ...(process.env.PUBLIC_URL ? { publicOrigin: process.env.PUBLIC_URL } : {}),
-      title: (canvasId) =>
-        canvasId === "feature-lab" ? "Crit feature lab" : canvasId
+      ...(process.env.PUBLIC_URL ? { publicOrigin: process.env.PUBLIC_URL } : {})
     })
   ],
   server: {

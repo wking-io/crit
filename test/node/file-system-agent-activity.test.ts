@@ -21,49 +21,78 @@ describe("FileSystemAgentActivity", () => {
     await rm(root, { recursive: true, force: true })
   })
 
-  it.effect("signals, expires, and removes ephemeral Canvas activity", () =>
+  it.effect("renews, expires, and clears independent Agent Activities", () =>
     Effect.gen(function*() {
-      const activity = yield* AgentActivityStore
-      const activityFile = path.join(root, ".crit/activity/review.json")
-      const activityFileExists = () =>
+      const store = yield* AgentActivityStore
+      const activityFile = (activityId: string) =>
+        path.join(root, ".crit/activity/review", `${activityId}.json`)
+      const exists = (activityId: string) =>
         Effect.promise(() =>
-          access(activityFile).then(
+          access(activityFile(activityId)).then(
             () => true,
             () => false
           )
         )
-      expect(yield* activity.read("review")).toMatchObject({ active: false })
 
-      const signaled = yield* activity.signal({
-        canvasId: "review",
-        activeForSeconds: 30,
-        detail: "Implementing checkout"
-      })
-      expect(signaled).toMatchObject({
-        active: true,
-        activeUntil: "2026-08-08T12:00:30.000Z",
-        detail: "Implementing checkout"
-      })
-      expect(yield* activityFileExists()).toBe(true)
-
-      time = new Date("2026-08-08T12:00:31.000Z")
-      expect(yield* activity.read("review")).toMatchObject({ active: false })
-      expect(yield* activityFileExists()).toBe(false)
-
-      yield* activity.signal({
-        canvasId: "review",
-        activeForSeconds: 30,
-        detail: "Implementing checkout"
-      })
-      expect(yield* activity.clear("review")).toEqual({
+      expect(yield* store.read("review")).toEqual({
         schemaVersion: 1,
         canvasId: "review",
-        active: false,
-        updatedAt: null,
-        activeUntil: null,
-        detail: null
+        activities: []
       })
-      expect(yield* activityFileExists()).toBe(false)
+
+      const first = yield* store.signal({
+        canvasId: "review",
+        activityId: "codex-1",
+        harness: "Codex",
+        model: "GPT-5",
+        detail: "Implementing checkout",
+        reference: {
+          kind: "thread",
+          id: "thread-1",
+          uri: "codex://threads/thread-1"
+        }
+      })
+      expect(first).toMatchObject({
+        activityId: "codex-1",
+        createdAt: "2026-08-08T12:00:00.000Z",
+        activeUntil: "2026-08-08T12:01:00.000Z"
+      })
+
+      time = new Date("2026-08-08T12:00:20.000Z")
+      yield* store.signal({
+        canvasId: "review",
+        activityId: "claude-1",
+        harness: "Claude",
+        detail: "Reviewing copy"
+      })
+      expect((yield* store.read("review")).activities).toHaveLength(2)
+
+      time = new Date("2026-08-08T12:00:30.000Z")
+      const renewed = yield* store.signal({
+        canvasId: "review",
+        activityId: "codex-1",
+        harness: "Codex",
+        detail: "Polishing checkout"
+      })
+      expect(renewed).toMatchObject({
+        createdAt: "2026-08-08T12:00:00.000Z",
+        updatedAt: "2026-08-08T12:00:30.000Z",
+        activeUntil: "2026-08-08T12:01:30.000Z",
+        model: null,
+        reference: null,
+        detail: "Polishing checkout"
+      })
+
+      time = new Date("2026-08-08T12:01:21.000Z")
+      const remaining = yield* store.read("review")
+      expect(remaining.activities.map((activity) => activity.activityId)).toEqual([
+        "codex-1"
+      ])
+      expect(yield* exists("claude-1")).toBe(false)
+
+      yield* store.clear("review", "codex-1")
+      expect(yield* exists("codex-1")).toBe(false)
+      expect((yield* store.read("review")).activities).toEqual([])
     }).pipe(
       Effect.provide(
         FileSystemAgentActivity.layer({ root, now: () => time })

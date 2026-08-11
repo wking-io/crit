@@ -9,7 +9,7 @@ const collaborator = { id: "collaborator", name: "Collaborator" } as const
 describe("Canvas Notes", () => {
   it.effect("moves an attached Note with its Frame until it is detached", () =>
     Effect.gen(function*() {
-      const canvas = Canvas.create({ id: "review", title: "Review" })
+      const canvas = Canvas.create({ id: "review", title: "Review", owner: { id: "git:test", name: "Test Author" } })
       yield* Canvas.apply(
         canvas,
         CanvasCommand.addFrame({
@@ -55,7 +55,7 @@ describe("Canvas Notes", () => {
 
   it.effect("rejects a stale text edit without changing the Note", () =>
     Effect.gen(function*() {
-      const canvas = Canvas.create({ id: "review", title: "Review" })
+      const canvas = Canvas.create({ id: "review", title: "Review", owner: { id: "git:test", name: "Test Author" } })
       yield* Canvas.apply(
         canvas,
         CanvasCommand.addNote({
@@ -94,7 +94,7 @@ describe("Canvas Notes", () => {
 
   it.effect("lets only the Author edit or remove a Note", () =>
     Effect.gen(function*() {
-      const canvas = Canvas.create({ id: "review", title: "Review" })
+      const canvas = Canvas.create({ id: "review", title: "Review", owner: { id: "git:test", name: "Test Author" } })
       yield* Canvas.apply(
         canvas,
         CanvasCommand.addNote({
@@ -142,7 +142,7 @@ describe("Canvas Notes", () => {
 
   it.effect("allows collaborators to arrange a Note", () =>
     Effect.gen(function*() {
-      const canvas = Canvas.create({ id: "review", title: "Review" })
+      const canvas = Canvas.create({ id: "review", title: "Review", owner: { id: "git:test", name: "Test Author" } })
       yield* Canvas.apply(
         canvas,
         CanvasCommand.addNote({

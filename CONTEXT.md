@@ -34,6 +34,10 @@ Crit is a local-first tool for arranging and assessing live web iterations.
 
 **Author**: A local collaborator identified by an opaque ID derived from Git identity and shown by Git committer name. Authors may edit their own Notes and Comments, and the opening Comment's Author may resolve or reopen its thread.
 
+**Git Author Identity**: The repository's effective, validated `user.name` and `user.email`, resolved through one reusable identity boundary. Initialization, Canvas Creation, and Canvas Session opening all require it; Crit never guesses it or changes global Git configuration.
+
+**Identity Remediation Prompt**: The copy-ready agent instruction attached to missing or invalid Git Author Identity failures. It directs the independent `crit-identity` skill to ask the user for unknown values, write only confirmed repository-local configuration, and verify the result through `crit identity`.
+
 **Current Author**: Every Canvas Session has exactly one Current Author: the Git-derived Author using that session. The Current Author supplies authorship for new Notes and Comments and is not part of the Canvas Document.
 
 **Canvas Repository**: The local persistence boundary that serializes semantic command batches under a per-Canvas filesystem lock.
@@ -43,6 +47,8 @@ Crit is a local-first tool for arranging and assessing live web iterations.
 **Canvas Presence**: The ephemeral session view combining the Current Author with all active Agent Activities for a Canvas. It supports identity and work awareness without implying remote collaboration. Presence refreshes independently from the Canvas Document, immediately on local activity events and every five seconds as a fallback.
 
 **Anonymous Presence**: The public fallback shown as one anonymous avatar when Agent Activities cannot be retrieved. The underlying failure is logged internally; the UI does not expose the error or falsely present an empty activity list.
+
+**Presence Avatar**: A local, deterministic colored avatar containing a letter derived from the Current Author's name or an Agent Activity's harness name. Crit does not resolve or persist remote profile images; unreadable activity presence uses the anonymous fallback avatar.
 
 **Agent Activity**: A renewable, automatically expiring local coordination hint with a stable opaque identity for one agent run working on a Canvas. Only a harness-supplied activity identity may create or renew one; ordinary CLI commands do not create presence, though they may carry existing harness context. Its descriptive metadata is reported by the harness, its identity is independent from optional external references, and it is not durable Canvas state, revision history, or remote-user presence.
 

@@ -14,6 +14,7 @@ import {
   SnapshotService,
   SnapshotServiceLive
 } from "../../src/runtime/snapshot-service.js"
+import { TEST_AUTHOR, TestAuthorIdentityLayer } from "../support/author-identity.js"
 
 describe("crit Canvas workflows", () => {
   let root = ""
@@ -48,6 +49,7 @@ describe("crit Canvas workflows", () => {
       )
     )
     const cliLayer = Layer.mergeAll(
+      TestAuthorIdentityLayer,
       FileSystem.layerNoop({}),
       Path.layer,
       Stdio.layerTest({
@@ -114,8 +116,12 @@ describe("crit Canvas workflows", () => {
       yield* runCrit([
         "activity",
         "review",
-        "--for",
-        "120",
+        "--id",
+        "codex-1",
+        "--harness",
+        "Codex",
+        "--model",
+        "GPT-5",
         "--detail",
         "Implementing checkout",
         "--json"
@@ -180,7 +186,7 @@ describe("crit Canvas workflows", () => {
         canvas: added.mutation.canvas,
         frames: added.frames,
         notes: [],
-        owner: null,
+        owner: TEST_AUTHOR,
         comments: []
       })
       expect(snapshotted).toMatchObject({
@@ -205,7 +211,9 @@ describe("crit Canvas workflows", () => {
         command: "activity",
         activity: {
           canvasId: "review",
-          active: true,
+          activityId: "codex-1",
+          harness: "Codex",
+          model: "GPT-5",
           detail: "Implementing checkout"
         }
       })
@@ -215,6 +223,7 @@ describe("crit Canvas workflows", () => {
   it.effect("atomically exposes every semantic Frame edit to agents", () => {
     const storeLayer = FileSystemCanvasRepository.layer({ root })
     const cliLayer = Layer.mergeAll(
+      TestAuthorIdentityLayer,
       FileSystem.layerNoop({}),
       Path.layer,
       Stdio.layerTest({
@@ -339,7 +348,7 @@ describe("crit Canvas workflows", () => {
           }
         ],
         notes: [],
-        owner: { id: "git:agent", name: "Agent User" },
+        owner: TEST_AUTHOR,
         comments: [{
           id: "thread-agent-1",
           frameId: "candidate",
@@ -354,6 +363,7 @@ describe("crit Canvas workflows", () => {
   it.effect("rejects AddSnapshotFrame on the public apply surface", () => {
     const storeLayer = FileSystemCanvasRepository.layer({ root })
     const cliLayer = Layer.mergeAll(
+      TestAuthorIdentityLayer,
       FileSystem.layerNoop({}),
       Path.layer,
       Stdio.layerTest({
@@ -422,6 +432,7 @@ describe("crit Canvas workflows", () => {
     () => {
       const storeLayer = FileSystemCanvasRepository.layer({ root })
       const cliLayer = Layer.mergeAll(
+        TestAuthorIdentityLayer,
         FileSystem.layerNoop({}),
         Path.layer,
         Stdio.layerTest({
@@ -504,7 +515,7 @@ describe("crit Canvas workflows", () => {
                 }
               ],
               notes: [],
-              owner: null,
+              owner: TEST_AUTHOR,
               comments: []
             }),
           readArtifact: () => Effect.die("unused")

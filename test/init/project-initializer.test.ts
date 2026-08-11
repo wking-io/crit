@@ -3,13 +3,19 @@ import { tmpdir } from "node:os"
 import path from "node:path"
 
 import * as NodeServices from "@effect/platform-node/NodeServices"
-import { Effect } from "effect"
+import { Effect, Layer } from "effect"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 
 import {
   CritInitFailed,
   CritInitializer
 } from "../../src/init/project-initializer.js"
+import {
+  AuthorIdentity,
+  AuthorIdentityFailed,
+  GIT_AUTHOR_REMEDIATION_PROMPT
+} from "../../src/runtime/author-identity.js"
+import { TEST_AUTHOR, TestAuthorIdentityLayer } from "../support/author-identity.js"
 
 const read = (root: string, target: string) =>
   readFile(path.join(root, target), "utf8")
@@ -22,7 +28,9 @@ const write = async (root: string, target: string, content: string) => {
 
 const runInit = (root: string) =>
   Effect.runPromise(
-    CritInitializer.init({ root }).pipe(Effect.provide(NodeServices.layer))
+    CritInitializer.init({ root }).pipe(
+      Effect.provide(Layer.merge(NodeServices.layer, TestAuthorIdentityLayer))
+    )
   )
 
 describe("CritInitializer", () => {
@@ -83,6 +91,7 @@ export default [
       vite: await read(root, "vite.config.ts"),
       component: await read(root, "app/components/crit-canvas.tsx"),
       skill: await read(root, ".agents/skills/crit/SKILL.md"),
+      identitySkill: await read(root, ".agents/skills/crit-identity/SKILL.md"),
       manifest: await read(root, "crit.manifest.json"),
       gitignore: await read(root, ".gitignore")
     }
@@ -107,6 +116,7 @@ export default [
       `index("./routes/home.tsx")`
     )
     expect(firstSnapshot.skill).toContain("name: crit")
+    expect(firstSnapshot.identitySkill).toContain("name: crit-identity")
     expect(JSON.parse(firstSnapshot.manifest)).toMatchObject({
       schemaVersion: 1,
       id: "review-app",
@@ -133,9 +143,11 @@ export default [
                   ? "app/components/crit-canvas.tsx"
                   : key === "skill"
                     ? ".agents/skills/crit/SKILL.md"
-                    : key === "manifest"
-                      ? "crit.manifest.json"
-                      : ".gitignore"
+                    : key === "identitySkill"
+                      ? ".agents/skills/crit-identity/SKILL.md"
+                      : key === "manifest"
+                        ? "crit.manifest.json"
+                        : ".gitignore"
           expect(await read(root, target)).toBe(value)
         })
       )
@@ -168,6 +180,7 @@ export default defineConfig({})
     const result = await runInit(root)
 
     expect(result.project).toBe("vite-react")
+    expect(result.author).toEqual(TEST_AUTHOR)
     expect(result.warnings).toEqual([])
     expect(await read(root, "src/components/crit-canvas.tsx")).toContain(
       "CritCanvas"
@@ -199,7 +212,11 @@ export default defineConfig(makeConfig())
 
     const failure = await Effect.runPromise(
       Effect.flip(
-        CritInitializer.init({ root }).pipe(Effect.provide(NodeServices.layer))
+        CritInitializer.init({ root }).pipe(
+          Effect.provide(
+            Layer.merge(NodeServices.layer, TestAuthorIdentityLayer)
+          )
+        )
       )
     )
 
@@ -210,5 +227,44 @@ export default defineConfig(makeConfig())
     })
     expect(await read(root, "package.json")).toBe(packageSource)
     await expect(read(root, ".gitignore")).rejects.toThrow()
+  })
+
+  it("stops before writing when Git Author identity is invalid", async () => {
+    const packageSource = `${JSON.stringify({
+      name: "identity-fixture",
+      dependencies: { react: "19.2.0", vite: "7.3.6" }
+    })}\n`
+    await write(root, "package.json", packageSource)
+    await write(
+      root,
+      "vite.config.ts",
+      `import { defineConfig } from "vite"
+
+export default defineConfig({})
+`
+    )
+    const unavailableIdentity = Layer.succeed(AuthorIdentity, {
+      resolve: () => Effect.fail(new AuthorIdentityFailed({
+        reason: "missing-email",
+        detail: "Git user.email is not configured",
+        remediationPrompt: GIT_AUTHOR_REMEDIATION_PROMPT
+      }))
+    })
+
+    const failure = await Effect.runPromise(
+      Effect.flip(
+        CritInitializer.init({ root }).pipe(
+          Effect.provide(Layer.merge(NodeServices.layer, unavailableIdentity))
+        )
+      )
+    )
+
+    expect(failure).toMatchObject({
+      operation: "identity",
+      detail: "Git user.email is not configured",
+      remediationPrompt: GIT_AUTHOR_REMEDIATION_PROMPT
+    })
+    expect(await read(root, "package.json")).toBe(packageSource)
+    await expect(read(root, ".agents/skills/crit/SKILL.md")).rejects.toThrow()
   })
 })

@@ -6,7 +6,7 @@ import { Canvas, CanvasCommand } from "../../src/core/index.js"
 describe("Canvas UpdateFrame command", () => {
   it.effect("updates editable Frame fields atomically and accepts canonical Frame IDs", () =>
     Effect.gen(function*() {
-      const canvas = Canvas.create({ id: "review", title: "Review" })
+      const canvas = Canvas.create({ id: "review", title: "Review", owner: { id: "git:test", name: "Test Author" } })
       const added = yield* Canvas.apply(
         canvas,
         CanvasCommand.addFrame({
@@ -54,7 +54,7 @@ describe("Canvas UpdateFrame command", () => {
 
   it.effect("rejects an empty update without changing the Canvas", () =>
     Effect.gen(function*() {
-      const canvas = Canvas.create({ id: "review", title: "Review" })
+      const canvas = Canvas.create({ id: "review", title: "Review", owner: { id: "git:test", name: "Test Author" } })
       yield* Canvas.apply(
         canvas,
         CanvasCommand.addFrame({

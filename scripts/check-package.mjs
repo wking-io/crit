@@ -73,7 +73,8 @@ try {
     "dist/discovery/index.js",
     "dist/node/index.js",
     "dist/vite/index.js",
-    "skills/crit/SKILL.md"
+    "skills/crit/SKILL.md",
+    "skills/crit-identity/SKILL.md"
   ]
   const missing = requiredFiles.filter((file) => !packagedFiles.has(file))
   if (missing.length > 0) {
@@ -162,7 +163,7 @@ for (const [specifier, name] of checks) {
     ["--help"],
     { cwd: consumer }
   )
-  for (const command of ["init", "sync", "apply", "create", "add", "snapshot", "activity", "list", "open"]) {
+  for (const command of ["init", "identity", "sync", "apply", "create", "add", "snapshot", "activity", "list", "open"]) {
     if (!new RegExp(`^  ${command}\\s`, "m").test(help.stdout)) {
       throw new Error(`Installed CLI help is missing the ${command} command`)
     }

@@ -68,9 +68,7 @@ export const CanvasDocument = Schema.Struct({
   revision: NonNegativeInteger,
   frames: Schema.Array(CanvasFrame),
   notes: Schema.Array(CanvasNote),
-  owner: Schema.NullOr(Author).pipe(
-    Schema.withDecodingDefaultKey(Effect.succeed(null))
-  ),
+  owner: Author,
   comments: Schema.Array(CanvasCommentThread).pipe(
     Schema.withDecodingDefaultKey(Effect.succeed([]))
   )
@@ -182,7 +180,7 @@ type CanvasState = {
   revision: number
   frames: Array<CanvasFrame>
   notes: Array<CanvasNote>
-  owner: Author | null
+  owner: Author
   comments: Array<CanvasCommentThread>
 }
 
@@ -240,7 +238,7 @@ export const CanvasInternals = {
 const create = (input: {
   readonly id: string
   readonly title: string
-  readonly owner?: Author
+  readonly owner: Author
 }): Canvas =>
   makeCanvas({
     id: input.id,
@@ -248,7 +246,7 @@ const create = (input: {
     revision: 0,
     frames: [],
     notes: [],
-    owner: input.owner ?? null,
+    owner: clone(input.owner),
     comments: []
   })
 
@@ -259,6 +257,12 @@ const encodedBytes = (input: unknown) => {
 }
 
 const validateDocument = (document: CanvasDocument) => {
+  if (
+    document.owner.id.trim().length === 0 ||
+    document.owner.name.trim().length === 0
+  ) {
+    throw new Error("Canvas Owner is invalid")
+  }
   const ids = new Set<string>()
   for (const frame of document.frames) {
     if (frame.id.trim().length === 0) throw new Error("Frame IDs cannot be empty")
@@ -813,7 +817,6 @@ const apply = (
                   detail: "The opening Comment cannot be empty"
                 })
               }
-              if (draft.owner === null) draft.owner = clone(command.opening.author)
               draft.comments.push({
                 id: command.id,
                 frameId: command.frameId,

@@ -14,10 +14,11 @@ Initialize Crit in a Vite + React project:
 npx @riff-refine/crit init
 ```
 
-The initializer installs the package, adds the Vite plugin and reusable React
-surface, creates a discovery manifest, ignores local `.crit/` data, and installs
-the Crit agent skill. The Vite plugin serves `/crit/:canvasId?` directly, so the
-editor works without modifying or depending on the host application's router.
+The initializer first verifies the current user's Git Author identity, then
+installs the package, Vite plugin, reusable React surface, discovery manifest,
+ignore rule, general Crit skill, and independent `crit-identity` skill. The Vite
+plugin serves `/crit/:canvasId?` directly, so the editor works without modifying
+or depending on the host application's router.
 
 Or configure it directly:
 
@@ -40,8 +41,8 @@ export function ReviewCanvas() {
 ```
 
 The plugin is active only during Vite serve and preview. It can be gated with
-`crit({ enabled: mode !== "production" })`. A missing Canvas is created on first
-load by default; use `createIfMissing: false` to require explicit creation. The
+`crit({ enabled: mode !== "production" })`. Canvas loading is read-only: create
+Canvases explicitly with `crit create` or `crit sync` before opening them. The
 automatic editor route can be moved or disabled with `editorPath`.
 
 ### Vite plugin options
@@ -51,8 +52,6 @@ automatic editor route can be moved or disabled with `editorPath`.
 | `enabled` | Enables the plugin; defaults to `true`. |
 | `root` | Directory containing `.crit` data and the discovery manifest; defaults to Vite's resolved root. |
 | `apiPath` | Base path for the Canvas HTTP API; defaults to `/__crit/api`. |
-| `createIfMissing` | Creates a missing Canvas when it is first loaded; defaults to `true`. |
-| `title` | Returns the title to use when a Canvas is created on first load. |
 | `manifest` | Manifest filename relative to `root`; defaults to `crit.manifest.json`. Set it to `false` to disable discovery. |
 | `manifestPath` | URL that publishes the resolved manifest; defaults to `/.well-known/crit.json`. |
 | `editorPath` | URL prefix for the standalone editor; defaults to `/crit`. Set it to `false` to disable the editor. |
@@ -73,6 +72,7 @@ internal route managed by the plugin, not a separately configurable asset URL.
 | `apiPath` | Base path used by the default HTTP client; defaults to `/__crit/api`. |
 | `autosaveDelay` | Effect `Duration.Input` debounce before saving; defaults to 100 ms. |
 | `refreshInterval` | Effect `Duration.Input` polling interval; defaults to two seconds. Use `false` to disable polling. |
+| `presenceRefreshInterval` | Canvas Presence polling interval; defaults to five seconds. Use `false` to disable fallback polling. |
 | `sessionId` | Stable writer ID. By default, Crit creates one per Canvas and browser tab session. |
 | `draftJournal` | Custom `DraftJournalShape`. IndexedDB is used by default; use `false` to disable draft recovery. |
 | `className`, `style` | Class and inline styles applied to the root, loading, or error container. |
@@ -113,8 +113,8 @@ Declare Frames without hard-coding the running origin:
 }
 ```
 
-Vite publishes the resolved manifest at `/.well-known/crit.json` and reconciles
-declared Frames before opening a Canvas. Agents can do the same:
+Vite publishes the resolved manifest at `/.well-known/crit.json`. Reconcile its
+declared Canvases and Frames explicitly:
 
 ```sh
 npx @riff-refine/crit sync --from https://storefront.localhost --json
@@ -129,13 +129,15 @@ Agents can read and atomically edit the same files as open browser windows:
 
 ```sh
 npx @riff-refine/crit list --json
+npx @riff-refine/crit identity --json
 npx @riff-refine/crit open checkout-review --json
 npx @riff-refine/crit apply checkout-review \
   '[{"_tag":"SetFrameStatus","id":"candidate","status":"approved"}]' \
   --json
 npx @riff-refine/crit snapshot checkout-review candidate --json
 npx @riff-refine/crit activity checkout-review \
-  --for 120 --detail "Refining checkout" --json
+  --id codex-thread-1 --harness Codex --model GPT-5 \
+  --detail "Refining checkout" --json
 ```
 
 ### CLI reference
@@ -145,12 +147,13 @@ All commands accept `--json` for machine-readable output where applicable.
 | Command | Purpose and options |
 | --- | --- |
 | `crit init` | Configure a Vite + React project. Use `--root <directory>` to target another project and `--skip-install` to leave dependency installation to the caller. |
+| `crit identity` | Verify the Git Author used by Crit. Use `--root <directory>` to target another repository. |
 | `crit sync` | Reconcile a manifest. Use `--from <file-or-url>`, `--base-url <url>` to resolve relative Frame URLs in a local manifest, and `--canvas <id>` to sync one Canvas. |
 | `crit create <id> --title <title>` | Create an empty Canvas. |
 | `crit add <canvas> <url...>` | Add one or more HTTP or HTTPS URLs as live Frames. |
 | `crit apply <canvas> <commands>` | Atomically apply a JSON array of semantic Canvas commands. |
 | `crit snapshot <canvas> <frame>` | Capture a live Frame as an immutable HTML snapshot. |
-| `crit activity <canvas>` | Signal activity with `--for <seconds>` and optional `--detail <text>`, or remove it with `--clear`. |
+| `crit activity <canvas>` | Signal a 60-second lease with required `--id` and `--harness`, optional `--model`, `--detail`, and external-reference fields; remove that activity with `--id <id> --clear`. |
 | `crit list` | List local Canvases. |
 | `crit open <canvas>` | Read a Canvas and its Frames. |
 
@@ -169,24 +172,24 @@ actor ID; collaborators can still move, reorder, attach, detach, and resize its
 width. Note height is measured from its rendered text, and removing a Frame
 detaches its Notes without deleting them.
 
-Agents leave Comments through the same `apply` surface. Use the Git committer
-identity returned by `GET /__crit/api/identity` on the local Crit host for
-`author` / `actor` fields; do not invent another person's identity. `crit open
-<canvas> --json` returns the Canvas Owner and full active and resolved thread
-history. Frame-coordinate anchors work for every live Frame, while element
-anchors are created by the instrumented browser UI and may be reused or
-re-anchored by their owner. Archived snapshot Frames reject Comments.
+Agents leave Comments through the same `apply` surface. Use `crit identity
+--json` to verify the Current Author; do not invent another person's identity.
+Canvas creation stores that Author as immutable Canvas Owner. `crit open
+<canvas> --json` returns the Owner and full active and resolved thread history.
+Frame-coordinate anchors work for every live Frame, while element anchors are
+created by the instrumented browser UI and may be reused or re-anchored by their
+owner. Archived snapshot Frames reject Comments.
 
 Canvas Documents live under `.crit/canvases`. Use Crit commands and interfaces
 instead of editing those files directly.
 
-CLI commands that work on a Canvas automatically publish a short local activity
-pulse. Before a longer task, agents can renew that signal with `crit activity
-<canvas> --for <seconds> --detail <work>` and clear it with `--clear`. Open
-editors show a purple **Agent working** indicator, and poll authoritative Canvas
-revisions every 500 ms while the signal is active instead of the normal
-two-second fallback. Activity files under `.crit/activity` expire automatically;
-they are coordination hints, not Canvas history or durable presence.
+Only harnesses publish Agent Activity. Each run renews its stable activity ID
+about every 20 seconds and clears it on clean completion. Open editors combine
+the Current Author and active runs into letter avatars with hover details for
+harness, model, work, and supported desktop/web references. Presence refreshes
+on Vite events with a five-second fallback, independently from Canvas Document
+polling. Per-activity files under `.crit/activity/<canvas>/<activity>.json`
+expire after 60 seconds; they are coordination hints, not Canvas history.
 
 ## Frame snapshots
 
@@ -237,8 +240,9 @@ separate immutable state.
 Autosave is single-flight and stores pending semantic commands in IndexedDB for
 draft recovery. Vite file watching refreshes clean windows immediately after a
 browser or agent write; a two-second poll remains a fallback. Dirty local work
-is never replaced by refresh. Active agent sessions temporarily tighten that
-fallback to 500 ms. Use `refreshInterval={false}` to disable polling.
+is never replaced by refresh. Canvas Presence uses its own five-second fallback
+and never changes document polling. Use `refreshInterval={false}` to disable
+document polling.
 
 Iframe capabilities are configurable:
 
@@ -303,7 +307,7 @@ In another terminal, agents can edit the exact same Canvas:
 
 ```sh
 npm run dev:agent -- open feature-lab --json
-npm run dev:agent -- activity feature-lab --for 120 --detail "Testing agent edits" --json
+npm run dev:agent -- activity feature-lab --id dev-agent --harness Terminal --detail "Testing agent edits" --json
 ```
 
 See [playground/README.md](playground/README.md) for the complete browser and

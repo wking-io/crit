@@ -3,7 +3,12 @@ import { Deferred, Effect, Fiber, Layer, SubscriptionRef } from "effect"
 
 import { Canvas, CanvasCommand, type CanvasCommand as CanvasCommandValue } from "../../src/core/index.js"
 import { CanvasSession } from "../../src/session/canvas-session.js"
-import { CritClient, type CritClientShape } from "../../src/session/crit-client.js"
+import {
+  CritClient,
+  CritClientUnavailable,
+  type CritClientShape
+} from "../../src/session/crit-client.js"
+import { TEST_AUTHOR } from "../support/author-identity.js"
 
 const applyTo = (stored: ReturnType<typeof Canvas.export>, commands: ReadonlyArray<CanvasCommandValue>) =>
   Effect.gen(function*() {
@@ -13,32 +18,133 @@ const applyTo = (stored: ReturnType<typeof Canvas.export>, commands: ReadonlyArr
   }).pipe(Effect.orDie)
 
 describe("CanvasSession", () => {
+  it.effect("resolves Current Author once for the Canvas Session lifetime", () =>
+    Effect.scoped(
+      Effect.gen(function*() {
+        const stored = Canvas.export(Canvas.create({
+          id: "review",
+          title: "Review",
+          owner: { id: "git:owner", name: "Canvas Owner" }
+        }))
+        let authorLoads = 0
+        const client: CritClientShape = {
+          currentAuthor: () => Effect.sync(() => {
+            authorLoads += 1
+            return TEST_AUTHOR
+          }),
+          load: () => Effect.succeed(stored),
+          apply: () => Effect.succeed(stored)
+        }
+        const session = yield* CanvasSession.open("review", {
+          refreshInterval: false,
+          presenceRefreshInterval: false
+        }).pipe(Effect.provide(Layer.succeed(CritClient, client)))
+
+        yield* session.refresh()
+
+        expect(authorLoads).toBe(1)
+        expect(session.state.value.presence.currentAuthor).toEqual(TEST_AUTHOR)
+        expect(session.document.value.owner).toEqual({
+          id: "git:owner",
+          name: "Canvas Owner"
+        })
+      })
+    ))
+
+  it.effect("fails opening when Current Author cannot be resolved", () =>
+    Effect.scoped(
+      Effect.gen(function*() {
+        const stored = Canvas.export(Canvas.create({ id: "review", title: "Review", owner: TEST_AUTHOR }))
+        const client: CritClientShape = {
+          currentAuthor: () => Effect.fail(new CritClientUnavailable({
+            operation: "current-author",
+            id: "current-author",
+            detail: "Git user.email is not configured"
+          })),
+          load: () => Effect.succeed(stored),
+          apply: () => Effect.succeed(stored)
+        }
+
+        const failure = yield* Effect.flip(
+          CanvasSession.open("review").pipe(
+            Effect.provide(Layer.succeed(CritClient, client))
+          )
+        )
+
+        expect(failure).toMatchObject({
+          operation: "current-author",
+          detail: "Git user.email is not configured"
+        })
+      })
+    ))
+
+  it.effect("keeps the session open with anonymous presence when activity retrieval fails", () =>
+    Effect.scoped(
+      Effect.gen(function*() {
+        const stored = Canvas.export(Canvas.create({ id: "review", title: "Review", owner: TEST_AUTHOR }))
+        const client: CritClientShape = {
+          currentAuthor: () => Effect.succeed(TEST_AUTHOR),
+          load: () => Effect.succeed(stored),
+          apply: () => Effect.succeed(stored),
+          activities: () => Effect.fail(new CritClientUnavailable({
+            operation: "activity",
+            id: "review",
+            detail: "Activity store is unreadable"
+          }))
+        }
+        const session = yield* CanvasSession.open("review", {
+          refreshInterval: false,
+          presenceRefreshInterval: false
+        }).pipe(Effect.provide(Layer.succeed(CritClient, client)))
+
+        expect(yield* session.refreshPresence()).toBe(false)
+        expect(session.state.value.presence).toEqual({
+          currentAuthor: TEST_AUTHOR,
+          activities: [],
+          availability: "unavailable"
+        })
+      })
+    ))
+
   it.effect("surfaces renewable agent activity independently of Canvas revisions", () =>
     Effect.scoped(
       Effect.gen(function*() {
-        const stored = Canvas.export(Canvas.create({ id: "review", title: "Review" }))
+        const stored = Canvas.export(Canvas.create({ id: "review", title: "Review", owner: { id: "git:test", name: "Test Author" } }))
         const client: CritClientShape = {
+          currentAuthor: () => Effect.succeed(TEST_AUTHOR),
           load: () => Effect.succeed(stored),
           apply: () => Effect.succeed(stored),
-          activity: (canvasId) => Effect.succeed({
+          activities: (canvasId) => Effect.succeed({
             schemaVersion: 1,
             canvasId,
-            active: true,
-            updatedAt: "2026-08-08T12:00:00.000Z",
-            activeUntil: "2026-08-08T12:02:00.000Z",
-            detail: "Refining checkout"
+            activities: [{
+              schemaVersion: 1,
+              canvasId,
+              activityId: "codex-1",
+              harness: "Codex",
+              model: "GPT-5",
+              detail: "Refining checkout",
+              reference: null,
+              createdAt: "2026-08-08T12:00:00.000Z",
+              updatedAt: "2026-08-08T12:00:00.000Z",
+              activeUntil: "2026-08-08T12:02:00.000Z"
+            }]
           })
         }
         const session = yield* CanvasSession.open("review", {
           refreshInterval: false
         }).pipe(Effect.provide(Layer.succeed(CritClient, client)))
 
-        expect(yield* session.refreshAgentActivity()).toBe(true)
+        expect(yield* session.refreshPresence()).toBe(true)
         expect(yield* SubscriptionRef.get(session.state)).toMatchObject({
           revision: 0,
-          agentActivity: {
-            active: true,
-            detail: "Refining checkout"
+          presence: {
+            currentAuthor: TEST_AUTHOR,
+            availability: "available",
+            activities: [{
+              activityId: "codex-1",
+              detail: "Refining checkout"
+            }]
           }
         })
       })
@@ -47,13 +153,14 @@ describe("CanvasSession", () => {
   it.effect("coalesces edits made during an in-flight command batch", () =>
     Effect.scoped(
       Effect.gen(function*() {
-        let stored = Canvas.export(Canvas.create({ id: "review", title: "Review" }))
+        let stored = Canvas.export(Canvas.create({ id: "review", title: "Review", owner: { id: "git:test", name: "Test Author" } }))
         let applyCount = 0
         let active = 0
         let maximumActive = 0
         const firstStarted = yield* Deferred.make<void>()
         const releaseFirst = yield* Deferred.make<void>()
         const client: CritClientShape = {
+          currentAuthor: () => Effect.succeed(TEST_AUTHOR),
           load: () => Effect.succeed(stored),
           apply: (_id, commands) =>
             Effect.gen(function*() {
@@ -99,8 +206,9 @@ describe("CanvasSession", () => {
   it.effect("adopts a newer filesystem revision while clean", () =>
     Effect.scoped(
       Effect.gen(function*() {
-        let stored = Canvas.export(Canvas.create({ id: "review", title: "Review" }))
+        let stored = Canvas.export(Canvas.create({ id: "review", title: "Review", owner: { id: "git:test", name: "Test Author" } }))
         const client: CritClientShape = {
+          currentAuthor: () => Effect.succeed(TEST_AUTHOR),
           load: () => Effect.succeed(stored),
           apply: (_id, commands) => applyTo(stored, commands).pipe(
             Effect.tap((next) => Effect.sync(() => { stored = next }))
