@@ -14,6 +14,31 @@ const readJson = async (file: string) =>
   JSON.parse(await readFile(path.resolve(file), "utf8")) as unknown
 
 describe("Crit feature lab", () => {
+  it("serves orb frame routes as self-contained HTML", async () => {
+    const previous = process.env.AMP_ORB
+    process.env.AMP_ORB = "1"
+    const vite = await createServer({ configFile: path.resolve("playground/vite.config.ts"), logLevel: "silent", server: { middlewareMode: true } })
+    const http = createHttpServer(vite.middlewares)
+    try {
+      await new Promise<void>((resolve, reject) => { http.once("error", reject); http.listen(0, "127.0.0.1", resolve) })
+      const response = await fetch(`http://127.0.0.1:${(http.address() as AddressInfo).port}/frames/ready`, { headers: { Connection: "close" } })
+      const html = await response.text()
+      expect(response.status).toBe(200)
+      expect(response.headers.get("x-amp-review-widget")).toBe("off")
+      expect(html).toContain('<meta name="crit-frame-url" content="/frames/ready">')
+      expect(html).toMatch(/<style>[^<]+/)
+      expect(html).toContain("Everything looks good")
+      expect(html).not.toContain("<script src=")
+      expect(html).not.toContain("<link rel=stylesheet")
+      expect(html).not.toContain("/@vite/client")
+    } finally {
+      if (http.listening) await new Promise<void>((resolve, reject) => http.close((cause) => cause ? reject(cause) : resolve()))
+      await vite.close()
+      if (previous === undefined) delete process.env.AMP_ORB
+      else process.env.AMP_ORB = previous
+    }
+  })
+
   it("uses the feature-lab Canvas as home and serves the repo-only UI lab", async () => {
     const vite = await createServer({
       configFile: path.resolve("playground/vite.config.ts"),
@@ -50,7 +75,7 @@ describe("Crit feature lab", () => {
       expect(ui.status).toBe(200)
       expect(ui.headers.get("location")).toBeNull()
       expect(await ui.text()).toContain("Crit feature lab")
-      expect(mainSource).toContain('meta[name="crit-frame-url"]')
+      expect(mainSource).toContain("frameRouteUrl()")
       expect(mainSource).toContain('pathname.replace(/\\/+$/, "") === "/ui"')
       expect(uiSource).toContain("Crit UI color assignments")
       expect(uiSource).toContain('mode="inline"')
