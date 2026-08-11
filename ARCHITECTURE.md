@@ -79,10 +79,15 @@ by anonymous presence rather than an empty agent list.
 Frame and Note movement and resizing, review status, note editing and
 attach/detach behavior. Offscreen iframes are not mounted, keeping the cost tied
 to visible work. The iframe `allow` and `sandbox` policies are configurable.
+Frame geometry is the iframe's configured layout viewport; fixed-screen chrome
+is projected outside that height. The complete Frame representation participates
+in the Canvas camera transform, so zoom never changes the iframe's responsive
+layout or introduces an independent content scale.
 Global Canvas shortcuts are centralized through TanStack Hotkeys. The iframe
 input bridge only transports input intent—keyboard shortcuts, wheel, pinch,
-and pointer selection—across document and origin boundaries; shortcut matching
-and actions remain owned by the React viewport.
+and pointer selection—across document and origin boundaries. Trackpad pan and
+pinch remain Canvas navigation when crossing live Frame content; shortcut
+matching and camera actions remain owned by the React viewport.
 
 Element and Frame comment adapters terminate after producing a normalized
 Comment Anchor or Comment Thread identity. React owns draft text, focus,

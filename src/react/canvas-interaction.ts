@@ -30,6 +30,19 @@ export interface CanvasInteraction {
   readonly finish: (delta: CanvasInteractionDelta) => ReadonlyArray<CanvasCommandValue>
 }
 
+export type CanvasInteractionPointer = {
+  readonly pointerId: number
+  readonly currentTarget: {
+    readonly setPointerCapture: (pointerId: number) => void
+  }
+}
+
+export const captureCanvasInteractionPointer = (
+  event: CanvasInteractionPointer
+): void => {
+  event.currentTarget.setPointerCapture(event.pointerId)
+}
+
 const itemFrom = (
   document: CanvasDocument,
   itemId: string

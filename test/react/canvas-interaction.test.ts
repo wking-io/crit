@@ -2,7 +2,10 @@ import { Effect } from "effect"
 import { describe, expect, it } from "vitest"
 
 import { Canvas, CanvasCommand } from "../../src/core/index.js"
-import { beginCanvasInteraction } from "../../src/react/canvas-interaction.js"
+import {
+  beginCanvasInteraction,
+  captureCanvasInteractionPointer
+} from "../../src/react/canvas-interaction.js"
 
 const reviewDocument = async () => {
   const canvas = Canvas.create({ id: "review", title: "Review", owner: { id: "git:test", name: "Test Author" } })
@@ -42,6 +45,19 @@ const reviewDocument = async () => {
 }
 
 describe("Canvas interaction rules", () => {
+  it("captures the initiating pointer so iframe boundaries cannot interrupt a drag", () => {
+    const captured: Array<number> = []
+
+    captureCanvasInteractionPointer({
+      pointerId: 17,
+      currentTarget: {
+        setPointerCapture: (pointerId) => captured.push(pointerId)
+      }
+    })
+
+    expect(captured).toEqual([17])
+  })
+
   it("anchors the opposite edge while resizing from every direction", async () => {
     const document = await reviewDocument()
     const frame = document.frames.find((item) => item.id === "candidate")!

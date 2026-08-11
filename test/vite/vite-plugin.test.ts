@@ -334,7 +334,7 @@ describe("crit Vite plugin", () => {
     expect(html).toContain('type: "zoom-step"')
     expect(html).toContain('addEventListener("pointerdown"')
     expect(html).toContain('addEventListener("wheel"')
-    expect(html).toContain("relay.wheel(event, true)")
+    expect(html).toContain("relay.wheel(event)")
     expect(html).toContain("decision.handled")
     expect(html).toContain('addEventListener("gesturechange"')
     expect(html).toContain('addEventListener("touchmove"')

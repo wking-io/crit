@@ -102,6 +102,18 @@ export const frameToolbarMode = (
 
 export const frameUiScale = (zoom: number) => canvasUiScale(zoom)
 
+export const frameContentProjection = (
+  width: number,
+  height: number,
+  zoom: number
+) => ({
+  iframeHeight: Math.max(0, height),
+  iframeWidth: Math.max(0, width),
+  shellHeight:
+    Math.max(0, height) + FRAME_CHROME_HEIGHT * frameUiScale(zoom),
+  shellWidth: Math.max(0, width)
+})
+
 export const statusFanProjection = (
   zoom: number,
   screenFrameGap: number
@@ -396,10 +408,16 @@ export function FrameCard({
     STATUS_PILL_MOTION.frameGap +
     Math.max(0, rotatedBottomHalfHeight - STATUS_PILL_HEIGHT / 2)
   const uiScale = frameUiScale(zoom)
+  const contentProjection = frameContentProjection(
+    geometry.width,
+    geometry.height,
+    zoom
+  )
   const statusFan = statusFanProjection(zoom, statusFrameGap)
   const statusVariable = `--crit-frame-status-${frame.status}`
   const frameStyle = {
     ...canvasItemStyle(geometry, frame.zIndex),
+    height: contentProjection.shellHeight,
     "--crit-ui": uiScale,
     "--frame-ink": `var(${statusVariable}-ink, ${status.ink})`,
     "--frame-shell": `var(${statusVariable}-shell, ${status.shell})`,
@@ -427,7 +445,7 @@ export function FrameCard({
         body?.offsetHeight ?? 0,
         body?.clientHeight ?? 0
       )
-      const nextHeight = Math.ceil(contentHeight + FRAME_CHROME_HEIGHT)
+      const nextHeight = Math.ceil(contentHeight)
       if (force || Math.abs(nextHeight - geometry.height) > 1) {
         onFitContent(nextHeight)
       }

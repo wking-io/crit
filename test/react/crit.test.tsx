@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server"
 import { describe, expect, it } from "vitest"
 
-import { Crit } from "../../src/react/crit.js"
+import { Crit, sessionIdForCanvas } from "../../src/react/crit.js"
 import {
   CanvasPresenceIndicator,
   GitIdentityBoundary
@@ -18,7 +18,10 @@ import {
   frameUiScale,
   frameToolbarMode
 } from "../../src/react/canvas-viewport.js"
-import { statusFanProjection } from "../../src/react/frame-card.js"
+import {
+  frameContentProjection,
+  statusFanProjection
+} from "../../src/react/frame-card.js"
 import {
   COMMENT_POPOVER_GAP,
   COMMENT_POPOVER_WIDTH,
@@ -45,6 +48,17 @@ const cssRule = (selector: string) => {
 }
 
 describe("Crit", () => {
+  it("creates a session ID when randomUUID is unavailable on an HTTP origin", () => {
+    const sessionId = sessionIdForCanvas("mobile", {
+      storage: undefined,
+      randomUUID: undefined,
+      now: () => 123,
+      random: () => 0.5
+    })
+
+    expect(sessionId).toMatch(/^session-123-/)
+  })
+
   it("renders the shared canvas toolbar contract", () => {
     const html = renderToStaticMarkup(
       <CanvasToolbar
@@ -118,6 +132,21 @@ describe("Crit", () => {
     expect(frameChromeMetrics(244, 2).titleVisible).toBe(true)
     expect(frameUiScale(0.25) * 0.25).toBeCloseTo(1)
     expect(frameUiScale(2) * 2).toBeCloseTo(1)
+  })
+
+  it("keeps iframe viewport geometry independent from the Canvas shell zoom", () => {
+    for (const zoom of [0.25, 0.5, 1, 2, 4]) {
+      const projection = frameContentProjection(402, 874, zoom)
+
+      expect(projection.iframeWidth).toBe(402)
+      expect(projection.iframeHeight).toBe(874)
+      expect(projection.shellWidth * zoom).toBeCloseTo(402 * zoom)
+      expect(projection.shellHeight * zoom).toBeCloseTo(874 * zoom + 28)
+    }
+    const iframe = cssRule(".crit-frame__viewport iframe")
+    expect(iframe).toContain("height: 100%")
+    expect(iframe).toContain("width: 100%")
+    expect(iframe).not.toContain("transform:")
   })
 
   it("keeps the original status fan geometry stable on screen across zoom", () => {
@@ -395,6 +424,12 @@ describe("Crit", () => {
     expect(html).toContain('data-crit-help-name="Edit frame title"')
     expect(html).toContain('data-crit-help-name="Edit note"')
     expect(html).not.toContain("Layer options for Candidate")
+    const frameTag = html.match(/<section class="crit-frame"[^>]+>/)?.[0]
+    expect(frameTag).toContain(
+      `height:${frameContentProjection(1200, 800, 0.65).shellHeight}px`
+    )
+    const iframeTag = html.match(/<iframe[^>]+candidate[^>]*>/)?.[0]
+    expect(iframeTag).not.toContain("style=")
     expect(html).toContain('aria-label="Undo"')
     expect(html).toContain('aria-label="Redo"')
     expect(html).toContain('aria-keyshortcuts="V"')

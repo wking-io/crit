@@ -37,7 +37,10 @@ import {
   type CanvasTool
 } from "./canvas-cursors.js"
 import type { ResizeHandlePosition } from "./canvas-selection.js"
-import { beginCanvasInteraction } from "./canvas-interaction.js"
+import {
+  beginCanvasInteraction,
+  captureCanvasInteractionPointer
+} from "./canvas-interaction.js"
 import { CanvasToolbar } from "./canvas-toolbar.js"
 import {
   FrameCard,
@@ -368,7 +371,7 @@ export function CanvasViewport({
     setSelectedId(null)
     setPanning(true)
     const start = { x: event.clientX, y: event.clientY, camera }
-    event.currentTarget.setPointerCapture(event.pointerId)
+    captureCanvasInteractionPointer(event)
     const move = (next: PointerEvent) =>
       commitCameraState(initialCanvasCameraState({
         ...start.camera,
@@ -528,6 +531,7 @@ export function CanvasViewport({
   ) => {
     event.preventDefault()
     event.stopPropagation()
+    captureCanvasInteractionPointer(event)
     const start = { x: event.clientX, y: event.clientY, geometry: geometryOf(item) }
     const interaction = beginCanvasInteraction({
       document,
@@ -568,6 +572,7 @@ export function CanvasViewport({
   ) => {
     event.preventDefault()
     event.stopPropagation()
+    captureCanvasInteractionPointer(event)
     const start = { x: event.clientX, y: event.clientY, geometry: geometryOf(item) }
     const interaction = beginCanvasInteraction({
       document,

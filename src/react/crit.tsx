@@ -60,16 +60,42 @@ const rootStyle: CSSProperties = {
 const classes = (...values: ReadonlyArray<string | undefined>) =>
   values.filter((value): value is string => value !== undefined).join(" ")
 
-const sessionIdForCanvas = (canvasId: string) => {
+type SessionIdRuntime = {
+  readonly storage: Pick<Storage, "getItem" | "setItem"> | undefined
+  readonly randomUUID: (() => string) | undefined
+  readonly now: () => number
+  readonly random: () => number
+}
+
+const createSessionId = (runtime?: SessionIdRuntime) => {
+  if (runtime?.randomUUID !== undefined) return runtime.randomUUID()
+  if (
+    runtime === undefined &&
+    typeof globalThis.crypto?.randomUUID === "function"
+  ) {
+    return globalThis.crypto.randomUUID()
+  }
+  const now = runtime?.now ?? Date.now
+  const random = runtime?.random ?? Math.random
+  return `session-${now()}-${random().toString(36).slice(2)}`
+}
+
+export const sessionIdForCanvas = (
+  canvasId: string,
+  runtime?: SessionIdRuntime
+) => {
   const key = `@riff-refine/crit/session/${canvasId}`
   try {
-    const existing = globalThis.sessionStorage?.getItem(key)
+    const storage = runtime === undefined
+      ? globalThis.sessionStorage
+      : runtime.storage
+    const existing = storage?.getItem(key)
     if (existing) return existing
-    const created = crypto.randomUUID()
-    globalThis.sessionStorage?.setItem(key, created)
+    const created = createSessionId(runtime)
+    storage?.setItem(key, created)
     return created
   } catch {
-    return crypto.randomUUID()
+    return createSessionId(runtime)
   }
 }
 

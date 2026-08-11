@@ -213,8 +213,11 @@ review status, editable Notes, and attachment by dropping a Note onto a Frame.
 Dragging it away detaches it without changing its Canvas position. Attached
 Notes move with their Frame. Frame toolbars retain a stable screen size while
 zooming and progressively hide title and secondary controls when space becomes
-tight. Frame and Note headers include send-to-back and bring-to-front controls.
-Offscreen iframes are paused for performance.
+tight. A live Frame's saved width and height belong to the iframe viewport, not
+its toolbar: responsive layout stays fixed at that configured size while the
+complete Frame representation follows the Canvas camera transform. Frame and
+Note headers include send-to-back and bring-to-front controls. Offscreen iframes
+are paused for performance.
 
 Global shortcuts are registered through TanStack Hotkeys: `V` selects the
 Select tool, `H` selects the Hand tool, and `Mod++` / `Mod+-` zoom the Canvas.
@@ -228,7 +231,9 @@ and cover canvas tools, Frame and Note controls, context menus, and dialogs.
 The Vite-served editor includes development-only DialKit panels for tuning
 Frame chrome and camera pan/zoom speed. Camera input follows the same immediate
 model across wheel, trackpad, touch pinch, and Frame bridges; keyboard zoom uses
-discrete steps. Values and presets persist locally. Applications can pass
+discrete steps. Two-finger trackpad scrolling pans the Canvas and trackpad pinch
+zooms around the pointer even while the pointer is over live Frame content.
+Values and presets persist locally. Applications can pass
 `frameChrome` and `cameraOptions` to `<Crit>`; camera options also control wheel
 behavior and the ordered zoom steps that define the minimum and maximum zoom.
 

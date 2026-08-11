@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import {
+  connectCanvasInput,
   createFrameInputRelay,
   offsetFrameInputIntent
 } from "../../src/frame-bridge/input-relay.js"
@@ -20,16 +21,54 @@ const wheel = {
 }
 
 describe("Frame input relay", () => {
-  it("keeps Frame scrolling local while routing canvas pan and zoom", () => {
+  it("snapshots non-enumerable WheelEvent fields at the Canvas adapter", () => {
+    const target = new EventTarget()
+    Object.defineProperties(target, {
+      GestureEvent: { value: class GestureEvent extends Event {} },
+      navigator: {
+        value: { maxTouchPoints: 0, platform: "MacIntel", userAgent: "" }
+      }
+    })
+    const root = new EventTarget()
+    Object.defineProperty(root, "getBoundingClientRect", {
+      value: () => ({ bottom: 600, left: 0, right: 800, top: 0 })
+    })
+    const intents: Array<unknown> = []
+    const disconnect = connectCanvasInput({
+      target: target as Window,
+      root: root as HTMLElement,
+      onIntent: (intent) => intents.push(intent)
+    })
+    const event = new Event("wheel", { cancelable: true })
+    Object.defineProperties(event, {
+      clientX: { value: 20 },
+      clientY: { value: 30 },
+      ctrlKey: { value: false },
+      deltaX: { value: 4 },
+      deltaY: { value: 8 },
+      metaKey: { value: false }
+    })
+
+    target.dispatchEvent(event)
+    disconnect()
+
+    expect(event.defaultPrevented).toBe(true)
+    expect(intents).toEqual([{ type: "wheel", ...wheel }])
+  })
+
+  it("routes trackpad pan and zoom across Frame content", () => {
     const relay = createFrameInputRelay()
 
-    expect(relay.wheel(wheel, true)).toEqual({ handled: false })
-    expect(relay.wheel(wheel, false)).toMatchObject({
+    expect(relay.wheel(wheel)).toMatchObject({
+      handled: true,
+      intent: { type: "wheel", deltaX: 4, deltaY: 8 }
+    })
+    expect(relay.wheel(wheel)).toMatchObject({
       handled: true,
       intent: { type: "wheel", deltaX: 4, deltaY: 8 }
     })
     expect(
-      relay.wheel({ ...wheel, ctrlKey: true }, true)
+      relay.wheel({ ...wheel, ctrlKey: true })
     ).toMatchObject({
       handled: true,
       intent: { type: "wheel", ctrlKey: true }
@@ -40,7 +79,7 @@ describe("Frame input relay", () => {
     const relay = createFrameInputRelay()
     relay.gestureStart(1, { x: 40, y: 50 })
 
-    expect(relay.wheel({ ...wheel, ctrlKey: true }, true)).toEqual({
+    expect(relay.wheel({ ...wheel, ctrlKey: true })).toEqual({
       handled: true
     })
     expect(relay.gestureChange(1.25, { x: 40, y: 50 })).toEqual({
@@ -58,7 +97,7 @@ describe("Frame input relay", () => {
     })
 
     relay.gestureEnd()
-    expect(relay.wheel({ ...wheel, ctrlKey: true }, true).intent).toBeDefined()
+    expect(relay.wheel({ ...wheel, ctrlKey: true }).intent).toBeDefined()
   })
 
   it("distinguishes two-touch panning from zooming", () => {

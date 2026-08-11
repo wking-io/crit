@@ -121,7 +121,7 @@ export const critFrameInputBridgeScript = String.raw`
     send(relay.select())
   }, { capture: true })
   window.addEventListener("wheel", (event) => {
-    const decision = relay.wheel(event, true)
+    const decision = relay.wheel(event)
     if (!decision.handled) return
     event.preventDefault()
     event.stopImmediatePropagation()

@@ -94,16 +94,23 @@ export function createFrameInputRelay() {
         readonly metaKey: boolean
         readonly deltaX: number
         readonly deltaY: number
-      },
-      overFrameContent: boolean
+      }
     ): FrameWheelDecision => {
-      const canvasDestination =
-        !overFrameContent || input.ctrlKey || input.metaKey
-      if (!canvasDestination) return { handled: false }
       if (gestureActive && (input.ctrlKey || input.metaKey)) {
         return { handled: true }
       }
-      return { handled: true, intent: { type: "wheel", ...input } }
+      return {
+        handled: true,
+        intent: {
+          type: "wheel",
+          clientX: input.clientX,
+          clientY: input.clientY,
+          ctrlKey: input.ctrlKey,
+          metaKey: input.metaKey,
+          deltaX: input.deltaX,
+          deltaY: input.deltaY
+        }
+      }
     },
     gestureStart: (
       scale: number | undefined,
@@ -276,15 +283,13 @@ export const connectCanvasInput = (input: {
       event.clientY < rect.top ||
       event.clientY > rect.bottom
     ) return
-    const target = event.target as (EventTarget & { closest?: (selector: string) => Element | null }) | null
-    const overFrameContent =
-      typeof target?.closest === "function" &&
-      target.closest(".crit-frame__viewport") !== null
-    const decision = relay.wheel(event, overFrameContent)
+    const decision = relay.wheel(event)
     if (!decision.handled) return
     event.preventDefault()
     event.stopPropagation()
-    if (decision.intent !== undefined) input.onIntent(decision.intent)
+    if (decision.intent !== undefined) {
+      input.onIntent(decision.intent)
+    }
   }
   const gesturePoint = (event: NativeGestureEvent) => {
     const rect = input.root.getBoundingClientRect()
@@ -388,7 +393,7 @@ export const connectSameOriginFrameInput = (input: {
     )
   const captureWheel = (event: WheelEvent) => {
     if (event.defaultPrevented) return
-    const decision = relay.wheel(event, true)
+    const decision = relay.wheel(event)
     if (!decision.handled) return
     event.preventDefault()
     event.stopPropagation()
