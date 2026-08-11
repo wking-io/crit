@@ -337,6 +337,14 @@ describe("Crit", () => {
     expect(live).toHaveLength(1)
     expect(archived[0]).toContain('sandbox="allow-scripts"')
     expect(live[0]).not.toContain("sandbox")
+    for (const tag of iframes) {
+      expect(tag).toContain('referrerPolicy="same-origin"')
+    }
+
+    const open = html.match(/<a[^>]*href="https:\/\/example\.com\/candidate"[^>]*>/)?.[0]
+    expect(open).toContain('referrerPolicy="same-origin"')
+    expect(open).toContain('rel="noopener"')
+    expect(open).toContain('target="_blank"')
   })
 
   it("keeps an explicit iframeSandbox policy for archived Frames", async () => {

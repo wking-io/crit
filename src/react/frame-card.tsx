@@ -706,7 +706,8 @@ export function FrameCard({
                 description: "Open this frame's page in a separate browser tab."
               })}
               href={frame.url}
-              rel="noreferrer"
+              referrerPolicy="same-origin"
+              rel="noopener"
               target="_blank"
             >
               <Glyph name="openExternal" />
@@ -745,7 +746,7 @@ export function FrameCard({
           <iframe
             allow={iframeAllow}
             ref={iframeRef}
-            referrerPolicy="no-referrer"
+            referrerPolicy="same-origin"
             // Snapshot Artifacts are captured foreign pages with their CSP
             // stripped, served from the dev-server origin — never let their
             // scripts run same-origin with the host app and the Crit API.
