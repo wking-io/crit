@@ -51,6 +51,11 @@ import {
 } from "./frame-card.js"
 import { frameStatus, shortIdForIndex } from "./frame-chrome.js"
 import {
+  completeFrameBreakpointSet,
+  duplicateFrameAtPreset,
+  type FrameSizePreset
+} from "./frame-breakpoints.js"
+import {
   initialCanvasCameraState,
   updateCanvasCamera,
   type CanvasCamera,
@@ -366,6 +371,25 @@ export function CanvasViewport({
     )
     setSelectedId(id)
   }, [run])
+
+  const duplicateFrame = useCallback((
+    frameId: string,
+    preset?: FrameSizePreset
+  ) => {
+    const commands = preset === undefined
+      ? completeFrameBreakpointSet({
+          document,
+          sourceId: frameId,
+          createId: () => localId("frame")
+        })
+      : duplicateFrameAtPreset({
+          document,
+          sourceId: frameId,
+          preset,
+          createId: () => localId("frame")
+        })
+    if (commands.length > 0) run(...commands)
+  }, [document, run])
 
   const startPan = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) return
@@ -740,6 +764,8 @@ export function CanvasViewport({
               onCommentAnchor={(anchor) => {
                 focusCommentReview({ kind: "new", frameId: item.id, anchor })
               }}
+              onCompleteBreakpoints={() => duplicateFrame(item.id)}
+              onDuplicateAt={(preset) => duplicateFrame(item.id, preset)}
               onOpenComment={(threadId) => {
                 focusCommentReview({ kind: "thread", threadId })
               }}

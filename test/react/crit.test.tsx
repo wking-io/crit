@@ -138,12 +138,14 @@ describe("Crit", () => {
   it("progressively hides Frame actions only when their width budget runs out", () => {
     expect(frameChromeLayout(150, 1, true).actions).toEqual({
       snapshot: true,
+      breakpoints: false,
       open: true,
       fullscreen: true,
       delete: true
     })
     expect(frameChromeLayout(120, 1, true).actions).toEqual({
       snapshot: false,
+      breakpoints: false,
       open: true,
       fullscreen: true,
       delete: true
@@ -576,6 +578,7 @@ describe("Crit", () => {
     expect(open).not.toContain("referrerPolicy")
     expect(open).toContain('rel="noreferrer"')
     expect(open).toContain('target="_blank"')
+    expect(html.match(/Show Candidate at all breakpoints/g)).toHaveLength(1)
   })
 
   it("keeps src navigation during SSR when srcdoc loading is requested", async () => {

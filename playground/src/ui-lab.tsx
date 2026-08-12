@@ -532,6 +532,8 @@ function FrameSpecimen({
         iframeVisible={state !== "paused"}
         onBringToFront={() => {}}
         onCommentAnchor={() => {}}
+        onCompleteBreakpoints={() => {}}
+        onDuplicateAt={() => {}}
         onFitContent={() => {}}
         onInputIntent={() => {}}
         onMove={() => {}}

@@ -48,11 +48,16 @@ import {
   frameStatus,
   measureStatusPillWidth
 } from "./frame-chrome.js"
+import {
+  FRAME_SIZE_PRESETS,
+  type FrameSizePreset
+} from "./frame-breakpoints.js"
 import { Glyph } from "./glyph.js"
 
 export type FrameToolbarMode = "full" | "compact" | "minimal"
 export type FrameChromeAction =
   | "snapshot"
+  | "breakpoints"
   | "open"
   | "fullscreen"
   | "delete"
@@ -60,6 +65,7 @@ export type FrameChromeAction =
 export interface FrameChromeSettings {
   readonly titleMinimumCharacters: number
   readonly snapshotMinimumWidth: number
+  readonly breakpointsMinimumWidth: number
   readonly openMinimumWidth: number
   readonly fullscreenMinimumWidth: number
   readonly deleteMinimumWidth: number
@@ -68,6 +74,7 @@ export interface FrameChromeSettings {
 export const DEFAULT_FRAME_CHROME_SETTINGS: FrameChromeSettings = {
   titleMinimumCharacters: 10,
   snapshotMinimumWidth: 148,
+  breakpointsMinimumWidth: 170,
   openMinimumWidth: 82,
   fullscreenMinimumWidth: 104,
   deleteMinimumWidth: 60
@@ -165,13 +172,16 @@ export const frameChromeLayout = (
   worldWidth: number,
   zoom: number,
   snapshotAvailable: boolean,
-  settings?: Partial<FrameChromeSettings>
+  settings?: Partial<FrameChromeSettings>,
+  breakpointsAvailable = true
 ): FrameChromeLayout => {
   const resolved = resolveFrameChromeSettings(settings)
   const screenWidth = worldWidth * zoom
   const actions = {
     snapshot:
       snapshotAvailable && screenWidth >= resolved.snapshotMinimumWidth,
+    breakpoints:
+      breakpointsAvailable && screenWidth >= resolved.breakpointsMinimumWidth,
     open: screenWidth >= resolved.openMinimumWidth,
     fullscreen: screenWidth >= resolved.fullscreenMinimumWidth,
     delete: screenWidth >= resolved.deleteMinimumWidth
@@ -181,13 +191,7 @@ export const frameChromeLayout = (
   return { ...metrics, actions }
 }
 
-export const FRAME_SIZE_PRESETS = [
-  { id: "mobile", label: "Mobile", width: 402, height: 874 },
-  { id: "tablet", label: "Tablet", width: 832, height: 1194 },
-  { id: "laptop", label: "Laptop", width: 1280, height: 832 },
-  { id: "desktop", label: "Desktop", width: 1512, height: 982 },
-  { id: "widescreen", label: "Widescreen", width: 2560, height: 1440 }
-] as const
+export { FRAME_SIZE_PRESETS } from "./frame-breakpoints.js"
 
 export type FrameLoadingPolicy =
   | { readonly strategy: "navigate" }
@@ -268,6 +272,8 @@ export function FrameCard({
   onSelect,
   onInputIntent,
   onCommentAnchor,
+  onCompleteBreakpoints,
+  onDuplicateAt,
   onOpenComment,
   onSnapshot,
   onSnapshotError,
@@ -302,6 +308,8 @@ export function FrameCard({
   readonly onSelect: () => void
   readonly onInputIntent: (intent: FrameInputIntent) => void
   readonly onCommentAnchor: (anchor: CommentAnchor) => void
+  readonly onCompleteBreakpoints: () => void
+  readonly onDuplicateAt: (preset: FrameSizePreset) => void
   readonly onOpenComment: (id: string) => void
   readonly onSnapshot?: () => Effect.Effect<unknown, unknown>
   readonly onSnapshotError: (cause: unknown) => void
@@ -393,7 +401,8 @@ export function FrameCard({
     geometry.width,
     zoom,
     frame.snapshot === undefined && onSnapshot !== undefined,
-    frameChrome
+    frameChrome,
+    frame.snapshot === undefined
   )
   const status = frameStatus(frame.status)
   const availableStatuses = FRAME_STATUSES.filter(
@@ -815,6 +824,21 @@ export function FrameCard({
           ) : null}
         </div>
         <div className="crit-frame__actions" onPointerDown={(event) => event.stopPropagation()}>
+            {frame.snapshot === undefined && actions.breakpoints ? (
+              <button
+                aria-label={`Show ${frame.title} at all breakpoints`}
+                className="crit-frame__action"
+                {...helpTarget({
+                  name: "Show all breakpoints",
+                  hotkey: NO_HELP_HOTKEY,
+                  description: "Duplicate this live page at every missing standard viewport size."
+                })}
+                onClick={onCompleteBreakpoints}
+                type="button"
+              >
+                <Glyph name="responsiveBreakpoints" />
+              </button>
+            ) : null}
             {frame.snapshot === undefined && onSnapshot !== undefined && actions.snapshot ? (
               <button
                 aria-label={snapshotting ? "Taking snapshot" : "Take snapshot"}
@@ -994,6 +1018,16 @@ export function FrameCard({
               onSelect: () => onSetSize(preset.width, preset.height)
             }))
           },
+          ...(frame.snapshot === undefined ? [{
+            help: "Create another live Frame at a standard viewport size.",
+            label: "Duplicate at...",
+            items: FRAME_SIZE_PRESETS.map((preset) => ({
+              detail: `${preset.width} × ${preset.height}`,
+              help: `Duplicate this frame at the ${preset.label.toLowerCase()} preset.`,
+              label: preset.label,
+              onSelect: () => onDuplicateAt(preset)
+            }))
+          }] : []),
           {
             help: "Resize the frame height to fit its same-origin page content.",
             label: "Fit content",

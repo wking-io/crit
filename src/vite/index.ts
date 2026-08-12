@@ -306,6 +306,7 @@ const editorModuleSource = (
       ],
       iconMinimumWidth: {
         snapshot: [DEFAULT_FRAME_CHROME_SETTINGS.snapshotMinimumWidth, 0, 1600, 1],
+        breakpoints: [DEFAULT_FRAME_CHROME_SETTINGS.breakpointsMinimumWidth, 0, 1600, 1],
         open: [DEFAULT_FRAME_CHROME_SETTINGS.openMinimumWidth, 0, 1600, 1],
         fullscreen: [DEFAULT_FRAME_CHROME_SETTINGS.fullscreenMinimumWidth, 0, 1600, 1],
         delete: [DEFAULT_FRAME_CHROME_SETTINGS.deleteMinimumWidth, 0, 1600, 1]
@@ -329,6 +330,7 @@ const editorModuleSource = (
         frameChrome: {
           titleMinimumCharacters: chrome.titleMinimumCharacters,
           snapshotMinimumWidth: chrome.iconMinimumWidth.snapshot,
+          breakpointsMinimumWidth: chrome.iconMinimumWidth.breakpoints,
           openMinimumWidth: chrome.iconMinimumWidth.open,
           fullscreenMinimumWidth: chrome.iconMinimumWidth.fullscreen,
           deleteMinimumWidth: chrome.iconMinimumWidth.delete
