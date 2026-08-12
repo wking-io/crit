@@ -10,11 +10,38 @@ import { createServer } from "vite"
 import { CanvasCommandSchema } from "../../src/core/index.js"
 import { CritManifest } from "../../src/discovery/index.js"
 import { isOrbFrameSource } from "../../playground/vite.config.js"
+import { migrateLegacyPlaygroundCanvas } from "../../playground/migrate-state.mjs"
 
 const readJson = async (file: string) =>
   JSON.parse(await readFile(path.resolve(file), "utf8")) as unknown
 
 describe("Crit feature lab", () => {
+  it("preserves legacy playground state while adding required identities", () => {
+    const author = { id: "git:test", name: "Test Author" }
+    const legacy = {
+      format: "crit-canvas",
+      version: 1,
+      id: "feature-lab",
+      owner: null,
+      notes: [
+        { id: "legacy", text: "Keep me" },
+        { id: "authored", text: "Keep my Author", author: { id: "git:other", name: "Other" } }
+      ],
+      revision: 42
+    }
+
+    expect(migrateLegacyPlaygroundCanvas(legacy, author)).toEqual({
+      ...legacy,
+      owner: author,
+      notes: [
+        { id: "legacy", text: "Keep me", author },
+        legacy.notes[1]
+      ]
+    })
+    const current = { ...legacy, owner: author }
+    expect(migrateLegacyPlaygroundCanvas(current, author)).toBe(current)
+  })
+
   it("reloads inline orb frames for first-party frame dependencies", () => {
     expect(isOrbFrameSource(path.resolve("playground/src/frame-entry.tsx"))).toBe(true)
     expect(isOrbFrameSource(path.resolve("src/react/frame-card.tsx"))).toBe(true)

@@ -1,9 +1,10 @@
 import { execFileSync } from "node:child_process"
-import { readFileSync } from "node:fs"
+import { readFileSync, renameSync, writeFileSync } from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
 import { gitAuthor } from "../dist/node/index.js"
+import { migrateLegacyPlaygroundCanvas } from "./migrate-state.mjs"
 
 const playground = path.dirname(fileURLToPath(import.meta.url))
 const repository = path.dirname(playground)
@@ -16,6 +17,23 @@ const origin =
 const seedCommands = JSON.parse(
   readFileSync(path.join(playground, "feature-lab.commands.json"), "utf8")
 )
+const canvasFile = path.join(playground, ".crit", "canvases", "feature-lab.json")
+
+const migratePersistedCanvas = (author) => {
+  let source
+  try {
+    source = readFileSync(canvasFile, "utf8")
+  } catch (cause) {
+    if (cause?.code === "ENOENT") return
+    throw cause
+  }
+  const current = JSON.parse(source)
+  const migrated = migrateLegacyPlaygroundCanvas(current, author)
+  if (migrated === current) return
+  const temporary = `${canvasFile}.${process.pid}.tmp`
+  writeFileSync(temporary, `${JSON.stringify(migrated, null, 2)}\n`)
+  renameSync(temporary, canvasFile)
+}
 
 const run = (args) => {
   const output = execFileSync(process.execPath, [cli, ...args, "--json"], {
@@ -25,6 +43,9 @@ const run = (args) => {
   })
   return JSON.parse(output)
 }
+
+const author = await gitAuthor(playground)
+migratePersistedCanvas(author)
 
 run([
   "sync",
@@ -38,7 +59,6 @@ const canvas = run(["open", "feature-lab"])
 const hasSeed = canvas.notes.some((note) => note.id === "feature-checklist")
 
 if (!hasSeed) {
-  const author = await gitAuthor(playground)
   const authoredSeedCommands = seedCommands.map((command) =>
     command._tag === "AddNote" ? { ...command, author } : command
   )
