@@ -39,6 +39,8 @@ import {
 import type { ResizeHandlePosition } from "./canvas-selection.js"
 import {
   beginCanvasInteraction,
+  canvasDragDelta,
+  canvasEdgePanVelocity,
   captureCanvasInteractionPointer
 } from "./canvas-interaction.js"
 import { CanvasToolbar } from "./canvas-toolbar.js"
@@ -532,7 +534,12 @@ export function CanvasViewport({
     event.preventDefault()
     event.stopPropagation()
     captureCanvasInteractionPointer(event)
-    const start = { x: event.clientX, y: event.clientY, geometry: geometryOf(item) }
+    const start = {
+      pointer: { x: event.clientX, y: event.clientY },
+      camera: cameraStateRef.current.camera,
+      geometry: geometryOf(item)
+    }
+    const pointer = { ...start.pointer }
     const interaction = beginCanvasInteraction({
       document,
       itemId: item.id,
@@ -540,29 +547,66 @@ export function CanvasViewport({
       kind: { type: "move" },
       geometryOverrides: preview
     })
-    const deltaAt = (clientX: number, clientY: number) => ({
-      x: (clientX - start.x) / camera.zoom,
-      y: (clientY - start.y) / camera.zoom
+    const deltaAt = () => canvasDragDelta({
+      pointer,
+      startPointer: start.pointer,
+      camera: cameraStateRef.current.camera,
+      startCamera: start.camera,
+      zoom: start.camera.zoom
     })
-    const move = (next: PointerEvent) => {
+    const updatePreview = () => {
       setPreview((current) => ({
         ...current,
-        ...interaction.preview(deltaAt(next.clientX, next.clientY))
+        ...interaction.preview(deltaAt())
       }))
     }
-    const end = (next: PointerEvent) => {
+    const move = (next: PointerEvent) => {
+      pointer.x = next.clientX
+      pointer.y = next.clientY
+      updatePreview()
+    }
+    let animationFrame = 0
+    let previousFrameTime: number | undefined
+    const autoPan = (time: number) => {
+      const bounds = rootRef.current?.getBoundingClientRect()
+      if (bounds !== undefined && previousFrameTime !== undefined) {
+        const elapsed = Math.min(time - previousFrameTime, 32) / 1_000
+        const velocity = canvasEdgePanVelocity(pointer, bounds)
+        if (velocity.x !== 0 || velocity.y !== 0) {
+          applyCameraInput({
+            type: "pan",
+            deltaX: velocity.x * elapsed,
+            deltaY: velocity.y * elapsed
+          })
+          updatePreview()
+        }
+      }
+      previousFrameTime = time
+      animationFrame = window.requestAnimationFrame(autoPan)
+    }
+    animationFrame = window.requestAnimationFrame(autoPan)
+    const cleanUp = () => {
+      window.cancelAnimationFrame(animationFrame)
       window.removeEventListener("pointermove", move)
       window.removeEventListener("pointerup", end)
+      window.removeEventListener("pointercancel", cancel)
       setPreview((current) => {
         const removedIds = new Set(interaction.affectedIds)
         return Object.fromEntries(
           Object.entries(current).filter(([id]) => !removedIds.has(id))
         )
       })
-      run(...interaction.finish(deltaAt(next.clientX, next.clientY)))
     }
+    const end = (next: PointerEvent) => {
+      pointer.x = next.clientX
+      pointer.y = next.clientY
+      cleanUp()
+      run(...interaction.finish(deltaAt()))
+    }
+    const cancel = () => cleanUp()
     window.addEventListener("pointermove", move)
     window.addEventListener("pointerup", end, { once: true })
+    window.addEventListener("pointercancel", cancel, { once: true })
   }
 
   const startResize = (

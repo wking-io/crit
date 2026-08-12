@@ -20,6 +20,68 @@ export type CanvasInteractionDelta = {
   readonly y: number
 }
 
+export type CanvasInteractionPoint = {
+  readonly x: number
+  readonly y: number
+}
+
+export type CanvasInteractionBounds = {
+  readonly left: number
+  readonly top: number
+  readonly right: number
+  readonly bottom: number
+}
+
+const EDGE_PAN_ZONE = 80
+const EDGE_PAN_MAX_SPEED = 900
+
+const edgePanAxisVelocity = (
+  position: number,
+  start: number,
+  end: number
+) => {
+  if (position < start + EDGE_PAN_ZONE) {
+    return EDGE_PAN_MAX_SPEED * Math.min(
+      1,
+      Math.max(0, (start + EDGE_PAN_ZONE - position) / EDGE_PAN_ZONE)
+    )
+  }
+  if (position > end - EDGE_PAN_ZONE) {
+    return -EDGE_PAN_MAX_SPEED * Math.min(
+      1,
+      Math.max(0, (position - end + EDGE_PAN_ZONE) / EDGE_PAN_ZONE)
+    )
+  }
+  return 0
+}
+
+/** @internal Camera velocity, in screen pixels per second, for an active item drag. */
+export const canvasEdgePanVelocity = (
+  pointer: CanvasInteractionPoint,
+  bounds: CanvasInteractionBounds
+): CanvasInteractionDelta => ({
+  x: edgePanAxisVelocity(pointer.x, bounds.left, bounds.right),
+  y: edgePanAxisVelocity(pointer.y, bounds.top, bounds.bottom)
+})
+
+/** @internal Keeps an item under the pointer as its camera pans during a drag. */
+export const canvasDragDelta = (input: {
+  readonly pointer: CanvasInteractionPoint
+  readonly startPointer: CanvasInteractionPoint
+  readonly camera: CanvasInteractionPoint
+  readonly startCamera: CanvasInteractionPoint
+  readonly zoom: number
+}): CanvasInteractionDelta => ({
+  x: (
+    input.pointer.x - input.startPointer.x -
+    (input.camera.x - input.startCamera.x)
+  ) / input.zoom,
+  y: (
+    input.pointer.y - input.startPointer.y -
+    (input.camera.y - input.startCamera.y)
+  ) / input.zoom
+})
+
 export type CanvasInteractionPreview = Readonly<
   Record<string, CanvasGeometry>
 >

@@ -4,6 +4,8 @@ import { describe, expect, it } from "vitest"
 import { Canvas, CanvasCommand } from "../../src/core/index.js"
 import {
   beginCanvasInteraction,
+  canvasDragDelta,
+  canvasEdgePanVelocity,
   captureCanvasInteractionPointer
 } from "../../src/react/canvas-interaction.js"
 
@@ -45,6 +47,25 @@ const reviewDocument = async () => {
 }
 
 describe("Canvas interaction rules", () => {
+  it("ramps camera panning toward each viewport edge", () => {
+    const bounds = { left: 100, top: 50, right: 900, bottom: 650 }
+
+    expect(canvasEdgePanVelocity({ x: 500, y: 350 }, bounds)).toEqual({ x: 0, y: 0 })
+    expect(canvasEdgePanVelocity({ x: 140, y: 90 }, bounds)).toEqual({ x: 450, y: 450 })
+    expect(canvasEdgePanVelocity({ x: 860, y: 610 }, bounds)).toEqual({ x: -450, y: -450 })
+    expect(canvasEdgePanVelocity({ x: 50, y: 700 }, bounds)).toEqual({ x: 900, y: -900 })
+  })
+
+  it("keeps a dragged item under a stationary pointer while the camera pans", () => {
+    expect(canvasDragDelta({
+      pointer: { x: 860, y: 400 },
+      startPointer: { x: 800, y: 400 },
+      camera: { x: -40, y: 70 },
+      startCamera: { x: 20, y: 40 },
+      zoom: 0.5
+    })).toEqual({ x: 240, y: -60 })
+  })
+
   it("captures the initiating pointer so iframe boundaries cannot interrupt a drag", () => {
     const captured: Array<number> = []
 
