@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+setup_started_at=$SECONDS
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
@@ -60,6 +61,8 @@ if [[ "$(npm --version 2>/dev/null || true)" != "$npm_version" ]]; then
 fi
 
 echo "==> Installing lockfile dependencies with npm $(npm --version)"
+dependencies_started_at=$SECONDS
 npm ci
+echo "==> Dependencies installed in $((SECONDS - dependencies_started_at))s"
 
-echo "==> Orb setup complete"
+echo "==> Orb setup complete in $((SECONDS - setup_started_at))s"
