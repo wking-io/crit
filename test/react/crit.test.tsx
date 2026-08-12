@@ -535,7 +535,11 @@ describe("Crit", () => {
   })
 
   it("keeps src navigation during SSR when srcdoc loading is requested", async () => {
-    const canvas = Canvas.create({ id: "review", title: "Review" })
+    const canvas = Canvas.create({
+      id: "review",
+      title: "Review",
+      owner: { id: "git:test", name: "Test Author" }
+    })
     await Effect.runPromise(Canvas.apply(canvas, CanvasCommand.addFrame({
       id: "candidate",
       url: "/frames/ready#details",
