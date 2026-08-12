@@ -1,5 +1,6 @@
 import { resizeCursors } from "./resize-cursors.js"
 import { MOVE_CANVAS_CURSOR } from "./move-cursor.js"
+import { FRAME_CORNER_RADIUS } from "./frame-geometry.js"
 
 export const critStyles = String.raw`
 .crit-canvas {
@@ -118,7 +119,7 @@ export const critStyles = String.raw`
 .crit-frame {
   --crit-frame-chrome-height: calc(28px * var(--crit-ui));
   --crit-ui: 1;
-  border-radius: calc(8px * var(--crit-ui));
+  border-radius: calc(${FRAME_CORNER_RADIUS}px * var(--crit-ui));
   color: var(--frame-ink);
   isolation: isolate;
   overflow: visible;
@@ -214,6 +215,13 @@ export const critStyles = String.raw`
   min-width: 0;
   transform: translateY(0);
   transition: transform 220ms cubic-bezier(.22, 1, .36, 1);
+}
+
+.crit-frame__title-label {
+  display: flex;
+  height: calc(20px * var(--crit-ui));
+  max-width: 100%;
+  width: max-content;
 }
 
 .crit-frame__title-button {
@@ -460,7 +468,7 @@ export const critStyles = String.raw`
 
 .crit-selection {
   border-radius: inherit;
-  box-shadow: 0 0 0 calc(1.5px * var(--selection-ui)) var(--selection-ink);
+  box-shadow: 0 0 0 calc(1px * var(--selection-ui)) var(--selection-ink);
   inset: 0;
   pointer-events: none;
   position: absolute;
@@ -475,19 +483,37 @@ export const critStyles = String.raw`
   touch-action: none;
 }
 .crit-selection__handle[data-visible-handle] {
-  background: var(--crit-paper);
-  border: calc(1.5px * var(--selection-ui)) solid var(--selection-ink);
-  border-radius: calc(1px * var(--selection-ui));
-  height: calc(8px * var(--selection-ui));
-  width: calc(8px * var(--selection-ui));
+  height: calc(var(--selection-handle-size) * var(--selection-ui) * 1px);
+  width: calc(var(--selection-handle-size) * var(--selection-ui) * 1px);
 }
-.crit-selection__handle[data-resize-handle="north-west"] { cursor: ${resizeCursors.nwse}; left: 0; top: 0; transform: translate(-50%, -50%); }
+.crit-selection[data-handle-style="sides"] .crit-selection__handle[data-visible-handle] {
+  height: auto;
+}
+.crit-selection__handle-shape {
+  display: block;
+  fill: var(--selection-ink);
+  height: 100%;
+  overflow: visible;
+  width: 100%;
+}
+.crit-selection__side-handle-shape {
+  fill: var(--selection-ink);
+  height: calc(18px * var(--selection-ui));
+  left: 50%;
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: calc(4.95px * var(--selection-ui));
+}
+.crit-selection__handle-isolation { fill: #fff; }
+.crit-selection__handle-accent { fill: var(--selection-handle-accent); }
+.crit-selection__handle[data-resize-handle="north-west"] { cursor: ${resizeCursors.nwse}; left: calc(var(--selection-handle-offset) * var(--selection-ui) * -1px); top: calc(var(--selection-handle-offset) * var(--selection-ui) * -1px); }
 .crit-selection__handle[data-resize-handle="north"] { cursor: ${resizeCursors.ns}; height: calc(12px * var(--selection-ui)); left: calc(8px * var(--selection-ui)); right: calc(8px * var(--selection-ui)); top: 0; transform: translateY(-50%); }
-.crit-selection__handle[data-resize-handle="north-east"] { cursor: ${resizeCursors.nesw}; right: 0; top: 0; transform: translate(50%, -50%); }
+.crit-selection__handle[data-resize-handle="north-east"] { cursor: ${resizeCursors.nesw}; right: calc(var(--selection-handle-offset) * var(--selection-ui) * -1px); top: calc(var(--selection-handle-offset) * var(--selection-ui) * -1px); }
 .crit-selection__handle[data-resize-handle="east"] { bottom: calc(8px * var(--selection-ui)); cursor: ${resizeCursors.ew}; right: 0; top: calc(8px * var(--selection-ui)); transform: translateX(50%); width: calc(12px * var(--selection-ui)); }
-.crit-selection__handle[data-resize-handle="south-east"] { bottom: 0; cursor: ${resizeCursors.nwse}; right: 0; transform: translate(50%, 50%); }
+.crit-selection__handle[data-resize-handle="south-east"] { bottom: calc(var(--selection-handle-offset) * var(--selection-ui) * -1px); cursor: ${resizeCursors.nwse}; right: calc(var(--selection-handle-offset) * var(--selection-ui) * -1px); }
 .crit-selection__handle[data-resize-handle="south"] { bottom: 0; cursor: ${resizeCursors.ns}; height: calc(12px * var(--selection-ui)); left: calc(8px * var(--selection-ui)); right: calc(8px * var(--selection-ui)); transform: translateY(50%); }
-.crit-selection__handle[data-resize-handle="south-west"] { bottom: 0; cursor: ${resizeCursors.nesw}; left: 0; transform: translate(-50%, 50%); }
+.crit-selection__handle[data-resize-handle="south-west"] { bottom: calc(var(--selection-handle-offset) * var(--selection-ui) * -1px); cursor: ${resizeCursors.nesw}; left: calc(var(--selection-handle-offset) * var(--selection-ui) * -1px); }
 .crit-selection__handle[data-resize-handle="west"] { bottom: calc(8px * var(--selection-ui)); cursor: ${resizeCursors.ew}; left: 0; top: calc(8px * var(--selection-ui)); transform: translateX(-50%); width: calc(12px * var(--selection-ui)); }
 
 .crit-help {

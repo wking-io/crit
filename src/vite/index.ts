@@ -321,7 +321,6 @@ const editorModuleSource = (
       id: "crit-camera",
       persist: { key: "crit-camera", storage: "localStorage", presets: true }
     })
-
     return createElement(Fragment, null,
       createElement(Crit, {
         canvasId,

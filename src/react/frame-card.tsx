@@ -381,6 +381,9 @@ export function FrameCard({
   onOpenCommentRef.current = onOpenComment
   useEffect(() => setTitleDraft(frame.title), [frame.title])
   useEffect(() => {
+    if (!selected) setTitleEditing(false)
+  }, [selected])
+  useEffect(() => {
     const update = () => setFullscreen(document.fullscreenElement === frameRef.current)
     document.addEventListener("fullscreenchange", update)
     update()
@@ -414,14 +417,13 @@ export function FrameCard({
     zoom
   )
   const statusFan = statusFanProjection(zoom, statusFrameGap)
-  const statusVariable = `--crit-frame-status-${frame.status}`
   const frameStyle = {
     ...canvasItemStyle(geometry, frame.zIndex),
     height: contentProjection.shellHeight,
     "--crit-ui": uiScale,
-    "--frame-ink": `var(${statusVariable}-ink, ${status.ink})`,
-    "--frame-shell": `var(${statusVariable}-shell, ${status.shell})`,
-    "--frame-stroke": `var(${statusVariable}-stroke, ${status.stroke})`
+    "--frame-ink": status.ink,
+    "--frame-shell": status.shell,
+    "--frame-stroke": status.stroke
   } as CSSProperties
 
   const measureContentHeight = useCallback((force = false) => {
@@ -726,10 +728,10 @@ export function FrameCard({
           {titleVisible ? (
             <span
               className="crit-frame__title-mask"
-              data-editing={titleEditing || undefined}
-              title={titleEditing ? undefined : `${shortId}: ${frame.title}`}
+              data-editing={titleEditing && selected || undefined}
+              title={titleEditing && selected ? undefined : `${shortId}: ${frame.title}`}
             >
-              {titleEditing ? (
+              {titleEditing && selected ? (
                 <div
                   className="crit-frame__title-editor"
                   onBlur={(event) => {
@@ -782,7 +784,7 @@ export function FrameCard({
                     <Glyph name="save" />
                   </button>
                 </div>
-              ) : (
+              ) : selected ? (
                 <button
                   aria-label={`Edit frame title: ${frame.title}`}
                   className="crit-frame__title-button"
@@ -801,6 +803,13 @@ export function FrameCard({
                   </span>
                   <Glyph className="crit-frame__title-edit-icon" name="edit" />
                 </button>
+              ) : (
+                <span className="crit-frame__title-label">
+                  <span className="crit-frame__title-track">
+                    <strong>{shortId}: {frame.title}</strong>
+                    <strong>{status.label}</strong>
+                  </span>
+                </span>
               )}
             </span>
           ) : null}
@@ -939,6 +948,7 @@ export function FrameCard({
           ink="var(--frame-ink)"
           label={frame.title}
           onResize={(event, handle) => onResize(event, frame, handle)}
+          shell={status.shell}
           zoom={zoom}
         />
       ) : null}

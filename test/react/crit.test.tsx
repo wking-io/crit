@@ -59,6 +59,46 @@ describe("Crit", () => {
     expect(sessionId).toMatch(/^session-123-/)
   })
 
+  it("renders the supplied two-tone SVG in all four frame corners", () => {
+    const html = renderToStaticMarkup(
+      <CanvasSelection
+        ink="rebeccapurple"
+        label="frame"
+        onResize={() => {}}
+        shell="lavender"
+        zoom={1}
+      />
+    )
+    expect(html.match(/<svg/g)).toHaveLength(4)
+    expect(html).toContain('viewBox="0 0 13.95 13.95"')
+    expect(html.match(/crit-selection__handle-isolation/g)).toHaveLength(4)
+    expect(html.match(/crit-selection__handle-accent/g)).toHaveLength(4)
+    expect(html).toContain("--selection-ink:rebeccapurple")
+    expect(html).toContain("--selection-handle-accent:lavender")
+    expect(html).toContain("--selection-handle-offset:4.95")
+    expect(html).toContain("M12.95,3.95C7.98,3.95,3.95,7.98,3.95,12.95")
+  })
+
+  it("renders the supplied status-colored side handles for notes", () => {
+    const html = renderToStaticMarkup(
+      <CanvasSelection
+        handleStyle="sides"
+        ink="rebeccapurple"
+        label="note"
+        onResize={() => {}}
+        shell="lavender"
+        zoom={1}
+      />
+    )
+    expect(html.match(/crit-selection__side-handle-shape/g)).toHaveLength(2)
+    expect(html).toContain('data-handle-style="sides"')
+    expect(html).toContain('viewBox="0 0 4.95 18"')
+    expect(html).toContain("M2.95,1h1v16h-1Z")
+    expect(html).toContain("--selection-ink:rebeccapurple")
+    expect(html).toContain("--selection-handle-accent:lavender")
+    expect(html).not.toContain('viewBox="0 0 13.95 13.95"')
+  })
+
   it("renders the shared canvas toolbar contract", () => {
     const html = renderToStaticMarkup(
       <CanvasToolbar
@@ -315,6 +355,7 @@ describe("Crit", () => {
         ink="#000"
         label="frame"
         onResize={() => undefined}
+        shell="#eee"
         zoom={1}
       />
     )
@@ -410,18 +451,21 @@ describe("Crit", () => {
     expect(html).toContain("Approved")
     expect(html).toContain("Ready for review")
     expect(html).toContain(
-      "--frame-shell:var(--crit-frame-status-approved-shell,"
+      "--frame-shell:oklch(79.2% 0.209 151.7 / 30%)"
     )
     expect(html).toContain(
-      "--frame-shell:var(--crit-frame-status-ready-for-review-shell,"
+      "--frame-shell:oklch(78% 0.16 302 / 30%)"
     )
+    expect(html).not.toContain("--crit-frame-status-")
     expect(html).toContain("Status: Approved. Change status")
     expect(html).toContain("A: Candidate")
     expect(html).toContain("Tighten spacing")
     expect(html).toContain('rows="3"')
     expect(html).not.toContain("Attached to candidate")
     expect(html).toContain('data-crit-help-name="Frame status"')
-    expect(html).toContain('data-crit-help-name="Edit frame title"')
+    expect(html).not.toContain('data-crit-help-name="Edit frame title"')
+    expect(html).not.toContain('class="crit-frame__title-edit-icon"')
+    expect(html).toContain("crit-frame__title-label")
     expect(html).toContain('data-crit-help-name="Edit note"')
     expect(html).not.toContain("Layer options for Candidate")
     const frameTag = html.match(/<section class="crit-frame"[^>]+>/)?.[0]

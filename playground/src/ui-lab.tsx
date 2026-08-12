@@ -6,7 +6,10 @@ import {
 } from "dialkit"
 import { Effect } from "effect"
 import {
+  useEffect,
   useMemo,
+  useRef,
+  useState,
   type CSSProperties,
   type ReactNode
 } from "react"
@@ -22,7 +25,6 @@ import { CritContextMenu, type ContextMenuItem } from "../../src/react/canvas-co
 import { CanvasPresenceIndicator, CanvasSaveIndicator, CritBoundaryMessage } from "../../src/react/canvas-feedback.js"
 import { CanvasHelpPanel } from "../../src/react/canvas-help.js"
 import { CanvasCommentPin } from "../../src/react/canvas-comment-pin.js"
-import { CanvasSelection } from "../../src/react/canvas-selection.js"
 import { CanvasToolbar } from "../../src/react/canvas-toolbar.js"
 import { CommentPopover } from "../../src/react/comment-popover.js"
 import { critStyles } from "../../src/react/crit-styles.js"
@@ -173,39 +175,6 @@ const RECIPE_CONFIG = {
       focusRing: tokenSelect("--crit-color-p2")
     }
   },
-  frame: {
-    _collapsed: true,
-    viewportSurface: tokenSelect("--crit-color-s1"),
-    handleSurface: tokenSelect("--crit-color-s1")
-  },
-  frameStatus: {
-    _collapsed: true,
-    changesRequested: {
-      shell: tokenSelect("--crit-color-orange-c1"),
-      stroke: tokenSelect("--crit-color-orange-p1"),
-      ink: tokenSelect("--crit-color-orange-t1")
-    },
-    inProgress: {
-      shell: tokenSelect("--crit-color-blue-c1"),
-      stroke: tokenSelect("--crit-color-blue-p1"),
-      ink: tokenSelect("--crit-color-blue-t1")
-    },
-    archived: {
-      shell: tokenSelect("--crit-color-c1"),
-      stroke: tokenSelect("--crit-color-p1"),
-      ink: tokenSelect("--crit-color-t2")
-    },
-    approved: {
-      shell: tokenSelect("--crit-color-green-c1"),
-      stroke: tokenSelect("--crit-color-green-p1"),
-      ink: tokenSelect("--crit-color-green-t1")
-    },
-    readyForReview: {
-      shell: tokenSelect("--crit-color-purple-c1"),
-      stroke: tokenSelect("--crit-color-purple-p1"),
-      ink: tokenSelect("--crit-color-purple-t1")
-    }
-  },
   statusMenu: {
     _collapsed: true,
     surface: tokenSelect("--crit-color-c1"),
@@ -214,15 +183,6 @@ const RECIPE_CONFIG = {
     hoverSurface: tokenSelect("--crit-color-c2"),
     selectedBorder: tokenSelect("--crit-color-p2"),
     disabledText: tokenSelect("--crit-color-p1")
-  },
-  note: {
-    _collapsed: true,
-    surface: tokenSelect("--crit-color-c1"),
-    editingSurface: tokenSelect("--crit-color-s1"),
-    chromeSurface: tokenSelect("--crit-color-t2"),
-    chromeText: tokenSelect("--crit-color-s1"),
-    text: tokenSelect("--crit-color-t2"),
-    border: tokenSelect("--crit-color-t2")
   },
   help: {
     _collapsed: true,
@@ -346,7 +306,95 @@ function StateLabel({ children }: { readonly children: ReactNode }) {
   return <span className="ui-state-label">{children}</span>
 }
 
+function UiTooltip({ children, id }: { readonly children: ReactNode; readonly id: string }) {
+  return <span aria-live="polite" className="ui-tooltip" id={id} role="tooltip">{children}</span>
+}
+
+export const oklchToHex = (color: string) => {
+  const match = color.match(/^oklch\(([\d.]+)%\s+([\d.]+)\s+(none|[-\d.]+)\)$/)
+  if (match === null) return color
+  const lightness = Number(match[1]) / 100
+  const chroma = Number(match[2])
+  const hue = match[3] === "none" ? 0 : Number(match[3])
+  const radians = hue * Math.PI / 180
+  const a = chroma * Math.cos(radians)
+  const b = chroma * Math.sin(radians)
+  const lRoot = lightness + 0.3963377774 * a + 0.2158037573 * b
+  const mRoot = lightness - 0.1055613458 * a - 0.0638541728 * b
+  const sRoot = lightness - 0.0894841775 * a - 1.291485548 * b
+  const l = lRoot ** 3
+  const m = mRoot ** 3
+  const s = sRoot ** 3
+  const linear = [
+    4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
+    -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
+    -0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s
+  ]
+  const channel = (value: number) => {
+    const encoded = value <= 0.0031308
+      ? 12.92 * value
+      : 1.055 * value ** (1 / 2.4) - 0.055
+    return Math.round(Math.max(0, Math.min(1, encoded)) * 255)
+      .toString(16)
+      .padStart(2, "0")
+  }
+  return `#${linear.map(channel).join("")}`
+}
+
 function ColorScale({ values }: { readonly values: TokenValues }) {
+  const [copiedToken, setCopiedToken] = useState<TokenName | null>(null)
+  const [shiftHeld, setShiftHeld] = useState(false)
+  const copyReset = useRef<number | undefined>(undefined)
+  useEffect(() => {
+    const update = (event: KeyboardEvent) => setShiftHeld(event.shiftKey)
+    const reset = () => setShiftHeld(false)
+    window.addEventListener("keydown", update)
+    window.addEventListener("keyup", update)
+    window.addEventListener("blur", reset)
+    return () => {
+      window.removeEventListener("keydown", update)
+      window.removeEventListener("keyup", update)
+      window.removeEventListener("blur", reset)
+      window.clearTimeout(copyReset.current)
+    }
+  }, [])
+  const confirmCopy = (token: TokenName) => {
+    setCopiedToken(token)
+    window.clearTimeout(copyReset.current)
+    copyReset.current = window.setTimeout(() => setCopiedToken(null), 1200)
+  }
+  const copyColor = (token: TokenName, color: string) => {
+    const previousFocus = document.activeElement
+    const textarea = document.createElement("textarea")
+    textarea.value = color
+    textarea.readOnly = true
+    textarea.style.position = "fixed"
+    textarea.style.inset = "-1000px auto auto -1000px"
+    document.body.append(textarea)
+    textarea.select()
+    let copied = false
+    try {
+      copied = document.execCommand("copy")
+    } catch {
+      copied = false
+    }
+    textarea.remove()
+    if (previousFocus instanceof HTMLElement) previousFocus.focus({ preventScroll: true })
+    if (copied) {
+      confirmCopy(token)
+      return
+    }
+    if (navigator.clipboard === undefined) {
+      setCopiedToken(null)
+      return
+    }
+    void navigator.clipboard.writeText(color).then(() => {
+      confirmCopy(token)
+    }).catch(() => {
+      setCopiedToken(null)
+    })
+  }
+
   return (
     <SpecimenSection id="01" title="Base color scale">
       <div className="ui-palette-table">
@@ -354,8 +402,11 @@ function ColorScale({ values }: { readonly values: TokenValues }) {
           <div className="ui-palette-row" key={palette.id}>
             <span className="ui-palette-row__label">{palette.label}</span>
             <ol aria-label={`${palette.label} base color tokens`} className="ui-scale">
-              {BASE_TOKENS.filter((token) => token.palette === palette.id).map((token, index) => (
-                <li
+              {BASE_TOKENS.filter((token) => token.palette === palette.id).map((token, index) => {
+                const oklch = values[token.name]
+                const displayedColor = shiftHeld ? oklchToHex(oklch) : oklch
+                const tooltipId = `ui-color-${palette.id}-${token.shortName}`
+                return <li
                   className="ui-scale__token"
                   key={token.name}
                   style={{
@@ -364,11 +415,21 @@ function ColorScale({ values }: { readonly values: TokenValues }) {
                       ? "var(--crit-color-t2)"
                       : "var(--crit-color-s1)"
                   } as LabStyle}
-                  title={`${token.name}: ${values[token.name]}`}
                 >
-                  <strong>{token.shortName}</strong>
+                  <button
+                    aria-describedby={tooltipId}
+                    aria-label={`Copy ${displayedColor}`}
+                    className="ui-scale__copy"
+                    onClick={() => copyColor(token.name, displayedColor)}
+                    type="button"
+                  >
+                    <strong>{token.shortName}</strong>
+                    <UiTooltip id={tooltipId}>
+                      {copiedToken === token.name ? "copied" : displayedColor}
+                    </UiTooltip>
+                  </button>
                 </li>
-              ))}
+              })}
             </ol>
           </div>
         ))}
@@ -533,28 +594,12 @@ function FramesSpecimens() {
   )
 }
 
-function SelectionSpecimen() {
-  return (
-    <div className="crit-canvas ui-selection-demo">
-      <span>Eight resize hit areas</span>
-      <CanvasSelection
-        ink="var(--crit-frame-status-in-progress-ink)"
-        label="frame"
-        onResize={() => {}}
-        zoom={1}
-      />
-    </div>
-  )
-}
-
 function NoteSpecimen({
   attached = false,
-  editing = false,
   empty = false,
   selected = false
 }: {
   readonly attached?: boolean
-  readonly editing?: boolean
   readonly empty?: boolean
   readonly selected?: boolean
 }) {
@@ -568,7 +613,7 @@ function NoteSpecimen({
     zIndex: 1
   }
   return (
-    <div className="crit-canvas ui-production-canvas ui-note-stage" data-editing={editing || undefined}>
+    <div className="crit-canvas ui-production-canvas ui-note-stage">
       <NoteCard
         author={{ id: "wes", name: "Wes King" }}
         commit={() => {}}
@@ -592,9 +637,7 @@ function NotesSpecimens() {
       <div className="ui-note-grid">
         <div><StateLabel>Free · unselected</StateLabel><NoteSpecimen /></div>
         <div><StateLabel>Attached · selected</StateLabel><NoteSpecimen attached selected /></div>
-        <div><StateLabel>Focused editing</StateLabel><NoteSpecimen editing /></div>
         <div><StateLabel>Empty</StateLabel><NoteSpecimen empty /></div>
-        <div><StateLabel>Selection handles</StateLabel><SelectionSpecimen /></div>
       </div>
     </SpecimenSection>
   )

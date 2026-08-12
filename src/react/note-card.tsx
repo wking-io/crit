@@ -26,6 +26,7 @@ import {
   CanvasSelection,
   type ResizeHandlePosition
 } from "./canvas-selection.js"
+import { frameStatus } from "./frame-chrome.js"
 import {
   createNoteEditingSession,
   type NoteCommandCommit
@@ -207,9 +208,11 @@ export function NoteCard({
       {selected ? (
         <CanvasSelection
           handles={NOTE_RESIZE_HANDLES}
-          ink="var(--crit-note-selection-ink, var(--crit-muted))"
+          handleStyle="sides"
+          ink={frameStatus("archived").ink}
           label="note"
           onResize={(event, handle) => onResize(event, note, handle)}
+          shell={frameStatus("archived").shell}
           zoom={zoom}
         />
       ) : null}

@@ -114,6 +114,10 @@ describe("Crit feature lab", () => {
       expect(mainSource).toContain("frameRouteUrl()")
       expect(mainSource).toContain('pathname.replace(/\\/+$/, "") === "/ui"')
       expect(uiSource).toContain("Crit UI color assignments")
+      expect(uiSource).toContain("navigator.clipboard.writeText(color)")
+      expect(uiSource).toContain('document.execCommand("copy")')
+      expect(uiSource).toContain("oklchToHex(oklch)")
+      expect(uiSource).toContain("1200")
       expect(uiSource).toContain('mode="inline"')
       expect(uiSource).toContain("greyscale: false")
       expect(uiSource).toContain("lightness: slider(")
@@ -128,13 +132,14 @@ describe("Crit feature lab", () => {
       expect(uiSource.indexOf("red: slider(HUE_DEFAULTS.red")).toBeLessThan(
         uiSource.indexOf("orange: slider(HUE_DEFAULTS.orange")
       )
-      expect(uiSource).toContain("frameStatus: {")
       expect(uiSource).toContain('title: tokenSelect("--crit-color-t2")')
       expect(uiSource).toContain('description: tokenSelect("--crit-color-t1")')
       expect(uiSource).toContain('shortcutSurface: tokenSelect("--crit-color-c1")')
       expect(uiSource).toContain('shortcutBorder: tokenSelect("--crit-color-c3")')
-      expect(uiSource).toContain('ink="var(--crit-frame-status-in-progress-ink)"')
       expect(uiSource).not.toContain('selectedOutline: tokenSelect("--crit-color-t1")')
+      expect(uiSource).not.toContain("\n  frame: {\n")
+      expect(uiSource).not.toContain("frameStatus: {")
+      expect(uiSource).not.toContain("\n  note: {\n")
       expect(uiSource).toContain('from "../../src/react/canvas-toolbar.js"')
       expect(uiSource).toContain('from "../../src/react/canvas-feedback.js"')
       expect(uiSource).toContain('from "../../src/react/canvas-context-menu.js"')
@@ -155,16 +160,12 @@ describe("Crit feature lab", () => {
       expect(uiStyles).not.toContain(
         ".ui-lab .crit-frame__chrome { background: var(--ui-frame-chrome-surface); }"
       )
-      expect(uiStyles).toContain(
-        "--crit-frame-status-in-progress-shell: var(--ui-frame-status-in-progress-shell)"
-      )
       expect(uiStyles).not.toContain(".ui-lab .crit-status-option")
+      expect(uiStyles).not.toContain("--crit-frame-status-")
+      expect(uiStyles).not.toContain(".ui-lab .crit-selection { box-shadow:")
+      expect(uiStyles).not.toContain(".ui-lab .crit-note")
       expect(uiStyles).toContain(".ui-lab .crit-comment-popover")
       expect(uiStyles).toContain(".ui-lab .crit-new-frame-dialog")
-      expect(uiStyles).toContain("--crit-note-selection-ink: var(--crit-color-t1)")
-      expect(uiStyles).toContain(
-        ".ui-lab .crit-note .crit-selection__handle[data-visible-handle] { background: var(--crit-color-s1); }"
-      )
       expect(uiStyles).not.toContain(
         ".ui-lab .crit-selection { box-shadow: 0 0 0 1.5px var(--ui-frame-selected-outline); }"
       )
