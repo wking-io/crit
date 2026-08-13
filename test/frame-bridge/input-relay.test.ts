@@ -159,6 +159,20 @@ describe("Frame input relay", () => {
     })).toBeNull()
   })
 
+  it("preserves additive Frame selection across iframe input", () => {
+    const relay = createFrameInputRelay()
+
+    expect(relay.select()).toEqual({ type: "select", additive: false })
+    expect(relay.select({ metaKey: true })).toEqual({
+      type: "select",
+      additive: true
+    })
+    expect(relay.select({ shiftKey: true })).toEqual({
+      type: "select",
+      additive: true
+    })
+  })
+
   it("lets adapters offset pointer intents without changing other intents", () => {
     expect(offsetFrameInputIntent(
       { type: "wheel", ...wheel },
@@ -186,6 +200,15 @@ describe("Frame input relay", () => {
       source: CRIT_FRAME_INPUT_SOURCE,
       type: "hotkey",
       key: "h"
+    })).toBe(false)
+    expect(isCritFrameInputMessage({
+      source: CRIT_FRAME_INPUT_SOURCE,
+      type: "select",
+      additive: true
+    })).toBe(true)
+    expect(isCritFrameInputMessage({
+      source: CRIT_FRAME_INPUT_SOURCE,
+      type: "select"
     })).toBe(false)
     expect(isCritFrameInputMessage({
       source: CRIT_FRAME_INPUT_SOURCE,

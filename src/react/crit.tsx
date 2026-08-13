@@ -31,7 +31,7 @@ import {
   type FrameChromeSettings
 } from "./canvas-viewport.js"
 import type { CanvasCameraOptions } from "./canvas-camera.js"
-import type { FrameLoadingPolicy } from "./frame-card.js"
+import type { FrameLoadingPolicy } from "./frame-loading.js"
 import {
   CanvasHelpPanel,
   CanvasHelpSurface

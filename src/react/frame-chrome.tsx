@@ -169,11 +169,11 @@ export function calculateStatusPillLayout(
 }
 
 export const FRAME_STATUSES: ReadonlyArray<FrameStatusChrome> = [
-  { id: "changes-requested", label: "Changes requested", ink: "oklch(64.6% 0.222 41.1)", shell: "oklch(75% 0.183 55.9 / 30%)", stroke: "oklch(64.6% 0.222 41.1 / 30%)", glyph: "statusChangesRequested" },
-  { id: "in-progress", label: "In progress", ink: "oklch(54.6% 0.245 262.9)", shell: "oklch(80.9% 0.105 251.8 / 30%)", stroke: "oklch(54.6% 0.245 262.9 / 30%)", glyph: "statusInProgress" },
-  { id: "archived", label: "Archived", ink: "oklch(26.9% 0 0)", shell: "oklch(87% 0 0 / 30%)", stroke: "oklch(26.9% 0 0 / 30%)", glyph: "statusArchived" },
-  { id: "approved", label: "Approved", ink: "oklch(62.7% 0.194 149.2)", shell: "oklch(79.2% 0.209 151.7 / 30%)", stroke: "oklch(62.7% 0.194 149.2 / 30%)", glyph: "statusApproved" },
-  { id: "ready-for-review", label: "Ready for review", ink: "oklch(50% 0.24 302)", shell: "oklch(78% 0.16 302 / 30%)", stroke: "oklch(50% 0.24 302 / 30%)", glyph: "statusReadyForReview" }
+  { id: "changes-requested", label: "Changes requested", ink: "oklch(52% 0.2 55)", shell: "oklch(95.25% 0.024 55)", stroke: "oklch(67% 0.18 55)", glyph: "statusChangesRequested" },
+  { id: "in-progress", label: "In progress", ink: "oklch(52% 0.2 245.3)", shell: "oklch(95.25% 0.024 245.3)", stroke: "oklch(67% 0.18 245.3)", glyph: "statusInProgress" },
+  { id: "archived", label: "Archived", ink: "oklch(28% 0 none)", shell: "oklch(95.25% 0 none)", stroke: "oklch(67% 0 none)", glyph: "statusArchived" },
+  { id: "approved", label: "Approved", ink: "oklch(52% 0.2 156.3)", shell: "oklch(95.25% 0.024 156.3)", stroke: "oklch(67% 0.18 156.3)", glyph: "statusApproved" },
+  { id: "ready-for-review", label: "Ready for review", ink: "oklch(52% 0.2 302)", shell: "oklch(95.25% 0.024 302)", stroke: "oklch(67% 0.18 302)", glyph: "statusReadyForReview" }
 ]
 
 export const frameStatus = (status: FrameStatus): FrameStatusChrome =>

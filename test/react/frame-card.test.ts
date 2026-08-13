@@ -1,37 +1,27 @@
 import { describe, expect, it } from "vitest"
 
-import { frameFetchTarget } from "../../src/react/frame-card.js"
+import { frameIframeUrl } from "../../src/react/frame-loading.js"
 
-describe("frameFetchTarget", () => {
-  const pageOrigin = "https://actual-portal.example"
+describe("frameIframeUrl", () => {
+  const frame = {
+    id: "candidate",
+    url: "https://portal.example/frames/ready?variant=2#section"
+  }
 
-  it("fetches a trusted public alias through its relative resource route", () => {
-    expect(frameFetchTarget(
-      new URL("https://portal.example/frames/ready?variant=2#section"),
-      pageOrigin,
-      { strategy: "parent-fetch", aliasOrigin: "https://portal.example" }
-    )).toEqual({
-      target: "/frames/ready?variant=2",
-      fetchOrigin: pageOrigin
-    })
+  it("uses the canonical URL for direct navigation", () => {
+    expect(frameIframeUrl("review", frame, { strategy: "navigate" }))
+      .toBe(frame.url)
   })
 
-  it("keeps actual same-origin fetches absolute", () => {
-    expect(frameFetchTarget(
-      new URL("https://actual-portal.example/frames/ready?variant=2"),
-      pageOrigin,
-      { strategy: "parent-fetch", aliasOrigin: "https://portal.example" }
-    )).toEqual({
-      target: "https://actual-portal.example/frames/ready?variant=2",
-      fetchOrigin: pageOrigin
-    })
+  it("uses a stable real navigation URL for relayed live Frames", () => {
+    expect(frameIframeUrl("review space", frame, { strategy: "relay" }))
+      .toBe("/__crit/frames/review%20space/candidate#section")
   })
 
-  it("rejects unrelated cross-origin frames", () => {
-    expect(frameFetchTarget(
-      new URL("https://untrusted.example/frames/ready"),
-      pageOrigin,
-      { strategy: "parent-fetch", aliasOrigin: "https://portal.example" }
-    )).toBeNull()
+  it("keeps archived Frames on their immutable artifact URL", () => {
+    expect(frameIframeUrl("review", {
+      ...frame,
+      snapshot: { artifactId: "artifact" }
+    }, { strategy: "relay" })).toBe(frame.url)
   })
 })

@@ -48,6 +48,13 @@ const detailsFromTarget = (
 
 const CanvasHelpContext = createContext<CanvasHelpDetails | null>(null)
 
+export const activeCanvasHelpDetails = (
+  pointerDetails: CanvasHelpDetails | null | undefined,
+  focusDetails: CanvasHelpDetails | undefined
+): CanvasHelpDetails | null => pointerDetails === undefined
+  ? focusDetails ?? null
+  : pointerDetails
+
 export function CanvasHelpSurface({
   children,
   onBlur,
@@ -57,13 +64,13 @@ export function CanvasHelpSurface({
   ...props
 }: HTMLAttributes<HTMLDivElement> & { readonly children: ReactNode }) {
   const [pointerDetails, setPointerDetails] =
-    useState<CanvasHelpDetails | undefined>()
+    useState<CanvasHelpDetails | null | undefined>()
   const [focusDetails, setFocusDetails] =
     useState<CanvasHelpDetails | undefined>()
 
   return (
     <CanvasHelpContext.Provider
-      value={pointerDetails ?? focusDetails ?? null}
+      value={activeCanvasHelpDetails(pointerDetails, focusDetails)}
     >
       <div
         {...props}
@@ -77,11 +84,16 @@ export function CanvasHelpSurface({
         }}
         onPointerOut={(event) => {
           onPointerOut?.(event)
-          setPointerDetails(detailsFromTarget(event.relatedTarget))
+          setPointerDetails(
+            event.relatedTarget instanceof Node &&
+              event.currentTarget.contains(event.relatedTarget)
+              ? detailsFromTarget(event.relatedTarget) ?? null
+              : undefined
+          )
         }}
         onPointerOver={(event) => {
           onPointerOver?.(event)
-          setPointerDetails(detailsFromTarget(event.target))
+          setPointerDetails(detailsFromTarget(event.target) ?? null)
         }}
       >
         {children}

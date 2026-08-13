@@ -55,7 +55,39 @@ run([
   origin
 ])
 
-const canvas = run(["open", "feature-lab"])
+let canvas = run(["open", "feature-lab"])
+const author = await gitAuthor(playground)
+const legacyFrameIds = new Set([
+  "checkout-draft",
+  "checkout-ready",
+  "checkout-approved",
+  "checkout-changes"
+])
+const legacyFrameCommands = canvas.frames
+  .filter((frame) => legacyFrameIds.has(frame.id))
+  .map((frame) => ({ _tag: "RemoveFrame", id: frame.id }))
+if (legacyFrameCommands.length > 0) {
+  run(["apply", "feature-lab", JSON.stringify(legacyFrameCommands)])
+  canvas = run(["open", "feature-lab"])
+}
+const legacyNoteIds = new Set([
+  "attached-feedback",
+  "ordering-note-back",
+  "ordering-note-front"
+])
+const checklistSeed = seedCommands.find((command) =>
+  command._tag === "AddNote" && command.id === "feature-checklist"
+)
+const legacyNoteCommands = canvas.notes
+  .filter((note) =>
+    legacyNoteIds.has(note.id) ||
+    (note.id === "feature-checklist" && note.text !== checklistSeed?.text)
+  )
+  .map((note) => ({ _tag: "RemoveNote", id: note.id, actorId: note.author.id }))
+if (legacyNoteCommands.length > 0) {
+  run(["apply", "feature-lab", JSON.stringify(legacyNoteCommands)])
+  canvas = run(["open", "feature-lab"])
+}
 const hasSeed = canvas.notes.some((note) => note.id === "feature-checklist")
 
 if (!hasSeed) {

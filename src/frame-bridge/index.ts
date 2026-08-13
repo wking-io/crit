@@ -39,7 +39,9 @@ export const isCritFrameInputMessage = (
     value.source !== CRIT_FRAME_INPUT_SOURCE ||
     !("type" in value)
   ) return false
-  if (value.type === "select") return true
+  if (value.type === "select") {
+    return "additive" in value && typeof value.additive === "boolean"
+  }
   if (value.type === "delete") return true
   if (value.type === "tool") {
     return "tool" in value && (value.tool === "select" || value.tool === "pan")
@@ -117,8 +119,8 @@ export const critFrameInputBridgeScript = String.raw`
     event.stopImmediatePropagation()
     send(intent)
   }, { capture: true })
-  window.addEventListener("pointerdown", () => {
-    send(relay.select())
+  window.addEventListener("pointerdown", (event) => {
+    send(relay.select(event))
   }, { capture: true })
   window.addEventListener("wheel", (event) => {
     const decision = relay.wheel(event)

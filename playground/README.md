@@ -18,8 +18,10 @@ The editor is source-backed in development: changes under `src/react` update the
 open playground through Vite without a manual package build or server restart.
 
 The playground uses Crit's real Vite plugin, HTTP adapter, filesystem repository,
-snapshot archive, manifest discovery, and standalone editor route. Its four Frame
-URLs are real pages served by the same Vite process. Canvas state persists under
+snapshot archive, manifest discovery, and standalone editor route. Its three
+playable synth Frames reproduce the Polyphonic Workbench, Performance Deck, and
+Signal Rack designs from the `wking` synth iteration Canvas. All three pages are
+served by the same Vite process. Canvas state persists under
 `playground/.crit`, which is ignored by git.
 
 ## Browser checks
@@ -31,7 +33,7 @@ URLs are real pages served by the same Vite process. Canvas state persists under
 - Narrow a Frame; verify its title hides only after fewer than ten characters fit and its action icons remain.
 - Use the **Frame chrome** DialKit panel to tune the title and per-icon visibility thresholds live.
 - Drag and resize Frames, edit all four statuses, and use their ordering buttons.
-- Interact with form controls inside a Frame.
+- Power on a synth, play its pads or keyboard shortcuts, and adjust its controls.
 - Edit, move, resize, and reorder Notes.
 - Move the attached Note with its Frame, then drag it away to detach it.
 - Take a snapshot, change the live page, and verify the archived Frame remains.
@@ -45,8 +47,8 @@ Keep the Portless dev server running, then use another terminal:
 ```sh
 npm run dev:agent -- open feature-lab --json
 npm run dev:agent -- activity feature-lab --id dev-agent --harness Terminal --detail "Testing agent edits" --json
-npm run dev:agent -- apply feature-lab '[{"_tag":"SetFrameStatus","id":"checkout-draft","status":"ready-for-review"}]' --json
-npm run dev:agent -- snapshot feature-lab checkout-ready --json
+npm run dev:agent -- apply feature-lab '[{"_tag":"SetFrameStatus","id":"synth-workbench","status":"ready-for-review"}]' --json
+npm run dev:agent -- snapshot feature-lab synth-performance --json
 npm run dev:agent -- activity feature-lab --id dev-agent --clear --json
 ```
 

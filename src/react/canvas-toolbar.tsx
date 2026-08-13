@@ -85,7 +85,7 @@ export function CanvasToolbar({
           {...helpTarget({
             name: "Select",
             hotkey: "V",
-            description: "Select, move, resize, and interact with frames and notes."
+            description: "Drag empty canvas to select multiple Frames; hold Shift or Cmd/Ctrl to add to the selection."
           })}
           onClick={() => onAction("select")}
           type="button"

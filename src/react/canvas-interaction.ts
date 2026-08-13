@@ -125,12 +125,28 @@ export const beginCanvasInteraction = (input: {
   readonly startGeometry: CanvasGeometry
   readonly kind: CanvasInteractionKind
   readonly geometryOverrides?: CanvasInteractionPreview
+  readonly selectedFrameIds?: ReadonlySet<string>
 }): CanvasInteraction => {
   const item = itemFrom(input.document, input.itemId)
-  const attached = isFrame(item)
-    ? input.document.notes.filter((note) => note.attachedTo === item.id)
+  const movingFrames = input.kind.type === "move" && isFrame(item)
+    ? input.document.frames.filter((frame) =>
+        frame.id === item.id ||
+        (input.selectedFrameIds?.has(item.id) === true &&
+          input.selectedFrameIds.has(frame.id))
+      )
     : []
-  const affectedIds = [item.id, ...attached.map((note) => note.id)]
+  const affectedFrameIds = new Set(movingFrames.map((frame) => frame.id))
+  const attached = isFrame(item)
+    ? input.document.notes.filter((note) =>
+        input.kind.type === "move"
+          ? note.attachedTo !== null && affectedFrameIds.has(note.attachedTo)
+          : note.attachedTo === item.id
+      )
+    : []
+  const affectedIds = [
+    ...(movingFrames.length > 0 ? movingFrames.map((frame) => frame.id) : [item.id]),
+    ...attached.map((note) => note.id)
+  ]
   const geometryAt = (delta: CanvasInteractionDelta) =>
     input.kind.type === "move"
       ? {
@@ -149,6 +165,28 @@ export const beginCanvasInteraction = (input: {
     const geometry = geometryAt(delta)
     const deltaX = geometry.x - input.startGeometry.x
     const deltaY = geometry.y - input.startGeometry.y
+    if (input.kind.type === "move" && movingFrames.length > 0) {
+      return Object.fromEntries([
+        ...movingFrames.map((frame) => {
+          const start = frame.id === item.id
+            ? input.startGeometry
+            : input.geometryOverrides?.[frame.id] ?? frame.geometry
+          return [frame.id, {
+            ...start,
+            x: start.x + delta.x,
+            y: start.y + delta.y
+          }]
+        }),
+        ...attached.map((note) => {
+          const start = input.geometryOverrides?.[note.id] ?? note.geometry
+          return [note.id, {
+            ...start,
+            x: start.x + delta.x,
+            y: start.y + delta.y
+          }]
+        })
+      ])
+    }
     return {
       [item.id]: geometry,
       ...Object.fromEntries(
@@ -168,7 +206,16 @@ export const beginCanvasInteraction = (input: {
     geometry: CanvasGeometry
   ): ReadonlyArray<CanvasCommandValue> => {
     if (isFrame(item)) {
-      return [CanvasCommand.moveFrame({ id: item.id, x: geometry.x, y: geometry.y })]
+      return movingFrames.map((frame) => {
+        const start = frame.id === item.id
+          ? input.startGeometry
+          : input.geometryOverrides?.[frame.id] ?? frame.geometry
+        return CanvasCommand.moveFrame({
+          id: frame.id,
+          x: start.x + geometry.x - input.startGeometry.x,
+          y: start.y + geometry.y - input.startGeometry.y
+        })
+      })
     }
     const centerX = geometry.x + geometry.width / 2
     const centerY = geometry.y + geometry.height / 2

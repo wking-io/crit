@@ -31,6 +31,7 @@ import {
 import { CanvasCommentPin } from "../../src/react/canvas-comment-pin.js"
 import { critStyles } from "../../src/react/crit-styles.js"
 import { CanvasSelection } from "../../src/react/canvas-selection.js"
+import { FRAME_STATUSES } from "../../src/react/frame-chrome.js"
 import { CanvasToolbar } from "../../src/react/canvas-toolbar.js"
 import {
   NOTE_MINIMUM_ROWS,
@@ -176,6 +177,68 @@ describe("Crit", () => {
     expect(frameUiScale(2) * 2).toBeCloseTo(1)
   })
 
+  it("uses Inter with stable Frame header metrics", () => {
+    expect(critStyles).toContain(
+      '@import url("https://rsms.me/inter/inter.css");'
+    )
+    const chrome = cssRule(".crit-frame__chrome")
+    const titleLine = cssRule(".crit-frame__title-track strong")
+
+    expect(chrome).toContain("font-family: InterVariable, Inter, sans-serif")
+    expect(chrome).toContain(
+      'font-feature-settings: "calt" 1, "case" 1, "ss02" 1, "tnum" 1, "ss03" 1'
+    )
+    expect(chrome).toContain("font-optical-sizing: none")
+    expect(chrome).toContain('font-variation-settings: "opsz" 14')
+    expect(titleLine).not.toContain("system-ui")
+  })
+
+  it("uses the Frame palette selected in the UI lab", () => {
+    expect(FRAME_STATUSES.map(({ id, shell, stroke, ink }) => ({
+      id,
+      shell,
+      stroke,
+      ink
+    }))).toEqual([
+      {
+        id: "changes-requested",
+        shell: "oklch(95.25% 0.024 55)",
+        stroke: "oklch(67% 0.18 55)",
+        ink: "oklch(52% 0.2 55)"
+      },
+      {
+        id: "in-progress",
+        shell: "oklch(95.25% 0.024 245.3)",
+        stroke: "oklch(67% 0.18 245.3)",
+        ink: "oklch(52% 0.2 245.3)"
+      },
+      {
+        id: "archived",
+        shell: "oklch(95.25% 0 none)",
+        stroke: "oklch(67% 0 none)",
+        ink: "oklch(28% 0 none)"
+      },
+      {
+        id: "approved",
+        shell: "oklch(95.25% 0.024 156.3)",
+        stroke: "oklch(67% 0.18 156.3)",
+        ink: "oklch(52% 0.2 156.3)"
+      },
+      {
+        id: "ready-for-review",
+        shell: "oklch(95.25% 0.024 302)",
+        stroke: "oklch(67% 0.18 302)",
+        ink: "oklch(52% 0.2 302)"
+      }
+    ])
+    expect(cssRule(".crit-frame__viewport")).toContain(
+      "background: var(--crit-frame-viewport-surface, oklch(99% 0 none))"
+    )
+    expect(cssRule(".crit-selection__handle[data-visible-handle]")).toContain(
+      "height: calc(var(--selection-handle-size) * var(--selection-ui) * 1px)"
+    )
+  })
+
   it("keeps iframe viewport geometry independent from the Canvas shell zoom", () => {
     for (const zoom of [0.25, 0.5, 1, 2, 4]) {
       const projection = frameContentProjection(402, 874, zoom)
@@ -189,6 +252,28 @@ describe("Crit", () => {
     expect(iframe).toContain("height: 100%")
     expect(iframe).toContain("width: 100%")
     expect(iframe).not.toContain("transform:")
+  })
+
+  it("matches the neutral segmented drag-selection marquee", () => {
+    const marquee = cssRule(".crit-canvas__selection-marquee")
+
+    expect(marquee).toContain(
+      "var(--crit-color-p2, oklch(65% 0 none)) 10%"
+    )
+    expect(marquee).toContain(
+      "--crit-selection-marquee-ink: var(--crit-color-t1, oklch(52% 0 none))"
+    )
+    expect(marquee).toContain("background-size:")
+    expect(marquee).toContain(
+      "var(--crit-selection-marquee-ink) 0 9px, transparent 9px 12px"
+    )
+    expect(marquee).toContain("100% 1px")
+    expect(marquee).toContain("1px 100%")
+    expect(marquee).toContain(
+      "calc(100% - 8px) calc(100% - 8px)"
+    )
+    expect(marquee).toContain("4px 4px")
+    expect(marquee).not.toContain("border:")
   })
 
   it("keeps the original status fan geometry stable on screen across zoom", () => {
@@ -314,7 +399,7 @@ describe("Crit", () => {
     expect(html).toContain('data-crit-help-name="Select"')
     expect(html).toContain('data-crit-help-hotkey="V"')
     expect(html).toContain(
-      'data-crit-help-description="Select, move, resize, and interact with frames and notes."'
+      'data-crit-help-description="Drag empty canvas to select multiple Frames; hold Shift or Cmd/Ctrl to add to the selection."'
     )
     expect(html).toContain('data-crit-help-name="Add frame"')
     expect(html).toContain('data-crit-help-name="Add note"')
@@ -453,10 +538,10 @@ describe("Crit", () => {
     expect(html).toContain("Approved")
     expect(html).toContain("Ready for review")
     expect(html).toContain(
-      "--frame-shell:oklch(79.2% 0.209 151.7 / 30%)"
+      "--frame-shell:oklch(95.25% 0.024 156.3)"
     )
     expect(html).toContain(
-      "--frame-shell:oklch(78% 0.16 302 / 30%)"
+      "--frame-shell:oklch(95.25% 0.024 302)"
     )
     expect(html).not.toContain("--crit-frame-status-")
     expect(html).toContain("Status: Approved. Change status")
@@ -581,7 +666,7 @@ describe("Crit", () => {
     expect(html.match(/Show Candidate at all breakpoints/g)).toHaveLength(1)
   })
 
-  it("keeps src navigation during SSR when srcdoc loading is requested", async () => {
+  it("uses a real relay navigation while preserving the canonical open URL", async () => {
     const canvas = Canvas.create({
       id: "review",
       title: "Review",
@@ -598,12 +683,13 @@ describe("Crit", () => {
       <CanvasViewport
         dispatch={() => Effect.void}
         document={Canvas.export(canvas)}
-        frameLoading={{ strategy: "parent-fetch" }}
+        frameLoading={{ strategy: "relay" }}
       />
     )
 
-    expect(html).toContain('src="/frames/ready#details"')
+    expect(html).toContain('src="/__crit/frames/review/candidate#details"')
     expect(html).not.toContain("srcDoc=")
+    expect(html).toContain('href="/frames/ready#details"')
   })
 
   it("keeps an explicit iframeSandbox policy for archived Frames", async () => {

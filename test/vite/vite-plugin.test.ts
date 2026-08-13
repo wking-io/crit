@@ -16,6 +16,7 @@ import { Canvas, CanvasCommand } from "../../src/core/index.js"
 import { FileSystemAgentActivity } from "../../src/node/file-system-agent-activity.js"
 import { FileSystemCanvasRepository } from "../../src/node/file-system-canvas-repository.js"
 import { CanvasRepository } from "../../src/runtime/canvas-repository.js"
+import { frameRelayUrl } from "../../src/runtime/frame-relay.js"
 import {
   CritClientCommandFailed,
   CritClientNotFound
@@ -203,26 +204,95 @@ describe("crit Vite plugin", () => {
     const editorModule = await editorModuleResponse.text()
     expect(editorModuleResponse.status).toBe(200)
     expect(editorModule).toContain("/@vite/client")
-    expect(editorModule).toContain("Frame chrome")
-    expect(editorModule).toContain("titleMinimumCharacters")
-    expect(editorModule).toContain("Camera")
-    expect(editorModule).toContain("panSpeed")
-    expect(editorModule).toContain("zoomSpeed")
-    expect(editorModule).toContain("bottom-right")
+    expect(editorModule).not.toContain("dialkit")
+    expect(editorModule).toContain("DEFAULT_FRAME_CHROME_SETTINGS")
+    expect(editorModule).toContain("DEFAULT_CANVAS_CAMERA_OPTIONS")
     expect(editorModule).toContain('frameLoading: {"strategy":"navigate"}')
   })
 
   it("serializes the configured Frame loading policy into the editor", async () => {
     const origin = await start({
       root,
-      frameLoading: "parent-fetch",
+      frameLoading: "relay",
       publicOrigin: "https://portal.example/some/path?ignored=true#fragment"
     }, process.cwd())
     const editorModule = await (await fetch(
       `${origin}/@id/virtual:crit-editor.js`
     )).text()
 
-    expect(editorModule).toContain('frameLoading: {"strategy":"parent-fetch","aliasOrigin":"https://portal.example"}')
+    expect(editorModule).toContain('frameLoading: {"strategy":"relay"}')
+  })
+
+  it("relays a validated live Frame as a real navigable HTML document", async () => {
+    await createCanvas("review")
+    await writeFile(path.join(root, "frame.html"), `<!doctype html>
+<html><head><meta name="crit-frame-url" content="/stale"></head>
+<body><script>window.__frameLocation = window.location.href</script></body></html>`)
+    const origin = await start({ root, frameLoading: "relay" })
+    const client = HttpCritClient.make({ apiPath: `${origin}/__crit/api` })
+    const canonicalUrl = `${origin}/frame.html?variant=ready#details`
+    await Effect.runPromise(client.apply("review", [CanvasCommand.addFrame({
+      id: "candidate",
+      url: canonicalUrl,
+      title: "Candidate",
+      provenance: { kind: "manual", sourceId: "test" }
+    })]))
+
+    const response = await fetch(`${origin}${frameRelayUrl("review", "candidate")}`)
+    const html = await response.text()
+
+    expect(response.status).toBe(200)
+    expect(response.headers.get("content-type")).toContain("text/html")
+    expect(html.match(/name="crit-frame-url"/g)).toHaveLength(1)
+    expect(html).toContain(`content="${canonicalUrl}"`)
+    expect(html).toContain(`<base href="${origin}/frame.html?variant=ready">`)
+    expect(html).toContain("history.replaceState")
+    expect(html).toContain(`${origin}/frame.html?variant=ready#details`)
+    expect(html).not.toContain("srcdoc")
+  })
+
+  it("maps a trusted public alias onto the browser-visible application URL", async () => {
+    await createCanvas("review")
+    await writeFile(
+      path.join(root, "frame.html"),
+      "<!doctype html><html><head></head><body>Aliased Frame</body></html>"
+    )
+    const publicOrigin = "https://portal.example"
+    const origin = await start({ root, frameLoading: "relay", publicOrigin })
+    const client = HttpCritClient.make({ apiPath: `${origin}/__crit/api` })
+    const canonicalUrl = `${publicOrigin}/frame.html?variant=alias#details`
+    await Effect.runPromise(client.apply("review", [CanvasCommand.addFrame({
+      id: "candidate",
+      url: canonicalUrl,
+      title: "Candidate",
+      provenance: { kind: "manual", sourceId: "test" }
+    })]))
+
+    const response = await fetch(`${origin}${frameRelayUrl("review", "candidate")}`)
+    const html = await response.text()
+
+    expect(response.status).toBe(200)
+    expect(html).toContain(`content="${canonicalUrl}"`)
+    expect(html).toContain(`<base href="${origin}/frame.html?variant=alias">`)
+    expect(html).toContain(`${origin}/frame.html?variant=alias#details`)
+  })
+
+  it("rejects relay requests for Frame URLs outside the trusted origin", async () => {
+    await createCanvas("review")
+    const origin = await start({ root, frameLoading: "relay" })
+    const client = HttpCritClient.make({ apiPath: `${origin}/__crit/api` })
+    await Effect.runPromise(client.apply("review", [CanvasCommand.addFrame({
+      id: "untrusted",
+      url: "https://untrusted.example/frame.html",
+      title: "Untrusted",
+      provenance: { kind: "manual", sourceId: "test" }
+    })]))
+
+    const response = await fetch(`${origin}${frameRelayUrl("review", "untrusted")}`)
+    const body = await response.json() as { error: { message: string } }
+
+    expect(response.status).toBe(403)
+    expect(body.error.message).toContain("trusted application origin")
   })
 
   it("pushes Canvas change hints to the served editor over the HMR WebSocket", async () => {

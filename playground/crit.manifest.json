@@ -4,27 +4,28 @@
   "canvases": [
     {
       "id": "feature-lab",
-      "title": "Crit feature lab",
+      "title": "Synth UI Iterations",
       "frames": [
         {
-          "id": "checkout-draft",
-          "url": "/frames/draft",
-          "title": "Checkout draft · intentionally unfinished"
+          "id": "synth-workbench",
+          "url": "/synth?variant=A&preview=1",
+          "title": "Polyphonic Workbench",
+          "status": "approved",
+          "geometry": { "x": 80, "y": 100, "width": 1280, "height": 760 }
         },
         {
-          "id": "checkout-ready",
-          "url": "/frames/ready",
-          "title": "Checkout candidate with an intentionally long title for responsive toolbar testing"
+          "id": "synth-performance",
+          "url": "/synth?variant=B&preview=1",
+          "title": "Performance Deck",
+          "status": "changes-requested",
+          "geometry": { "x": 1440, "y": 100, "width": 1280, "height": 760 }
         },
         {
-          "id": "checkout-approved",
-          "url": "/frames/approved",
-          "title": "Approved confirmation"
-        },
-        {
-          "id": "checkout-changes",
-          "url": "/frames/changes",
-          "title": "Checkout with changes requested"
+          "id": "synth-rack",
+          "url": "/synth?variant=C&preview=1",
+          "title": "Signal Rack",
+          "status": "in-progress",
+          "geometry": { "x": 2800, "y": 100, "width": 1280, "height": 760 }
         }
       ]
     }

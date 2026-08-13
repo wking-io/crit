@@ -193,54 +193,6 @@ export const frameChromeLayout = (
 
 export { FRAME_SIZE_PRESETS } from "./frame-breakpoints.js"
 
-export type FrameLoadingPolicy =
-  | { readonly strategy: "navigate" }
-  | { readonly strategy: "parent-fetch"; readonly aliasOrigin?: string }
-
-const DEFAULT_FRAME_LOADING_POLICY: FrameLoadingPolicy = { strategy: "navigate" }
-
-/** @internal Selects a safe parent fetch without treating an alias as the page origin. */
-export const frameFetchTarget = (
-  requestedUrl: URL,
-  pageOrigin: string,
-  policy: Extract<FrameLoadingPolicy, { readonly strategy: "parent-fetch" }>
-) => {
-  if (requestedUrl.origin === pageOrigin) {
-    return { target: requestedUrl.href, fetchOrigin: pageOrigin }
-  }
-  if (policy.aliasOrigin === undefined) return null
-  try {
-    const trusted = new URL(policy.aliasOrigin)
-    if ((trusted.protocol !== "http:" && trusted.protocol !== "https:") ||
-      requestedUrl.origin !== trusted.origin) return null
-  } catch {
-    return null
-  }
-  return {
-    target: `${requestedUrl.pathname}${requestedUrl.search}`,
-    fetchOrigin: pageOrigin
-  }
-}
-
-export const prepareSameOriginFrameHtml = (
-  html: string,
-  responseUrl: string,
-  requestedUrl: string
-) => {
-  const document = new DOMParser().parseFromString(html, "text/html")
-  const head = document.head
-  const base = document.querySelector("base") ?? document.createElement("base")
-  base.setAttribute("href", responseUrl)
-  const metadata = document.createElement("meta")
-  metadata.setAttribute("name", "crit-frame-url")
-  metadata.setAttribute("content", requestedUrl)
-  // Prepend both so URL resolution and logical routing are established before
-  // any module scripts in the fetched document are encountered.
-  head.prepend(metadata)
-  head.prepend(base)
-  return `<!doctype html>\n${document.documentElement.outerHTML}`
-}
-
 const statusHelpDescriptions: Readonly<Record<FrameStatus, string>> = {
   "changes-requested": "Mark this frame as needing another iteration.",
   "in-progress": "Mark this frame as actively being worked on.",
@@ -255,8 +207,8 @@ export function FrameCard({
   geometry,
   iframeAllow,
   iframeSandbox,
+  iframeUrl = frame.url,
   iframeVisible,
-  frameLoading = DEFAULT_FRAME_LOADING_POLICY,
   selected,
   shortId,
   zoom,
@@ -287,8 +239,8 @@ export function FrameCard({
   readonly geometry: CanvasGeometry
   readonly iframeAllow: string
   readonly iframeSandbox?: string
+  readonly iframeUrl?: string
   readonly iframeVisible: boolean
-  readonly frameLoading?: FrameLoadingPolicy
   readonly selected: boolean
   readonly shortId: string
   readonly zoom: number
@@ -305,7 +257,7 @@ export function FrameCard({
     item: CanvasFrame,
     handle: ResizeHandlePosition
   ) => void
-  readonly onSelect: () => void
+  readonly onSelect: (additive?: boolean) => void
   readonly onInputIntent: (intent: FrameInputIntent) => void
   readonly onCommentAnchor: (anchor: CommentAnchor) => void
   readonly onCompleteBreakpoints: () => void
@@ -327,61 +279,6 @@ export function FrameCard({
   const [titleDraft, setTitleDraft] = useState(frame.title)
   const [titleEditing, setTitleEditing] = useState(false)
   const [commentBridgeReady, setCommentBridgeReady] = useState(false)
-  const [srcdocState, setSrcdocState] = useState<
-    { readonly status: "idle" | "loading" | "error"; readonly error?: string } |
-    { readonly status: "ready"; readonly html: string }
-  >({ status: "idle" })
-  const [srcdocAttempt, setSrcdocAttempt] = useState(0)
-  const requestedFrameUrl = typeof window === "undefined"
-    ? null
-    : (() => {
-        try { return new URL(frame.url, window.location.href) } catch { return null }
-      })()
-  const fetchTarget = requestedFrameUrl === null || typeof window === "undefined"
-    ? null
-    : frameLoading.strategy === "parent-fetch"
-      ? frameFetchTarget(requestedFrameUrl, window.location.origin, frameLoading)
-      : null
-  const usesSrcdoc = frame.snapshot === undefined &&
-    frameLoading.strategy === "parent-fetch" &&
-    typeof window !== "undefined" &&
-    fetchTarget !== null
-
-  useEffect(() => {
-    if (!iframeVisible || !usesSrcdoc || requestedFrameUrl === null) {
-      setSrcdocState({ status: "idle" })
-      return
-    }
-    const controller = new AbortController()
-    setSrcdocState({ status: "loading" })
-    fetch(fetchTarget!.target, {
-      credentials: "same-origin",
-      referrerPolicy: "same-origin",
-      signal: controller.signal
-    }).then(async (response) => {
-      if (!response.ok) throw new Error(`Frame request failed (${response.status})`)
-      if (!response.headers.get("content-type")?.toLowerCase().includes("text/html")) {
-        throw new Error("Frame response is not HTML")
-      }
-      const finalUrl = new URL(response.url)
-      if (finalUrl.origin !== fetchTarget!.fetchOrigin) {
-        throw new Error("Frame request redirected to another origin")
-      }
-      const logicalUrl = new URL(requestedFrameUrl.href)
-      if (logicalUrl.hash && !finalUrl.hash) finalUrl.hash = logicalUrl.hash
-      const html = prepareSameOriginFrameHtml(
-        await response.text(), finalUrl.href, logicalUrl.href
-      )
-      if (!controller.signal.aborted) setSrcdocState({ status: "ready", html })
-    }).catch((cause: unknown) => {
-      if (controller.signal.aborted) return
-      setSrcdocState({
-        status: "error",
-        error: cause instanceof Error ? cause.message : "Unable to load frame"
-      })
-    })
-    return () => controller.abort()
-  }, [fetchTarget?.fetchOrigin, fetchTarget?.target, frame.url, iframeVisible, srcdocAttempt, usesSrcdoc])
   const commentBridgeRef = useRef<ReturnType<typeof connectBridgedFrameComments> | null>(null)
   const onCommentAnchorRef = useRef(onCommentAnchor)
   const onOpenCommentRef = useRef(onOpenComment)
@@ -532,7 +429,7 @@ export function FrameCard({
     measureContentHeight,
     onInputIntent,
     onSelect,
-    srcdocState.status
+    iframeUrl
   ])
   useEffect(() => {
     const iframe = iframeRef.current
@@ -558,7 +455,7 @@ export function FrameCard({
       bridge.disconnect()
       if (commentBridgeRef.current === bridge) commentBridgeRef.current = null
     }
-  }, [frame.snapshot, frame.url, srcdocState.status, status.ink])
+  }, [frame.snapshot, frame.url, iframeUrl, status.ink])
   useEffect(() => {
     if (!commentBridgeReady) return
     commentBridgeRef.current?.configure({
@@ -608,7 +505,9 @@ export function FrameCard({
         setContextMenu({ x: event.clientX, y: event.clientY })
         onSelect()
       }}
-      onPointerDown={onSelect}
+      onPointerDown={(event) => onSelect(
+        event.metaKey || event.ctrlKey || event.shiftKey
+      )}
       ref={frameRef}
       style={frameStyle}
     >
@@ -900,18 +799,12 @@ export function FrameCard({
         </div>
         </header>
         <div className="crit-frame__viewport">
-        {iframeVisible && usesSrcdoc && srcdocState.status !== "ready" ? (
-          <div className="crit-frame__paused" role={srcdocState.status === "error" ? "alert" : "status"}>
-            {srcdocState.status === "error" ? (
-              <><span>Unable to load frame: {srcdocState.error}</span>{" "}<button
-                onClick={() => setSrcdocAttempt((attempt) => attempt + 1)}
-                type="button"
-              >Retry</button></>
-            ) : "Loading frame…"}
-          </div>
-        ) : iframeVisible ? (
+        {iframeVisible ? (
           <iframe
             allow={iframeAllow}
+            // The relay URL is stable by Frame identity, so recreate the
+            // browsing context when that Frame's canonical URL changes.
+            key={frame.url}
             ref={iframeRef}
             referrerPolicy="no-referrer"
             // Snapshot Artifacts are captured foreign pages with their CSP
@@ -921,9 +814,7 @@ export function FrameCard({
               iframeSandbox ??
               (frame.snapshot === undefined ? undefined : "allow-scripts")
             }
-            {...(usesSrcdoc && srcdocState.status === "ready"
-              ? { srcDoc: srcdocState.html }
-              : { src: frame.url })}
+            src={iframeUrl}
             title={frame.title}
           />
         ) : <div
