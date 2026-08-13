@@ -8,6 +8,14 @@ import {
   canvasEdgePanVelocity,
   captureCanvasInteractionPointer
 } from "../../src/react/canvas-interaction.js"
+import {
+  frameIdsIntersectingSelectionBox,
+  isAdditiveFrameSelection,
+  selectCanvasFrame,
+  selectCanvasFrameForMove,
+  selectCanvasFramesInBox,
+  selectionBoxBetween
+} from "../../src/react/canvas-frame-selection.js"
 
 const reviewDocument = async () => {
   const canvas = Canvas.create({ id: "review", title: "Review", owner: { id: "git:test", name: "Test Author" } })
@@ -22,6 +30,14 @@ const reviewDocument = async () => {
       }),
       CanvasCommand.moveFrame({ id: "candidate", x: 100, y: 100 }),
       CanvasCommand.resizeFrame({ id: "candidate", width: 600, height: 400 }),
+      CanvasCommand.addFrame({
+        id: "comparison",
+        url: "/comparison",
+        title: "Comparison",
+        provenance: { kind: "manual", sourceId: "test" }
+      }),
+      CanvasCommand.moveFrame({ id: "comparison", x: 900, y: 100 }),
+      CanvasCommand.resizeFrame({ id: "comparison", width: 500, height: 300 }),
       CanvasCommand.addNote({
         id: "attached",
         text: "Attached",
@@ -32,6 +48,16 @@ const reviewDocument = async () => {
         height: 120
       }),
       CanvasCommand.attachNote({ id: "attached", frameId: "candidate" }),
+      CanvasCommand.addNote({
+        id: "comparison-note",
+        text: "Comparison note",
+        author: { id: "author", name: "Test Author" },
+        x: 950,
+        y: 150,
+        width: 200,
+        height: 120
+      }),
+      CanvasCommand.attachNote({ id: "comparison-note", frameId: "comparison" }),
       CanvasCommand.addNote({
         id: "loose",
         text: "Loose",
@@ -64,6 +90,51 @@ describe("Canvas interaction rules", () => {
       startCamera: { x: 20, y: 40 },
       zoom: 0.5
     })).toEqual({ x: 240, y: -60 })
+  })
+
+  it("toggles additive Frame selection while preserving a selected drag group", () => {
+    const first = selectCanvasFrame(new Set(), "candidate", false)
+    const both = selectCanvasFrame(first, "comparison", true)
+
+    expect([...both]).toEqual(["candidate", "comparison"])
+    expect([...selectCanvasFrame(both, "candidate", true)]).toEqual([
+      "comparison"
+    ])
+    expect(selectCanvasFrameForMove(both, "candidate", false)).toBe(both)
+    expect([...selectCanvasFrameForMove(first, "comparison", true)]).toEqual([
+      "candidate",
+      "comparison"
+    ])
+    expect(isAdditiveFrameSelection({ metaKey: true })).toBe(true)
+    expect(isAdditiveFrameSelection({ shiftKey: true })).toBe(true)
+    expect(isAdditiveFrameSelection({})).toBe(false)
+  })
+
+  it("normalizes a marquee and selects every intersecting Frame", () => {
+    const box = selectionBoxBetween({ x: 750, y: 450 }, { x: 50, y: 50 })
+    const intersecting = frameIdsIntersectingSelectionBox([
+      {
+        id: "candidate",
+        geometry: { x: 100, y: 100, width: 600, height: 400 }
+      },
+      {
+        id: "comparison",
+        geometry: { x: 900, y: 100, width: 500, height: 300 }
+      }
+    ], box)
+
+    expect(box).toEqual({ x: 50, y: 50, width: 700, height: 400 })
+    expect([...intersecting]).toEqual(["candidate"])
+    expect([...selectCanvasFramesInBox(
+      new Set(["comparison"]),
+      intersecting,
+      true
+    )]).toEqual(["comparison", "candidate"])
+    expect([...selectCanvasFramesInBox(
+      new Set(["comparison"]),
+      intersecting,
+      false
+    )]).toEqual(["candidate"])
   })
 
   it("captures the initiating pointer so iframe boundaries cannot interrupt a drag", () => {
@@ -131,6 +202,38 @@ describe("Canvas interaction rules", () => {
     expect(preview.attached).toMatchObject({ x: 190, y: 130 })
     expect(commands).toEqual([
       { _tag: "MoveFrame", id: "candidate", x: 140, y: 80 }
+    ])
+  })
+
+  it("previews and commits every selected Frame as one drag group", async () => {
+    const document = await reviewDocument()
+    const frame = document.frames.find((item) => item.id === "candidate")!
+    const interaction = beginCanvasInteraction({
+      document,
+      itemId: frame.id,
+      startGeometry: frame.geometry,
+      kind: { type: "move" },
+      selectedFrameIds: new Set(["candidate", "comparison"])
+    })
+
+    const preview = interaction.preview({ x: 40, y: -20 })
+    const commands = interaction.finish({ x: 40, y: -20 })
+
+    expect(interaction.affectedIds).toEqual([
+      "candidate",
+      "comparison",
+      "attached",
+      "comparison-note"
+    ])
+    expect(preview).toMatchObject({
+      candidate: { x: 140, y: 80 },
+      comparison: { x: 940, y: 80 },
+      attached: { x: 190, y: 130 },
+      "comparison-note": { x: 990, y: 130 }
+    })
+    expect(commands).toEqual([
+      { _tag: "MoveFrame", id: "candidate", x: 140, y: 80 },
+      { _tag: "MoveFrame", id: "comparison", x: 940, y: 80 }
     ])
   })
 

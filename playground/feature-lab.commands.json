@@ -1,55 +1,12 @@
 [
-  { "_tag": "SetFrameStatus", "id": "checkout-draft", "status": "in-progress" },
-  { "_tag": "MoveFrame", "id": "checkout-draft", "x": 80, "y": 100 },
-  { "_tag": "ResizeFrame", "id": "checkout-draft", "width": 860, "height": 520 },
-  { "_tag": "SetFrameStatus", "id": "checkout-ready", "status": "ready-for-review" },
-  { "_tag": "MoveFrame", "id": "checkout-ready", "x": 1020, "y": 100 },
-  { "_tag": "ResizeFrame", "id": "checkout-ready", "width": 860, "height": 520 },
-  { "_tag": "SetFrameStatus", "id": "checkout-approved", "status": "approved" },
-  { "_tag": "MoveFrame", "id": "checkout-approved", "x": 80, "y": 700 },
-  { "_tag": "ResizeFrame", "id": "checkout-approved", "width": 860, "height": 520 },
-  { "_tag": "SetFrameStatus", "id": "checkout-changes", "status": "changes-requested" },
-  { "_tag": "MoveFrame", "id": "checkout-changes", "x": 1020, "y": 700 },
-  { "_tag": "ResizeFrame", "id": "checkout-changes", "width": 860, "height": 520 },
   {
     "_tag": "AddNote",
     "id": "feature-checklist",
-    "text": "Try pan, zoom, drag, resize, status changes, ordering, snapshots, and editing this Note.",
+    "text": "Play the synths, compare all three structural directions, then try pan, zoom, drag, resize, status changes, and snapshots.",
     "author": { "id": "seed:current-author", "name": "Current Author" },
-    "x": 1910,
-    "y": 500,
-    "width": 420,
+    "x": 80,
+    "y": 960,
+    "width": 520,
     "height": 140
-  },
-  {
-    "_tag": "AddNote",
-    "id": "attached-feedback",
-    "text": "I am attached. Move the Ready Frame to verify that I move with it; drag me away to detach.",
-    "author": { "id": "seed:current-author", "name": "Current Author" },
-    "x": 1580,
-    "y": 330,
-    "width": 300,
-    "height": 150
-  },
-  { "_tag": "AttachNote", "id": "attached-feedback", "frameId": "checkout-ready" },
-  {
-    "_tag": "AddNote",
-    "id": "ordering-note-back",
-    "text": "Send me backward, then bring me forward.",
-    "author": { "id": "seed:current-author", "name": "Current Author" },
-    "x": 1910,
-    "y": 160,
-    "width": 280,
-    "height": 150
-  },
-  {
-    "_tag": "AddNote",
-    "id": "ordering-note-front",
-    "text": "These overlapping Notes exercise shared stacking order.",
-    "author": { "id": "seed:current-author", "name": "Current Author" },
-    "x": 1960,
-    "y": 210,
-    "width": 300,
-    "height": 160
   }
 ]

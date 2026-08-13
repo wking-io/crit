@@ -56,13 +56,14 @@ describe("Crit feature lab", () => {
     const http = createHttpServer(vite.middlewares)
     try {
       await new Promise<void>((resolve, reject) => { http.once("error", reject); http.listen(0, "127.0.0.1", resolve) })
-      const response = await fetch(`http://127.0.0.1:${(http.address() as AddressInfo).port}/frames/ready`, { headers: { Connection: "close" } })
+      const response = await fetch(`http://127.0.0.1:${(http.address() as AddressInfo).port}/synth?variant=B&preview=1`, { headers: { Connection: "close" } })
       const html = await response.text()
       expect(response.status).toBe(200)
       expect(response.headers.get("x-amp-review-widget")).toBe("off")
-      expect(html).toContain('<meta name="crit-frame-url" content="/frames/ready">')
+      expect(html).toContain('<meta name="crit-frame-url" content="/synth?variant=B&amp;preview=1">')
       expect(html).toMatch(/<style>[^<]+/)
-      expect(html).toContain("Everything looks good")
+      expect(html).toContain("Performance instrument")
+      expect(html).toContain("ASTRA")
       expect(html).not.toContain("<script src=")
       expect(html).not.toContain("<link rel=stylesheet")
       expect(html).not.toContain("/@vite/client")
@@ -215,30 +216,32 @@ describe("Crit feature lab", () => {
     expect(packageJson.portless).toEqual({ name: "crit", script: "dev" })
     expect(canvas.id).toBe("feature-lab")
     expect(canvas.frames.map((frame) => frame.id)).toEqual([
-      "checkout-draft",
-      "checkout-ready",
-      "checkout-approved",
-      "checkout-changes"
+      "synth-workbench",
+      "synth-performance",
+      "synth-rack"
     ])
-    expect(canvas.frames.every((frame) => frame.url.startsWith("/frames/"))).toBe(true)
-    expect(canvas.frames.every((frame) => frame.status === undefined)).toBe(true)
-    expect(canvas.frames.every((frame) => frame.geometry === undefined)).toBe(true)
+    expect(canvas.frames.map((frame) => frame.url)).toEqual([
+      "/synth?variant=A&preview=1",
+      "/synth?variant=B&preview=1",
+      "/synth?variant=C&preview=1"
+    ])
+    expect(canvas.frames.map((frame) => frame.title)).toEqual([
+      "Polyphonic Workbench",
+      "Performance Deck",
+      "Signal Rack"
+    ])
+    expect(canvas.frames.map((frame) => frame.status)).toEqual([
+      "approved",
+      "changes-requested",
+      "in-progress"
+    ])
+    expect(canvas.frames.every((frame) => frame.geometry !== undefined)).toBe(true)
 
     expect(
       commands
         .filter((command) => command._tag === "SetFrameStatus")
         .map((command) => command.status)
-    ).toEqual([
-      "in-progress",
-      "ready-for-review",
-      "approved",
-      "changes-requested"
-    ])
-    expect(commands.filter((command) => command._tag === "AddNote")).toHaveLength(4)
-    expect(commands).toContainEqual({
-      _tag: "AttachNote",
-      id: "attached-feedback",
-      frameId: "checkout-ready"
-    })
+    ).toEqual([])
+    expect(commands.filter((command) => command._tag === "AddNote")).toHaveLength(1)
   })
 })

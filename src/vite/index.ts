@@ -28,7 +28,14 @@ import { GitAuthorIdentity } from "../node/git-author.js"
 import { CanvasRepositoryCritClient } from "../runtime/canvas-repository-crit-client.js"
 import { CanvasRepository } from "../runtime/canvas-repository.js"
 import { AgentActivityStore } from "../runtime/agent-activity.js"
-import { CritClientUnavailable } from "../runtime/canvas-failure.js"
+import {
+  CritClientNotFound,
+  CritClientUnavailable
+} from "../runtime/canvas-failure.js"
+import {
+  CRIT_FRAME_RELAY_PATH,
+  parseFrameRelayPath
+} from "../runtime/frame-relay.js"
 import { critFrameInputBridgeScript } from "../frame-bridge/index.js"
 import { critFrameCommentBridgeScript } from "../frame-bridge/comment-bridge.js"
 import {
@@ -36,6 +43,7 @@ import {
   SnapshotNotFound
 } from "../runtime/snapshot-archive.js"
 import { SnapshotService, SnapshotServiceLive } from "../runtime/snapshot-service.js"
+import { prepareFrameRelayHtml } from "./frame-relay.js"
 
 export interface CritVitePluginOptions {
   readonly enabled?: boolean
@@ -45,7 +53,8 @@ export interface CritVitePluginOptions {
   readonly manifestPath?: string
   readonly editorPath?: string | false
   readonly frameInputBridge?: boolean
-  readonly frameLoading?: "navigate" | "parent-fetch"
+  /** `parent-fetch` is retained as a deprecated alias for `relay`. */
+  readonly frameLoading?: "navigate" | "relay" | "parent-fetch"
   /** Trusted browser-visible origin used for manifest URLs and frame loading. */
   readonly publicOrigin?: string
 }
@@ -144,6 +153,106 @@ const requireGet = (
 
 const requestPathname = (request: IncomingMessage) =>
   new URL(request.url ?? "/", "http://crit.local").pathname
+
+const requestOrigin = (request: IncomingMessage) => {
+  const forwardedProtocol = request.headers["x-forwarded-proto"]
+  const forwarded = (Array.isArray(forwardedProtocol)
+    ? forwardedProtocol[0]
+    : forwardedProtocol)?.split(",")[0]?.trim()
+  const protocol = forwarded === "http" || forwarded === "https"
+    ? `${forwarded}:`
+    : "encrypted" in request.socket && request.socket.encrypted
+      ? "https:"
+      : "http:"
+  return new URL(`${protocol}//${request.headers.host ?? "crit.local"}`).origin
+}
+
+const internalRequestOrigin = (request: IncomingMessage) => {
+  const address = request.socket.localAddress ?? "127.0.0.1"
+  const hostname = address.includes(":") ? `[${address}]` : address
+  const protocol = "encrypted" in request.socket && request.socket.encrypted
+    ? "https:"
+    : "http:"
+  return `${protocol}//${hostname}:${request.socket.localPort ?? 80}`
+}
+
+const relayRequestHeaders = (request: IncomingMessage) => {
+  const headers = new Headers()
+  for (const name of [
+    "accept",
+    "accept-language",
+    "authorization",
+    "cookie",
+    "user-agent"
+  ]) {
+    const value = request.headers[name]
+    if (typeof value === "string") headers.set(name, value)
+  }
+  if (request.headers.host !== undefined) headers.set("host", request.headers.host)
+  headers.set("accept", "text/html,application/xhtml+xml")
+  return headers
+}
+
+class FrameRelayFailure extends Error {
+  constructor(
+    readonly status: number,
+    message: string
+  ) {
+    super(message)
+  }
+}
+
+const fetchFrameDocument = async (
+  request: IncomingMessage,
+  canonicalUrl: URL,
+  publicOrigin: string | undefined
+) => {
+  const browserOrigin = requestOrigin(request)
+  const allowedOrigins = new Set([
+    browserOrigin,
+    ...(publicOrigin === undefined ? [] : [publicOrigin])
+  ])
+  if (!allowedOrigins.has(canonicalUrl.origin)) {
+    throw new FrameRelayFailure(403, "Frame URL is outside the trusted application origin")
+  }
+  if (canonicalUrl.pathname.startsWith(CRIT_FRAME_RELAY_PATH)) {
+    throw new FrameRelayFailure(400, "A Frame cannot relay another Frame relay URL")
+  }
+
+  const internalOrigin = internalRequestOrigin(request)
+  let logicalUrl = new URL(
+    `${canonicalUrl.pathname}${canonicalUrl.search}`,
+    browserOrigin
+  )
+  let target = new URL(`${logicalUrl.pathname}${logicalUrl.search}`, internalOrigin)
+  const headers = relayRequestHeaders(request)
+  for (let redirects = 0; redirects <= 5; redirects += 1) {
+    const output = await fetch(target, {
+      headers,
+      redirect: "manual"
+    })
+    if (output.status < 300 || output.status >= 400) {
+      return { output, documentUrl: logicalUrl.href }
+    }
+    if (redirects === 5) {
+      throw new FrameRelayFailure(502, "Frame request redirected too many times")
+    }
+    const location = output.headers.get("location")
+    if (location === null) {
+      throw new FrameRelayFailure(502, "Frame redirect did not include a location")
+    }
+    const nextLogicalUrl = new URL(location, logicalUrl)
+    if (!allowedOrigins.has(nextLogicalUrl.origin)) {
+      throw new FrameRelayFailure(403, "Frame request redirected outside the trusted application origin")
+    }
+    logicalUrl = new URL(
+      `${nextLogicalUrl.pathname}${nextLogicalUrl.search}`,
+      browserOrigin
+    )
+    target = new URL(`${logicalUrl.pathname}${logicalUrl.search}`, internalOrigin)
+  }
+  throw new FrameRelayFailure(502, "Frame request failed")
+}
 
 const requestedSnapshotId = (request: IncomingMessage) => {
   const pathname = requestPathname(request)
@@ -249,33 +358,23 @@ const resolvedVirtualEditorId = () =>
 const editorModuleSource = (
   reactEntry: string,
   delivery: "vite" | "bundle",
-  frameLoading: "navigate" | "parent-fetch" = "navigate",
-  publicOrigin?: string
+  frameLoading: "navigate" | "relay" | "parent-fetch" = "navigate"
 ) => {
-  const frameLoadingPolicy = frameLoading === "parent-fetch"
-    ? { strategy: "parent-fetch", ...(publicOrigin === undefined ? {} : { aliasOrigin: publicOrigin }) }
-    : { strategy: "navigate" }
+  const frameLoadingPolicy = frameLoading === "navigate"
+    ? { strategy: "navigate" }
+    : { strategy: "relay" }
   return `
-  import { createElement, Fragment } from "react"
+  import { createElement } from "react"
   import { createRoot } from "react-dom/client"
-  import { DialRoot, useDialKit } from "dialkit"
   ${delivery === "vite"
-    ? `import "/@vite/client"
-  import "dialkit/styles.css"`
-    : `import dialKitStyles from "dialkit/styles.css"`}
+    ? `import "/@vite/client"`
+    : ""}
   import {
     connectCanvasLiveRefresh,
     Crit,
     DEFAULT_CANVAS_CAMERA_OPTIONS,
     DEFAULT_FRAME_CHROME_SETTINGS
   } from ${JSON.stringify(reactEntry)}
-
-  ${delivery === "bundle" ? `
-  const dialKitStyle = document.createElement("style")
-  dialKitStyle.dataset.critDialkit = ""
-  dialKitStyle.textContent = dialKitStyles
-  document.head.append(dialKitStyle)
-  ` : ""}
 
   const canvasId = document.body.dataset.critCanvasId || "default"
 
@@ -297,56 +396,13 @@ const editorModuleSource = (
   }
 
   function CritEditor() {
-    const chrome = useDialKit("Frame chrome", {
-      titleMinimumCharacters: [
-        DEFAULT_FRAME_CHROME_SETTINGS.titleMinimumCharacters,
-        0,
-        80,
-        1
-      ],
-      iconMinimumWidth: {
-        snapshot: [DEFAULT_FRAME_CHROME_SETTINGS.snapshotMinimumWidth, 0, 1600, 1],
-        breakpoints: [DEFAULT_FRAME_CHROME_SETTINGS.breakpointsMinimumWidth, 0, 1600, 1],
-        open: [DEFAULT_FRAME_CHROME_SETTINGS.openMinimumWidth, 0, 1600, 1],
-        fullscreen: [DEFAULT_FRAME_CHROME_SETTINGS.fullscreenMinimumWidth, 0, 1600, 1],
-        delete: [DEFAULT_FRAME_CHROME_SETTINGS.deleteMinimumWidth, 0, 1600, 1]
-      }
-    }, {
-      id: "crit-frame-chrome",
-      persist: { key: "crit-frame-chrome", storage: "localStorage", presets: true }
+    return createElement(Crit, {
+      canvasId,
+      frameLoading: ${JSON.stringify(frameLoadingPolicy)},
+      onSession: attachLiveRefresh,
+      frameChrome: DEFAULT_FRAME_CHROME_SETTINGS,
+      cameraOptions: DEFAULT_CANVAS_CAMERA_OPTIONS
     })
-    const camera = useDialKit("Camera", {
-      panSpeed: [DEFAULT_CANVAS_CAMERA_OPTIONS.panSpeed, 0.1, 3, 0.05],
-      zoomSpeed: [DEFAULT_CANVAS_CAMERA_OPTIONS.zoomSpeed, 0.1, 3, 0.05]
-    }, {
-      id: "crit-camera",
-      persist: { key: "crit-camera", storage: "localStorage", presets: true }
-    })
-    return createElement(Fragment, null,
-      createElement(Crit, {
-        canvasId,
-        frameLoading: ${JSON.stringify(frameLoadingPolicy)},
-        onSession: attachLiveRefresh,
-        frameChrome: {
-          titleMinimumCharacters: chrome.titleMinimumCharacters,
-          snapshotMinimumWidth: chrome.iconMinimumWidth.snapshot,
-          breakpointsMinimumWidth: chrome.iconMinimumWidth.breakpoints,
-          openMinimumWidth: chrome.iconMinimumWidth.open,
-          fullscreenMinimumWidth: chrome.iconMinimumWidth.fullscreen,
-          deleteMinimumWidth: chrome.iconMinimumWidth.delete
-        },
-        cameraOptions: {
-          panSpeed: camera.panSpeed,
-          zoomSpeed: camera.zoomSpeed
-        }
-      }),
-      createElement(DialRoot, {
-        defaultOpen: true,
-        position: "bottom-right",
-        productionEnabled: true,
-        theme: "system"
-      })
-    )
   }
 
   createRoot(document.getElementById("crit-root")).render(
@@ -356,13 +412,12 @@ const editorModuleSource = (
 }
 
 const buildEditorBundle = async (
-  frameLoading: "navigate" | "parent-fetch",
-  publicOrigin?: string
+  frameLoading: "navigate" | "relay" | "parent-fetch"
 ) => {
   const reactEntry = resolveReactEntry()
   const result = await build({
     stdin: {
-      contents: editorModuleSource(reactEntry, "bundle", frameLoading, publicOrigin),
+      contents: editorModuleSource(reactEntry, "bundle", frameLoading),
       loader: "js",
       resolveDir: path.dirname(reactEntry),
       sourcefile: "crit-editor.js"
@@ -419,7 +474,7 @@ export const crit = (options: CritVitePluginOptions = {}): Plugin => {
     const editorBundle =
       editorBase === undefined || !isPreview
         ? undefined
-        : buildEditorBundle(frameLoading, publicOrigin)
+        : buildEditorBundle(frameLoading)
     const runtime = ManagedRuntime.make(
       Layer.mergeAll(
         documentLayer,
@@ -435,6 +490,7 @@ export const crit = (options: CritVitePluginOptions = {}): Plugin => {
         snapshots: SnapshotService
       }).pipe(
         Effect.map(({ activity, documents, snapshots }) => ({
+          documents,
           snapshots,
           handler: makeCritHttpHandler(
             CanvasRepositoryCritClient.make(documents, {
@@ -542,6 +598,74 @@ export const crit = (options: CritVitePluginOptions = {}): Plugin => {
     }
 
     server.middlewares.use((request, response, next) => {
+      const frameRoute = frameLoading === "navigate"
+        ? undefined
+        : parseFrameRelayPath(requestPathname(request))
+      if (frameRoute !== undefined) {
+        if (!requireGet(request, response)) return
+        if (frameRoute === null) {
+          sendJson(response, 400, {
+            error: { code: "invalid-request", message: "Invalid Frame relay URL" }
+          })
+          return
+        }
+        void services
+          .then(({ documents }) => runtime.runPromise(documents.load(frameRoute.canvasId)))
+          .then(async (document) => {
+            const frame = document.frames.find(({ id }) => id === frameRoute.frameId)
+            if (frame === undefined || frame.snapshot !== undefined) {
+              throw new CritClientNotFound({ id: frameRoute.frameId })
+            }
+            let canonicalUrl: URL
+            try {
+              canonicalUrl = new URL(frame.url, publicOrigin ?? requestOrigin(request))
+            } catch {
+              throw new FrameRelayFailure(400, "Frame URL is invalid")
+            }
+            if (canonicalUrl.protocol !== "http:" && canonicalUrl.protocol !== "https:") {
+              throw new FrameRelayFailure(403, "Frame URL must use HTTP(S)")
+            }
+            const { output, documentUrl } = await fetchFrameDocument(
+              request,
+              canonicalUrl,
+              publicOrigin
+            )
+            if (!output.ok) {
+              throw new FrameRelayFailure(502, `Frame request failed (${output.status})`)
+            }
+            if (!output.headers.get("content-type")?.toLowerCase().includes("text/html")) {
+              throw new FrameRelayFailure(502, "Frame response is not HTML")
+            }
+            return prepareFrameRelayHtml(
+              await output.text(),
+              documentUrl,
+              canonicalUrl.href
+            )
+          })
+          .then((html) => {
+            response.statusCode = 200
+            response.setHeader("Cache-Control", "no-store")
+            response.setHeader("Content-Type", "text/html; charset=utf-8")
+            response.setHeader("X-Content-Type-Options", "nosniff")
+            response.end(html)
+          })
+          .catch((cause: unknown) => {
+            if (cause instanceof CritClientNotFound) {
+              sendJson(response, 404, {
+                error: { code: "not-found", message: "Frame not found" }
+              })
+              return
+            }
+            if (cause instanceof FrameRelayFailure) {
+              sendJson(response, cause.status, {
+                error: { code: "frame-relay-failed", message: cause.message }
+              })
+              return
+            }
+            sendUnexpectedFailure(response, cause)
+          })
+        return
+      }
       if (
         editorBundle !== undefined &&
         editorAssetPath !== undefined &&
@@ -661,7 +785,7 @@ export const crit = (options: CritVitePluginOptions = {}): Plugin => {
     load(id) {
       if (id === resolvedVirtualEditorId()) {
         return editorModuleSource(
-          resolveReactEntry(), "vite", frameLoading, publicOrigin
+          resolveReactEntry(), "vite", frameLoading
         )
       }
     },

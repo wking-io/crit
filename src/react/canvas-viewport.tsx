@@ -36,6 +36,15 @@ import {
   canvasCursor,
   type CanvasTool
 } from "./canvas-cursors.js"
+import {
+  frameIdsIntersectingSelectionBox,
+  isAdditiveFrameSelection,
+  selectCanvasFrame,
+  selectCanvasFrameForMove,
+  selectCanvasFramesInBox,
+  selectionBoxBetween,
+  type CanvasSelectionBox
+} from "./canvas-frame-selection.js"
 import type { ResizeHandlePosition } from "./canvas-selection.js"
 import {
   beginCanvasInteraction,
@@ -46,9 +55,12 @@ import {
 import { CanvasToolbar } from "./canvas-toolbar.js"
 import {
   FrameCard,
-  type FrameLoadingPolicy,
   type FrameChromeSettings
 } from "./frame-card.js"
+import {
+  frameIframeUrl,
+  type FrameLoadingPolicy
+} from "./frame-loading.js"
 import { frameStatus, shortIdForIndex } from "./frame-chrome.js"
 import {
   completeFrameBreakpointSet,
@@ -192,7 +204,19 @@ export function CanvasViewport({
   cameraOptionsRef.current = cameraOptions
   const [viewport, setViewport] = useState({ width: 0, height: 0 })
   const [preview, setPreview] = useState<Preview>({})
-  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(
+    () => new Set()
+  )
+  const frameIds = useMemo(
+    () => new Set(document.frames.map((frame) => frame.id)),
+    [document.frames]
+  )
+  const selectedFrameIds = useMemo(
+    () => new Set([...selectedIds].filter((id) => frameIds.has(id))),
+    [frameIds, selectedIds]
+  )
+  const [selectionMarquee, setSelectionMarquee] =
+    useState<CanvasSelectionBox | null>(null)
   const [tool, setTool] = useState<CanvasTool>("select")
   const [panning, setPanning] = useState(false)
   const [canvasMenu, setCanvasMenu] = useState<
@@ -247,14 +271,23 @@ export function CanvasViewport({
   }, [])
 
   useEffect(() => {
-    if (
-      selectedId !== null &&
-      !document.frames.some((frame) => frame.id === selectedId) &&
-      !document.notes.some((note) => note.id === selectedId)
-    ) {
-      setSelectedId(null)
-    }
-  }, [document.frames, document.notes, selectedId])
+    const validIds = new Set([
+      ...document.frames.map((frame) => frame.id),
+      ...document.notes.map((note) => note.id)
+    ])
+    setSelectedIds((current) => {
+      const next = new Set([...current].filter((id) => validIds.has(id)))
+      return next.size === current.size ? current : next
+    })
+  }, [document.frames, document.notes])
+
+  const selectFrame = useCallback((frameId: string, additive: boolean) => {
+    setSelectedIds((current) => selectCanvasFrame(
+      new Set([...current].filter((id) => frameIds.has(id))),
+      frameId,
+      additive
+    ))
+  }, [frameIds])
 
   const run = useCallback(
     (...commands: ReadonlyArray<CanvasCommandValue>) => {
@@ -355,7 +388,7 @@ export function CanvasViewport({
     }
     const id = localId("note")
     run(CanvasCommand.addNote({ id, text: "", author, x, y }))
-    setSelectedId(id)
+    setSelectedIds(new Set([id]))
   }, [author, onCommandError, run])
 
   const addFrameAt = useCallback((url: string, title: string, x: number, y: number) => {
@@ -369,7 +402,7 @@ export function CanvasViewport({
       }),
       CanvasCommand.moveFrame({ id, x, y })
     )
-    setSelectedId(id)
+    setSelectedIds(new Set([id]))
   }, [run])
 
   const duplicateFrame = useCallback((
@@ -391,10 +424,74 @@ export function CanvasViewport({
     if (commands.length > 0) run(...commands)
   }, [document, run])
 
+  const startSelectionMarquee = (
+    event: ReactPointerEvent<HTMLDivElement>
+  ) => {
+    if (event.button !== 0) return
+    event.preventDefault()
+    captureCanvasInteractionPointer(event)
+    const rect = event.currentTarget.getBoundingClientRect()
+    const start = {
+      x: event.clientX - rect.left,
+      y: event.clientY - rect.top
+    }
+    const additive = isAdditiveFrameSelection(event)
+    const initialSelection = additive
+      ? selectedFrameIds
+      : new Set<string>()
+    const frameTargets = document.frames.map((frame) => ({
+      id: frame.id,
+      geometry: geometryOf(frame)
+    }))
+    let dragged = false
+    if (!additive) setSelectedIds(initialSelection)
+
+    const move = (next: PointerEvent) => {
+      const current = {
+        x: next.clientX - rect.left,
+        y: next.clientY - rect.top
+      }
+      if (!dragged && Math.hypot(current.x - start.x, current.y - start.y) < 3) {
+        return
+      }
+      dragged = true
+      setSelectionMarquee(selectionBoxBetween(start, current))
+      const worldBox = selectionBoxBetween(
+        {
+          x: (start.x - camera.x) / camera.zoom,
+          y: (start.y - camera.y) / camera.zoom
+        },
+        {
+          x: (current.x - camera.x) / camera.zoom,
+          y: (current.y - camera.y) / camera.zoom
+        }
+      )
+      setSelectedIds(selectCanvasFramesInBox(
+        initialSelection,
+        frameIdsIntersectingSelectionBox(frameTargets, worldBox),
+        additive
+      ))
+    }
+    const cleanup = () => {
+      setSelectionMarquee(null)
+      window.removeEventListener("pointermove", move)
+      window.removeEventListener("pointerup", end)
+      window.removeEventListener("pointercancel", cancel)
+    }
+    const end = () => cleanup()
+    const cancel = () => {
+      setSelectedIds(initialSelection)
+      cleanup()
+    }
+    window.addEventListener("pointermove", move)
+    window.addEventListener("pointerup", end, { once: true })
+    window.addEventListener("pointercancel", cancel, { once: true })
+  }
+
   const startPan = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) return
     event.preventDefault()
-    setSelectedId(null)
+    setSelectedIds(new Set())
     setPanning(true)
     const start = { x: event.clientX, y: event.clientY, camera }
     captureCanvasInteractionPointer(event)
@@ -458,21 +555,34 @@ export function CanvasViewport({
   }, [addNoteAt, camera, viewport])
 
   const deleteSelection = useCallback(() => {
-    if (selectedId === null) return
-    if (document.frames.some((frame) => frame.id === selectedId)) {
-      run(CanvasCommand.removeFrame({ id: selectedId }))
+    if (selectedIds.size === 0) return
+    const selectedFrames = document.frames.filter((frame) =>
+      selectedFrameIds.has(frame.id)
+    )
+    if (selectedFrames.length > 0) {
+      run(...selectedFrames.map((frame) =>
+        CanvasCommand.removeFrame({ id: frame.id })
+      ))
     } else {
-      const note = document.notes.find((candidate) => candidate.id === selectedId)
+      const note = document.notes.find((candidate) => selectedIds.has(candidate.id))
       if (note !== undefined) {
         if (author?.id !== note.author.id) {
           onCommandError?.("Only the Note Author may remove it")
           return
         }
-        run(CanvasCommand.removeNote({ id: selectedId, actorId: author.id }))
+        run(CanvasCommand.removeNote({ id: note.id, actorId: author.id }))
       }
     }
-    setSelectedId(null)
-  }, [author, document.frames, document.notes, onCommandError, run, selectedId])
+    setSelectedIds(new Set())
+  }, [
+    author,
+    document.frames,
+    document.notes,
+    onCommandError,
+    run,
+    selectedFrameIds,
+    selectedIds
+  ])
 
   useHotkeys([
     {
@@ -553,7 +663,8 @@ export function CanvasViewport({
 
   const startMove = (
     event: ReactPointerEvent,
-    item: CanvasFrame | CanvasNote
+    item: CanvasFrame | CanvasNote,
+    selectedFrameIds?: ReadonlySet<string>
   ) => {
     event.preventDefault()
     event.stopPropagation()
@@ -569,7 +680,8 @@ export function CanvasViewport({
       itemId: item.id,
       startGeometry: start.geometry,
       kind: { type: "move" },
-      geometryOverrides: preview
+      geometryOverrides: preview,
+      ...(selectedFrameIds === undefined ? {} : { selectedFrameIds })
     })
     const deltaAt = () => canvasDragDelta({
       pointer,
@@ -717,7 +829,9 @@ export function CanvasViewport({
       }}
       data-canvas-tool={tool}
       onPointerDown={(event) => {
-        if (event.target === event.currentTarget) setSelectedId(null)
+        if (event.target !== event.currentTarget) return
+        if (tool === "select") startSelectionMarquee(event)
+        else if (!isAdditiveFrameSelection(event)) setSelectedIds(new Set())
       }}
       style={{
         "--crit-canvas-cursor": canvasCursor(tool, panning),
@@ -750,12 +864,12 @@ export function CanvasViewport({
               geometry={geometryOf(item)}
               zoom={camera.zoom}
               iframeAllow={iframeAllow}
-              {...(frameLoading === undefined ? {} : { frameLoading })}
+              iframeUrl={frameIframeUrl(document.id, item, frameLoading)}
               {...(iframeSandbox === undefined ? {} : { iframeSandbox })}
               iframeVisible={intersectsViewport(
                 geometryOf(item), camera, viewport.width, viewport.height
               )}
-              selected={selectedId === item.id}
+              selected={selectedIds.has(item.id)}
               commentMode={tool === "comment"}
               commentThreads={activeComments.filter((thread) => thread.frameId === item.id)}
               {...(commentReview.kind === "thread" && commentReview.frameId === item.id
@@ -769,13 +883,21 @@ export function CanvasViewport({
               onOpenComment={(threadId) => {
                 focusCommentReview({ kind: "thread", threadId })
               }}
-              onSelect={() => setSelectedId(item.id)}
+              onSelect={(additive = false) =>
+                selectFrame(item.id, additive)}
               onInputIntent={(intent) => {
                 if (intent.type === "select") {
-                  setSelectedId(item.id)
+                  selectFrame(item.id, intent.additive)
                 } else if (intent.type === "delete") {
-                  run(CanvasCommand.removeFrame({ id: item.id }))
-                  setSelectedId(null)
+                  const ids = selectedFrameIds.has(item.id)
+                    ? document.frames.filter((frame) =>
+                        selectedFrameIds.has(frame.id)
+                      )
+                    : [item]
+                  run(...ids.map((frame) =>
+                    CanvasCommand.removeFrame({ id: frame.id })
+                  ))
+                  setSelectedIds(new Set())
                 } else if (intent.type === "tool") {
                   setTool(intent.tool)
                 } else if (intent.type === "zoom-step") {
@@ -794,8 +916,13 @@ export function CanvasViewport({
                 }
               }}
               onMove={(event, frame) => {
-                setSelectedId(frame.id)
-                startMove(event, frame)
+                const selection = selectCanvasFrameForMove(
+                  selectedFrameIds,
+                  frame.id,
+                  isAdditiveFrameSelection(event)
+                )
+                setSelectedIds(selection)
+                startMove(event, frame, selection)
               }}
               onBringToFront={() =>
                 run(CanvasCommand.bringFrameToFront({ id: item.id }))
@@ -845,9 +972,9 @@ export function CanvasViewport({
               key={item.id}
               note={item}
               geometry={geometryOf(item)}
-              selected={selectedId === item.id}
+              selected={selectedIds.has(item.id)}
               zoom={camera.zoom}
-              onSelect={() => setSelectedId(item.id)}
+              onSelect={() => setSelectedIds(new Set([item.id]))}
               onBringToFront={() =>
                 run(CanvasCommand.bringNoteToFront({ id: item.id }))
               }
@@ -907,6 +1034,18 @@ export function CanvasViewport({
           />
         ) : null}
       </div>
+      {selectionMarquee === null ? null : (
+        <div
+          aria-hidden="true"
+          className="crit-canvas__selection-marquee"
+          style={{
+            height: selectionMarquee.height,
+            left: selectionMarquee.x,
+            top: selectionMarquee.y,
+            width: selectionMarquee.width
+          }}
+        />
+      )}
       {tool === "pan" ? (
         <div
           aria-hidden="true"

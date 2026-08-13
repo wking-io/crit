@@ -3,6 +3,8 @@ import { MOVE_CANVAS_CURSOR } from "./move-cursor.js"
 import { FRAME_CORNER_RADIUS } from "./frame-geometry.js"
 
 export const critStyles = String.raw`
+@import url("https://rsms.me/inter/inter.css");
+
 .crit-canvas {
   --crit-ink: #191918;
   --crit-paper: oklch(98.5% 0 none);
@@ -38,6 +40,37 @@ export const critStyles = String.raw`
   position: absolute;
   touch-action: none;
   z-index: 900;
+}
+
+.crit-canvas__selection-marquee {
+  --crit-selection-marquee-ink: var(--crit-color-t1, oklch(52% 0 none));
+  --crit-selection-marquee-surface: color-mix(
+    in oklch,
+    var(--crit-color-p2, oklch(65% 0 none)) 10%,
+    transparent
+  );
+  background-image:
+    linear-gradient(to right, var(--crit-selection-marquee-ink) 0 9px, transparent 9px 12px, var(--crit-selection-marquee-ink) 12px calc(100% - 12px), transparent calc(100% - 12px) calc(100% - 9px), var(--crit-selection-marquee-ink) calc(100% - 9px)),
+    linear-gradient(to right, var(--crit-selection-marquee-ink) 0 9px, transparent 9px 12px, var(--crit-selection-marquee-ink) 12px calc(100% - 12px), transparent calc(100% - 12px) calc(100% - 9px), var(--crit-selection-marquee-ink) calc(100% - 9px)),
+    linear-gradient(to bottom, var(--crit-selection-marquee-ink) 0 9px, transparent 9px 12px, var(--crit-selection-marquee-ink) 12px calc(100% - 12px), transparent calc(100% - 12px) calc(100% - 9px), var(--crit-selection-marquee-ink) calc(100% - 9px)),
+    linear-gradient(to bottom, var(--crit-selection-marquee-ink) 0 9px, transparent 9px 12px, var(--crit-selection-marquee-ink) 12px calc(100% - 12px), transparent calc(100% - 12px) calc(100% - 9px), var(--crit-selection-marquee-ink) calc(100% - 9px)),
+    linear-gradient(var(--crit-selection-marquee-surface), var(--crit-selection-marquee-surface));
+  background-position:
+    0 4px,
+    0 calc(100% - 4px),
+    4px 0,
+    calc(100% - 4px) 0,
+    4px 4px;
+  background-repeat: no-repeat;
+  background-size:
+    100% 1px,
+    100% 1px,
+    1px 100%,
+    1px 100%,
+    calc(100% - 8px) calc(100% - 8px);
+  pointer-events: none;
+  position: absolute;
+  z-index: 950;
 }
 
 .crit-toolbar {
@@ -158,7 +191,10 @@ export const critStyles = String.raw`
   cursor: ${MOVE_CANVAS_CURSOR};
   display: flex;
   flex: 0 0 var(--crit-frame-chrome-height);
-  font-family: system-ui, -apple-system, sans-serif;
+  font-family: InterVariable, Inter, sans-serif;
+  font-feature-settings: "calt" 1, "case" 1, "ss02" 1, "tnum" 1, "ss03" 1;
+  font-optical-sizing: none;
+  font-variation-settings: "opsz" 14;
   gap: calc(12px * var(--crit-ui));
   height: var(--crit-frame-chrome-height);
   justify-content: space-between;
@@ -259,9 +295,12 @@ export const critStyles = String.raw`
   align-items: center;
   color: var(--frame-ink);
   display: flex;
-  font: 400 calc(14px * var(--crit-ui))/calc(20px * var(--crit-ui)) system-ui, -apple-system, sans-serif;
+  font-family: inherit;
+  font-size: calc(14px * var(--crit-ui));
+  font-weight: 400;
   gap: calc(3px * var(--crit-ui));
   height: calc(20px * var(--crit-ui));
+  line-height: calc(20px * var(--crit-ui));
   max-width: 100%;
   min-width: 0;
   width: max-content;
@@ -324,7 +363,7 @@ export const critStyles = String.raw`
   display: block;
   flex: 0 0 calc(20px * var(--crit-ui));
   color: var(--frame-ink);
-  font-family: system-ui, -apple-system, sans-serif;
+  font-family: inherit;
   font-size: calc(14px * var(--crit-ui));
   font-weight: 400;
   height: calc(20px * var(--crit-ui));
@@ -353,7 +392,7 @@ export const critStyles = String.raw`
 }
 
 .crit-frame__viewport {
-  background: oklch(97% 0.001 106.4);
+  background: var(--crit-frame-viewport-surface, oklch(99% 0 none));
   border-radius: calc(8px * var(--crit-ui));
   flex: 1;
   min-height: 0;
@@ -370,7 +409,7 @@ export const critStyles = String.raw`
   position: absolute;
   z-index: 2;
 }
-.crit-frame__viewport iframe { background: oklch(97% 0.001 106.4); border: 0; height: 100%; inset: 0; position: absolute; width: 100%; }
+.crit-frame__viewport iframe { background: var(--crit-frame-viewport-surface, oklch(99% 0 none)); border: 0; height: 100%; inset: 0; position: absolute; width: 100%; }
 .crit-frame__paused { color: var(--crit-muted); font: calc(10px * var(--crit-ui))/1.5 system-ui, sans-serif; padding: calc(24px * var(--crit-ui)); }
 .crit-frame__comment-fallback { background: transparent; border: 0; cursor: crosshair; inset: 0; padding: 0; position: absolute; z-index: 3; }
 .crit-comment-pin { align-items: center; background: #fff; border: 1px solid currentColor; border-radius: 999px; box-shadow: 0 2px 6px oklch(14.7% 0.004 49.3 / 18%); cursor: pointer; display: grid; height: calc(24px * var(--crit-ui)); justify-content: center; padding: calc(3px * var(--crit-ui)); position: absolute; transform: translate(-50%, -100%); transition: background 80ms ease, border-color 80ms ease, box-shadow 80ms ease; width: calc(24px * var(--crit-ui)); z-index: 4; }

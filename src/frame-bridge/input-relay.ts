@@ -1,5 +1,5 @@
 export type FrameInputIntent =
-  | { readonly type: "select" }
+  | { readonly type: "select"; readonly additive: boolean }
   | { readonly type: "delete" }
   | { readonly type: "tool"; readonly tool: "select" | "pan" }
   | { readonly type: "zoom-step"; readonly direction: -1 | 1 }
@@ -57,7 +57,17 @@ export function createFrameInputRelay() {
   }
 
   return {
-    select: () => ({ type: "select" as const }),
+    select: (input?: {
+      readonly ctrlKey?: boolean
+      readonly metaKey?: boolean
+      readonly shiftKey?: boolean
+    }) => ({
+      type: "select" as const,
+      additive:
+        input?.ctrlKey === true ||
+        input?.metaKey === true ||
+        input?.shiftKey === true
+    }),
     hotkey: (input: {
       readonly code: string
       readonly ctrlKey: boolean
@@ -449,7 +459,7 @@ export const connectSameOriginFrameInput = (input: {
     event.stopPropagation()
     emit(intent)
   }
-  const selectFrame = () => emit(relay.select())
+  const selectFrame = (event: PointerEvent) => emit(relay.select(event))
   const options = { capture: true, passive: false } as const
   const nativeGestures = usesNativeGestureEvents(input.target)
   input.target.addEventListener("wheel", captureWheel, options)

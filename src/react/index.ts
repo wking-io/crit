@@ -57,9 +57,13 @@ export {
 } from "./glyph.js"
 export {
   DEFAULT_FRAME_CHROME_SETTINGS,
-  type FrameLoadingPolicy,
   type FrameChromeSettings
 } from "./frame-card.js"
+export {
+  DEFAULT_FRAME_LOADING_POLICY,
+  frameIframeUrl,
+  type FrameLoadingPolicy
+} from "./frame-loading.js"
 export {
   DEFAULT_CANVAS_CAMERA_OPTIONS,
   type CanvasCameraOptions,
