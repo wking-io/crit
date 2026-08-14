@@ -56,7 +56,6 @@ run([
 ])
 
 let canvas = run(["open", "feature-lab"])
-const author = await gitAuthor(playground)
 const legacyFrameIds = new Set([
   "checkout-draft",
   "checkout-ready",
