@@ -272,6 +272,13 @@ export const critStyles = String.raw`
   width: calc(16px * var(--crit-ui));
 }
 
+.crit-frame__action {
+  flex-basis: calc(22px * var(--crit-ui));
+  height: var(--crit-frame-chrome-height);
+  padding: calc(6px * var(--crit-ui)) calc(3px * var(--crit-ui));
+  width: calc(22px * var(--crit-ui));
+}
+
 .crit-frame__mark:hover, .crit-frame__mark:focus-visible,
 .crit-frame__mark[aria-expanded="true"],
 .crit-frame__action:hover, .crit-frame__action:focus-visible { transform: scale(1.08); }
@@ -423,8 +430,9 @@ export const critStyles = String.raw`
   align-items: center;
   display: flex;
   flex: 0 0 auto;
-  gap: calc(6px * var(--crit-ui));
+  gap: 0;
   justify-content: flex-end;
+  margin-inline: calc(-3px * var(--crit-ui));
 }
 
 .crit-frame__action[data-snapshotting] svg {
@@ -613,7 +621,7 @@ export const critStyles = String.raw`
   display: grid;
   font-family: system-ui, -apple-system, sans-serif;
   font-weight: 400;
-  gap: 8px;
+  gap: 0;
   left: 16px;
   min-height: 88px;
   padding: var(--crit-help-inset);

@@ -376,6 +376,13 @@ describe("Crit", () => {
     expect(cssRule(".crit-frame__surface::before")).toContain("z-index: 3")
     expect(chrome).toContain("flex: 0 0 var(--crit-frame-chrome-height)")
     expect(chrome).toContain("z-index: 2")
+    expect(cssRule(".crit-frame__actions")).toContain("gap: 0")
+    expect(cssRule(".crit-frame__actions")).toContain(
+      "margin-inline: calc(-3px * var(--crit-ui))"
+    )
+    expect(critStyles).toContain(
+      ".crit-frame__action {\n  flex-basis: calc(22px * var(--crit-ui));\n  height: var(--crit-frame-chrome-height);\n  padding: calc(6px * var(--crit-ui)) calc(3px * var(--crit-ui));\n  width: calc(22px * var(--crit-ui));\n}"
+    )
     expect(viewport).toContain("flex: 1")
     expect(viewport).toContain("min-height: 0")
     expect(critStyles).toContain("transform: scale(1.08)")
@@ -445,6 +452,7 @@ describe("Crit", () => {
     expect(cssRule(".crit-help__shortcut")).toContain(
       "border-radius: calc(var(--crit-help-radius) - var(--crit-help-inset))"
     )
+    expect(cssRule(".crit-help")).toContain("gap: 0")
   })
 
   it("describes resize handles through contextual help", () => {
