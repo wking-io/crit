@@ -28,7 +28,7 @@ export interface HttpCritClientOptions {
 
 const parseJson = (response: Response) =>
   Effect.tryPromise({
-    try: () => response.json() as Promise<unknown>,
+    try: () => response.json(),
     catch: (cause) =>
       new Error(cause instanceof Error ? cause.message : "Invalid JSON response")
   })

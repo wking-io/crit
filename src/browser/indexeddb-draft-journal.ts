@@ -55,9 +55,7 @@ const decodeStoredDraft = (
   if (typeof value !== "object" || value === null || !("draft" in value)) {
     throw new Error("Draft journal record is malformed")
   }
-  const draft = Schema.decodeUnknownSync(CanvasDraft)(
-    (value as StoredDraft).draft
-  )
+  const draft = Schema.decodeUnknownSync(CanvasDraft)(value.draft)
   if (draft.canvasId !== canvasId || draft.sessionId !== sessionId) {
     throw new Error("Draft journal record identity does not match its key")
   }

@@ -132,7 +132,8 @@ export function CanvasToolbar({
   useEffect(() => {
     if (!arrangementOpen) return
     const closeForOutsidePointer = (event: PointerEvent) => {
-      if (!arrangementRef.current?.contains(event.target as Node)) {
+      if (!(event.target instanceof Node) ||
+        !arrangementRef.current?.contains(event.target)) {
         closeArrangementMenu()
       }
     }

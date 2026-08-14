@@ -10,6 +10,28 @@ export type FrameCommentEvent =
   | { readonly type: "select"; readonly anchor: ElementCommentAnchor }
   | { readonly type: "open"; readonly id: string }
 
+type FrameCommentMessageEvent = {
+  readonly source: unknown
+  readonly data: unknown
+}
+
+interface FrameCommentMessageTarget {
+  addEventListener(
+    type: "message",
+    listener: (event: FrameCommentMessageEvent) => void
+  ): void
+  removeEventListener(
+    type: "message",
+    listener: (event: FrameCommentMessageEvent) => void
+  ): void
+}
+
+interface BridgedCommentFrame {
+  readonly contentWindow: {
+    postMessage(message: unknown, targetOrigin: string): void
+  } | null
+}
+
 const isEvent = (value: unknown): value is FrameCommentEvent & { readonly source: string } => {
   if (typeof value !== "object" || value === null || !("source" in value) || value.source !== CRIT_FRAME_COMMENT_SOURCE || !("type" in value)) return false
   if (value.type === "ready") return true
@@ -20,11 +42,11 @@ const isEvent = (value: unknown): value is FrameCommentEvent & { readonly source
 }
 
 export const connectBridgedFrameComments = (input: {
-  readonly target: Window
-  readonly frameElement: HTMLIFrameElement
+  readonly target: FrameCommentMessageTarget
+  readonly frameElement: BridgedCommentFrame
   readonly onEvent: (event: FrameCommentEvent) => void
 }) => {
-  const receive = (event: MessageEvent) => {
+  const receive = (event: FrameCommentMessageEvent) => {
     if (event.source !== input.frameElement.contentWindow || !isEvent(event.data)) return
     const { source: _source, ...message } = event.data
     input.onEvent(message)

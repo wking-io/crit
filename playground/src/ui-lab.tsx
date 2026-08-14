@@ -10,7 +10,6 @@ import {
   useMemo,
   useRef,
   useState,
-  type CSSProperties,
   type ReactNode
 } from "react"
 
@@ -24,6 +23,7 @@ import type {
 import { CritContextMenu, type ContextMenuItem } from "../../src/react/canvas-context-menu.js"
 import { CanvasActionRunnerProvider } from "../../src/react/canvas-action-runner.js"
 import { CanvasControls } from "../../src/react/canvas-controls.js"
+import { cssVariableStyle } from "../../src/react/css-variable-style.js"
 import { CanvasPresenceIndicator, CanvasSaveIndicator, CritBoundaryMessage } from "../../src/react/canvas-feedback.js"
 import { actionHelpDetails, CanvasHelpPanel } from "../../src/react/canvas-help.js"
 import { CanvasCommentPin } from "../../src/react/canvas-comment-pin.js"
@@ -55,8 +55,7 @@ type TokenName =
   | "--crit-color-t2"
   | `--crit-color-${Exclude<PaletteName, "neutral">}-${TokenStep}`
 
-type LabStyle = CSSProperties & Record<`--${string}`, string | number>
-type TokenValues = Readonly<Record<TokenName, string>>
+type TokenValues = ReadonlyMap<TokenName, string>
 
 const TOKEN_STEPS: ReadonlyArray<TokenStep> = [
   "s1", "s2", "c1", "c2", "c3", "p1", "p2", "t1", "t2"
@@ -92,10 +91,10 @@ const slider = (
   step: number
 ): [number, number, number, number] => [value, min, max, step]
 
-const tokenName = (palette: PaletteName, step: TokenStep): TokenName =>
-  (palette === "neutral"
-    ? `--crit-color-${step}`
-    : `--crit-color-${palette}-${step}`) as TokenName
+const tokenName = (palette: PaletteName, step: TokenStep): TokenName => {
+  if (palette === "neutral") return `--crit-color-${step}`
+  return `--crit-color-${palette}-${step}`
+}
 
 const BASE_PALETTES: ReadonlyArray<{
   readonly id: PaletteName
@@ -126,6 +125,10 @@ const TOKEN_OPTIONS = BASE_TOKENS.map(({ name, palette, shortName }) => ({
   label: `${palette} · ${shortName}`
 }))
 
+const TOKEN_NAMES = new Set<string>(BASE_TOKENS.map(({ name }) => name))
+const isTokenName = (value: string): value is TokenName =>
+  TOKEN_NAMES.has(value)
+
 const tokenSelect = (defaultValue: TokenName): SelectConfig => ({
   type: "select",
   options: TOKEN_OPTIONS,
@@ -142,15 +145,19 @@ const BASE_SCALE_CONFIG = {
     green: slider(HUE_DEFAULTS.green, 0, 360, 0.1),
     purple: slider(HUE_DEFAULTS.purple, 0, 360, 0.1)
   },
-  ...Object.fromEntries(TOKEN_STEPS.map((step) => [step, {
+  s1: {
     _collapsed: true,
-    lightness: slider(COLUMN_DEFAULTS[step].lightness, 0, 100, 0.25),
-    chroma: slider(COLUMN_DEFAULTS[step].chroma, 0, 0.3, 0.001)
-  }])) as Record<TokenStep, {
-    readonly _collapsed: boolean
-    readonly lightness: [number, number, number, number]
-    readonly chroma: [number, number, number, number]
-  }>
+    lightness: slider(COLUMN_DEFAULTS.s1.lightness, 0, 100, 0.25),
+    chroma: slider(COLUMN_DEFAULTS.s1.chroma, 0, 0.3, 0.001)
+  },
+  s2: { _collapsed: true, lightness: slider(COLUMN_DEFAULTS.s2.lightness, 0, 100, 0.25), chroma: slider(COLUMN_DEFAULTS.s2.chroma, 0, 0.3, 0.001) },
+  c1: { _collapsed: true, lightness: slider(COLUMN_DEFAULTS.c1.lightness, 0, 100, 0.25), chroma: slider(COLUMN_DEFAULTS.c1.chroma, 0, 0.3, 0.001) },
+  c2: { _collapsed: true, lightness: slider(COLUMN_DEFAULTS.c2.lightness, 0, 100, 0.25), chroma: slider(COLUMN_DEFAULTS.c2.chroma, 0, 0.3, 0.001) },
+  c3: { _collapsed: true, lightness: slider(COLUMN_DEFAULTS.c3.lightness, 0, 100, 0.25), chroma: slider(COLUMN_DEFAULTS.c3.chroma, 0, 0.3, 0.001) },
+  p1: { _collapsed: true, lightness: slider(COLUMN_DEFAULTS.p1.lightness, 0, 100, 0.25), chroma: slider(COLUMN_DEFAULTS.p1.chroma, 0, 0.3, 0.001) },
+  p2: { _collapsed: true, lightness: slider(COLUMN_DEFAULTS.p2.lightness, 0, 100, 0.25), chroma: slider(COLUMN_DEFAULTS.p2.chroma, 0, 0.3, 0.001) },
+  t1: { _collapsed: true, lightness: slider(COLUMN_DEFAULTS.t1.lightness, 0, 100, 0.25), chroma: slider(COLUMN_DEFAULTS.t1.chroma, 0, 0.3, 0.001) },
+  t2: { _collapsed: true, lightness: slider(COLUMN_DEFAULTS.t2.lightness, 0, 100, 0.25), chroma: slider(COLUMN_DEFAULTS.t2.chroma, 0, 0.3, 0.001) }
 }
 
 // One base-scale assignment study, switchable live through DialKit at /ui.
@@ -275,9 +282,9 @@ const flattenAssignments = (
   value: unknown,
   path: ReadonlyArray<string> = []
 ): ReadonlyArray<Assignment> => {
-  if (typeof value === "string" && value.startsWith("--crit-color-")) {
+  if (typeof value === "string" && isTokenName(value)) {
     return [{
-      token: value as TokenName,
+      token: value,
       variable: assignmentVariable(path)
     }]
   }
@@ -405,18 +412,21 @@ function ColorScale({ values }: { readonly values: TokenValues }) {
             <span className="ui-palette-row__label">{palette.label}</span>
             <ol aria-label={`${palette.label} base color tokens`} className="ui-scale">
               {BASE_TOKENS.filter((token) => token.palette === palette.id).map((token, index) => {
-                const oklch = values[token.name]
+                const oklch = values.get(token.name)
+                if (oklch === undefined) {
+                  throw new TypeError(`Missing UI lab token ${token.name}`)
+                }
                 const displayedColor = shiftHeld ? oklchToHex(oklch) : oklch
                 const tooltipId = `ui-color-${palette.id}-${token.shortName}`
                 return <li
                   className="ui-scale__token"
                   key={token.name}
-                  style={{
+                  style={cssVariableStyle({
                     "--ui-scale-color": `var(${token.name})`,
                     "--ui-scale-ink": index < 5
                       ? "var(--crit-color-t2)"
                       : "var(--crit-color-s1)"
-                  } as LabStyle}
+                  })}
                 >
                   <button
                     aria-describedby={tooltipId}
@@ -706,19 +716,23 @@ const LAB_CONTROLS = CanvasControls.resolve({
   pendingActions: []
 })
 const LAB_FRAME_TARGET = { kind: "frame" as const, id: "lab", label: "Checkout candidate" }
+const LAB_FRAME_PRESETS = [
+  { preset: "mobile", detail: "402 × 874" },
+  { preset: "tablet", detail: "832 × 1194" },
+  { preset: "laptop", detail: "1280 × 832" },
+  { preset: "desktop", detail: "1512 × 982" },
+  { preset: "widescreen", detail: "2560 × 1440" }
+] satisfies ReadonlyArray<{
+  readonly preset: "mobile" | "tablet" | "laptop" | "desktop" | "widescreen"
+  readonly detail: string
+}>
 const FRAME_MENU_ITEMS: ReadonlyArray<ContextMenuItem> = [
   { action: LAB_CONTROLS.action({ id: "open-frame-new-tab", target: LAB_FRAME_TARGET }), href: "about:blank", detail: <Glyph name="externalArrow" /> },
   { action: LAB_CONTROLS.action({ id: "fit-frame-content", target: LAB_FRAME_TARGET }), execute: Effect.void, detail: "F" },
   {
     action: LAB_CONTROLS.action({ id: "open-frame-size-menu", target: LAB_FRAME_TARGET }),
-    items: [
-      ["mobile", "402 × 874"],
-      ["tablet", "832 × 1194"],
-      ["laptop", "1280 × 832"],
-      ["desktop", "1512 × 982"],
-      ["widescreen", "2560 × 1440"]
-    ].map(([preset, detail]) => ({
-      action: LAB_CONTROLS.action({ id: "resize-frame-to-preset", target: LAB_FRAME_TARGET, preset: preset as "mobile" | "tablet" | "laptop" | "desktop" | "widescreen" }),
+    items: LAB_FRAME_PRESETS.map(({ preset, detail }) => ({
+      action: LAB_CONTROLS.action({ id: "resize-frame-to-preset", target: LAB_FRAME_TARGET, preset }),
       execute: Effect.void,
       detail
     }))
@@ -859,27 +873,27 @@ export default function UiLab() {
     id: "crit-ui-color-assignments"
   })
   const assignments = useMemo(() => flattenAssignments(recipes), [recipes])
-  const tokenValues = useMemo(() => Object.fromEntries(
-    BASE_TOKENS.map((token) => {
+  const tokenValues = useMemo(() => new Map<TokenName, string>(
+    BASE_TOKENS.map((token): readonly [TokenName, string] => {
       const column = recipes.baseScale[token.shortName]
       const chroma = recipes.baseScale.greyscale || token.palette === "neutral"
         ? 0
         : column.chroma
-      const hue = chroma === 0
+      const hue = token.palette === "neutral" || chroma === 0
         ? "none"
-        : recipes.baseScale.hues[token.palette as ChromaticPalette]
+        : recipes.baseScale.hues[token.palette]
       return [
         token.name,
         `oklch(${column.lightness}% ${chroma} ${hue})`
       ]
     })
-  ) as Record<TokenName, string>, [recipes.baseScale])
-  const recipeStyle = useMemo(() => Object.fromEntries(
+  ), [recipes.baseScale])
+  const recipeStyle = useMemo(() => cssVariableStyle(Object.fromEntries(
     [
       ...assignments.map(({ token, variable }) => [variable, `var(${token})`]),
-      ...Object.entries(tokenValues)
+      ...tokenValues
     ]
-  ) as LabStyle, [assignments, tokenValues])
+  )), [assignments, tokenValues])
   return (
     <CanvasActionRunnerProvider>
       <style data-crit-ui-styles="">{critStyles}</style>

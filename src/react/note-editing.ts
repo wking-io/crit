@@ -16,7 +16,17 @@ export type NoteCommandCommit = (
   ...commands: ReadonlyArray<CanvasCommandValue>
 ) => void
 
-type NoteEditingTimer = ReturnType<typeof globalThis.setTimeout>
+export interface NoteEditingTimer {
+  readonly cancel: () => void
+}
+
+const setNoteEditingTimer = (
+  callback: () => void,
+  delay: number
+): NoteEditingTimer => {
+  const handle = globalThis.setTimeout(callback, delay)
+  return { cancel: () => globalThis.clearTimeout(handle) }
+}
 
 export const noteEditingCommands = (
   note: Pick<CanvasNote, "id" | "text" | "author" | "geometry">,
@@ -55,8 +65,8 @@ export const createNoteEditingSession = ({
   actorId,
   commit,
   note,
-  setTimer = (callback, delay) => globalThis.setTimeout(callback, delay),
-  clearTimer = (timer) => globalThis.clearTimeout(timer)
+  setTimer = setNoteEditingTimer,
+  clearTimer = (timer) => timer.cancel()
 }: {
   readonly actorId: string | null
   readonly commit: NoteCommandCommit

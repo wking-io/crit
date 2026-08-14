@@ -1,4 +1,4 @@
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
 import { describe, expect, it } from "vitest"
 
 import { Canvas, CanvasCommand } from "../../src/core/index.js"
@@ -16,6 +16,10 @@ import { TEST_AUTHOR } from "../support/author-identity.js"
 const document = Canvas.export(
   Canvas.create({ id: "homepage", title: "Homepage", owner: { id: "git:test", name: "Test Author" } })
 )
+
+const TestErrorBody = Schema.Struct({
+  error: Schema.Struct({ message: Schema.String })
+})
 
 const makeClient = (): CritClient["Service"] & {
   readonly applied: Array<ReadonlyArray<unknown>>
@@ -193,9 +197,7 @@ describe("makeCritHttpHandler", () => {
     const response = await Effect.runPromise(handler(request))
 
     expect(response?.status).toBe(400)
-    const body = (await response?.json()) as {
-      readonly error: { readonly message: string }
-    }
+    const body = Schema.decodeUnknownSync(TestErrorBody)(await response?.json())
     expect(body.error.message).toBe("Body stream exceeds transport budget")
     expect(client.applied).toHaveLength(0)
   })
@@ -284,9 +286,7 @@ describe("makeCritHttpHandler", () => {
       )
     )
     expect(response?.status).toBe(400)
-    const body = (await response?.json()) as {
-      readonly error: { readonly message: string }
-    }
+    const body = Schema.decodeUnknownSync(TestErrorBody)(await response?.json())
     expect(body.error.message).toContain("AddSnapshotFrame")
     expect(client.applied).toHaveLength(0)
   })

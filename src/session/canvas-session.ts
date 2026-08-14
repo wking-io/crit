@@ -182,7 +182,8 @@ const open = (
     const revision = yield* Ref.make(authoritative.revision)
     const mutation = yield* Ref.make(initialMutation)
     const confirmedMutation = yield* Ref.make(0)
-    const initialRecoveryStatus = recoveryStatus as CanvasSessionRecoveryStatus
+    const initialRecoveryStatus =
+      Schema.decodeUnknownSync(CanvasSessionRecoveryStatus)(recoveryStatus)
     const state = yield* SubscriptionRef.make<CanvasSessionState>({
       canvasId,
       revision: authoritative.revision,

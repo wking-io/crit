@@ -188,8 +188,12 @@ const states = new WeakMap<object, CanvasState>()
 
 const clone = <A>(value: A): A => structuredClone(value)
 
+class CanvasHandle implements Canvas {
+  readonly [CanvasTypeId]: typeof CanvasTypeId = CanvasTypeId
+}
+
 const makeCanvas = (state: CanvasState): Canvas => {
-  const handle = Object.freeze({}) as Canvas
+  const handle = Object.freeze(new CanvasHandle())
   states.set(handle, state)
   return handle
 }

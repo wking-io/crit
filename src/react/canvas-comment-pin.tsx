@@ -1,4 +1,3 @@
-import type { CSSProperties } from "react"
 import { Effect } from "effect"
 
 import {
@@ -53,7 +52,7 @@ export function CanvasCommentPin({
         color,
         left: `${xRatio * 100}%`,
         top: `${yRatio * 100}%`
-      } as CSSProperties}
+      }}
       type="button"
     ><Glyph name="commentPin" /></button>
   )

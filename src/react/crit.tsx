@@ -44,6 +44,23 @@ import {
   GitIdentityBoundary
 } from "./canvas-feedback.js"
 
+type CritHotModule = {
+  readonly on: (
+    event: string,
+    listener: (data: { readonly id?: string }) => void
+  ) => void
+  readonly off: (
+    event: string,
+    listener: (data: { readonly id?: string }) => void
+  ) => void
+}
+
+declare global {
+  interface ImportMeta {
+    readonly hot?: CritHotModule
+  }
+}
+
 const rootStyle: CSSProperties = {
   background: "oklch(98.5% 0 none)",
   color: "#191918",
@@ -243,18 +260,7 @@ export function Crit({
 
   useEffect(() => {
     if (session === null) return
-    const hot = (import.meta as ImportMeta & {
-      readonly hot?: {
-        readonly on: (
-          event: string,
-          listener: (data: { readonly id?: string }) => void
-        ) => void
-        readonly off: (
-          event: string,
-          listener: (data: { readonly id?: string }) => void
-        ) => void
-      }
-    }).hot
+    const hot = import.meta.hot
     if (hot === undefined) return
     const refreshChangedCanvas = (data: { readonly id?: string }) => {
       if (data.id === canvasId) {

@@ -70,8 +70,35 @@ export const isCritFrameInputMessage = (
 export const frameInputIntentFromMessage = (
   message: CritFrameInputMessage
 ): FrameInputIntent => {
-  const { source: _source, ...intent } = message
-  return intent as FrameInputIntent
+  switch (message.type) {
+    case "select":
+      return { type: message.type, additive: message.additive }
+    case "delete":
+      return { type: message.type }
+    case "tool":
+      return { type: message.type, tool: message.tool }
+    case "zoom-step":
+      return { type: message.type, direction: message.direction }
+    case "wheel":
+      return {
+        type: message.type,
+        clientX: message.clientX,
+        clientY: message.clientY,
+        ctrlKey: message.ctrlKey,
+        metaKey: message.metaKey,
+        deltaX: message.deltaX,
+        deltaY: message.deltaY
+      }
+    case "pinch":
+      return {
+        type: message.type,
+        clientX: message.clientX,
+        clientY: message.clientY,
+        deltaX: message.deltaX,
+        deltaY: message.deltaY,
+        scaleFactor: message.scaleFactor
+      }
+  }
 }
 
 export const connectBridgedFrameInput = (input: {

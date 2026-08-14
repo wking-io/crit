@@ -65,7 +65,7 @@ const make = (
     try {
       const source = await readFile(targetFor(canvasId, activityId), "utf8")
       const decoded = Schema.decodeUnknownSync(AgentActivity)(
-        JSON.parse(source) as unknown
+        JSON.parse(source)
       )
       if (decoded.canvasId !== canvasId || decoded.activityId !== activityId) {
         throw new Error("Agent Activity identity does not match its path")

@@ -446,12 +446,24 @@ const failedGuard = (
   reason: CanvasActionUnavailableReason,
   message: string,
   state: "disabled" | "hidden" = "disabled"
-): Guard => ({
-  requirement: source === "global"
-    ? { source, fact: "commentAuthorPresent", equals: true }
-    : { source, fact: fact as Exclude<typeof fact, "commentAuthorPresent">, equals: true },
-  onFailure: { state, reason, message }
-})
+): Guard => {
+  if (source === "global") {
+    if (fact !== "commentAuthorPresent") {
+      throw new TypeError(`Global guard cannot use target fact ${fact}`)
+    }
+    return {
+      requirement: { source, fact, equals: true },
+      onFailure: { state, reason, message }
+    }
+  }
+  if (fact === "commentAuthorPresent") {
+    throw new TypeError("Target guard cannot use global fact commentAuthorPresent")
+  }
+  return {
+    requirement: { source, fact, equals: true },
+    onFailure: { state, reason, message }
+  }
+}
 
 const notPending: Guard = {
   requirement: { source: "execution", fact: "actionPending", equals: false },
@@ -694,12 +706,36 @@ const templateValues = (request: CanvasActionRequest) => {
   }
 }
 
+const emptyTemplateValues: ReturnType<typeof templateValues> = {
+  targetLabel: "",
+  targetKind: "",
+  statusLabel: "",
+  presetLabel: "",
+  presetLabelLower: "",
+  width: "",
+  height: "",
+  alignmentLabel: "",
+  alignmentDescription: "",
+  distributionAxisLabel: "",
+  distributionGapLabel: ""
+}
+
 const interpolate = (
   template: string,
   values: ReturnType<typeof templateValues>
 ) => template.replace(/\{([A-Za-z]+)\}/g, (_, key: string) => {
-  if (!(key in values)) throw new TypeError(`Unknown Canvas action template value: ${key}`)
-  return values[key as keyof typeof values]
+  if (key === "targetLabel") return values.targetLabel
+  if (key === "targetKind") return values.targetKind
+  if (key === "statusLabel") return values.statusLabel
+  if (key === "presetLabel") return values.presetLabel
+  if (key === "presetLabelLower") return values.presetLabelLower
+  if (key === "width") return values.width
+  if (key === "height") return values.height
+  if (key === "alignmentLabel") return values.alignmentLabel
+  if (key === "alignmentDescription") return values.alignmentDescription
+  if (key === "distributionAxisLabel") return values.distributionAxisLabel
+  if (key === "distributionGapLabel") return values.distributionGapLabel
+  throw new TypeError(`Unknown Canvas action template value: ${key}`)
 })
 
 const resolvedPlatform = (platform: CanvasControlPlatform) =>
@@ -743,8 +779,8 @@ const validatePolicies = (policies: ReadonlyArray<CanvasActionPolicy>) => {
   const counts = new Map<CanvasActionId, number>()
   for (const declaration of policies) {
     counts.set(declaration.id, (counts.get(declaration.id) ?? 0) + 1)
-    interpolate(declaration.label, templateValues({ id: declaration.id } as CanvasActionRequest))
-    interpolate(declaration.description, templateValues({ id: declaration.id } as CanvasActionRequest))
+    interpolate(declaration.label, emptyTemplateValues)
+    interpolate(declaration.description, emptyTemplateValues)
   }
   for (const id of actionIds) {
     if (counts.get(id) !== 1) {

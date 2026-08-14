@@ -1,10 +1,8 @@
-import type {
-  CSSProperties,
-  PointerEvent as ReactPointerEvent
-} from "react"
+import type { PointerEvent as ReactPointerEvent } from "react"
 
 import type { CanvasGeometry } from "../core/index.js"
 import { informationalHelpTarget } from "./canvas-help.js"
+import { cssVariableStyle } from "./css-variable-style.js"
 import { FRAME_CORNER_RADIUS } from "./frame-geometry.js"
 
 const SELECTION_HANDLE_SIZE = 13.95
@@ -124,13 +122,13 @@ export function CanvasSelection({
       aria-label={`Selected ${label}`}
       className="crit-selection"
       data-handle-style={resolvedHandleStyle}
-      style={{
+      style={cssVariableStyle({
         "--selection-ink": ink,
         "--selection-handle-accent": shell,
         "--selection-handle-size": SELECTION_HANDLE_SIZE,
         "--selection-handle-offset": SELECTION_HANDLE_OFFSET,
         "--selection-ui": 1 / zoom
-      } as CSSProperties}
+      })}
     >
       {handles.map((handle) => (
         <button

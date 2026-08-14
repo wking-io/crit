@@ -6,7 +6,6 @@ import {
   useMemo,
   useRef,
   useState,
-  type CSSProperties,
   type PointerEvent as ReactPointerEvent
 } from "react"
 
@@ -25,6 +24,7 @@ import {
   connectCanvasInput,
   type FrameInputIntent
 } from "../frame-bridge/index.js"
+import { cssVariableStyle } from "./css-variable-style.js"
 import {
   CritContextMenu,
   type ContextMenuPosition
@@ -904,7 +904,7 @@ function CanvasViewportContent({
         if (tool === "select") startSelectionMarquee(event)
         else if (!isAdditiveFrameSelection(event)) setSelectedIds(new Set())
       }}
-      style={{
+      style={cssVariableStyle({
         "--crit-canvas-cursor": canvasCursor(tool, panning),
         height: "100%",
         minHeight: 420,
@@ -914,7 +914,7 @@ function CanvasViewportContent({
         position: "relative",
         touchAction: "none",
         width: "100%"
-      } as CSSProperties}
+      })}
     >
       <style data-crit-styles="">{critStyles}</style>
       <div

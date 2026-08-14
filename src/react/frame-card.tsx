@@ -5,7 +5,7 @@ import {
   useEffect,
   useRef,
   useState,
-  type CSSProperties,
+  type ComponentProps,
   type PointerEvent as ReactPointerEvent
 } from "react"
 
@@ -23,6 +23,10 @@ import {
   connectSameOriginFrameInput,
   type FrameInputIntent
 } from "../frame-bridge/index.js"
+import {
+  cssVariableStyle,
+  type CssVariableStyle
+} from "./css-variable-style.js"
 import { canvasUiScale } from "./canvas-camera.js"
 import {
   CritContextMenu,
@@ -339,7 +343,7 @@ export function FrameCard({
     "--frame-ink": status.ink,
     "--frame-shell": status.shell,
     "--frame-stroke": status.stroke
-  } as CSSProperties
+  } satisfies CssVariableStyle
 
   const measureContentHeight = useCallback((force = false) => Effect.suspend(() => {
     const iframe = iframeRef.current
@@ -587,11 +591,11 @@ export function FrameCard({
           className="crit-status-menu"
           onPointerDown={(event) => event.stopPropagation()}
           role="menu"
-          style={{
-            ["--crit-status-ui" as string]: statusFan.scale,
+          style={cssVariableStyle({
+            "--crit-status-ui": statusFan.scale,
             bottom: `calc(100% + ${statusFan.frameGap}px)`,
             pointerEvents: statusMenuOpen ? "all" : "none"
-          }}
+          })}
         >
           <AnimatePresence>
             {statusMenuOpen
@@ -632,6 +636,16 @@ export function FrameCard({
                         status: option.id,
                         frameIsLive: frame.snapshot === undefined
                       })
+                  const optionStyle = cssVariableStyle({
+                    "--status-ink": option.ink,
+                    "--status-shell": option.shell,
+                    "--status-stroke": option.stroke
+                  })
+                  // SAFETY: Motion forwards CSS custom properties to the DOM,
+                  // but its style type conflicts with React's optional SVG x property.
+                  const motionOptionStyle = optionStyle as ComponentProps<
+                    typeof motion.button
+                  >["style"] & {}
                   return (
                     <motion.button
                       aria-checked={false}
@@ -650,11 +664,7 @@ export function FrameCard({
                         selectStatus()
                       }}
                       role="menuitemradio"
-                      style={{
-                        ["--status-ink" as string]: option.ink,
-                        ["--status-shell" as string]: option.shell,
-                        ["--status-stroke" as string]: option.stroke
-                      }}
+                      style={motionOptionStyle}
                       initial={{
                         opacity: 0,
                         scale: STATUS_PILL_MOTION.initialScale,

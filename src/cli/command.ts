@@ -55,7 +55,7 @@ const canvasMutation = (mutation: CanvasRepositoryMutation) => ({
 
 const parseJson = (source: string, contents: string) =>
   Effect.try({
-    try: () => JSON.parse(contents) as unknown,
+    try: () => JSON.parse(contents),
     catch: (cause) =>
       new CritManifestInvalid({
         source,
@@ -105,7 +105,7 @@ const loadManifest = (
         })
       }
       const input = yield* Effect.tryPromise({
-        try: () => response.json() as Promise<unknown>,
+          try: () => response.json(),
         catch: (cause) =>
           new CritManifestInvalid({
             source: requested.toString(),
@@ -257,7 +257,7 @@ const syncCommand = Command.make(
 
 const decodeCanvasCommands = (input: string) =>
   Effect.try({
-    try: () => JSON.parse(input) as unknown,
+    try: () => JSON.parse(input),
     catch: (cause) =>
       new InvalidCliInput({
         detail: `Commands must be valid JSON: ${cause instanceof Error ? cause.message : String(cause)}`

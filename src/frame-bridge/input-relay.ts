@@ -39,7 +39,7 @@ export function createFrameInputRelay() {
   let touchInitialDistance = 1
   let touchInitialX = 0
   let touchInitialY = 0
-  let touchMode = "undecided" as "undecided" | "pan" | "zoom"
+  let touchMode: "undecided" | "pan" | "zoom" = "undecided"
 
   const touchMetrics = (
     points: ReadonlyArray<{ readonly x: number; readonly y: number }>
@@ -256,6 +256,14 @@ type NativeGestureEvent = Event & {
   readonly scale?: number
 }
 
+const nativeGestureListener = (
+  listener: (event: NativeGestureEvent) => void
+): EventListener => {
+  // SAFETY: WebKit dispatches gesture events as Event instances with these
+  // optional coordinates and scale fields, but lib.dom does not declare them.
+  return listener as EventListener
+}
+
 const touchPoints = (event: TouchEvent) =>
   Array.from(event.touches, (touch) => ({ x: touch.clientX, y: touch.clientY }))
 
@@ -267,13 +275,11 @@ const usesNativeGestureEvents = (target: Window) => {
 }
 
 const inputTarget = (target: EventTarget | null) => {
-  const element = target as (
-    EventTarget & Pick<HTMLElement, "isContentEditable" | "matches">
-  ) | null
-  return element !== null &&
-    typeof element.matches === "function" && (
-      element.isContentEditable ||
-      element.matches(
+  return target !== null &&
+    "matches" in target &&
+    typeof target.matches === "function" && (
+      ("isContentEditable" in target && target.isContentEditable === true) ||
+      target.matches(
         'input:not([type="button"]):not([type="submit"]):not([type="reset"]), textarea, select'
       )
     )
@@ -338,23 +344,26 @@ export const connectCanvasInput = (input: {
   const captureTouchEnd = (event: TouchEvent) => {
     relay.touchEnd(touchPoints(event))
   }
+  const gestureStartListener = nativeGestureListener(captureGestureStart)
+  const gestureChangeListener = nativeGestureListener(captureGestureChange)
+  const gestureEndListener = nativeGestureListener(captureGestureEnd)
   const options = { capture: true, passive: false } as const
   const nativeGestures = usesNativeGestureEvents(input.target)
   input.target.addEventListener("wheel", captureWheel, options)
   if (nativeGestures) {
     input.target.addEventListener(
       "gesturestart",
-      captureGestureStart as EventListener,
+      gestureStartListener,
       options
     )
     input.target.addEventListener(
       "gesturechange",
-      captureGestureChange as EventListener,
+      gestureChangeListener,
       options
     )
     input.target.addEventListener(
       "gestureend",
-      captureGestureEnd as EventListener,
+      gestureEndListener,
       options
     )
   } else {
@@ -369,17 +378,17 @@ export const connectCanvasInput = (input: {
     if (nativeGestures) {
       input.target.removeEventListener(
         "gesturestart",
-        captureGestureStart as EventListener,
+        gestureStartListener,
         true
       )
       input.target.removeEventListener(
         "gesturechange",
-        captureGestureChange as EventListener,
+        gestureChangeListener,
         true
       )
       input.target.removeEventListener(
         "gestureend",
-        captureGestureEnd as EventListener,
+        gestureEndListener,
         true
       )
     } else {
@@ -460,6 +469,9 @@ export const connectSameOriginFrameInput = (input: {
     emit(intent)
   }
   const selectFrame = (event: PointerEvent) => emit(relay.select(event))
+  const gestureStartListener = nativeGestureListener(captureGestureStart)
+  const gestureChangeListener = nativeGestureListener(captureGestureChange)
+  const gestureEndListener = nativeGestureListener(captureGestureEnd)
   const options = { capture: true, passive: false } as const
   const nativeGestures = usesNativeGestureEvents(input.target)
   input.target.addEventListener("wheel", captureWheel, options)
@@ -468,17 +480,17 @@ export const connectSameOriginFrameInput = (input: {
   if (nativeGestures) {
     input.target.addEventListener(
       "gesturestart",
-      captureGestureStart as EventListener,
+      gestureStartListener,
       options
     )
     input.target.addEventListener(
       "gesturechange",
-      captureGestureChange as EventListener,
+      gestureChangeListener,
       options
     )
     input.target.addEventListener(
       "gestureend",
-      captureGestureEnd as EventListener,
+      gestureEndListener,
       options
     )
   } else {
@@ -495,17 +507,17 @@ export const connectSameOriginFrameInput = (input: {
     if (nativeGestures) {
       input.target.removeEventListener(
         "gesturestart",
-        captureGestureStart as EventListener,
+        gestureStartListener,
         true
       )
       input.target.removeEventListener(
         "gesturechange",
-        captureGestureChange as EventListener,
+        gestureChangeListener,
         true
       )
       input.target.removeEventListener(
         "gestureend",
-        captureGestureEnd as EventListener,
+        gestureEndListener,
         true
       )
     } else {

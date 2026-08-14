@@ -20,6 +20,18 @@ const wheel = {
   deltaY: 8
 }
 
+const canvasInputWindow = (target: EventTarget): Window => {
+  // SAFETY: This fixture supplies every Window member read by connectCanvasInput
+  // and inherits the real EventTarget listener implementation.
+  return target as Window
+}
+
+const canvasInputRoot = (target: EventTarget): HTMLElement => {
+  // SAFETY: This fixture supplies getBoundingClientRect, the only HTMLElement
+  // member read by connectCanvasInput, and inherits real event dispatch.
+  return target as HTMLElement
+}
+
 describe("Frame input relay", () => {
   it("snapshots non-enumerable WheelEvent fields at the Canvas adapter", () => {
     const target = new EventTarget()
@@ -35,8 +47,8 @@ describe("Frame input relay", () => {
     })
     const intents: Array<unknown> = []
     const disconnect = connectCanvasInput({
-      target: target as Window,
-      root: root as HTMLElement,
+      target: canvasInputWindow(target),
+      root: canvasInputRoot(root),
       onIntent: (intent) => intents.push(intent)
     })
     const event = new Event("wheel", { cancelable: true })

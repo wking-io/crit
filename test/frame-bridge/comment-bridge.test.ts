@@ -8,21 +8,21 @@ import {
 
 describe("Frame Comment bridge", () => {
   it("configures one iframe and forwards frame-relative comment events", () => {
-    let receive: ((event: MessageEvent) => void) | undefined
+    let receive: ((event: { readonly source: unknown; readonly data: unknown }) => void) | undefined
     let disconnected = false
     const target = {
-      addEventListener: (_type: string, listener: EventListener) => {
-        receive = listener as (event: MessageEvent) => void
+      addEventListener: (_type: "message", listener: typeof receive) => {
+        receive = listener
       },
       removeEventListener: () => {
         disconnected = true
       }
-    } as unknown as Window
+    }
     const posted: Array<unknown> = []
     const frameWindow = {
       postMessage: (value: unknown) => posted.push(value)
-    } as unknown as Window
-    const frameElement = { contentWindow: frameWindow } as unknown as HTMLIFrameElement
+    }
+    const frameElement = { contentWindow: frameWindow }
     const events: Array<unknown> = []
     const bridge = connectBridgedFrameComments({
       target,
@@ -47,16 +47,16 @@ describe("Frame Comment bridge", () => {
         type: "open",
         id: "thread-1"
       }
-    } as MessageEvent)
+    })
     expect(events).toEqual([{
       type: "open",
       id: "thread-1"
     }])
 
     receive?.({
-      source: {} as Window,
+      source: {},
       data: { source: CRIT_FRAME_COMMENT_SOURCE, type: "ready" }
-    } as MessageEvent)
+    })
     expect(events).toHaveLength(1)
 
     bridge.disconnect()

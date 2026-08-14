@@ -3,7 +3,7 @@ import { tmpdir } from "node:os"
 import path from "node:path"
 
 import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem"
-import { Effect, Layer, Path, Sink, Stdio, Terminal } from "effect"
+import { Effect, Layer, Path, Schema, Sink, Stdio, Terminal } from "effect"
 import { ChildProcessSpawner } from "effect/unstable/process"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 
@@ -100,12 +100,19 @@ export default defineConfig({})
       ]).pipe(Effect.provide(cliLayer))
     )
 
-    const output = JSON.parse(stdout.join("")) as {
-      schemaVersion: number
-      installed: boolean
-      project: string
-      install: { command: string; args: string[] }
-    }
+    const output = Schema.decodeUnknownSync(Schema.Struct({
+      schemaVersion: Schema.Number,
+      installed: Schema.Boolean,
+      project: Schema.String,
+      author: Schema.Struct({
+        id: Schema.String,
+        name: Schema.String
+      }),
+      install: Schema.Struct({
+        command: Schema.String,
+        args: Schema.Array(Schema.String)
+      })
+    }))(JSON.parse(stdout.join("")))
     const packageJson = JSON.parse(await readFile(path.join(root, "package.json"), "utf8"))
 
     expect(output).toMatchObject({

@@ -228,7 +228,7 @@ const readApplyRequest = (request: Request, maxBodyBytes: number) =>
     ),
     Effect.flatMap((body) =>
       Effect.try({
-        try: () => JSON.parse(body) as unknown,
+          try: () => JSON.parse(body),
         catch: () =>
           new InvalidApplyRequest({
             detail: "Request body must be valid JSON"

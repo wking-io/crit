@@ -97,6 +97,8 @@ const webRequest = (request: IncomingMessage) => {
   if (method === "GET" || method === "HEAD") {
     return new Request(url, base)
   }
+  // SAFETY: Node's Readable.toWeb stream implements the Fetch body contract,
+  // but the Node and DOM declarations use incompatible Uint8Array generics.
   return new Request(url, {
     ...base,
     body: Readable.toWeb(request) as ReadableStream<Uint8Array>,
@@ -588,7 +590,7 @@ export const crit = (options: CritVitePluginOptions = {}): Plugin => {
           ? "https:"
           : "http:"
       return Effect.runPromise(
-        CritManifest.resolve(JSON.parse(source) as unknown, {
+          CritManifest.resolve(JSON.parse(source), {
           baseUrl: publicOrigin === undefined
             ? `${protocol}//${host}/`
             : `${publicOrigin}/`,

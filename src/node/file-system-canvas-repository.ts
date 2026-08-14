@@ -99,7 +99,7 @@ const make = (root: string) =>
           .readFileString(target)
           .pipe(Effect.mapError((cause) => storageFailure("load", id, cause)))
         const input = yield* Effect.try({
-          try: () => JSON.parse(contents) as unknown,
+          try: () => JSON.parse(contents),
           catch: (cause) =>
             new CritClientInvalidDocument({
               id,

@@ -1,4 +1,4 @@
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
 
 import type { CanvasSession } from "../session/canvas-session.js"
 
@@ -50,6 +50,14 @@ export interface CanvasLiveRefreshOptions {
   readonly heartbeatIntervalMillis?: number
 }
 
+const CanvasLiveRefreshPayload = Schema.Struct({
+  type: Schema.optionalKey(Schema.String),
+  event: Schema.optionalKey(Schema.String),
+  data: Schema.optionalKey(Schema.Struct({
+    id: Schema.optionalKey(Schema.String)
+  }))
+})
+
 export const canvasLiveRefreshSocketUrl = (
   endpoint: CanvasLiveRefreshEndpoint,
   location: CanvasLiveRefreshLocation
@@ -83,7 +91,7 @@ export const connectCanvasLiveRefresh = (
   const endpoint = options.endpoint ?? {}
   const location =
     options.location ??
-    (globalThis.location as CanvasLiveRefreshLocation | undefined)
+    globalThis.location
   if (endpoint.enabled === false || location === undefined) return () => {}
 
   const url = canvasLiveRefreshSocketUrl(endpoint, location)
@@ -105,13 +113,11 @@ export const connectCanvasLiveRefresh = (
 
   const deliver = (event: { readonly data?: unknown }) => {
     if (typeof event.data !== "string") return
-    let payload: {
-      readonly type?: string
-      readonly event?: string
-      readonly data?: { readonly id?: string }
-    }
+    let payload: typeof CanvasLiveRefreshPayload.Type
     try {
-      payload = JSON.parse(event.data) as typeof payload
+      payload = Schema.decodeUnknownSync(CanvasLiveRefreshPayload)(
+        JSON.parse(event.data)
+      )
     } catch {
       return
     }
