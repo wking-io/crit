@@ -1,16 +1,23 @@
-import { useHotkey } from "@tanstack/react-hotkeys"
+import { Effect } from "effect"
 import {
   useState,
   type FormEvent
 } from "react"
 import { createPortal } from "react-dom"
 
-import { NO_HELP_HOTKEY, helpTarget } from "./canvas-help.js"
+import {
+  useCanvasActionRunner,
+  useCanvasControls
+} from "./canvas-action-runner.js"
+import {
+  actionHelpTarget,
+  informationalHelpTarget
+} from "./canvas-help.js"
 
 export interface NewFrameFormProps {
   readonly autoFocus?: boolean
   readonly onCancel: () => void
-  readonly onCreate: (url: string, title: string) => void
+  readonly onCreate: (url: string, title: string) => Effect.Effect<unknown, unknown>
   readonly onError: (message: string) => void
 }
 
@@ -20,6 +27,10 @@ export function NewFrameForm({
   onCreate,
   onError
 }: NewFrameFormProps) {
+  const controls = useCanvasControls(["canvas", "new-frame-form"], true)
+  const runner = useCanvasActionRunner()
+  const cancel = controls.action({ id: "cancel-new-frame" })
+  const create = controls.action({ id: "create-frame" })
   const [title, setTitle] = useState("")
   const [url, setUrl] = useState("")
 
@@ -32,7 +43,15 @@ export function NewFrameForm({
       }
       const inferredTitle =
         parsed.pathname.split("/").filter(Boolean).at(-1) ?? parsed.hostname
-      onCreate(parsed.href, title.trim() || inferredTitle || "Untitled frame")
+      runner.run(
+        controls,
+        create,
+        onCreate(
+          parsed.href,
+          title.trim() || inferredTitle || "Untitled frame"
+        ),
+        (cause) => onError(cause instanceof Error ? cause.message : String(cause))
+      )
     } catch (cause) {
       onError(cause instanceof Error ? cause.message : "Enter a valid frame URL")
     }
@@ -45,9 +64,8 @@ export function NewFrameForm({
         URL
         <input
           autoFocus={autoFocus}
-          {...helpTarget({
+          {...informationalHelpTarget({
             name: "Frame URL",
-            hotkey: NO_HELP_HOTKEY,
             description: "Enter the url to load in a new live frame."
           })}
           onChange={(event) => setUrl(event.currentTarget.value)}
@@ -60,9 +78,8 @@ export function NewFrameForm({
       <label>
         Title <span>(optional)</span>
         <input
-          {...helpTarget({
+          {...informationalHelpTarget({
             name: "Frame title",
-            hotkey: NO_HELP_HOTKEY,
             description: "Name the frame. Optional, title is inferred when left blank."
           })}
           onChange={(event) => setTitle(event.currentTarget.value)}
@@ -73,23 +90,18 @@ export function NewFrameForm({
       </label>
       <div className="crit-new-frame-dialog__actions">
         <button
-          {...helpTarget({
-            name: "Cancel",
-            hotkey: "Esc",
-            description: "Close the dialog without adding a frame."
-          })}
-          onClick={onCancel}
+          aria-keyshortcuts={cancel.ariaKeyShortcuts}
+          {...actionHelpTarget(cancel)}
+          onClick={() => runner.run(controls, cancel, Effect.sync(onCancel))}
           type="button"
-        >Cancel</button>
+        >{cancel.label}</button>
         <button
+          aria-keyshortcuts={create.ariaKeyShortcuts}
           data-primary=""
-          {...helpTarget({
-            name: "Add frame",
-            hotkey: "Enter",
-            description: "Create a live frame using the entered URL and title."
-          })}
+          disabled={create.availability !== "enabled"}
+          {...actionHelpTarget(create)}
           type="submit"
-        >Add frame</button>
+        >{create.label}</button>
       </div>
     </form>
   )
@@ -102,15 +114,13 @@ export function NewFrameDialog({
   open
 }: {
   readonly onCancel: () => void
-  readonly onCreate: (url: string, title: string) => void
+  readonly onCreate: (url: string, title: string) => Effect.Effect<unknown, unknown>
   readonly onError: (message: string) => void
   readonly open: boolean
 }) {
-  useHotkey("Escape", onCancel, {
-    conflictBehavior: "allow",
-    enabled: open,
-    ignoreInputs: false
-  })
+  const controls = useCanvasControls(["canvas", "new-frame-form"], true)
+  const runner = useCanvasActionRunner()
+  const cancel = controls.action({ id: "cancel-new-frame" })
 
   if (!open || typeof document === "undefined") return null
 
@@ -119,8 +129,16 @@ export function NewFrameDialog({
       aria-labelledby="crit-new-frame-title"
       aria-modal="true"
       className="crit-dialog-backdrop"
+      onKeyDown={(event) => {
+        if (event.key !== "Escape") return
+        event.preventDefault()
+        event.stopPropagation()
+        runner.run(controls, cancel, Effect.sync(onCancel))
+      }}
       onPointerDown={(event) => {
-        if (event.target === event.currentTarget) onCancel()
+        if (event.target === event.currentTarget) {
+          runner.run(controls, cancel, Effect.sync(onCancel))
+        }
       }}
       role="dialog"
     >

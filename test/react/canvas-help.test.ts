@@ -6,8 +6,8 @@ import {
 } from "../../src/react/canvas-help.js"
 
 const SELECT_HELP: CanvasHelpDetails = {
+  _tag: "informational",
   name: "Select",
-  hotkey: "V",
   description: "Select canvas items."
 }
 

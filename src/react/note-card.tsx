@@ -7,6 +7,7 @@ import {
   type CSSProperties,
   type PointerEvent as ReactPointerEvent
 } from "react"
+import { Effect } from "effect"
 
 import {
   CanvasCommand,
@@ -20,8 +21,10 @@ import {
   type ContextMenuItem,
   type ContextMenuPosition
 } from "./canvas-context-menu.js"
+import { useCanvasControls } from "./canvas-action-runner.js"
+import type { CanvasControlsInstance } from "./canvas-controls.js"
 import { canvasItemStyle } from "./canvas-item-style.js"
-import { NO_HELP_HOTKEY, helpTarget } from "./canvas-help.js"
+import { informationalHelpTarget } from "./canvas-help.js"
 import {
   CanvasSelection,
   type ResizeHandlePosition
@@ -40,32 +43,44 @@ export const noteHeightForContent = (scrollHeight: number) =>
   Math.ceil(scrollHeight + NOTE_BORDER_HEIGHT)
 
 export const noteContextMenuItems = (actions: {
-  readonly onBringToFront: () => void
-  readonly onRemove?: () => void
-  readonly onSendToBack: () => void
+  readonly controls: CanvasControlsInstance
+  readonly target: {
+    readonly kind: "note"
+    readonly id: string
+    readonly label: string
+  }
+  readonly currentAuthorIsTargetAuthor: boolean
+  readonly onBringToFront: () => Effect.Effect<unknown, unknown>
+  readonly onRemove: () => Effect.Effect<unknown, unknown>
+  readonly onSendToBack: () => Effect.Effect<unknown, unknown>
 }): ReadonlyArray<ContextMenuItem> => {
   const ordering: ReadonlyArray<ContextMenuItem> = [{
-    help: "Place this note above every other canvas item.",
-    label: "Bring to front",
-    onSelect: actions.onBringToFront
+    action: actions.controls.action({
+      id: "bring-item-to-front",
+      target: actions.target
+    }),
+    execute: actions.onBringToFront()
   }, {
-    help: "Place this note behind every other canvas item.",
-    label: "Send to back",
-    onSelect: actions.onSendToBack
+    action: actions.controls.action({
+      id: "send-item-to-back",
+      target: actions.target
+    }),
+    execute: actions.onSendToBack()
   }]
-  return actions.onRemove === undefined
-    ? ordering
-    : [...ordering, {
-        help: "Remove this note from the canvas.",
-        label: "Delete",
-        onSelect: actions.onRemove,
-        tone: "danger"
-      }]
+  return [...ordering, {
+    action: actions.controls.action({
+      id: "remove-item",
+      target: actions.target,
+      currentAuthorIsTargetAuthor: actions.currentAuthorIsTargetAuthor
+    }),
+    execute: actions.onRemove()
+  }]
 }
 
 export function NoteCard({
   author,
   commit,
+  execute,
   note,
   geometry,
   selected,
@@ -78,20 +93,22 @@ export function NoteCard({
 }: {
   readonly author: Author | null
   readonly commit: (...commands: ReadonlyArray<CanvasCommandValue>) => void
+  readonly execute: (...commands: ReadonlyArray<CanvasCommandValue>) => Effect.Effect<unknown, unknown>
   readonly note: CanvasNote
   readonly geometry: CanvasGeometry
   readonly selected: boolean
   readonly zoom: number
-  readonly onBringToFront: () => void
+  readonly onBringToFront: () => Effect.Effect<unknown, unknown>
   readonly onMove: (event: ReactPointerEvent, item: CanvasNote) => void
   readonly onResize: (
     event: ReactPointerEvent,
     item: CanvasNote,
     handle: ResizeHandlePosition
   ) => void
-  readonly onSelect: () => void
-  readonly onSendToBack: () => void
+  readonly onSelect: (additive?: boolean) => void
+  readonly onSendToBack: () => Effect.Effect<unknown, unknown>
 }) {
+  const controls = useCanvasControls(["canvas"], author !== null)
   const [contextMenu, setContextMenu] = useState<ContextMenuPosition | null>(null)
   const [height, setHeight] = useState(geometry.height)
   const [text, setText] = useState(note.text)
@@ -100,6 +117,11 @@ export function NoteCard({
   const commitRef = useRef<NoteCommandCommit>(commit)
   commitRef.current = commit
   const canEdit = author?.id === note.author.id
+  const target = {
+    kind: "note" as const,
+    id: note.id,
+    label: "note"
+  }
   const editing = useMemo(() => createNoteEditingSession({
     actorId: author?.id ?? null,
     commit: (...commands) => commitRef.current(...commands),
@@ -147,12 +169,12 @@ export function NoteCard({
     })
   }
 
-  const remove = canEdit
-    ? () => commit(CanvasCommand.removeNote({
+  const remove = () => canEdit
+    ? execute(CanvasCommand.removeNote({
         id: note.id,
         actorId: author.id
       }))
-    : undefined
+    : Effect.fail(new Error("Only the Note Author may remove it"))
 
   return (
     <article
@@ -164,7 +186,9 @@ export function NoteCard({
         setContextMenu({ x: event.clientX, y: event.clientY })
         onSelect()
       }}
-      onPointerDown={onSelect}
+      onPointerDown={(event) => onSelect(
+        event.shiftKey || event.metaKey || event.ctrlKey
+      )}
       style={{
         ...canvasItemStyle({ ...geometry, height }, note.zIndex),
         "--crit-ui": 1
@@ -172,9 +196,8 @@ export function NoteCard({
     >
       <textarea
         aria-label="Note"
-        {...helpTarget({
+        {...informationalHelpTarget({
           name: canEdit ? "Edit note" : `Note by ${note.author.name}`,
-          hotkey: NO_HELP_HOTKEY,
           description: canEdit
             ? "Write review feedback. The note grows to keep every line visible."
             : "Only the Author can edit this note. You can select, move, and resize its width."
@@ -193,13 +216,12 @@ export function NoteCard({
         <button
           aria-label="Select and move note"
           className="crit-note__select-shield"
-          {...helpTarget({
+          {...informationalHelpTarget({
             name: "Select and move note",
-            hotkey: "V",
             description: "Click to select this note or drag to reposition it."
           })}
           onPointerDown={(event) => {
-            onSelect()
+            onSelect(event.shiftKey || event.metaKey || event.ctrlKey)
             onMove(event, note)
           }}
           type="button"
@@ -219,8 +241,11 @@ export function NoteCard({
       <CritContextMenu
         ariaLabel="Note actions"
         items={noteContextMenuItems({
+          controls,
+          target,
+          currentAuthorIsTargetAuthor: canEdit,
           onBringToFront,
-          ...(remove === undefined ? {} : { onRemove: remove }),
+          onRemove: remove,
           onSendToBack
         })}
         onClose={() => setContextMenu(null)}

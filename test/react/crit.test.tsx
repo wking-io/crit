@@ -8,6 +8,7 @@ import {
 } from "../../src/react/canvas-feedback.js"
 import { GIT_AUTHOR_REMEDIATION_PROMPT } from "../../src/runtime/author-identity.js"
 import {
+  actionHelpDetails,
   CanvasHelpPanel,
   CanvasHelpSurface
 } from "../../src/react/canvas-help.js"
@@ -33,6 +34,8 @@ import { critStyles } from "../../src/react/crit-styles.js"
 import { CanvasSelection } from "../../src/react/canvas-selection.js"
 import { FRAME_STATUSES } from "../../src/react/frame-chrome.js"
 import { CanvasToolbar } from "../../src/react/canvas-toolbar.js"
+import { CanvasActionRunnerProvider } from "../../src/react/canvas-action-runner.js"
+import { CanvasControls } from "../../src/react/canvas-controls.js"
 import {
   NOTE_MINIMUM_ROWS,
   noteContextMenuItems,
@@ -102,19 +105,25 @@ describe("Crit", () => {
 
   it("renders the shared canvas toolbar contract", () => {
     const html = renderToStaticMarkup(
-      <CanvasToolbar
-        commentAvailable
-        noteAvailable
-        onAction={() => {}}
-        title="Feature lab"
-        tool="select"
-      />
+      <CanvasActionRunnerProvider>
+        <CanvasToolbar
+          commentAvailable
+          noteAvailable
+          onAction={() => {}}
+          selectedItemCount={3}
+          title="Feature lab"
+          tool="select"
+        />
+      </CanvasActionRunnerProvider>
     )
 
     expect(html).toContain('role="toolbar"')
     expect(html).toContain("Feature lab")
     expect(html).toContain('aria-label="Undo"')
     expect(html).toContain('aria-label="Redo"')
+    expect(html).toContain('aria-label="Align and distribute"')
+    expect(html).toContain('aria-haspopup="menu"')
+    expect(html).toContain('aria-expanded="false"')
     expect(html).toContain('aria-pressed="true"')
     expect(html).not.toContain("Layers")
   })
@@ -300,14 +309,15 @@ describe("Crit", () => {
 
   it("renders an existing Comment Thread read-only without a Current Author", () => {
     const html = renderToStaticMarkup(
-      <CommentPopover
+      <CanvasActionRunnerProvider><CommentPopover
         canSubmit={false}
         clearDraft={null}
-        editableCommentIds={new Set()}
+        currentAuthorId={null}
+        frameId="candidate"
         inline
         pending={false}
-        resolution={null}
         statusColor="rebeccapurple"
+        threadManageable={false}
         thread={{
           id: "thread-1",
           frameId: "candidate",
@@ -323,12 +333,12 @@ describe("Crit", () => {
           resolvedAt: null,
           resolvedBy: null
         }}
-        onClose={() => {}}
+        onClose={() => Effect.void}
         onDraftStatus={() => {}}
-        onEdit={() => {}}
-        onResolve={() => {}}
-        onSubmit={() => {}}
-      />
+        onEdit={() => Effect.void}
+        onResolve={() => Effect.void}
+        onSubmit={() => Effect.void}
+      /></CanvasActionRunnerProvider>
     )
 
     expect(html).toContain("Tighten this spacing")
@@ -338,14 +348,15 @@ describe("Crit", () => {
 
   it("exposes an open comment pin as the reduced dot state", () => {
     const html = renderToStaticMarkup(
-      <CanvasCommentPin
+      <CanvasActionRunnerProvider><CanvasCommentPin
         active
         authorName="Wes"
         color="rebeccapurple"
-        onOpen={() => {}}
+        onOpen={() => Effect.void}
+        threadId="thread-1"
         xRatio={0.5}
         yRatio={0.5}
-      />
+      /></CanvasActionRunnerProvider>
     )
 
     expect(html).toContain('aria-expanded="true"')
@@ -397,31 +408,31 @@ describe("Crit", () => {
     expect(html).not.toContain('aria-label="Control help"')
     expect(html).not.toContain("Arrange frames and notes on an infinite canvas")
     expect(html).toContain('data-crit-help-name="Select"')
-    expect(html).toContain('data-crit-help-hotkey="V"')
+    expect(html).toContain('data-crit-help-shortcut="V"')
     expect(html).toContain(
-      'data-crit-help-description="Drag empty canvas to select multiple Frames; hold Shift or Cmd/Ctrl to add to the selection."'
+      'data-crit-help-description="Drag empty canvas to select multiple Frames and Notes; hold Shift or Cmd/Ctrl to add to the selection."'
     )
     expect(html).toContain('data-crit-help-name="Add frame"')
     expect(html).toContain('data-crit-help-name="Add note"')
-    expect(html).toContain('data-crit-help-hotkey="F"')
-    expect(html).toContain('data-crit-help-hotkey="N"')
+    expect(html).toContain('data-crit-help-shortcut="F"')
+    expect(html).toContain('data-crit-help-shortcut="N"')
     expect(html).not.toContain("crit-tooltip")
 
-    const detailCounts = [
-      html.match(/data-crit-help-name=/g)?.length ?? 0,
-      html.match(/data-crit-help-hotkey=/g)?.length ?? 0,
-      html.match(/data-crit-help-description=/g)?.length ?? 0
-    ]
-    expect(new Set(detailCounts).size).toBe(1)
+    expect(html).toContain('data-crit-help-kind="action"')
+    expect(html).toContain('data-crit-help-kind="informational"')
+    expect(html.match(/data-crit-help-name=/g)?.length).toBe(
+      html.match(/data-crit-help-description=/g)?.length
+    )
   })
 
   it("renders help without field labels and uses an inset-matched shortcut", () => {
     const html = renderToStaticMarkup(
-      <CanvasHelpPanel details={{
-        name: "Add frame",
-        hotkey: "F",
-        description: "Create a frame."
-      }} />
+      <CanvasHelpPanel details={actionHelpDetails(CanvasControls.resolve({
+          platform: "macos",
+          activeScopes: ["canvas"],
+          globalFacts: { commentAuthorPresent: true },
+          pendingActions: []
+        }).action({ id: "open-new-frame" }))} />
     )
 
     expect(html).toContain('class="crit-help__title"')
@@ -469,26 +480,38 @@ describe("Crit", () => {
   })
 
   it("keeps Note sizing content-driven and actions in its context menu", () => {
+    const controls = CanvasControls.resolve({
+      platform: "macos",
+      activeScopes: ["canvas", "menu"],
+      globalFacts: { commentAuthorPresent: true },
+      pendingActions: []
+    })
+    const target = { kind: "note" as const, id: "feedback", label: "note" }
     const items = noteContextMenuItems({
-      onBringToFront: () => {},
-      onRemove: () => {},
-      onSendToBack: () => {}
+      controls,
+      target,
+      currentAuthorIsTargetAuthor: true,
+      onBringToFront: () => Effect.void,
+      onRemove: () => Effect.void,
+      onSendToBack: () => Effect.void
     })
 
     expect(NOTE_MINIMUM_ROWS).toBe(3)
     expect(noteHeightForContent(84)).toBe(86)
-    expect(items.map((item) => item.label)).toEqual([
+    expect(items.map((item) => item.action.label)).toEqual([
       "Bring to front",
       "Send to back",
-      "Delete"
+      "Remove note"
     ])
-    expect(noteContextMenuItems({
-      onBringToFront: () => {},
-      onSendToBack: () => {}
-    }).map((item) => item.label)).toEqual([
-      "Bring to front",
-      "Send to back"
-    ])
+    const forbiddenItems = noteContextMenuItems({
+      controls,
+      target,
+      currentAuthorIsTargetAuthor: false,
+      onBringToFront: () => Effect.void,
+      onRemove: () => Effect.void,
+      onSendToBack: () => Effect.void
+    })
+    expect(forbiddenItems.at(-1)?.action.availability).toBe("hidden")
     expect(cssRule(".crit-note textarea")).toContain("overflow: hidden")
     expect(cssRule(".crit-note textarea")).toContain("min-height:")
     expect(cssRule(".crit-note textarea")).toContain(
@@ -567,7 +590,7 @@ describe("Crit", () => {
     expect(html).toContain('aria-keyshortcuts="H"')
     expect(html).toContain('aria-keyshortcuts="F"')
     expect(html).toContain('aria-keyshortcuts="N"')
-    expect(html).toContain('aria-keyshortcuts="Backspace"')
+    expect(html).toContain('aria-keyshortcuts="Backspace Delete"')
     expect(html).toContain('aria-label="Select"')
     expect(html).toContain('aria-label="Hand"')
     expect(html.indexOf('aria-label="Select"')).toBeLessThan(
@@ -663,7 +686,7 @@ describe("Crit", () => {
     expect(open).not.toContain("referrerPolicy")
     expect(open).toContain('rel="noreferrer"')
     expect(open).toContain('target="_blank"')
-    expect(html.match(/Show Candidate at all breakpoints/g)).toHaveLength(1)
+    expect(html.match(/aria-label="Show all breakpoints"/g)).toHaveLength(1)
   })
 
   it("uses a real relay navigation while preserving the canonical open URL", async () => {

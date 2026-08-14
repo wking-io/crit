@@ -22,8 +22,10 @@ import type {
   FrameReviewStatus
 } from "../../src/core/index.js"
 import { CritContextMenu, type ContextMenuItem } from "../../src/react/canvas-context-menu.js"
+import { CanvasActionRunnerProvider } from "../../src/react/canvas-action-runner.js"
+import { CanvasControls } from "../../src/react/canvas-controls.js"
 import { CanvasPresenceIndicator, CanvasSaveIndicator, CritBoundaryMessage } from "../../src/react/canvas-feedback.js"
-import { CanvasHelpPanel } from "../../src/react/canvas-help.js"
+import { actionHelpDetails, CanvasHelpPanel } from "../../src/react/canvas-help.js"
 import { CanvasCommentPin } from "../../src/react/canvas-comment-pin.js"
 import { CanvasToolbar } from "../../src/react/canvas-toolbar.js"
 import { CommentPopover } from "../../src/react/comment-popover.js"
@@ -530,23 +532,23 @@ function FrameSpecimen({
         geometry={geometry}
         iframeAllow=""
         iframeVisible={state !== "paused"}
-        onBringToFront={() => {}}
-        onCommentAnchor={() => {}}
-        onCompleteBreakpoints={() => {}}
-        onDuplicateAt={() => {}}
-        onFitContent={() => {}}
+        onBringToFront={() => Effect.void}
+        onCommentAnchor={() => Effect.void}
+        onCompleteBreakpoints={() => Effect.void}
+        onDuplicateAt={() => Effect.void}
+        onFitContent={() => Effect.void}
         onInputIntent={() => {}}
         onMove={() => {}}
-        onOpenComment={() => {}}
-        onRemove={() => {}}
+        onOpenComment={() => Effect.void}
+        onRemove={() => Effect.void}
         onResize={() => {}}
         onSelect={() => {}}
-        onSendToBack={() => {}}
-        onSetSize={() => {}}
+        onSendToBack={() => Effect.void}
+        onSetSize={() => Effect.void}
         onSnapshot={() => Effect.succeed(undefined)}
         onSnapshotError={() => {}}
-        onStatus={() => {}}
-        onTitle={() => {}}
+        onStatus={() => Effect.void}
+        onTitle={() => Effect.void}
         selected={selected}
         shortId="A"
         zoom={1}
@@ -619,13 +621,14 @@ function NoteSpecimen({
       <NoteCard
         author={{ id: "wes", name: "Wes King" }}
         commit={() => {}}
+        execute={() => Effect.void}
         geometry={geometry}
         note={note}
-        onBringToFront={() => {}}
+        onBringToFront={() => Effect.void}
         onMove={() => {}}
         onResize={() => {}}
         onSelect={() => {}}
-        onSendToBack={() => {}}
+        onSendToBack={() => Effect.void}
         selected={selected}
         zoom={1}
       />
@@ -649,8 +652,8 @@ function FeedbackSpecimens() {
   return (
     <SpecimenSection id="05" title="Help, presence, and save state">
       <div className="ui-feedback-grid">
-        <div><StateLabel>Help · hotkey</StateLabel><CanvasHelpPanel details={{ name: "Add frame", hotkey: "F", description: "Create a live frame at the center of the visible canvas." }} /></div>
-        <div><StateLabel>Help · no hotkey / long copy</StateLabel><CanvasHelpPanel details={{ name: "Resize Checkout candidate", hotkey: "—", description: "Drag this handle to resize the frame while preserving its opposite edge and minimum dimensions." }} /></div>
+        <div><StateLabel>Help · hotkey</StateLabel><CanvasHelpPanel details={actionHelpDetails(LAB_CONTROLS.action({ id: "open-new-frame" }))} /></div>
+        <div><StateLabel>Help · no hotkey / long copy</StateLabel><CanvasHelpPanel details={{ _tag: "informational", name: "Resize Checkout candidate", description: "Drag this handle to resize the frame while preserving its opposite edge and minimum dimensions." }} /></div>
         <div className="ui-feedback-badges">
           <StateLabel>Agent presence</StateLabel>
           <CanvasPresenceIndicator
@@ -696,28 +699,38 @@ function FeedbackSpecimens() {
   )
 }
 
+const LAB_CONTROLS = CanvasControls.resolve({
+  platform: "macos",
+  activeScopes: ["canvas", "menu"],
+  globalFacts: { commentAuthorPresent: true },
+  pendingActions: []
+})
+const LAB_FRAME_TARGET = { kind: "frame" as const, id: "lab", label: "Checkout candidate" }
 const FRAME_MENU_ITEMS: ReadonlyArray<ContextMenuItem> = [
-  { label: "Open frame", help: "Open the frame source.", href: "about:blank", detail: <Glyph name="externalArrow" /> },
-  { label: "Fit content", help: "Fit the frame height to its content.", onSelect: () => {}, detail: "F" },
+  { action: LAB_CONTROLS.action({ id: "open-frame-new-tab", target: LAB_FRAME_TARGET }), href: "about:blank", detail: <Glyph name="externalArrow" /> },
+  { action: LAB_CONTROLS.action({ id: "fit-frame-content", target: LAB_FRAME_TARGET }), execute: Effect.void, detail: "F" },
   {
-    label: "Set size",
-    help: "Apply a standard viewport size.",
+    action: LAB_CONTROLS.action({ id: "open-frame-size-menu", target: LAB_FRAME_TARGET }),
     items: [
-      { label: "Mobile", help: "Use a mobile viewport.", onSelect: () => {}, detail: "402 × 874" },
-      { label: "Tablet", help: "Use a tablet viewport.", onSelect: () => {}, detail: "832 × 1194" },
-      { label: "Laptop", help: "Use a laptop viewport.", onSelect: () => {}, detail: "1280 × 832" },
-      { label: "Desktop", help: "Use a desktop viewport.", onSelect: () => {}, detail: "1512 × 982" },
-      { label: "Widescreen", help: "Use a widescreen viewport.", onSelect: () => {}, detail: "2560 × 1440" }
-    ]
+      ["mobile", "402 × 874"],
+      ["tablet", "832 × 1194"],
+      ["laptop", "1280 × 832"],
+      ["desktop", "1512 × 982"],
+      ["widescreen", "2560 × 1440"]
+    ].map(([preset, detail]) => ({
+      action: LAB_CONTROLS.action({ id: "resize-frame-to-preset", target: LAB_FRAME_TARGET, preset: preset as "mobile" | "tablet" | "laptop" | "desktop" | "widescreen" }),
+      execute: Effect.void,
+      detail
+    }))
   },
-  { label: "Bring to front", help: "Move this frame above other items.", onSelect: () => {} },
-  { label: "Delete", help: "Remove this frame.", onSelect: () => {}, tone: "danger" }
+  { action: LAB_CONTROLS.action({ id: "bring-item-to-front", target: LAB_FRAME_TARGET }), execute: Effect.void },
+  { action: LAB_CONTROLS.action({ id: "remove-item", target: LAB_FRAME_TARGET }), execute: Effect.void }
 ]
 
 const EMPTY_MENU_ITEMS: ReadonlyArray<ContextMenuItem> = [
-  { label: "New frame", help: "Add a frame here.", onSelect: () => {} },
-  { label: "New note", help: "Add a note here.", onSelect: () => {} },
-  { label: "Zoom to fit", help: "Fit all canvas items in view.", onSelect: () => {} }
+  { action: LAB_CONTROLS.action({ id: "open-new-frame" }), execute: Effect.void },
+  { action: LAB_CONTROLS.action({ id: "create-note" }), execute: Effect.void },
+  { action: LAB_CONTROLS.action({ id: "zoom-to-fit" }), execute: Effect.void }
 ]
 
 function ContextMenuSpecimen({ ariaLabel, items }: {
@@ -762,7 +775,7 @@ function DialogSpecimens() {
   return (
     <SpecimenSection id="07" title="Dialog and form controls">
       <div className="ui-dialog-stage">
-        <NewFrameForm onCancel={() => {}} onCreate={() => {}} onError={() => {}} />
+        <NewFrameForm onCancel={() => {}} onCreate={() => Effect.void} onError={() => {}} />
       </div>
       <div className="crit-new-frame-dialog ui-form-state-grid">
         <label><StateLabel>Empty</StateLabel><input placeholder="https://example.com/iteration" /></label>
@@ -784,7 +797,7 @@ function DialogSpecimens() {
 
 function CommentPinSpecimen({ active = false, label, color }: { readonly active?: boolean; readonly label: string; readonly color: string }) {
   return <span aria-label={label} className="ui-comment-pin-stage">
-    <CanvasCommentPin active={active} authorName={label} color={color} onOpen={() => {}} xRatio={0.5} yRatio={0.8} />
+    <CanvasCommentPin active={active} authorName={label} color={color} onOpen={() => Effect.void} threadId="lab-thread" xRatio={0.5} yRatio={0.8} />
   </span>
 }
 
@@ -822,9 +835,9 @@ function CommentSpecimens() {
         <div><StateLabel>Open thread · dot</StateLabel><CommentPinSpecimen active color={color} label="Open comment thread" /></div>
       </div>
       <div className="ui-comment-grid">
-        <div><StateLabel>New · empty submit disabled</StateLabel><CommentPopover canSubmit clearDraft={null} editableCommentIds={new Set()} inline pending={false} resolution={null} statusColor={color} onClose={() => {}} onDraftStatus={() => {}} onEdit={() => {}} onResolve={() => {}} onSubmit={() => {}} /></div>
-        <div><StateLabel>Thread · owner can resolve</StateLabel><CommentPopover canSubmit clearDraft={null} editableCommentIds={new Set([thread.opening.id])} inline pending={false} resolution="resolve" statusColor={color} thread={thread} onClose={() => {}} onDraftStatus={() => {}} onEdit={() => {}} onResolve={() => {}} onSubmit={() => {}} /></div>
-        <div><StateLabel>Thread · no resolve permission</StateLabel><CommentPopover canSubmit clearDraft={null} editableCommentIds={new Set()} inline pending={false} resolution={null} statusColor={color} thread={thread} onClose={() => {}} onDraftStatus={() => {}} onEdit={() => {}} onResolve={() => {}} onSubmit={() => {}} /></div>
+        <div><StateLabel>New · empty submit disabled</StateLabel><CommentPopover canSubmit clearDraft={null} currentAuthorId="wes" frameId="candidate" inline pending={false} statusColor={color} threadManageable={false} onClose={() => Effect.void} onDraftStatus={() => {}} onEdit={() => Effect.void} onResolve={() => Effect.void} onSubmit={() => Effect.void} /></div>
+        <div><StateLabel>Thread · owner can resolve</StateLabel><CommentPopover canSubmit clearDraft={null} currentAuthorId={thread.opening.author.id} frameId="candidate" inline pending={false} statusColor={color} thread={thread} threadManageable onClose={() => Effect.void} onDraftStatus={() => {}} onEdit={() => Effect.void} onResolve={() => Effect.void} onSubmit={() => Effect.void} /></div>
+        <div><StateLabel>Thread · no resolve permission</StateLabel><CommentPopover canSubmit clearDraft={null} currentAuthorId={null} frameId="candidate" inline pending={false} statusColor={color} thread={thread} threadManageable={false} onClose={() => Effect.void} onDraftStatus={() => {}} onEdit={() => Effect.void} onResolve={() => Effect.void} onSubmit={() => Effect.void} /></div>
       </div>
     </SpecimenSection>
   )
@@ -868,7 +881,7 @@ export default function UiLab() {
     ]
   ) as LabStyle, [assignments, tokenValues])
   return (
-    <>
+    <CanvasActionRunnerProvider>
       <style data-crit-ui-styles="">{critStyles}</style>
       <div
         className="ui-lab-shell"
@@ -895,6 +908,6 @@ export default function UiLab() {
         />
       </aside>
       </div>
-    </>
+    </CanvasActionRunnerProvider>
   )
 }

@@ -4,7 +4,7 @@ import type {
 } from "react"
 
 import type { CanvasGeometry } from "../core/index.js"
-import { NO_HELP_HOTKEY, helpTarget } from "./canvas-help.js"
+import { informationalHelpTarget } from "./canvas-help.js"
 import { FRAME_CORNER_RADIUS } from "./frame-geometry.js"
 
 const SELECTION_HANDLE_SIZE = 13.95
@@ -136,9 +136,8 @@ export function CanvasSelection({
         <button
           aria-label={`Resize ${label} from ${handle}`}
           className="crit-selection__handle"
-          {...helpTarget({
+          {...informationalHelpTarget({
             name: "Resize",
-            hotkey: NO_HELP_HOTKEY,
             description: `Drag to resize the ${label} in this direction.`
           })}
           data-resize-handle={handle}

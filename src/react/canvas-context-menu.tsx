@@ -1,4 +1,5 @@
 import { useHotkey } from "@tanstack/react-hotkeys"
+import { Effect } from "effect"
 import {
   useCallback,
   useEffect,
@@ -8,7 +9,15 @@ import {
 } from "react"
 import { createPortal } from "react-dom"
 
-import { NO_HELP_HOTKEY, helpTarget } from "./canvas-help.js"
+import {
+  useCanvasActionRunner,
+  useCanvasControls
+} from "./canvas-action-runner.js"
+import {
+  tanStackHotkeysForAction,
+  type ResolvedCanvasAction
+} from "./canvas-controls.js"
+import { actionHelpTarget } from "./canvas-help.js"
 import { Glyph } from "./glyph.js"
 
 export type ContextMenuPosition = {
@@ -18,25 +27,22 @@ export type ContextMenuPosition = {
 
 export type ContextMenuActionItem =
   | {
+      readonly action: ResolvedCanvasAction
       readonly detail?: ReactNode
-      readonly help: string
-      readonly label: string
-      readonly onSelect: () => void
-      readonly tone?: "danger"
+      readonly execute: Effect.Effect<unknown, unknown>
+      readonly onFailure?: (cause: unknown) => void
     }
   | {
+      readonly action: ResolvedCanvasAction
       readonly detail?: ReactNode
-      readonly help: string
       readonly href: string
-      readonly label: string
     }
 
 export type ContextMenuItem =
   | ContextMenuActionItem
   | {
-      readonly help: string
+      readonly action: ResolvedCanvasAction
       readonly items: ReadonlyArray<ContextMenuActionItem>
-      readonly label: string
     }
 
 function ContextMenuAction({
@@ -48,9 +54,13 @@ function ContextMenuAction({
   readonly onClose: () => void
   readonly onPointerEnter?: () => void
 }) {
+  const controls = useCanvasControls(["canvas", "menu"], true)
+  const runner = useCanvasActionRunner()
+  const { action } = item
+  if (action.availability === "hidden") return null
   const content = (
     <>
-      <span>{item.label}</span>
+      <span>{action.label}</span>
       {item.detail === undefined ? null : (
         <span className="crit-context-menu__detail">{item.detail}</span>
       )}
@@ -59,12 +69,9 @@ function ContextMenuAction({
 
   return "href" in item ? (
     <a
+      aria-keyshortcuts={action.ariaKeyShortcuts}
       href={item.href}
-      {...helpTarget({
-        name: item.label,
-        hotkey: NO_HELP_HOTKEY,
-        description: item.help
-      })}
+      {...actionHelpTarget(action)}
       onClick={onClose}
       {...(onPointerEnter === undefined ? {} : { onPointerEnter })}
       rel="noreferrer"
@@ -75,15 +82,13 @@ function ContextMenuAction({
     </a>
   ) : (
     <button
-      data-tone={item.tone}
-      {...helpTarget({
-        name: item.label,
-        hotkey: NO_HELP_HOTKEY,
-        description: item.help
-      })}
+      aria-keyshortcuts={action.ariaKeyShortcuts}
+      data-tone={action.consequence === "destructive" ? "danger" : undefined}
+      disabled={action.availability !== "enabled"}
+      {...actionHelpTarget(action)}
       onClick={() => {
         onClose()
-        item.onSelect()
+        runner.run(controls, action, item.execute, item.onFailure)
       }}
       {...(onPointerEnter === undefined ? {} : { onPointerEnter })}
       role="menuitem"
@@ -107,11 +112,13 @@ export function CritContextMenu({
   readonly onClose: () => void
   readonly position: ContextMenuPosition | null
 }) {
+  const controls = useCanvasControls(["canvas", "menu"], true)
+  const runner = useCanvasActionRunner()
   const menuRef = useRef<HTMLDivElement>(null)
   const submenuRef = useRef<HTMLDivElement>(null)
   const [submenu, setSubmenu] = useState<{
+    readonly action: ResolvedCanvasAction
     readonly items: ReadonlyArray<ContextMenuActionItem>
-    readonly label: string
     readonly position: ContextMenuPosition
   } | null>(null)
 
@@ -119,8 +126,12 @@ export function CritContextMenu({
     setSubmenu(null)
     onClose()
   }, [onClose])
+  const closeAction = controls.action({ id: "close-context-menu" })
+  const closeHotkey = tanStackHotkeysForAction(closeAction)[0]!
 
-  useHotkey("Escape", close, {
+  useHotkey(closeHotkey, () => {
+    runner.run(controls, closeAction, Effect.sync(close))
+  }, {
     conflictBehavior: "allow",
     enabled: position !== null,
     ignoreInputs: false
@@ -136,8 +147,8 @@ export function CritContextMenu({
     const submenuHeight = item.items.length * 34 + 8
     const opensRight = rect.right + 4 + menuWidth <= window.innerWidth - 8
     setSubmenu({
+      action: item.action,
       items: item.items,
-      label: item.label,
       position: inline ? { x: 0, y: 0 } : {
         x: opensRight ? rect.right + 4 : rect.left - menuWidth - 4,
         y: Math.max(8, Math.min(rect.top, window.innerHeight - submenuHeight - 8))
@@ -177,8 +188,9 @@ export function CritContextMenu({
   }, [inline, position])
 
   if (position === null || typeof document === "undefined") return null
+  const visibleItems = items.filter((item) => item.action.availability !== "hidden")
   const menuWidth = 208
-  const menuHeight = items.length * 34 + 8
+  const menuHeight = visibleItems.length * 34 + 8
   const left = Math.max(8, Math.min(position.x, window.innerWidth - menuWidth - 8))
   const top = Math.max(8, Math.min(position.y, window.innerHeight - menuHeight - 8))
 
@@ -197,21 +209,26 @@ export function CritContextMenu({
         role="menu"
         style={inline ? undefined : { left, top }}
       >
-        {items.map((item) =>
+        {visibleItems.map((item) =>
           "items" in item ? (
             <button
-              aria-expanded={submenu?.label === item.label}
+              aria-expanded={submenu?.action.key === item.action.key}
               aria-haspopup="menu"
+              aria-keyshortcuts={item.action.ariaKeyShortcuts}
               data-submenu-trigger=""
-              {...helpTarget({
-                name: item.label,
-                hotkey: NO_HELP_HOTKEY,
-                description: item.help
-              })}
-              key={item.label}
+              disabled={item.action.availability !== "enabled"}
+              {...actionHelpTarget(item.action)}
+              key={item.action.key}
               onClick={(event) => {
-                if (submenu?.label === item.label) setSubmenu(null)
-                else openSubmenu(item, event.currentTarget, true)
+                const trigger = event.currentTarget
+                runner.run(
+                  controls,
+                  item.action,
+                  Effect.sync(() => {
+                    if (submenu?.action.key === item.action.key) setSubmenu(null)
+                    else openSubmenu(item, trigger, true)
+                  })
+                )
               }}
               onKeyDown={(event) => {
                 if (event.key === "ArrowRight") {
@@ -219,17 +236,24 @@ export function CritContextMenu({
                   openSubmenu(item, event.currentTarget, true)
                 }
               }}
-              onPointerEnter={(event) => openSubmenu(item, event.currentTarget)}
+              onPointerEnter={(event) => {
+                const trigger = event.currentTarget
+                runner.run(
+                  controls,
+                  item.action,
+                  Effect.sync(() => openSubmenu(item, trigger))
+                )
+              }}
               role="menuitem"
               type="button"
             >
-              <span>{item.label}</span>
+              <span>{item.action.label}</span>
               <span aria-hidden="true" className="crit-context-menu__arrow"><Glyph name="chevronRight" /></span>
             </button>
           ) : (
             <ContextMenuAction
               item={item}
-              key={item.label}
+              key={`${item.action.key}:${item.action.label}`}
               onPointerEnter={() => setSubmenu(null)}
               onClose={close}
             />
@@ -238,7 +262,7 @@ export function CritContextMenu({
       </div>
       {submenu === null ? null : (
         <div
-          aria-label={submenu.label}
+          aria-label={submenu.action.label}
           className="crit-context-menu crit-context-menu--submenu"
           data-inline={inline || undefined}
           onContextMenu={(event) => event.preventDefault()}
@@ -259,7 +283,7 @@ export function CritContextMenu({
           {submenu.items.map((item) => (
             <ContextMenuAction
               item={item}
-              key={item.label}
+              key={`${item.action.key}:${item.action.label}`}
               onClose={close}
             />
           ))}
