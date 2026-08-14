@@ -69,11 +69,11 @@ function ContextMenuAction({
 
   return "href" in item ? (
     <a
-      aria-keyshortcuts={action.ariaKeyShortcuts}
+      aria-keyshortcuts={action.ariaKeyShortcuts ?? undefined}
       href={item.href}
       {...actionHelpTarget(action)}
       onClick={onClose}
-      {...(onPointerEnter === undefined ? {} : { onPointerEnter })}
+      onPointerEnter={onPointerEnter}
       rel="noreferrer"
       role="menuitem"
       target="_blank"
@@ -82,7 +82,7 @@ function ContextMenuAction({
     </a>
   ) : (
     <button
-      aria-keyshortcuts={action.ariaKeyShortcuts}
+      aria-keyshortcuts={action.ariaKeyShortcuts ?? undefined}
       data-tone={action.consequence === "destructive" ? "danger" : undefined}
       disabled={action.availability !== "enabled"}
       {...actionHelpTarget(action)}
@@ -90,7 +90,7 @@ function ContextMenuAction({
         onClose()
         runner.run(controls, action, item.execute, item.onFailure)
       }}
-      {...(onPointerEnter === undefined ? {} : { onPointerEnter })}
+      onPointerEnter={onPointerEnter}
       role="menuitem"
       type="button"
     >
@@ -214,7 +214,7 @@ export function CritContextMenu({
             <button
               aria-expanded={submenu?.action.key === item.action.key}
               aria-haspopup="menu"
-              aria-keyshortcuts={item.action.ariaKeyShortcuts}
+              aria-keyshortcuts={item.action.ariaKeyShortcuts ?? undefined}
               data-submenu-trigger=""
               disabled={item.action.availability !== "enabled"}
               {...actionHelpTarget(item.action)}

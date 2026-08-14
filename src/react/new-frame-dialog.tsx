@@ -90,13 +90,13 @@ export function NewFrameForm({
       </label>
       <div className="crit-new-frame-dialog__actions">
         <button
-          aria-keyshortcuts={cancel.ariaKeyShortcuts}
+          aria-keyshortcuts={cancel.ariaKeyShortcuts ?? undefined}
           {...actionHelpTarget(cancel)}
           onClick={() => runner.run(controls, cancel, Effect.sync(onCancel))}
           type="button"
         >{cancel.label}</button>
         <button
-          aria-keyshortcuts={create.ariaKeyShortcuts}
+          aria-keyshortcuts={create.ariaKeyShortcuts ?? undefined}
           data-primary=""
           disabled={create.availability !== "enabled"}
           {...actionHelpTarget(create)}

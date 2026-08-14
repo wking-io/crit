@@ -1,4 +1,4 @@
-import { access, mkdtemp, rm } from "node:fs/promises"
+import { access, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 
@@ -63,7 +63,9 @@ describe("FileSystemAgentActivity", () => {
         canvasId: "review",
         activityId: "claude-1",
         harness: "Claude",
-        detail: "Reviewing copy"
+        model: null,
+        detail: "Reviewing copy",
+        reference: null
       })
       expect((yield* store.read("review")).activities).toHaveLength(2)
 
@@ -72,7 +74,9 @@ describe("FileSystemAgentActivity", () => {
         canvasId: "review",
         activityId: "codex-1",
         harness: "Codex",
-        detail: "Polishing checkout"
+        model: null,
+        detail: "Polishing checkout",
+        reference: null
       })
       expect(renewed).toMatchObject({
         createdAt: "2026-08-08T12:00:00.000Z",
@@ -93,6 +97,64 @@ describe("FileSystemAgentActivity", () => {
       yield* store.clear("review", "codex-1")
       expect(yield* exists("codex-1")).toBe(false)
       expect((yield* store.read("review")).activities).toEqual([])
+    }).pipe(
+      Effect.provide(
+        FileSystemAgentActivity.layer({ root, now: () => time })
+      )
+    ))
+
+  it.effect("correlates signal failures with the activity identity", () =>
+    Effect.gen(function*() {
+      const store = yield* AgentActivityStore
+      const failure = yield* Effect.flip(store.signal({
+        canvasId: "review",
+        activityId: " ",
+        harness: "Codex",
+        model: null,
+        detail: null,
+        reference: null
+      }))
+
+      expect(failure).toMatchObject({
+        _tag: "AgentActivitySignalFailed",
+        canvasId: "review",
+        activityId: " "
+      })
+      expect("operation" in failure).toBe(false)
+    }).pipe(
+      Effect.provide(
+        FileSystemAgentActivity.layer({ root, now: () => time })
+      )
+    ))
+
+  it.effect("normalizes an omitted reference URI in version 1 records", () =>
+    Effect.gen(function*() {
+      const directory = path.join(root, ".crit/activity/review")
+      yield* Effect.promise(() => mkdir(directory, { recursive: true }))
+      yield* Effect.promise(() => writeFile(
+        path.join(directory, "legacy.json"),
+        JSON.stringify({
+          schemaVersion: 1,
+          canvasId: "review",
+          activityId: "legacy",
+          harness: "Codex",
+          model: null,
+          detail: null,
+          reference: { kind: "thread", id: "thread-1" },
+          createdAt: "2026-08-08T12:00:00.000Z",
+          updatedAt: "2026-08-08T12:00:00.000Z",
+          activeUntil: "2026-08-08T12:01:00.000Z"
+        })
+      ))
+
+      const store = yield* AgentActivityStore
+      const collection = yield* store.read("review")
+
+      expect(collection.activities[0]?.reference).toEqual({
+        kind: "thread",
+        id: "thread-1",
+        uri: null
+      })
     }).pipe(
       Effect.provide(
         FileSystemAgentActivity.layer({ root, now: () => time })

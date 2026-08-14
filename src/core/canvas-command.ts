@@ -80,17 +80,24 @@ export const SetFrameStatusCommand = Schema.TaggedStruct("SetFrameStatus", {
 })
 export type SetFrameStatusCommand = typeof SetFrameStatusCommand.Type
 
-export const UpdateFrameCommand = Schema.TaggedStruct("UpdateFrame", {
+export const SetFrameSourceCommand = Schema.TaggedStruct("SetFrameSource", {
   id: Schema.String,
-  changes: Schema.Struct({
-    url: Schema.optional(Schema.String),
-    title: Schema.optional(Schema.String),
-    status: Schema.optional(FrameReviewStatus),
-    provenance: Schema.optional(FrameProvenance),
-    display: Schema.optional(FrameDisplay)
-  })
+  url: Schema.String,
+  provenance: FrameProvenance
 })
-export type UpdateFrameCommand = typeof UpdateFrameCommand.Type
+export type SetFrameSourceCommand = typeof SetFrameSourceCommand.Type
+
+export const SetFrameTitleCommand = Schema.TaggedStruct("SetFrameTitle", {
+  id: Schema.String,
+  title: Schema.String
+})
+export type SetFrameTitleCommand = typeof SetFrameTitleCommand.Type
+
+export const SetFrameDisplayCommand = Schema.TaggedStruct("SetFrameDisplay", {
+  id: Schema.String,
+  display: FrameDisplay
+})
+export type SetFrameDisplayCommand = typeof SetFrameDisplayCommand.Type
 
 export const RemoveFrameCommand = Schema.TaggedStruct("RemoveFrame", {
   id: Schema.String
@@ -258,6 +265,22 @@ export type SetFrameStatusInput = {
   readonly status: FrameReviewStatus
 }
 
+export type SetFrameSourceInput = {
+  readonly id: string
+  readonly url: string
+  readonly provenance: FrameProvenance
+}
+
+export type SetFrameTitleInput = {
+  readonly id: string
+  readonly title: string
+}
+
+export type SetFrameDisplayInput = {
+  readonly id: string
+  readonly display: FrameDisplay
+}
+
 export type AddSnapshotFrameInput = {
   readonly id: string
   readonly sourceFrameId: string
@@ -278,19 +301,20 @@ const setFrameStatus = (input: SetFrameStatusInput): SetFrameStatusCommand => ({
   ...input
 })
 
-export type UpdateFrameInput = {
-  readonly id: string
-  readonly changes: {
-    readonly url?: string
-    readonly title?: string
-    readonly status?: FrameReviewStatus
-    readonly provenance?: FrameProvenance
-    readonly display?: FrameDisplay
-  }
-}
+const setFrameSource = (input: SetFrameSourceInput): SetFrameSourceCommand => ({
+  _tag: "SetFrameSource",
+  ...input
+})
 
-const updateFrame = (input: UpdateFrameInput): UpdateFrameCommand => ({
-  _tag: "UpdateFrame",
+const setFrameTitle = (input: SetFrameTitleInput): SetFrameTitleCommand => ({
+  _tag: "SetFrameTitle",
+  ...input
+})
+
+const setFrameDisplay = (
+  input: SetFrameDisplayInput
+): SetFrameDisplayCommand => ({
+  _tag: "SetFrameDisplay",
   ...input
 })
 
@@ -492,7 +516,9 @@ export const CanvasCommandSchema = Schema.Union([
   AddFrameCommand,
   AddSnapshotFrameCommand,
   SetFrameStatusCommand,
-  UpdateFrameCommand,
+  SetFrameSourceCommand,
+  SetFrameTitleCommand,
+  SetFrameDisplayCommand,
   RemoveFrameCommand,
   MoveFrameCommand,
   ResizeFrameCommand,
@@ -519,7 +545,9 @@ export const CanvasCommand = {
   AddFrame: AddFrameCommand,
   AddSnapshotFrame: AddSnapshotFrameCommand,
   SetFrameStatus: SetFrameStatusCommand,
-  UpdateFrame: UpdateFrameCommand,
+  SetFrameSource: SetFrameSourceCommand,
+  SetFrameTitle: SetFrameTitleCommand,
+  SetFrameDisplay: SetFrameDisplayCommand,
   RemoveFrame: RemoveFrameCommand,
   MoveFrame: MoveFrameCommand,
   ResizeFrame: ResizeFrameCommand,
@@ -542,7 +570,9 @@ export const CanvasCommand = {
   addFrame,
   addSnapshotFrame,
   setFrameStatus,
-  updateFrame,
+  setFrameSource,
+  setFrameTitle,
+  setFrameDisplay,
   removeFrame,
   moveFrame,
   resizeFrame,

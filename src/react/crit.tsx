@@ -21,10 +21,18 @@ import { HttpCritClient } from "../http/client.js"
 import { GIT_AUTHOR_REMEDIATION_PROMPT } from "../runtime/author-identity.js"
 import {
   CanvasSession,
+  DEFAULT_CANVAS_SESSION_AUTOSAVE_DELAY,
+  DEFAULT_CANVAS_SESSION_PRESENCE_INTERVAL,
+  DEFAULT_CANVAS_SESSION_REFRESH_INTERVAL,
   type CanvasSession as CanvasSessionHandle,
   type CanvasSessionState
 } from "../session/canvas-session.js"
-import { CritClient } from "../session/crit-client.js"
+import {
+  CritActivityClient,
+  CritClient,
+  CritSnapshotClient,
+  type CritClientServices
+} from "../session/crit-client.js"
 import { DraftJournal } from "../session/draft-journal.js"
 import {
   CanvasViewport,
@@ -76,6 +84,13 @@ const rootStyle: CSSProperties = {
 
 const classes = (...values: ReadonlyArray<string | undefined>) =>
   values.filter((value): value is string => value !== undefined).join(" ")
+
+type CritSessionConfig = {
+  readonly sessionId: string
+  readonly autosaveDelay: Duration.Input
+  readonly refreshInterval: Duration.Input | false
+  readonly presenceRefreshInterval: Duration.Input | false
+}
 
 type SessionIdRuntime = {
   readonly storage: Pick<Storage, "getItem" | "setItem"> | undefined
@@ -132,7 +147,7 @@ const isCurrentAuthorError = (cause: unknown) =>
 
 export interface CritProps {
   readonly canvasId: string
-  readonly client?: CritClient["Service"]
+  readonly services?: CritClientServices
   readonly apiPath?: string
   readonly autosaveDelay?: Duration.Input
   readonly refreshInterval?: Duration.Input | false
@@ -154,7 +169,7 @@ export interface CritProps {
 
 export function Crit({
   canvasId,
-  client,
+  services,
   apiPath,
   autosaveDelay,
   refreshInterval,
@@ -183,9 +198,9 @@ export function Crit({
     () => sessionId ?? sessionIdForCanvas(canvasId),
     [canvasId, sessionId]
   )
-  const resolvedClient = useMemo(
-    () => client ?? HttpCritClient.make(apiPath === undefined ? {} : { apiPath }),
-    [apiPath, client]
+  const resolvedServices = useMemo<CritClientServices>(
+    () => services ?? HttpCritClient.make(apiPath === undefined ? {} : { apiPath }),
+    [apiPath, services]
   )
   const resolvedJournal = useMemo(
     () => draftJournal === false ? undefined : (draftJournal ?? IndexedDbDraftJournal.make()),
@@ -200,18 +215,29 @@ export function Crit({
     setDocument(null)
     setError(null)
 
-    const sessionOptions = {
+    const sessionOptions: CritSessionConfig = {
       sessionId: resolvedSessionId,
-      ...(autosaveDelay === undefined ? {} : { autosaveDelay }),
-      ...(refreshInterval === undefined ? {} : { refreshInterval }),
-      ...(presenceRefreshInterval === undefined
-        ? {}
-        : { presenceRefreshInterval })
+      autosaveDelay:
+        autosaveDelay ?? DEFAULT_CANVAS_SESSION_AUTOSAVE_DELAY,
+      refreshInterval:
+        refreshInterval ?? DEFAULT_CANVAS_SESSION_REFRESH_INTERVAL,
+      presenceRefreshInterval:
+        presenceRefreshInterval ?? DEFAULT_CANVAS_SESSION_PRESENCE_INTERVAL
     }
     let opening = CanvasSession.open(canvasId, sessionOptions).pipe(
-      Effect.provideService(CritClient, resolvedClient),
+      Effect.provideService(CritClient, resolvedServices.client),
       Effect.provideService(Scope.Scope, scope)
     )
+    if (resolvedServices.snapshots !== null) {
+      opening = opening.pipe(
+        Effect.provideService(CritSnapshotClient, resolvedServices.snapshots)
+      )
+    }
+    if (resolvedServices.activity !== null) {
+      opening = opening.pipe(
+        Effect.provideService(CritActivityClient, resolvedServices.activity)
+      )
+    }
     if (resolvedJournal !== undefined) {
       opening = opening.pipe(Effect.provideService(DraftJournal, resolvedJournal))
     }
@@ -253,7 +279,7 @@ export function Crit({
     canvasId,
     presenceRefreshInterval,
     refreshInterval,
-    resolvedClient,
+    resolvedServices,
     resolvedJournal,
     resolvedSessionId
   ])
@@ -287,8 +313,8 @@ export function Crit({
     return (
       <CritBoundaryMessage
         error
-        {...(className === undefined ? {} : { className })}
-        {...(style === undefined ? {} : { style })}
+        className={className}
+        style={style}
       >
         {errorFallback?.(message) ?? (
           isCurrentAuthorError(error) ? (
@@ -307,8 +333,8 @@ export function Crit({
   if (session === null || document === null) {
     return (
       <CritBoundaryMessage
-        {...(className === undefined ? {} : { className })}
-        {...(style === undefined ? {} : { style })}
+        className={className}
+        style={style}
       >
         {loadingFallback ?? "Opening canvas…"}
       </CritBoundaryMessage>
@@ -321,37 +347,37 @@ export function Crit({
         className={classes("crit-root", className)}
         style={{ ...rootStyle, ...style }}
       >
-      <CanvasViewport
-        author={sessionState?.presence.currentAuthor ?? null}
-        dispatch={session.dispatch}
-        document={document}
-        snapshotFrame={session.snapshotFrame}
-        {...(frameChrome === undefined ? {} : { frameChrome })}
-        {...(cameraOptions === undefined ? {} : { cameraOptions })}
-        {...(iframeAllow === undefined ? {} : { iframeAllow })}
-        {...(iframeSandbox === undefined ? {} : { iframeSandbox })}
-        {...(frameLoading === undefined ? {} : { frameLoading })}
-        {...(onCommandError === undefined ? {} : { onCommandError })}
-      />
-      <CanvasHelpPanel />
-      {sessionState === null ? null : (
-        <CanvasPresenceIndicator presence={sessionState.presence} />
-      )}
-      {sessionState === null ? null : (
-        <CanvasSaveIndicator
-          onDiscardLocalChanges={() => {
-            Effect.runFork(
-              session.discardLocalChanges().pipe(
-                Effect.catch((cause) =>
-                  Effect.sync(() => setError(cause))
+        <CanvasViewport
+          author={sessionState?.presence.currentAuthor ?? null}
+          dispatch={session.dispatch}
+          document={document}
+          snapshotFrame={session.snapshotFrame}
+          frameChrome={frameChrome}
+          cameraOptions={cameraOptions}
+          iframeAllow={iframeAllow}
+          iframeSandbox={iframeSandbox}
+          frameLoading={frameLoading}
+          onCommandError={onCommandError}
+        />
+        <CanvasHelpPanel />
+        {sessionState === null ? null : (
+          <CanvasPresenceIndicator presence={sessionState.presence} />
+        )}
+        {sessionState === null ? null : (
+          <CanvasSaveIndicator
+            onDiscardLocalChanges={() => {
+              Effect.runFork(
+                session.discardLocalChanges().pipe(
+                  Effect.catch((cause) =>
+                    Effect.sync(() => setError(cause))
+                  )
                 )
               )
-            )
-          }}
-          recoveryStatus={sessionState.recoveryStatus}
-          saveStatus={sessionState.saveStatus}
-        />
-      )}
+            }}
+            recoveryStatus={sessionState.recoveryStatus}
+            saveStatus={sessionState.saveStatus}
+          />
+        )}
       </CanvasHelpSurface>
     </GlyphProvider>
   )

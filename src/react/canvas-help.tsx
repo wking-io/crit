@@ -12,8 +12,8 @@ import type { ResolvedCanvasAction } from "./canvas-controls.js"
 export const ResolvedActionHelp = Schema.TaggedStruct("action", {
   name: Schema.String,
   description: Schema.String,
-  shortcut: Schema.optionalKey(Schema.String),
-  availabilityMessage: Schema.optionalKey(Schema.String)
+  shortcut: Schema.NullOr(Schema.String),
+  availabilityMessage: Schema.NullOr(Schema.String)
 }).pipe(Schema.brand("ResolvedActionHelp"))
 export type ResolvedActionHelp = typeof ResolvedActionHelp.Type
 
@@ -35,8 +35,8 @@ type CanvasHelpAttributes = {
   readonly "data-crit-help-kind": CanvasHelpDetails["_tag"]
   readonly "data-crit-help-name": string
   readonly "data-crit-help-description": string
-  readonly "data-crit-help-shortcut"?: string
-  readonly "data-crit-help-availability"?: string
+  readonly "data-crit-help-shortcut": string | undefined
+  readonly "data-crit-help-availability": string | undefined
 }
 
 const helpTarget = (input: CanvasHelpDetails): CanvasHelpAttributes => {
@@ -45,12 +45,12 @@ const helpTarget = (input: CanvasHelpDetails): CanvasHelpAttributes => {
     "data-crit-help-kind": details._tag,
     "data-crit-help-name": details.name,
     "data-crit-help-description": details.description,
-    ...(details._tag === "action" && details.shortcut !== undefined
-      ? { "data-crit-help-shortcut": details.shortcut }
-      : {}),
-    ...(details._tag === "action" && details.availabilityMessage !== undefined
-      ? { "data-crit-help-availability": details.availabilityMessage }
-      : {})
+    "data-crit-help-shortcut": details._tag === "action"
+      ? details.shortcut ?? undefined
+      : undefined,
+    "data-crit-help-availability": details._tag === "action"
+      ? details.availabilityMessage ?? undefined
+      : undefined
   }
 }
 
@@ -60,10 +60,10 @@ export const actionHelpDetails = (
   _tag: "action",
   name: action.label,
   description: action.description,
-  ...(action.shortcut === undefined ? {} : { shortcut: action.shortcut }),
-  ...(action.availabilityMessage === undefined
-    ? {}
-    : { availabilityMessage: action.availabilityMessage })
+  shortcut: action.shortcut,
+  availabilityMessage: action.availability === "enabled"
+    ? null
+    : action.availabilityMessage
 })
 
 export const actionHelpTarget = (
@@ -76,10 +76,10 @@ export const informationalHelpTarget = (
 
 const detailsFromTarget = (
   target: EventTarget | null
-): CanvasHelpDetails | undefined => {
-  if (!(target instanceof Element)) return undefined
+): CanvasHelpDetails | null => {
+  if (!(target instanceof Element)) return null
   const element = target.closest<HTMLElement>("[data-crit-help-name]")
-  if (element === null) return undefined
+  if (element === null) return null
   const {
     critHelpKind,
     critHelpName,
@@ -91,7 +91,7 @@ const detailsFromTarget = (
     critHelpName === undefined ||
     critHelpDescription === undefined ||
     (critHelpKind !== "action" && critHelpKind !== "informational")
-  ) return undefined
+  ) return null
   return critHelpKind === "informational"
     ? {
         _tag: "informational",
@@ -102,10 +102,8 @@ const detailsFromTarget = (
         _tag: "action",
         name: critHelpName,
         description: critHelpDescription,
-        ...(critHelpShortcut === undefined ? {} : { shortcut: critHelpShortcut }),
-        ...(critHelpAvailability === undefined
-          ? {}
-          : { availabilityMessage: critHelpAvailability })
+        shortcut: critHelpShortcut ?? null,
+        availabilityMessage: critHelpAvailability ?? null
       })
 }
 
@@ -113,9 +111,9 @@ const CanvasHelpContext = createContext<CanvasHelpDetails | null>(null)
 
 export const activeCanvasHelpDetails = (
   pointerDetails: CanvasHelpDetails | null | undefined,
-  focusDetails: CanvasHelpDetails | undefined
+  focusDetails: CanvasHelpDetails | null
 ): CanvasHelpDetails | null => pointerDetails === undefined
-  ? focusDetails ?? null
+  ? focusDetails
   : pointerDetails
 
 export function CanvasHelpSurface({
@@ -129,7 +127,7 @@ export function CanvasHelpSurface({
   const [pointerDetails, setPointerDetails] =
     useState<CanvasHelpDetails | null | undefined>()
   const [focusDetails, setFocusDetails] =
-    useState<CanvasHelpDetails | undefined>()
+    useState<CanvasHelpDetails | null>(null)
 
   return (
     <CanvasHelpContext.Provider
@@ -150,13 +148,13 @@ export function CanvasHelpSurface({
           setPointerDetails(
             event.relatedTarget instanceof Node &&
               event.currentTarget.contains(event.relatedTarget)
-              ? detailsFromTarget(event.relatedTarget) ?? null
+              ? detailsFromTarget(event.relatedTarget)
               : undefined
           )
         }}
         onPointerOver={(event) => {
           onPointerOver?.(event)
-          setPointerDetails(detailsFromTarget(event.target) ?? null)
+          setPointerDetails(detailsFromTarget(event.target))
         }}
       >
         {children}
@@ -177,12 +175,12 @@ export function CanvasHelpPanel({
     <aside aria-label="Control help" aria-live="polite" className="crit-help">
       <div className="crit-help__header">
         <div className="crit-help__title">{details.name}</div>
-        {details._tag === "action" && details.shortcut !== undefined ? (
+        {details._tag === "action" && details.shortcut !== null ? (
           <div className="crit-help__shortcut">{details.shortcut}</div>
         ) : null}
       </div>
       <p className="crit-help__description">{details.description}</p>
-      {details._tag === "action" && details.availabilityMessage !== undefined ? (
+      {details._tag === "action" && details.availabilityMessage !== null ? (
         <p className="crit-help__availability">{details.availabilityMessage}</p>
       ) : null}
     </aside>

@@ -7,12 +7,12 @@ import {
   MAX_CANVAS_DOCUMENT_BYTES
 } from "../core/index.js"
 import {
-  CritClient,
   CritClientCommandFailed,
   CritClientErrorSchema,
   CritClientInvalidDocument,
   CritClientNotFound,
   CritClientUnavailable,
+  type CritClientServices,
   type CritClientError
 } from "../session/crit-client.js"
 import { AgentActivityCollection } from "../runtime/agent-activity.js"
@@ -63,6 +63,8 @@ export interface CritHttpHandlerOptions {
   readonly apiPath?: string
   readonly maxBodyBytes?: number
 }
+
+export type CritHttpServices = CritClientServices
 
 const stripTrailingSlash = (value: string) => value.replace(/\/+$/, "")
 
@@ -245,11 +247,12 @@ const readApplyRequest = (request: Request, maxBodyBytes: number) =>
   )
 
 export const makeCritHttpHandler = (
-  client: CritClient["Service"],
+  services: CritHttpServices,
   options: CritHttpHandlerOptions = {}
 ): CritHttpHandler => {
   const apiPath = options.apiPath ?? DEFAULT_CRIT_API_PATH
   const maxBodyBytes = options.maxBodyBytes ?? MAX_CRIT_HTTP_BODY_BYTES
+  const { activity, client, snapshots } = services
 
   return (request, parsedRoute) => {
     const route = parsedRoute ?? parseCritHttpRoute(request.url, apiPath)
@@ -275,7 +278,7 @@ export const makeCritHttpHandler = (
       if (request.method !== "GET") {
         return Effect.succeed(methodNotAllowed(id, ["GET"]))
       }
-      if (client.activities === undefined) {
+      if (activity === null) {
         return Effect.succeed(
           clientErrorResponse(
             new CritClientUnavailable({
@@ -286,7 +289,7 @@ export const makeCritHttpHandler = (
           )
         )
       }
-      return client.activities(id).pipe(
+      return activity.activities(id).pipe(
         Effect.map((activities) => json(200, activities)),
         Effect.catch((cause) => Effect.succeed(clientErrorResponse(cause)))
       )
@@ -298,7 +301,7 @@ export const makeCritHttpHandler = (
       }
       const rejected = crossOriginRejection(request, id)
       if (rejected !== undefined) return Effect.succeed(rejected)
-      if (client.snapshot === undefined) {
+      if (snapshots === null) {
         return Effect.succeed(
           clientErrorResponse(
             new CritClientUnavailable({
@@ -309,7 +312,7 @@ export const makeCritHttpHandler = (
           )
         )
       }
-      return client.snapshot(id, route.frameId).pipe(
+      return snapshots.snapshot(id, route.frameId).pipe(
         Effect.map((document) => json(200, document)),
         Effect.catch((cause) => Effect.succeed(clientErrorResponse(cause)))
       )

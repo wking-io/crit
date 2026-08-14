@@ -14,6 +14,11 @@ export {
   parseCritHttpRoute,
   type CritHttpHandler,
   type CritHttpHandlerOptions,
-  type CritHttpRoute
+  type CritHttpRoute,
+  type CritHttpServices
 } from "./contract.js"
-export { HttpCritClient, type HttpCritClientOptions } from "./client.js"
+export {
+  HttpCritClient,
+  type HttpCritClientOptions,
+  type HttpCritClientServices
+} from "./client.js"

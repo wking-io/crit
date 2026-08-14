@@ -26,10 +26,14 @@ export { SnapshotArtifact } from "../core/index.js"
 export {
   AGENT_ACTIVITY_LEASE_SECONDS,
   AgentActivity,
+  AgentActivityClearFailed,
   AgentActivityCollection,
-  AgentActivityFailed,
+  AgentActivityErrorSchema,
+  AgentActivityReadFailed,
   AgentActivityReference,
+  AgentActivitySignalFailed,
   AgentActivityStore,
+  type AgentActivityError,
   type SignalAgentActivityInput
 } from "../runtime/agent-activity.js"
 export {

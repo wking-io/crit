@@ -32,12 +32,15 @@ export {
   type CanvasSessionOptions
 } from "../session/canvas-session.js"
 export {
+  CritActivityClient,
   CritClient,
   CritClientCommandFailed,
   CritClientErrorSchema,
   CritClientInvalidDocument,
   CritClientNotFound,
+  CritSnapshotClient,
   CritClientUnavailable,
+  type CritClientServices,
   type CritClientError
 } from "../session/crit-client.js"
 export {

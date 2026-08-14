@@ -64,9 +64,9 @@ function ActionButton({
   if (action.availability === "hidden") return null
   return (
     <button
-      aria-keyshortcuts={action.ariaKeyShortcuts}
+      aria-keyshortcuts={action.ariaKeyShortcuts ?? undefined}
       aria-label={action.label}
-      {...(pressed === undefined ? {} : { "aria-pressed": pressed })}
+      aria-pressed={pressed}
       className={className}
       disabled={action.availability !== "enabled"}
       {...actionHelpTarget(action)}
@@ -210,7 +210,7 @@ export function CanvasToolbar({
           <button
             aria-expanded={arrangementOpen}
             aria-haspopup="menu"
-            aria-keyshortcuts={arrangementTrigger.ariaKeyShortcuts}
+            aria-keyshortcuts={arrangementTrigger.ariaKeyShortcuts ?? undefined}
             aria-label={arrangementTrigger.label}
             className="crit-icon-button"
             disabled={arrangementTrigger.availability !== "enabled"}

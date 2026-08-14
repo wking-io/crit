@@ -125,13 +125,13 @@ export const beginCanvasInteraction = (input: {
   readonly startGeometry: CanvasGeometry
   readonly kind: CanvasInteractionKind
   readonly geometryOverrides?: CanvasInteractionPreview
-  readonly selectedFrameIds?: ReadonlySet<string>
+  readonly selectedFrameIds: ReadonlySet<string>
 }): CanvasInteraction => {
   const item = itemFrom(input.document, input.itemId)
   const movingFrames = input.kind.type === "move" && isFrame(item)
     ? input.document.frames.filter((frame) =>
         frame.id === item.id ||
-        (input.selectedFrameIds?.has(item.id) === true &&
+        (input.selectedFrameIds.has(item.id) &&
           input.selectedFrameIds.has(frame.id))
       )
     : []
@@ -245,9 +245,9 @@ export const beginCanvasInteraction = (input: {
     const commands: Array<CanvasCommandValue> = []
     if (isFrame(item) && item.display.heightMode === "fit-page") {
       commands.push(
-        CanvasCommand.updateFrame({
+        CanvasCommand.setFrameDisplay({
           id: item.id,
-          changes: { display: { heightMode: "viewport" } }
+          display: { heightMode: "viewport" }
         })
       )
     }

@@ -66,7 +66,19 @@ describe("CritManifest", () => {
     expect(resolved.canvases[0]?.frames[0]).toMatchObject({
       id: "current",
       url: "https://iteration.localhost/checkout",
-      status: "in-progress"
+      status: { _tag: "Managed", value: "in-progress" },
+      display: { _tag: "Unmanaged" },
+      geometry: {
+        _tag: "Managed",
+        value: { x: 40, y: 60, width: 1024, height: 720 }
+      }
+    })
+    expect(CritManifest.toDocument(resolved).canvases[0]?.frames[0]).toEqual({
+      id: "current",
+      url: "https://iteration.localhost/checkout",
+      title: "Current checkout",
+      status: "in-progress",
+      geometry: { x: 40, y: 60, width: 1024, height: 720 }
     })
     expect(duplicate).toBeInstanceOf(CritManifestInvalid)
     expect(duplicate.detail).toContain("Duplicate Canvas ID")

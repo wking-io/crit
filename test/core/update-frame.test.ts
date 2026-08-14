@@ -3,7 +3,7 @@ import { Effect } from "effect"
 
 import { Canvas, CanvasCommand } from "../../src/core/index.js"
 
-describe("Canvas UpdateFrame command", () => {
+describe("Canvas Frame field commands", () => {
   it.effect("updates editable Frame fields atomically and accepts canonical Frame IDs", () =>
     Effect.gen(function*() {
       const canvas = Canvas.create({ id: "review", title: "Review", owner: { id: "git:test", name: "Test Author" } })
@@ -20,22 +20,26 @@ describe("Canvas UpdateFrame command", () => {
 
       const change = yield* Canvas.apply(
         canvas,
-        CanvasCommand.updateFrame({
+        CanvasCommand.setFrameSource({
           id: frameId,
-          changes: {
-            url: "https://checkout.localhost/v2",
-            title: "Checkout refined",
-            status: "approved",
-            provenance: { kind: "agent", sourceId: "refinement-agent" },
-            display: { heightMode: "fit-page" }
-          }
+          url: "https://checkout.localhost/v2",
+          provenance: { kind: "agent", sourceId: "refinement-agent" }
+        }),
+        CanvasCommand.setFrameTitle({
+          id: frameId,
+          title: "Checkout refined"
+        }),
+        CanvasCommand.setFrameStatus({ id: frameId, status: "approved" }),
+        CanvasCommand.setFrameDisplay({
+          id: frameId,
+          display: { heightMode: "fit-page" }
         })
       )
       const reopened = yield* Canvas.open(Canvas.export(canvas))
       const frame = yield* Canvas.getFrame(reopened, frameId)
 
       expect(change).toEqual({
-        commandCount: 1,
+        commandCount: 4,
         changedFrameIds: [frameId],
         changedNoteIds: [],
         changedCommentThreadIds: []
@@ -52,7 +56,7 @@ describe("Canvas UpdateFrame command", () => {
       })
     }))
 
-  it.effect("rejects an empty update without changing the Canvas", () =>
+  it.effect("rolls back the batch when a field command is invalid", () =>
     Effect.gen(function*() {
       const canvas = Canvas.create({ id: "review", title: "Review", owner: { id: "git:test", name: "Test Author" } })
       yield* Canvas.apply(
@@ -69,13 +73,21 @@ describe("Canvas UpdateFrame command", () => {
       const failure = yield* Effect.flip(
         Canvas.apply(
           canvas,
-          CanvasCommand.updateFrame({ id: "checkout-v1", changes: {} })
+          CanvasCommand.setFrameTitle({
+            id: "checkout-v1",
+            title: "This must be rolled back"
+          }),
+          CanvasCommand.setFrameSource({
+            id: "checkout-v1",
+            url: "https://checkout.localhost/snapshot",
+            provenance: { kind: "snapshot", sourceId: "snapshot" }
+          })
         )
       )
 
       expect(failure).toMatchObject({
         _tag: "CanvasCommandFailed",
-        reason: "invalid-command"
+        reason: "snapshot-source-invalid"
       })
       expect(Canvas.export(canvas)).toEqual(before)
     }))

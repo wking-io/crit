@@ -37,10 +37,17 @@ const TestPublishedManifest = Schema.Struct({
     frames: Schema.Array(Schema.Struct({ url: Schema.String }))
   }))
 })
-const TestLiveRefreshEndpoint = Schema.Struct({
-  enabled: Schema.optionalKey(Schema.Boolean),
-  token: Schema.optionalKey(Schema.String)
-})
+const TestLiveRefreshEndpoint = Schema.Union([
+  Schema.Struct({ enabled: Schema.Literal(false) }),
+  Schema.Struct({
+    enabled: Schema.Literal(true),
+    protocol: Schema.NullOr(Schema.String),
+    host: Schema.NullOr(Schema.String),
+    port: Schema.NullOr(Schema.Number),
+    path: Schema.String,
+    token: Schema.String
+  })
+])
 const TestHmrPayload = Schema.Struct({
   type: Schema.optionalKey(Schema.String),
   event: Schema.optionalKey(Schema.String),
@@ -106,7 +113,9 @@ describe("crit Vite plugin", () => {
   it("loads and applies commands to an explicitly created Canvas over HTTP", async () => {
     await createCanvas("homepage")
     const origin = await start()
-    const client = HttpCritClient.make({ apiPath: `${origin}/__crit/api` })
+    const { activity, client } = HttpCritClient.make({
+      apiPath: `${origin}/__crit/api`
+    })
     const currentAuthor = await Effect.runPromise(client.currentAuthor())
     const editorResponse = await fetch(`${origin}/crit/homepage`)
     const editorHtml = await editorResponse.text()
@@ -115,9 +124,11 @@ describe("crit Vite plugin", () => {
       canvasId: "homepage",
       activityId: "codex-1",
       harness: "Codex",
-      detail: "Agent is arranging Frames"
+      model: null,
+      detail: "Agent is arranging Frames",
+      reference: null
     }))
-    const activity = await Effect.runPromise(client.activities!("homepage"))
+    const activities = await Effect.runPromise(activity.activities("homepage"))
 
     const initialLoads = await Promise.all(
       Array.from({ length: 8 }, () =>
@@ -187,7 +198,7 @@ describe("crit Vite plugin", () => {
     expect(editorHtml).toContain("overflow:hidden;overscroll-behavior:none")
     expect(editorHtml).toContain("overscroll-behavior-x:none")
     expect(editorHtml).toContain("data-crit-live-refresh=")
-    expect(activity).toMatchObject({
+    expect(activities).toMatchObject({
       canvasId: "homepage",
       activities: [{
         activityId: "codex-1",
@@ -249,7 +260,7 @@ describe("crit Vite plugin", () => {
 <html><head><meta name="crit-frame-url" content="/stale"></head>
 <body><script>window.__frameLocation = window.location.href</script></body></html>`)
     const origin = await start({ root, frameLoading: "relay" })
-    const client = HttpCritClient.make({ apiPath: `${origin}/__crit/api` })
+    const { client } = HttpCritClient.make({ apiPath: `${origin}/__crit/api` })
     const canonicalUrl = `${origin}/frame.html?variant=ready#details`
     await Effect.runPromise(client.apply("review", [CanvasCommand.addFrame({
       id: "candidate",
@@ -279,7 +290,7 @@ describe("crit Vite plugin", () => {
     )
     const publicOrigin = "https://portal.example"
     const origin = await start({ root, frameLoading: "relay", publicOrigin })
-    const client = HttpCritClient.make({ apiPath: `${origin}/__crit/api` })
+    const { client } = HttpCritClient.make({ apiPath: `${origin}/__crit/api` })
     const canonicalUrl = `${publicOrigin}/frame.html?variant=alias#details`
     await Effect.runPromise(client.apply("review", [CanvasCommand.addFrame({
       id: "candidate",
@@ -300,7 +311,7 @@ describe("crit Vite plugin", () => {
   it("rejects relay requests for Frame URLs outside the trusted origin", async () => {
     await createCanvas("review")
     const origin = await start({ root, frameLoading: "relay" })
-    const client = HttpCritClient.make({ apiPath: `${origin}/__crit/api` })
+    const { client } = HttpCritClient.make({ apiPath: `${origin}/__crit/api` })
     await Effect.runPromise(client.apply("review", [CanvasCommand.addFrame({
       id: "untrusted",
       url: "https://untrusted.example/frame.html",
@@ -335,7 +346,7 @@ describe("crit Vite plugin", () => {
     })
     const port = serverPort(httpServer)
     const origin = `http://127.0.0.1:${port}`
-    const client = HttpCritClient.make({ apiPath: `${origin}/__crit/api` })
+    const { client } = HttpCritClient.make({ apiPath: `${origin}/__crit/api` })
     await Effect.runPromise(client.load("homepage"))
 
     const editorPage = await (await fetch(`${origin}/crit/homepage`)).text()
@@ -353,6 +364,9 @@ describe("crit Vite plugin", () => {
         .replace(/&gt;/g, ">")
         .replace(/&amp;/g, "&")
     ))
+    if (!endpoint.enabled) {
+      throw new TypeError("Editor unexpectedly disabled live refresh")
+    }
 
     const socket = new WebSocket(
       canvasLiveRefreshSocketUrl(endpoint, {
@@ -397,7 +411,7 @@ describe("crit Vite plugin", () => {
 
   it("requires explicit Canvas creation", async () => {
     const origin = await start()
-    const client = HttpCritClient.make({ apiPath: `${origin}/__crit/api` })
+    const { client } = HttpCritClient.make({ apiPath: `${origin}/__crit/api` })
 
     const failure = await Effect.runPromise(
       Effect.flip(client.load("missing"))
@@ -468,7 +482,7 @@ describe("crit Vite plugin", () => {
     const manifest = Schema.decodeUnknownSync(TestPublishedManifest)(
       await manifestResponse.json()
     )
-    const client = HttpCritClient.make({ apiPath: `${origin}/__crit/api` })
+    const { client } = HttpCritClient.make({ apiPath: `${origin}/__crit/api` })
     const failure = await Effect.runPromise(Effect.flip(client.load("default")))
 
     expect(manifestResponse.status).toBe(200)
@@ -520,7 +534,9 @@ describe("crit Vite plugin", () => {
     )
     await createCanvas("review")
     const origin = await start()
-    const client = HttpCritClient.make({ apiPath: `${origin}/__crit/api` })
+    const { client, snapshots } = HttpCritClient.make({
+      apiPath: `${origin}/__crit/api`
+    })
     await Effect.runPromise(client.load("review"))
     await Effect.runPromise(
       client.apply("review", [
@@ -533,7 +549,9 @@ describe("crit Vite plugin", () => {
       ])
     )
 
-    const saved = await Effect.runPromise(client.snapshot!("review", "candidate"))
+    const saved = await Effect.runPromise(
+      snapshots.snapshot("review", "candidate")
+    )
     const archived = saved.frames.at(-1)!
     const response = await fetch(`${origin}${archived.url}`)
     const html = await response.text()

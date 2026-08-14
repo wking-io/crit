@@ -25,7 +25,11 @@ import { FileSystemCanvasRepository } from "../node/file-system-canvas-repositor
 import { FileSystemAgentActivity } from "../node/file-system-agent-activity.js"
 import { FileSystemSnapshotArchive } from "../node/file-system-snapshot-archive.js"
 import { GitAuthorIdentity } from "../node/git-author.js"
-import { CanvasRepositoryCritClient } from "../runtime/canvas-repository-crit-client.js"
+import {
+  CanvasRepositoryCritActivityClient,
+  CanvasRepositoryCritClient,
+  CanvasRepositoryCritSnapshotClient
+} from "../runtime/canvas-repository-crit-client.js"
 import { CanvasRepository } from "../runtime/canvas-repository.js"
 import { AgentActivityStore } from "../runtime/agent-activity.js"
 import {
@@ -335,10 +339,10 @@ const liveRefreshEndpointFromConfig = (
   return {
     enabled: true,
     token: config.webSocketToken,
-    ...(hmr?.protocol === undefined ? {} : { protocol: hmr.protocol }),
-    ...(hmr?.host === undefined ? {} : { host: hmr.host }),
-    ...(port === undefined ? {} : { port }),
-    ...(base === "/" ? {} : { path: base })
+    protocol: hmr?.protocol ?? null,
+    host: hmr?.host ?? null,
+    port: port ?? null,
+    path: base
   }
 }
 
@@ -494,8 +498,8 @@ export const crit = (options: CritVitePluginOptions = {}): Plugin => {
         Effect.map(({ activity, documents, snapshots }) => ({
           documents,
           snapshots,
-          handler: makeCritHttpHandler(
-            CanvasRepositoryCritClient.make(documents, {
+          handler: makeCritHttpHandler({
+            client: CanvasRepositoryCritClient.make(documents, {
               currentAuthor: () =>
                 authorIdentity.resolve(resolvedRoot).pipe(
                   Effect.mapError(
@@ -506,12 +510,13 @@ export const crit = (options: CritVitePluginOptions = {}): Plugin => {
                         detail: cause.detail
                       })
                   )
-                ),
-              loadAgentActivities: activity.read,
-              snapshotFrame: snapshots.snapshotFrame
+                )
             }),
-            { apiPath }
-          )
+            snapshots: CanvasRepositoryCritSnapshotClient.make(
+              snapshots.snapshotFrame
+            ),
+            activity: CanvasRepositoryCritActivityClient.make(activity.read)
+          }, { apiPath })
         }))
       )
     )
@@ -743,7 +748,7 @@ export const crit = (options: CritVitePluginOptions = {}): Plugin => {
               })
               return
             }
-            sendJson(response, 200, manifest)
+            sendJson(response, 200, CritManifest.toDocument(manifest))
           })
           .catch((cause: unknown) => sendUnexpectedFailure(response, cause))
         return

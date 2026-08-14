@@ -53,7 +53,7 @@ export const connectBridgedFrameComments = (input: {
   }
   input.target.addEventListener("message", receive)
   return {
-    configure: (value: { readonly activeId?: string; readonly enabled: boolean; readonly color: string; readonly pins: ReadonlyArray<FrameCommentPin> }) =>
+    configure: (value: { readonly activeId: string | null; readonly enabled: boolean; readonly color: string; readonly pins: ReadonlyArray<FrameCommentPin> }) =>
       input.frameElement.contentWindow?.postMessage({ source: CRIT_FRAME_COMMENT_SOURCE, type: "configure", ...value }, "*"),
     disconnect: () => input.target.removeEventListener("message", receive)
   }

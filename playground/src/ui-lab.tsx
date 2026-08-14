@@ -530,8 +530,7 @@ function FrameSpecimen({
       data-state={state}
       data-status-menu={defaultStatusMenuOpen || undefined}
       style={{
-        width: defaultStatusMenuOpen ? width + 214 : width + 24,
-        ...(defaultStatusMenuOpen ? { minHeight: 420 } : {})
+        width: defaultStatusMenuOpen ? width + 214 : width + 24
       }}
     >
       <FrameCard

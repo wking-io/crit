@@ -20,13 +20,30 @@ export class CritClient extends Context.Service<CritClient, {
     id: string,
     commands: ReadonlyArray<CanvasCommand>
   ) => Effect.Effect<CanvasDocument, CritClientError>
-  readonly snapshot?: (
-    canvasId: string,
-    frameId: string
-  ) => Effect.Effect<CanvasDocument, CritClientError>
-  readonly activities?: (
-    canvasId: string
-  ) => Effect.Effect<AgentActivityCollection, CritClientError>
 }>()(
   "@riff-refine/crit/CritClient"
 ) {}
+
+export class CritSnapshotClient extends Context.Service<CritSnapshotClient, {
+  readonly snapshot: (
+    canvasId: string,
+    frameId: string
+  ) => Effect.Effect<CanvasDocument, CritClientError>
+}>()(
+  "@riff-refine/crit/CritSnapshotClient"
+) {}
+
+export class CritActivityClient extends Context.Service<CritActivityClient, {
+  readonly activities: (
+    canvasId: string
+  ) => Effect.Effect<AgentActivityCollection, CritClientError>
+}>()(
+  "@riff-refine/crit/CritActivityClient"
+) {}
+
+/** Stable service bundle used at non-Effect boundaries such as React. */
+export interface CritClientServices {
+  readonly client: CritClient["Service"]
+  readonly snapshots: CritSnapshotClient["Service"] | null
+  readonly activity: CritActivityClient["Service"] | null
+}

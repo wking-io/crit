@@ -62,8 +62,10 @@ export {
   ResizeNoteCommand,
   SendFrameToBackCommand,
   SendNoteToBackCommand,
+  SetFrameDisplayCommand,
+  SetFrameSourceCommand,
   SetFrameStatusCommand,
-  UpdateFrameCommand,
+  SetFrameTitleCommand,
   EditNoteCommand,
   ReplyToCommentThreadCommand,
   EditCommentCommand,
@@ -87,7 +89,9 @@ export {
   type RemoveNoteInput,
   type ResizeFrameInput,
   type ResizeNoteInput,
+  type SetFrameDisplayInput,
+  type SetFrameSourceInput,
   type SetFrameStatusInput,
-  type UpdateFrameInput,
+  type SetFrameTitleInput,
   type EditNoteInput
 } from "./canvas-command.js"

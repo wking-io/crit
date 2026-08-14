@@ -22,9 +22,11 @@ import {
   AgentActivity
 } from "../runtime/agent-activity.js"
 import {
+  CritActivityClient,
   CritClient,
   CritClientCommandFailed,
   CritClientInvalidDocument,
+  CritSnapshotClient,
   CritClientUnavailable,
   type CritClientError
 } from "./crit-client.js"
@@ -102,6 +104,21 @@ export type CanvasSessionOptions = {
   readonly sessionId?: string
 }
 
+export const DEFAULT_CANVAS_SESSION_AUTOSAVE_DELAY: Duration.Input = 100
+export const DEFAULT_CANVAS_SESSION_REFRESH_INTERVAL: Duration.Input = 2_000
+export const DEFAULT_CANVAS_SESSION_PRESENCE_INTERVAL: Duration.Input = 5_000
+
+type PollingSchedule =
+  | { readonly enabled: false }
+  | { readonly enabled: true; readonly interval: Duration.Input }
+
+const pollingSchedule = (
+  input: Duration.Input | false | undefined,
+  defaultInterval: Duration.Input
+): PollingSchedule => input === false
+  ? { enabled: false }
+  : { enabled: true, interval: input ?? defaultInterval }
+
 const invalidDocument = (canvasId: string, cause: unknown) =>
   new CritClientInvalidDocument({
     id: canvasId,
@@ -125,6 +142,22 @@ const open = (
   Effect.gen(function*() {
     const client = yield* CritClient
     const scope = yield* Effect.scope
+    const autosaveDelay =
+      options.autosaveDelay ?? DEFAULT_CANVAS_SESSION_AUTOSAVE_DELAY
+    const documentRefresh = pollingSchedule(
+      options.refreshInterval,
+      DEFAULT_CANVAS_SESSION_REFRESH_INTERVAL
+    )
+    const presenceRefresh = pollingSchedule(
+      options.presenceRefreshInterval,
+      DEFAULT_CANVAS_SESSION_PRESENCE_INTERVAL
+    )
+    const snapshotClient = Option.getOrNull(
+      yield* Effect.serviceOption(CritSnapshotClient)
+    )
+    const activityClient = Option.getOrNull(
+      yield* Effect.serviceOption(CritActivityClient)
+    )
     const opened = yield* Effect.all({
       authoritative: client.load(canvasId),
       currentAuthor: client.currentAuthor()
@@ -201,7 +234,7 @@ const open = (
       presence: {
         currentAuthor,
         activities: [],
-        availability: "available"
+        availability: activityClient === null ? "unavailable" : "available"
       }
     })
     const saveLock = yield* Semaphore.make(1)
@@ -344,7 +377,7 @@ const open = (
       })
     )
 
-    const markPresenceUnavailable = (cause?: unknown) =>
+    const markPresenceUnavailable = (cause: unknown | null) =>
       Effect.gen(function*() {
         const current = yield* SubscriptionRef.get(state)
         yield* SubscriptionRef.update(
@@ -359,7 +392,7 @@ const open = (
           })
         )
         if (
-          cause !== undefined &&
+          cause !== null &&
           current.presence.availability !== "unavailable"
         ) {
           yield* Effect.logWarning(
@@ -378,9 +411,9 @@ const open = (
       })
 
     const refreshPresence = () =>
-      client.activities === undefined
-        ? markPresenceUnavailable()
-        : client.activities(canvasId).pipe(
+      activityClient === null
+        ? markPresenceUnavailable(null)
+        : activityClient.activities(canvasId).pipe(
             Effect.tap((collection) =>
               SubscriptionRef.update(
                 state,
@@ -395,7 +428,7 @@ const open = (
               )
             ),
             Effect.map((collection) => collection.activities.length > 0),
-            Effect.catch(markPresenceUnavailable)
+            Effect.catch((cause) => markPresenceUnavailable(cause))
           )
 
     const discardLocalChanges = saveLock.withPermit(
@@ -436,7 +469,7 @@ const open = (
 
     const snapshotFrame = (frameId: string) =>
       Effect.gen(function*() {
-        if (client.snapshot === undefined) {
+        if (snapshotClient === null) {
           return yield* new CritClientUnavailable({
             operation: "snapshot",
             id: canvasId,
@@ -444,7 +477,7 @@ const open = (
           })
         }
         yield* saveUntilClean
-        const saved = yield* client.snapshot(canvasId, frameId)
+        const saved = yield* snapshotClient.snapshot(canvasId, frameId)
         yield* documentLock.withPermit(
           Effect.gen(function*() {
             const rebased = Canvas.fromDocument(saved)
@@ -477,24 +510,22 @@ const open = (
       refreshPresence().pipe(Effect.asVoid),
       scope
     )
-    if (options.refreshInterval !== false) {
-      const interval = options.refreshInterval ?? 2_000
+    if (documentRefresh.enabled) {
       yield* Effect.forkIn(
         Effect.gen(function*() {
           while (true) {
-            yield* Effect.sleep(interval)
+            yield* Effect.sleep(documentRefresh.interval)
             yield* refresh.pipe(Effect.catch(() => Effect.void))
           }
         }),
         scope
       )
     }
-    if (options.presenceRefreshInterval !== false) {
-      const interval = options.presenceRefreshInterval ?? 5_000
+    if (presenceRefresh.enabled) {
       yield* Effect.forkIn(
         Effect.gen(function*() {
           while (true) {
-            yield* Effect.sleep(interval)
+            yield* Effect.sleep(presenceRefresh.interval)
             yield* refreshPresence()
           }
         }),
@@ -541,9 +572,8 @@ const open = (
                     detail: null
                   })
                 )
-                const delay = options.autosaveDelay ?? 100
-                yield* schedule(writeLatestDraft, delay)
-                yield* schedule(saveUntilClean, delay)
+                yield* schedule(writeLatestDraft, autosaveDelay)
+                yield* schedule(saveUntilClean, autosaveDelay)
                 return change
               })
             ),

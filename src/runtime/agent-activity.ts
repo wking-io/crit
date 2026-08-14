@@ -5,11 +5,11 @@ export const AGENT_ACTIVITY_LEASE_SECONDS = 60
 export const AgentActivityReference = Schema.Struct({
   kind: Schema.String,
   id: Schema.String,
-  uri: Schema.optionalKey(
+  uri: Schema.NullOr(
     Schema.String.check(
       Schema.isPattern(/^(?:https?|codex|claude):\/\//)
     )
-  )
+  ).pipe(Schema.withDecodingDefaultKey(Effect.succeed(null)))
 })
 export type AgentActivityReference = typeof AgentActivityReference.Type
 
@@ -34,34 +34,57 @@ export const AgentActivityCollection = Schema.Struct({
 })
 export type AgentActivityCollection = typeof AgentActivityCollection.Type
 
-export class AgentActivityFailed extends Schema.TaggedError<AgentActivityFailed>()(
-  "AgentActivityFailed",
+export class AgentActivityReadFailed extends Schema.TaggedError<AgentActivityReadFailed>()(
+  "AgentActivityReadFailed",
   {
-    operation: Schema.String,
     canvasId: Schema.String,
-    activityId: Schema.optional(Schema.String),
     detail: Schema.String
   }
 ) {}
+
+export class AgentActivitySignalFailed extends Schema.TaggedError<AgentActivitySignalFailed>()(
+  "AgentActivitySignalFailed",
+  {
+    canvasId: Schema.String,
+    activityId: Schema.String,
+    detail: Schema.String
+  }
+) {}
+
+export class AgentActivityClearFailed extends Schema.TaggedError<AgentActivityClearFailed>()(
+  "AgentActivityClearFailed",
+  {
+    canvasId: Schema.String,
+    activityId: Schema.String,
+    detail: Schema.String
+  }
+) {}
+
+export const AgentActivityErrorSchema = Schema.Union([
+  AgentActivityReadFailed,
+  AgentActivitySignalFailed,
+  AgentActivityClearFailed
+])
+export type AgentActivityError = typeof AgentActivityErrorSchema.Type
 
 export type SignalAgentActivityInput = {
   readonly canvasId: string
   readonly activityId: string
   readonly harness: string
-  readonly model?: string
-  readonly detail?: string
-  readonly reference?: AgentActivityReference
+  readonly model: string | null
+  readonly detail: string | null
+  readonly reference: AgentActivityReference | null
 }
 
 export class AgentActivityStore extends Context.Service<AgentActivityStore, {
   readonly read: (
     canvasId: string
-  ) => Effect.Effect<AgentActivityCollection, AgentActivityFailed>
+  ) => Effect.Effect<AgentActivityCollection, AgentActivityReadFailed>
   readonly signal: (
     input: SignalAgentActivityInput
-  ) => Effect.Effect<AgentActivity, AgentActivityFailed>
+  ) => Effect.Effect<AgentActivity, AgentActivitySignalFailed>
   readonly clear: (
     canvasId: string,
     activityId: string
-  ) => Effect.Effect<void, AgentActivityFailed>
+  ) => Effect.Effect<void, AgentActivityClearFailed>
 }>()("@riff-refine/crit/AgentActivityStore") {}

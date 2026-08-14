@@ -51,9 +51,10 @@ describe("Canvas snapshot Frames", () => {
       const immutable = yield* Effect.flip(
         Canvas.apply(
           canvas,
-          CanvasCommand.updateFrame({
+          CanvasCommand.setFrameSource({
             id: "snapshot-20260808120000-deadbeef",
-            changes: { url: "https://app.localhost/replaced" }
+            url: "https://app.localhost/replaced",
+            provenance: { kind: "agent", sourceId: "codex" }
           })
         )
       )

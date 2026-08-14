@@ -161,7 +161,8 @@ describe("Canvas interaction rules", () => {
       document,
       itemId: frame.id,
       startGeometry: frame.geometry,
-      kind: { type: "resize", handle }
+      kind: { type: "resize", handle },
+      selectedFrameIds: new Set()
     }).preview({ x, y }).candidate
 
     expect(previewAt("north-west", 50, 40)).toEqual({
@@ -191,7 +192,8 @@ describe("Canvas interaction rules", () => {
       document,
       itemId: frame.id,
       startGeometry: frame.geometry,
-      kind: { type: "move" }
+      kind: { type: "move" },
+      selectedFrameIds: new Set()
     })
 
     const preview = interaction.preview({ x: 40, y: -20 })
@@ -245,13 +247,15 @@ describe("Canvas interaction rules", () => {
       document,
       itemId: loose.id,
       startGeometry: loose.geometry,
-      kind: { type: "move" }
+      kind: { type: "move" },
+      selectedFrameIds: new Set()
     }).finish({ x: -650, y: -300 })
     const detach = beginCanvasInteraction({
       document,
       itemId: attached.id,
       startGeometry: attached.geometry,
-      kind: { type: "move" }
+      kind: { type: "move" },
+      selectedFrameIds: new Set()
     }).finish({ x: 800, y: 500 })
 
     expect(attach.map((command) => command._tag)).toEqual([
@@ -279,7 +283,8 @@ describe("Canvas interaction rules", () => {
       document,
       itemId: frame.id,
       startGeometry: frame.geometry,
-      kind: { type: "resize", handle: "north-west" }
+      kind: { type: "resize", handle: "north-west" },
+      selectedFrameIds: new Set()
     })
 
     const preview = interaction.preview({ x: 50, y: 40 })
@@ -293,7 +298,7 @@ describe("Canvas interaction rules", () => {
     })
     expect(preview.attached).toMatchObject({ x: 200, y: 190 })
     expect(commands.map((command) => command._tag)).toEqual([
-      "UpdateFrame",
+      "SetFrameDisplay",
       "MoveFrame",
       "ResizeFrame"
     ])

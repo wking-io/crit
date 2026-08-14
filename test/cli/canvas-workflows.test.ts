@@ -266,13 +266,20 @@ describe("crit Canvas workflows", () => {
           provenance: { kind: "agent", sourceId: "codex" }
         },
         {
-          _tag: "UpdateFrame",
+          _tag: "SetFrameSource",
           id: "candidate",
-          changes: {
-            url: "https://checkout.localhost/v2",
-            title: "Checkout candidate v2",
-            display: { heightMode: "fit-page" }
-          }
+          url: "https://checkout.localhost/v2",
+          provenance: { kind: "agent", sourceId: "codex" }
+        },
+        {
+          _tag: "SetFrameTitle",
+          id: "candidate",
+          title: "Checkout candidate v2"
+        },
+        {
+          _tag: "SetFrameDisplay",
+          id: "candidate",
+          display: { heightMode: "fit-page" }
         },
         {
           _tag: "SetFrameStatus",
@@ -323,7 +330,7 @@ describe("crit Canvas workflows", () => {
         command: "apply",
         mutation: {
           revision: 1,
-          change: { commandCount: 8 },
+          change: { commandCount: 10 },
           canvas: {
             id: "review",
             frameCount: 1,

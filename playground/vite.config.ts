@@ -1,10 +1,10 @@
-import { defineConfig } from "vite"
+import { defineConfig, type ServerOptions } from "vite"
 import { fileURLToPath } from "node:url"
 import { relative as pathRelative } from "node:path"
 import { build } from "esbuild"
 import type { Plugin } from "vite"
 
-import { crit } from "../src/vite/index.js"
+import { crit, type CritVitePluginOptions } from "../src/vite/index.js"
 import { critFrameInputBridgeScript } from "../src/frame-bridge/index.js"
 import { critFrameCommentBridgeScript } from "../src/frame-bridge/comment-bridge.js"
 
@@ -74,11 +74,27 @@ const port = Number.parseInt(
   process.env.PORT ?? process.env.CRIT_PLAYGROUND_PORT ?? "5173",
   10
 )
+const ampOrb = Boolean(process.env.AMP_ORB)
+const publicUrl = process.env.PUBLIC_URL
+let critOptions: CritVitePluginOptions = {
+  frameLoading: ampOrb ? "relay" : "navigate"
+}
+if (publicUrl) {
+  critOptions = { ...critOptions, publicOrigin: publicUrl }
+}
+const serverOptions: ServerOptions = {
+  host: process.env.HOST ?? "127.0.0.1",
+  port,
+  strictPort: true
+}
+if (ampOrb) {
+  serverOptions.allowedHosts = true
+}
 
 export default defineConfig({
   root: fileURLToPath(new URL(".", import.meta.url)),
   plugins: [
-    ...(process.env.AMP_ORB ? [orbFramePlugin()] : []),
+    ...(ampOrb ? [orbFramePlugin()] : []),
     {
       name: "crit-feature-lab-home",
       configureServer(server) {
@@ -96,15 +112,7 @@ export default defineConfig({
         })
       }
     },
-    crit({
-      ...(process.env.AMP_ORB ? { frameLoading: "relay" as const } : {}),
-      ...(process.env.PUBLIC_URL ? { publicOrigin: process.env.PUBLIC_URL } : {})
-    })
+    crit(critOptions)
   ],
-  server: {
-    host: process.env.HOST ?? "127.0.0.1",
-    port,
-    strictPort: true,
-    ...(process.env.AMP_ORB ? { allowedHosts: true as const } : {})
-  }
+  server: serverOptions
 })

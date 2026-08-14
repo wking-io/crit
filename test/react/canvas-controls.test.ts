@@ -44,8 +44,8 @@ describe("CanvasControls", () => {
       ariaKeyShortcuts: "Backspace Delete"
     })
     expect(tanStackHotkeysForAction(action)).toEqual([
-      { key: "Backspace" },
-      { key: "Delete" }
+      { key: "Backspace", mod: false, shift: false, alt: false },
+      { key: "Delete", mod: false, shift: false, alt: false }
     ])
   })
 
@@ -57,10 +57,14 @@ describe("CanvasControls", () => {
     expect(actionFor("unknown").shortcut).toBe("⌘=")
     expect(actionFor("windows").shortcut).toBe("Ctrl+=")
     expect(actionFor("linux").ariaKeyShortcuts).toBe("Control+= Control+Shift+=")
+    expect(tanStackHotkeysForAction(actionFor("linux"))).toEqual([
+      { key: "=", mod: true, shift: false, alt: false },
+      { key: "=", mod: true, shift: true, alt: false }
+    ])
   })
 
   it("projects bindings only while one of the action's scopes is active", () => {
-    expect(resolve().action({ id: "create-frame" }).shortcut).toBeUndefined()
+    expect(resolve().action({ id: "create-frame" }).shortcut).toBeNull()
     expect(resolve({
       activeScopes: ["canvas", "new-frame-form"]
     }).action({ id: "create-frame" }).shortcut).toBe("Enter")

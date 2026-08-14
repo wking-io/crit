@@ -398,20 +398,30 @@ export const CanvasControlState = Schema.Struct({
 })
 export type CanvasControlState = typeof CanvasControlState.Type
 
-export const ResolvedCanvasAction = Schema.Struct({
+const resolvedCanvasActionFields = {
   key: Schema.String,
   id: CanvasActionId,
-  target: Schema.optionalKey(CanvasActionTarget),
+  target: Schema.NullOr(CanvasActionTarget),
   label: Schema.String,
   description: Schema.String,
   consequence: CanvasActionConsequence,
-  availability: CanvasActionAvailability,
-  reason: Schema.optionalKey(CanvasActionUnavailableReason),
-  availabilityMessage: Schema.optionalKey(Schema.String),
-  shortcut: Schema.optionalKey(Schema.String),
-  ariaKeyShortcuts: Schema.optionalKey(Schema.String),
+  shortcut: Schema.NullOr(Schema.String),
+  ariaKeyShortcuts: Schema.NullOr(Schema.String),
   bindings: Schema.Array(CanvasActionBinding)
-})
+}
+
+export const ResolvedCanvasAction = Schema.Union([
+  Schema.Struct({
+    ...resolvedCanvasActionFields,
+    availability: Schema.Literal("enabled")
+  }),
+  Schema.Struct({
+    ...resolvedCanvasActionFields,
+    availability: Schema.Literals(["disabled", "hidden"]),
+    reason: CanvasActionUnavailableReason,
+    availabilityMessage: Schema.String
+  })
+])
 export type ResolvedCanvasAction = typeof ResolvedCanvasAction.Type
 
 export class CanvasActionUnavailable extends Schema.TaggedError<CanvasActionUnavailable>()(
@@ -420,7 +430,7 @@ export class CanvasActionUnavailable extends Schema.TaggedError<CanvasActionUnav
     actionKey: Schema.String,
     actionId: CanvasActionId,
     availability: Schema.Literals(["disabled", "hidden"]),
-    reason: Schema.optionalKey(CanvasActionUnavailableReason)
+    reason: CanvasActionUnavailableReason
   }
 ) {}
 
@@ -626,11 +636,11 @@ const bindingKey = (binding: CanvasActionBinding) =>
   [...binding.modifiers].sort().join("+") + ":" + binding.key.toLowerCase()
 
 const actionTargetOf = (request: CanvasActionRequest) =>
-  "target" in request ? request.target : undefined
+  "target" in request ? request.target : null
 
 export const canvasActionKey = (request: CanvasActionRequest) => {
   const target = actionTargetOf(request)
-  if (target !== undefined) return `${request.id}:${target.kind}:${target.id}`
+  if (target !== null) return `${request.id}:${target.kind}:${target.id}`
   if ("alignment" in request) return `${request.id}:${request.alignment}`
   if ("axis" in request) return `${request.id}:${request.axis}`
   return request.id
@@ -645,7 +655,7 @@ const factValue = (
   const target = actionTargetOf(request)
   if (
     guard.targetKinds !== undefined &&
-    (target === undefined || !guard.targetKinds.includes(target.kind))
+    (target === null || !guard.targetKinds.includes(target.kind))
   ) return requirement.equals
   if (requirement.source === "global") {
     return state.globalFacts.commentAuthorPresent
@@ -847,28 +857,34 @@ export const makeCanvasControls = (
           ) ? declaration.bindings : []
           const primaryBinding = bindings.find((binding) => binding.role === "primary")
           const target = actionTargetOf(request)
-          return Schema.decodeUnknownSync(ResolvedCanvasAction)({
+          const commonAction = {
             key: canvasActionKey(request),
             id: request.id,
-            ...(target === undefined ? {} : { target }),
+            target,
             label: interpolate(declaration.label, values),
             description: interpolate(declaration.description, values),
             consequence: declaration.consequence,
-            availability: failed?.onFailure.state ?? "enabled",
-            ...(failed === undefined ? {} : {
-              reason: failed.onFailure.reason,
-              availabilityMessage: failed.onFailure.message
-            }),
-            ...(primaryBinding === undefined ? {} : {
-              shortcut: displayBinding(primaryBinding, state.platform)
-            }),
-            ...(bindings.length === 0 ? {} : {
-              ariaKeyShortcuts: bindings
-                .map((binding) => ariaBinding(binding, state.platform))
-                .join(" ")
-            }),
+            shortcut: primaryBinding === undefined
+              ? null
+              : displayBinding(primaryBinding, state.platform),
+            ariaKeyShortcuts: bindings.length === 0
+              ? null
+              : bindings
+                  .map((binding) => ariaBinding(binding, state.platform))
+                  .join(" "),
             bindings
-          })
+          }
+          return failed === undefined
+            ? Schema.decodeUnknownSync(ResolvedCanvasAction)({
+                ...commonAction,
+                availability: "enabled"
+              })
+            : Schema.decodeUnknownSync(ResolvedCanvasAction)({
+                ...commonAction,
+                availability: failed.onFailure.state,
+                reason: failed.onFailure.reason,
+                availabilityMessage: failed.onFailure.message
+              })
         },
         invoke: (action, effect) => action.availability === "enabled"
           ? effect
@@ -876,7 +892,7 @@ export const makeCanvasControls = (
               actionKey: action.key,
               actionId: action.id,
               availability: action.availability,
-              ...(action.reason === undefined ? {} : { reason: action.reason })
+              reason: action.reason
             }))
       }
     }
@@ -896,14 +912,14 @@ export const tanStackHotkeysForAction = (
   action: ResolvedCanvasAction
 ): ReadonlyArray<{
   readonly key: string
-  readonly mod?: true
-  readonly shift?: true
-  readonly alt?: true
+  readonly mod: boolean
+  readonly shift: boolean
+  readonly alt: boolean
 }> => action.bindings
   .filter((binding) => binding.delivery === "registered")
   .map((binding) => ({
     key: binding.key,
-    ...(binding.modifiers.includes("mod") ? { mod: true as const } : {}),
-    ...(binding.modifiers.includes("shift") ? { shift: true as const } : {}),
-    ...(binding.modifiers.includes("alt") ? { alt: true as const } : {})
+    mod: binding.modifiers.includes("mod"),
+    shift: binding.modifiers.includes("shift"),
+    alt: binding.modifiers.includes("alt")
   }))

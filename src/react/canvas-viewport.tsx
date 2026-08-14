@@ -117,6 +117,8 @@ type WheelInput = Omit<
 
 type CanvasZoomDirection = -1 | 0 | 1
 
+const EMPTY_FRAME_SELECTION: ReadonlySet<string> = new Set()
+
 
 export interface CanvasViewportProps {
   readonly document: CanvasDocument
@@ -124,15 +126,15 @@ export interface CanvasViewportProps {
   readonly dispatch: (
     ...commands: ReadonlyArray<CanvasCommandValue>
   ) => Effect.Effect<unknown, CanvasCommandFailed>
-  readonly iframeAllow?: string
-  readonly iframeSandbox?: string
-  readonly frameLoading?: FrameLoadingPolicy
-  readonly onCommandError?: (message: string) => void
+  readonly iframeAllow?: string | undefined
+  readonly iframeSandbox?: string | undefined
+  readonly frameLoading?: FrameLoadingPolicy | undefined
+  readonly onCommandError?: ((message: string) => void) | undefined
   readonly snapshotFrame?: (
     frameId: string
   ) => Effect.Effect<unknown, unknown>
-  readonly frameChrome?: Partial<FrameChromeSettings>
-  readonly cameraOptions?: Partial<CanvasCameraOptions>
+  readonly frameChrome?: Partial<FrameChromeSettings> | undefined
+  readonly cameraOptions?: Partial<CanvasCameraOptions> | undefined
 }
 
 const messageOf = (cause: unknown) =>
@@ -735,7 +737,7 @@ function CanvasViewportContent({
   const startMove = (
     event: ReactPointerEvent,
     item: CanvasFrame | CanvasNote,
-    selectedFrameIds?: ReadonlySet<string>
+    selectedFrameIds: ReadonlySet<string> = EMPTY_FRAME_SELECTION
   ) => {
     event.preventDefault()
     event.stopPropagation()
@@ -752,7 +754,7 @@ function CanvasViewportContent({
       startGeometry: start.geometry,
       kind: { type: "move" },
       geometryOverrides: preview,
-      ...(selectedFrameIds === undefined ? {} : { selectedFrameIds })
+      selectedFrameIds
     })
     const deltaAt = () => canvasDragDelta({
       pointer,
@@ -830,7 +832,8 @@ function CanvasViewportContent({
       itemId: item.id,
       startGeometry: start.geometry,
       kind: { type: "resize", handle },
-      geometryOverrides: preview
+      geometryOverrides: preview,
+      selectedFrameIds: EMPTY_FRAME_SELECTION
     })
     const deltaAt = (clientX: number, clientY: number) => ({
       x: (clientX - start.x) / camera.zoom,
@@ -928,7 +931,7 @@ function CanvasViewportContent({
             <FrameCard
               key={item.id}
               frame={item}
-              {...(frameChrome === undefined ? {} : { frameChrome })}
+              frameChrome={frameChrome}
               shortId={shortIdForIndex(
                 document.frames.findIndex((frame) => frame.id === item.id)
               )}
@@ -936,16 +939,18 @@ function CanvasViewportContent({
               zoom={camera.zoom}
               iframeAllow={iframeAllow}
               iframeUrl={frameIframeUrl(document.id, item, frameLoading)}
-              {...(iframeSandbox === undefined ? {} : { iframeSandbox })}
+              iframeSandbox={iframeSandbox}
               iframeVisible={intersectsViewport(
                 geometryOf(item), camera, viewport.width, viewport.height
               )}
               selected={selectedIds.has(item.id)}
               commentMode={tool === "comment"}
               commentThreads={activeComments.filter((thread) => thread.frameId === item.id)}
-              {...(commentReview.kind === "thread" && commentReview.frameId === item.id
-                ? { openCommentId: commentReview.threadId }
-                : {})}
+              openCommentId={
+                commentReview.kind === "thread" && commentReview.frameId === item.id
+                  ? commentReview.threadId
+                  : null
+              }
               onCommentAnchor={(anchor) => {
                 return focusCommentReview({ kind: "new", frameId: item.id, anchor })
               }}
@@ -1031,9 +1036,9 @@ function CanvasViewportContent({
               onRemove={() => dispatch(CanvasCommand.removeFrame({ id: item.id }))}
               onFitContent={(height) =>
                 dispatch(
-                  CanvasCommand.updateFrame({
+                  CanvasCommand.setFrameDisplay({
                     id: item.id,
-                    changes: { display: { heightMode: "fit-page" } }
+                    display: { heightMode: "fit-page" }
                   }),
                   CanvasCommand.resizeFrame({
                     id: item.id,
@@ -1044,17 +1049,17 @@ function CanvasViewportContent({
               }
               onSetSize={(width, height) =>
                 dispatch(
-                  CanvasCommand.updateFrame({
+                  CanvasCommand.setFrameDisplay({
                     id: item.id,
-                    changes: { display: { heightMode: "viewport" } }
+                    display: { heightMode: "viewport" }
                   }),
                   CanvasCommand.resizeFrame({ id: item.id, width, height })
                 )
               }
               onResize={startResize}
-              {...(snapshotFrame === undefined
-                ? {}
-                : { onSnapshot: () => snapshotFrame(item.id) })}
+              onSnapshot={snapshotFrame === undefined
+                ? undefined
+                : () => snapshotFrame(item.id)}
               onSnapshotError={(cause) => onCommandError?.(messageOf(cause))}
               onSendToBack={() =>
                 dispatch(CanvasCommand.sendFrameToBack({ id: item.id }))
@@ -1063,7 +1068,7 @@ function CanvasViewportContent({
                 dispatch(CanvasCommand.setFrameStatus({ id: item.id, status }))
               }
               onTitle={(title) =>
-                dispatch(CanvasCommand.updateFrame({ id: item.id, changes: { title } }))
+                dispatch(CanvasCommand.setFrameTitle({ id: item.id, title }))
               }
             />
           ) : (
@@ -1112,7 +1117,7 @@ function CanvasViewportContent({
               commentThread !== undefined &&
               canManageCommentThread(document.owner, commentThread, author.id)
             }
-            {...(commentThread === undefined ? {} : { thread: commentThread })}
+            thread={commentThread}
             zoom={camera.zoom}
             onClose={() => focusCommentReview(null)}
             onActionError={(cause) => onCommandError?.(messageOf(cause))}

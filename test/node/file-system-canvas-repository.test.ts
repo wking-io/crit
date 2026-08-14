@@ -94,9 +94,9 @@ describe("FileSystemCanvasRepository", () => {
             title: "Checkout v1",
             provenance: { kind: "agent", sourceId: "iteration-agent" }
           }),
-          CanvasCommand.updateFrame({
+          CanvasCommand.setFrameStatus({
             id: "missing-frame",
-            changes: { status: "approved" }
+            status: "approved"
           })
         ])
       )

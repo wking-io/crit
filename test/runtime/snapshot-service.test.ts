@@ -117,9 +117,10 @@ describe("SnapshotService", () => {
                 Effect.gen(function*() {
                   artifactOnDiskDuringCommit = existsSync(artifactFile())
                   yield* repository.apply("review", [
-                    CanvasCommand.updateFrame({
+                    CanvasCommand.setFrameSource({
                       id: "candidate",
-                      changes: { url: "https://app.localhost/moved" }
+                      url: "https://app.localhost/moved",
+                      provenance: { kind: "agent", sourceId: "codex" }
                     })
                   ]).pipe(Effect.orDie)
                 })

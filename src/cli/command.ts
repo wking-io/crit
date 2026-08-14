@@ -17,7 +17,10 @@ import {
 } from "../discovery/index.js"
 import { CritInitFailed, CritInitializer } from "../init/project-initializer.js"
 import { AuthorIdentity } from "../runtime/author-identity.js"
-import { AgentActivityStore } from "../runtime/agent-activity.js"
+import {
+  AgentActivityStore,
+  type AgentActivityReference
+} from "../runtime/agent-activity.js"
 import {
   CanvasRepository,
   type CanvasRepositoryMutation
@@ -576,29 +579,21 @@ const activityCommand = Command.make(
           detail: "--reference-uri requires --reference-kind and --reference-id"
         })
       }
+      let reference: AgentActivityReference | null = null
+      if (referenceKindValue !== undefined && referenceIdValue !== undefined) {
+        reference = {
+          kind: referenceKindValue,
+          id: referenceIdValue,
+          uri: referenceUriValue ?? null
+        }
+      }
       const signaled = yield* activity.signal({
         canvasId: canvas,
         activityId,
         harness: harnessName,
-        ...Option.match(model, {
-          onNone: () => ({}),
-          onSome: (value) => ({ model: value })
-        }),
-        ...Option.match(detail, {
-          onNone: () => ({}),
-          onSome: (value) => ({ detail: value })
-        }),
-        ...(referenceKindValue === undefined || referenceIdValue === undefined
-          ? {}
-          : {
-              reference: {
-                kind: referenceKindValue,
-                id: referenceIdValue,
-                ...(referenceUriValue === undefined
-                  ? {}
-                  : { uri: referenceUriValue })
-              }
-            })
+        model: Option.getOrNull(model),
+        detail: Option.getOrNull(detail),
+        reference
       })
       const output = json
         ? JSON.stringify({ schemaVersion: 1, command: "activity", activity: signaled })

@@ -1,10 +1,12 @@
 import { Effect, Schema } from "effect"
 
 import {
+  CritActivityClient,
   CritClient,
   CritClientCommandFailed,
   CritClientInvalidDocument,
   CritClientNotFound,
+  CritSnapshotClient,
   CritClientUnavailable,
   type CritClientError
 } from "../session/crit-client.js"
@@ -18,12 +20,18 @@ import {
   decodeAgentActivities,
   decodeCanvasDocument,
   decodeCurrentAuthor,
-  encodeApplyRequest
+  encodeApplyRequest,
+  type CritHttpServices
 } from "./contract.js"
 
 export interface HttpCritClientOptions {
   readonly apiPath?: string
   readonly fetch?: typeof globalThis.fetch
+}
+
+export interface HttpCritClientServices extends CritHttpServices {
+  readonly snapshots: CritSnapshotClient["Service"]
+  readonly activity: CritActivityClient["Service"]
 }
 
 const parseJson = (response: Response) =>
@@ -64,7 +72,9 @@ const responseError = (
   })
 }
 
-const make = (options: HttpCritClientOptions = {}): CritClient["Service"] => {
+const make = (
+  options: HttpCritClientOptions = {}
+): HttpCritClientServices => {
   const apiPath = options.apiPath ?? DEFAULT_CRIT_API_PATH
   const request = options.fetch ?? globalThis.fetch
 
@@ -102,7 +112,7 @@ const make = (options: HttpCritClientOptions = {}): CritClient["Service"] => {
       )
     )
 
-  return {
+  const client: CritClient["Service"] = {
     currentAuthor: () =>
       Effect.tryPromise({
         try: () => request(critCurrentAuthorUrl(apiPath)),
@@ -144,11 +154,15 @@ const make = (options: HttpCritClientOptions = {}): CritClient["Service"] => {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(encodeApplyRequest(commands))
-      }),
+      })
+  }
+  const snapshots: CritSnapshotClient["Service"] = {
     snapshot: (canvasId, frameId) =>
       execute("snapshot", canvasId, {
         method: "POST"
-      }, critFrameSnapshotUrl(apiPath, canvasId, frameId)),
+      }, critFrameSnapshotUrl(apiPath, canvasId, frameId))
+  }
+  const activity: CritActivityClient["Service"] = {
     activities: (canvasId) =>
       Effect.tryPromise({
         try: () => request(critCanvasActivityUrl(apiPath, canvasId)),
@@ -180,6 +194,7 @@ const make = (options: HttpCritClientOptions = {}): CritClient["Service"] => {
         )
       )
   }
+  return { client, snapshots, activity }
 }
 
 export const HttpCritClient = { make } as const

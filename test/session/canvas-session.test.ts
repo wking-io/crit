@@ -4,7 +4,9 @@ import { Deferred, Effect, Fiber, Layer, SubscriptionRef } from "effect"
 import { Canvas, CanvasCommand, type CanvasCommand as CanvasCommandValue } from "../../src/core/index.js"
 import { CanvasSession } from "../../src/session/canvas-session.js"
 import {
+  CritActivityClient,
   CritClient,
+  CritSnapshotClient,
   CritClientUnavailable
 } from "../../src/session/crit-client.js"
 import { TEST_AUTHOR } from "../support/author-identity.js"
@@ -84,7 +86,9 @@ describe("CanvasSession", () => {
         const client: CritClient["Service"] = {
           currentAuthor: () => Effect.succeed(TEST_AUTHOR),
           load: () => Effect.succeed(stored),
-          apply: () => Effect.succeed(stored),
+          apply: () => Effect.succeed(stored)
+        }
+        const activityClient: CritActivityClient["Service"] = {
           activities: () => Effect.fail(new CritClientUnavailable({
             operation: "activity",
             id: "review",
@@ -94,7 +98,10 @@ describe("CanvasSession", () => {
         const session = yield* CanvasSession.open("review", {
           refreshInterval: false,
           presenceRefreshInterval: false
-        }).pipe(Effect.provide(Layer.succeed(CritClient, client)))
+        }).pipe(Effect.provide(Layer.merge(
+          Layer.succeed(CritClient, client),
+          Layer.succeed(CritActivityClient, activityClient)
+        )))
 
         expect(yield* session.refreshPresence()).toBe(false)
         expect(session.state.value.presence).toEqual({
@@ -112,7 +119,9 @@ describe("CanvasSession", () => {
         const client: CritClient["Service"] = {
           currentAuthor: () => Effect.succeed(TEST_AUTHOR),
           load: () => Effect.succeed(stored),
-          apply: () => Effect.succeed(stored),
+          apply: () => Effect.succeed(stored)
+        }
+        const activityClient: CritActivityClient["Service"] = {
           activities: (canvasId) => Effect.succeed({
             schemaVersion: 1,
             canvasId,
@@ -132,7 +141,10 @@ describe("CanvasSession", () => {
         }
         const session = yield* CanvasSession.open("review", {
           refreshInterval: false
-        }).pipe(Effect.provide(Layer.succeed(CritClient, client)))
+        }).pipe(Effect.provide(Layer.merge(
+          Layer.succeed(CritClient, client),
+          Layer.succeed(CritActivityClient, activityClient)
+        )))
 
         expect(yield* session.refreshPresence()).toBe(true)
         expect(yield* SubscriptionRef.get(session.state)).toMatchObject({
@@ -224,6 +236,70 @@ describe("CanvasSession", () => {
         expect(yield* session.refresh()).toBe(true)
         expect(yield* session.refresh()).toBe(false)
         expect(session.document.value.frames.map((frame) => frame.id)).toEqual(["agent-frame"])
+      })
+    ))
+
+  it.effect("reports unavailable snapshot capture when the capability is absent", () =>
+    Effect.scoped(
+      Effect.gen(function*() {
+        const stored = Canvas.export(Canvas.create({
+          id: "review",
+          title: "Review",
+          owner: TEST_AUTHOR
+        }))
+        const client: CritClient["Service"] = {
+          currentAuthor: () => Effect.succeed(TEST_AUTHOR),
+          load: () => Effect.succeed(stored),
+          apply: () => Effect.succeed(stored)
+        }
+        const session = yield* CanvasSession.open("review", {
+          refreshInterval: false,
+          presenceRefreshInterval: false
+        }).pipe(Effect.provide(Layer.succeed(CritClient, client)))
+
+        const failure = yield* Effect.flip(session.snapshotFrame("candidate"))
+
+        expect(failure).toMatchObject({
+          _tag: "CritClientUnavailable",
+          operation: "snapshot",
+          id: "review"
+        })
+      })
+    ))
+
+  it.effect("uses snapshot capture when the capability is provided", () =>
+    Effect.scoped(
+      Effect.gen(function*() {
+        const stored = Canvas.export(Canvas.create({
+          id: "review",
+          title: "Review",
+          owner: TEST_AUTHOR
+        }))
+        const capturedFrames: Array<string> = []
+        const client: CritClient["Service"] = {
+          currentAuthor: () => Effect.succeed(TEST_AUTHOR),
+          load: () => Effect.succeed(stored),
+          apply: () => Effect.succeed(stored)
+        }
+        const snapshots: CritSnapshotClient["Service"] = {
+          snapshot: (_canvasId, frameId) => Effect.sync(() => {
+            capturedFrames.push(frameId)
+            return { ...stored, revision: 1 }
+          })
+        }
+        const session = yield* CanvasSession.open("review", {
+          refreshInterval: false,
+          presenceRefreshInterval: false
+        }).pipe(Effect.provide(Layer.merge(
+          Layer.succeed(CritClient, client),
+          Layer.succeed(CritSnapshotClient, snapshots)
+        )))
+
+        const saved = yield* session.snapshotFrame("candidate")
+
+        expect(capturedFrames).toEqual(["candidate"])
+        expect(saved.revision).toBe(1)
+        expect(session.document.value.revision).toBe(1)
       })
     ))
 })
