@@ -53,7 +53,7 @@ export type SignalAgentActivityInput = {
   readonly reference?: AgentActivityReference
 }
 
-export interface AgentActivityStoreShape {
+export class AgentActivityStore extends Context.Service<AgentActivityStore, {
   readonly read: (
     canvasId: string
   ) => Effect.Effect<AgentActivityCollection, AgentActivityFailed>
@@ -64,10 +64,4 @@ export interface AgentActivityStoreShape {
     canvasId: string,
     activityId: string
   ) => Effect.Effect<void, AgentActivityFailed>
-}
-
-export class AgentActivityStore extends Context.Service<
-  AgentActivityStore,
-  AgentActivityStoreShape
->()("@riff-refine/crit/AgentActivityStore") {}
-
+}>()("@riff-refine/crit/AgentActivityStore") {}

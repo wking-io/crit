@@ -68,13 +68,13 @@ internal route managed by the plugin, not a separately configurable asset URL.
 | Prop | Purpose |
 | --- | --- |
 | `canvasId` | Canvas to open. Required. |
-| `client` | Custom `CritClientShape`; overrides `apiPath`. |
+| `client` | Custom `CritClient["Service"]`; overrides `apiPath`. |
 | `apiPath` | Base path used by the default HTTP client; defaults to `/__crit/api`. |
 | `autosaveDelay` | Effect `Duration.Input` debounce before saving; defaults to 100 ms. |
 | `refreshInterval` | Effect `Duration.Input` polling interval; defaults to two seconds. Use `false` to disable polling. |
 | `presenceRefreshInterval` | Canvas Presence polling interval; defaults to five seconds. Use `false` to disable fallback polling. |
 | `sessionId` | Stable writer ID. By default, Crit creates one per Canvas and browser tab session. |
-| `draftJournal` | Custom `DraftJournalShape`. IndexedDB is used by default; use `false` to disable draft recovery. |
+| `draftJournal` | Custom `DraftJournal["Service"]`. IndexedDB is used by default; use `false` to disable draft recovery. |
 | `className`, `style` | Class and inline styles applied to the root, loading, or error container. |
 | `iframeAllow`, `iframeSandbox` | Capability and sandbox attributes for live Frames. |
 | `frameChrome` | Partial `FrameChromeSettings` controlling title and action width thresholds. |
@@ -263,7 +263,7 @@ When `iframeSandbox` is not set, archived Frames render their Snapshot
 Artifact with `sandbox="allow-scripts"` so captured foreign scripts never run
 same-origin with the host application; live Frames stay unsandboxed.
 
-Pass `draftJournal={false}` to disable recovery, a custom `CritClientShape` for
+Pass `draftJournal={false}` to disable recovery, a custom `CritClient["Service"]` for
 another local HTTP host, or `onSession` to access `dispatch`, `flush`, `refresh`,
 and `snapshotFrame` directly.
 

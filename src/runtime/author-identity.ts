@@ -24,13 +24,8 @@ export class AuthorIdentityFailed extends Schema.TaggedError<AuthorIdentityFaile
   }
 ) {}
 
-export interface AuthorIdentityShape {
+export class AuthorIdentity extends Context.Service<AuthorIdentity, {
   readonly resolve: (
     root: string
   ) => Effect.Effect<Author, AuthorIdentityFailed>
-}
-
-export class AuthorIdentity extends Context.Service<
-  AuthorIdentity,
-  AuthorIdentityShape
->()("@riff-refine/crit/AuthorIdentity") {}
+}>()("@riff-refine/crit/AuthorIdentity") {}

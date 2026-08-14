@@ -38,7 +38,7 @@ export type SnapshotArchiveError =
   | SnapshotNotFound
   | SnapshotStorageFailed
 
-export interface SnapshotArchiveShape {
+export class SnapshotArchive extends Context.Service<SnapshotArchive, {
   readonly capture: (
     sourceUrl: string
   ) => Effect.Effect<SnapshotArtifact, SnapshotCaptureFailed | SnapshotStorageFailed>
@@ -49,8 +49,6 @@ export interface SnapshotArchiveShape {
   readonly remove: (
     artifactId: string
   ) => Effect.Effect<void, SnapshotStorageFailed>
-}
-
-export class SnapshotArchive extends Context.Service<SnapshotArchive, SnapshotArchiveShape>()(
+}>()(
   "@riff-refine/crit/SnapshotArchive"
 ) {}

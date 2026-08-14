@@ -24,8 +24,8 @@ import {
   type CanvasSession as CanvasSessionHandle,
   type CanvasSessionState
 } from "../session/canvas-session.js"
-import { CritClient, type CritClientShape } from "../session/crit-client.js"
-import { DraftJournal, type DraftJournalShape } from "../session/draft-journal.js"
+import { CritClient } from "../session/crit-client.js"
+import { DraftJournal } from "../session/draft-journal.js"
 import {
   CanvasViewport,
   type FrameChromeSettings
@@ -115,13 +115,13 @@ const isCurrentAuthorError = (cause: unknown) =>
 
 export interface CritProps {
   readonly canvasId: string
-  readonly client?: CritClientShape
+  readonly client?: CritClient["Service"]
   readonly apiPath?: string
   readonly autosaveDelay?: Duration.Input
   readonly refreshInterval?: Duration.Input | false
   readonly presenceRefreshInterval?: Duration.Input | false
   readonly sessionId?: string
-  readonly draftJournal?: DraftJournalShape | false
+  readonly draftJournal?: DraftJournal["Service"] | false
   readonly className?: string
   readonly style?: CSSProperties
   readonly iframeAllow?: string

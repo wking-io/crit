@@ -1,12 +1,12 @@
 import { Effect, Schema } from "effect"
 
 import {
+  CritClient,
   CritClientCommandFailed,
   CritClientInvalidDocument,
   CritClientNotFound,
   CritClientUnavailable,
-  type CritClientError,
-  type CritClientShape
+  type CritClientError
 } from "../session/crit-client.js"
 import {
   CritHttpErrorBody,
@@ -64,7 +64,7 @@ const responseError = (
   })
 }
 
-const make = (options: HttpCritClientOptions = {}): CritClientShape => {
+const make = (options: HttpCritClientOptions = {}): CritClient["Service"] => {
   const apiPath = options.apiPath ?? DEFAULT_CRIT_API_PATH
   const request = options.fetch ?? globalThis.fetch
 

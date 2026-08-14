@@ -7,13 +7,13 @@ import {
   MAX_CANVAS_DOCUMENT_BYTES
 } from "../core/index.js"
 import {
+  CritClient,
   CritClientCommandFailed,
   CritClientErrorSchema,
   CritClientInvalidDocument,
   CritClientNotFound,
   CritClientUnavailable,
-  type CritClientError,
-  type CritClientShape
+  type CritClientError
 } from "../session/crit-client.js"
 import { AgentActivityCollection } from "../runtime/agent-activity.js"
 
@@ -245,7 +245,7 @@ const readApplyRequest = (request: Request, maxBodyBytes: number) =>
   )
 
 export const makeCritHttpHandler = (
-  client: CritClientShape,
+  client: CritClient["Service"],
   options: CritHttpHandlerOptions = {}
 ): CritHttpHandler => {
   const apiPath = options.apiPath ?? DEFAULT_CRIT_API_PATH

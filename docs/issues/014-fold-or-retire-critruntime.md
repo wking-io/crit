@@ -25,7 +25,7 @@ vocabularies (see issue 010).
 
 ## Proposed deepening
 
-Either (a) fold the summary/view reads into `CritClientShape` so CLI, manifest
+Either (a) fold the summary/view reads into the `CritClient` service so CLI, manifest
 sync, and the Vite HTTP path share a single durable-access interface with two
 adapters (in-process and HTTP) — one real seam; or (b) keep `CritRuntime`,
 delete `readCanvas`, and make it the *only* in-process consumer surface,

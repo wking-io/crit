@@ -20,7 +20,7 @@ import {
 
 export type SnapshotFrameError = CritClientError
 
-export interface SnapshotServiceShape {
+export class SnapshotService extends Context.Service<SnapshotService, {
   readonly snapshotFrame: (
     canvasId: string,
     frameId: string
@@ -28,9 +28,7 @@ export interface SnapshotServiceShape {
   readonly readArtifact: (
     artifactId: string
   ) => Effect.Effect<Uint8Array, SnapshotNotFound | SnapshotStorageFailed>
-}
-
-export class SnapshotService extends Context.Service<SnapshotService, SnapshotServiceShape>()(
+}>()(
   "@riff-refine/crit/SnapshotService"
 ) {}
 
@@ -91,6 +89,6 @@ export const SnapshotServiceLive = Layer.effect(
           return mutation.document
         }),
       readArtifact: archive.read
-    } satisfies SnapshotServiceShape
+    } satisfies SnapshotService["Service"]
   })
 )

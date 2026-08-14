@@ -11,7 +11,6 @@ import {
   AgentActivityFailed,
   AgentActivityStore,
   type AgentActivityCollection,
-  type AgentActivityStoreShape,
   type SignalAgentActivityInput
 } from "../runtime/agent-activity.js"
 import { hasNodeErrorCode } from "./internal/node-error.js"
@@ -46,7 +45,7 @@ const optional = (value: string | undefined) => value?.trim() || null
 
 const make = (
   options: FileSystemAgentActivityOptions
-): AgentActivityStoreShape => {
+): AgentActivityStore["Service"] => {
   const directory = path.join(options.root, ACTIVITY_DIRECTORY)
   const now = options.now ?? (() => new Date())
   const directoryFor = (canvasId: string) =>

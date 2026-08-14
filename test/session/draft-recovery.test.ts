@@ -3,8 +3,8 @@ import { Effect, Layer, Option, SubscriptionRef } from "effect"
 
 import { Canvas, CanvasCommand, type CanvasCommand as CanvasCommandValue } from "../../src/core/index.js"
 import { CanvasSession } from "../../src/session/canvas-session.js"
-import { CritClient, type CritClientShape } from "../../src/session/crit-client.js"
-import { DraftJournal, type CanvasDraft, type DraftJournalShape } from "../../src/session/draft-journal.js"
+import { CritClient } from "../../src/session/crit-client.js"
+import { DraftJournal, type CanvasDraft } from "../../src/session/draft-journal.js"
 import { TEST_AUTHOR } from "../support/author-identity.js"
 
 describe("CanvasSession draft recovery", () => {
@@ -19,7 +19,7 @@ describe("CanvasSession draft recovery", () => {
         schemaVersion: 1, canvasId: "review", sessionId: "browser",
         baseRevision: 1, mutation: 7, commands
       }
-      const client: CritClientShape = {
+      const client: CritClient["Service"] = {
         currentAuthor: () => Effect.succeed(TEST_AUTHOR),
         load: () => Effect.succeed(stored),
         apply: (_id, incoming) => Effect.gen(function*() {
@@ -29,7 +29,7 @@ describe("CanvasSession draft recovery", () => {
           return stored
         }).pipe(Effect.orDie)
       }
-      const journal: DraftJournalShape = {
+      const journal: DraftJournal["Service"] = {
         load: () => Effect.succeed(Option.some(draft)),
         save: () => Effect.void,
         clear: () => Effect.void
@@ -59,12 +59,12 @@ describe("CanvasSession draft recovery", () => {
           text: "lost"
         })]
       }
-      const client: CritClientShape = {
+      const client: CritClient["Service"] = {
         currentAuthor: () => Effect.succeed(TEST_AUTHOR),
         load: () => Effect.succeed(stored),
         apply: () => Effect.succeed(stored)
       }
-      const journal: DraftJournalShape = {
+      const journal: DraftJournal["Service"] = {
         load: () => Effect.succeed(Option.some(draft)), save: () => Effect.void, clear: () => Effect.void
       }
       const session = yield* CanvasSession.open("review", { sessionId: "browser" }).pipe(

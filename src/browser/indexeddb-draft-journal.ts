@@ -3,8 +3,7 @@ import { Effect, Layer, Option, Schema } from "effect"
 import {
   CanvasDraft,
   DraftJournal,
-  DraftJournalFailed,
-  type DraftJournalShape
+  DraftJournalFailed
 } from "../session/draft-journal.js"
 
 const DATABASE_VERSION = 1
@@ -155,7 +154,7 @@ const clearDraft = (
       reject(transaction.error ?? new Error("Clearing the draft was aborted"))
   })
 
-const make = (options: IndexedDbDraftJournalOptions = {}): DraftJournalShape => {
+const make = (options: IndexedDbDraftJournalOptions = {}): DraftJournal["Service"] => {
   const databaseName = options.databaseName ?? "@riff-refine/crit/drafts/v1"
   const factory =
     options.indexedDB ??

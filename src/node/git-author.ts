@@ -8,8 +8,7 @@ import type { Author } from "../core/index.js"
 import {
   AuthorIdentity,
   AuthorIdentityFailed,
-  GIT_AUTHOR_REMEDIATION_PROMPT,
-  type AuthorIdentityShape
+  GIT_AUTHOR_REMEDIATION_PROMPT
 } from "../runtime/author-identity.js"
 
 const execFileAsync = promisify(execFile)
@@ -79,7 +78,7 @@ const authorFrom = (nameInput: string, emailInput: string): Author => {
   return { id: `git:${id}`, name }
 }
 
-const make = (): AuthorIdentityShape => ({
+const make = (): AuthorIdentity["Service"] => ({
   resolve: (root) =>
     Effect.tryPromise({
       try: async () => {

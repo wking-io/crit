@@ -5,8 +5,7 @@ import { Canvas, CanvasCommand, type CanvasCommand as CanvasCommandValue } from 
 import { CanvasSession } from "../../src/session/canvas-session.js"
 import {
   CritClient,
-  CritClientUnavailable,
-  type CritClientShape
+  CritClientUnavailable
 } from "../../src/session/crit-client.js"
 import { TEST_AUTHOR } from "../support/author-identity.js"
 
@@ -27,7 +26,7 @@ describe("CanvasSession", () => {
           owner: { id: "git:owner", name: "Canvas Owner" }
         }))
         let authorLoads = 0
-        const client: CritClientShape = {
+        const client: CritClient["Service"] = {
           currentAuthor: () => Effect.sync(() => {
             authorLoads += 1
             return TEST_AUTHOR
@@ -55,7 +54,7 @@ describe("CanvasSession", () => {
     Effect.scoped(
       Effect.gen(function*() {
         const stored = Canvas.export(Canvas.create({ id: "review", title: "Review", owner: TEST_AUTHOR }))
-        const client: CritClientShape = {
+        const client: CritClient["Service"] = {
           currentAuthor: () => Effect.fail(new CritClientUnavailable({
             operation: "current-author",
             id: "current-author",
@@ -82,7 +81,7 @@ describe("CanvasSession", () => {
     Effect.scoped(
       Effect.gen(function*() {
         const stored = Canvas.export(Canvas.create({ id: "review", title: "Review", owner: TEST_AUTHOR }))
-        const client: CritClientShape = {
+        const client: CritClient["Service"] = {
           currentAuthor: () => Effect.succeed(TEST_AUTHOR),
           load: () => Effect.succeed(stored),
           apply: () => Effect.succeed(stored),
@@ -110,7 +109,7 @@ describe("CanvasSession", () => {
     Effect.scoped(
       Effect.gen(function*() {
         const stored = Canvas.export(Canvas.create({ id: "review", title: "Review", owner: { id: "git:test", name: "Test Author" } }))
-        const client: CritClientShape = {
+        const client: CritClient["Service"] = {
           currentAuthor: () => Effect.succeed(TEST_AUTHOR),
           load: () => Effect.succeed(stored),
           apply: () => Effect.succeed(stored),
@@ -159,7 +158,7 @@ describe("CanvasSession", () => {
         let maximumActive = 0
         const firstStarted = yield* Deferred.make<void>()
         const releaseFirst = yield* Deferred.make<void>()
-        const client: CritClientShape = {
+        const client: CritClient["Service"] = {
           currentAuthor: () => Effect.succeed(TEST_AUTHOR),
           load: () => Effect.succeed(stored),
           apply: (_id, commands) =>
@@ -207,7 +206,7 @@ describe("CanvasSession", () => {
     Effect.scoped(
       Effect.gen(function*() {
         let stored = Canvas.export(Canvas.create({ id: "review", title: "Review", owner: { id: "git:test", name: "Test Author" } }))
-        const client: CritClientShape = {
+        const client: CritClient["Service"] = {
           currentAuthor: () => Effect.succeed(TEST_AUTHOR),
           load: () => Effect.succeed(stored),
           apply: (_id, commands) => applyTo(stored, commands).pipe(

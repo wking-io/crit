@@ -1,23 +1,23 @@
 import { Effect } from "effect"
 
 import {
-  CritClientUnavailable,
-  type CritClientShape
+  CritClient,
+  CritClientUnavailable
 } from "../session/crit-client.js"
-import type { CanvasRepositoryShape } from "./canvas-repository.js"
-import type { AgentActivityStoreShape } from "./agent-activity.js"
-import type { SnapshotServiceShape } from "./snapshot-service.js"
+import type { CanvasRepository } from "./canvas-repository.js"
+import type { AgentActivityStore } from "./agent-activity.js"
+import type { SnapshotService } from "./snapshot-service.js"
 
 export interface CanvasRepositoryCritClientOptions {
-  readonly currentAuthor: CritClientShape["currentAuthor"]
-  readonly snapshotFrame?: SnapshotServiceShape["snapshotFrame"]
-  readonly loadAgentActivities?: AgentActivityStoreShape["read"]
+  readonly currentAuthor: CritClient["Service"]["currentAuthor"]
+  readonly snapshotFrame?: SnapshotService["Service"]["snapshotFrame"]
+  readonly loadAgentActivities?: AgentActivityStore["Service"]["read"]
 }
 
 const make = (
-  documents: CanvasRepositoryShape,
+  documents: CanvasRepository["Service"],
   options: CanvasRepositoryCritClientOptions
-): CritClientShape => {
+): CritClient["Service"] => {
   return {
     currentAuthor: options.currentAuthor,
     load: (id) => documents.load(id),

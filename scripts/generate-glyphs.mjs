@@ -21,7 +21,7 @@ const rootAttributes = new Set([
   "vector-effect",
   "viewBox"
 ])
-const shapeAttributes = new Set([
+const graphicAttributes = new Set([
   "clip-rule",
   "cx",
   "cy",
@@ -115,7 +115,7 @@ const childNodes = (parent, inherited, filename) => {
       tag,
       attrs: {
         ...inherited,
-        ...attributesFor(child, shapeAttributes, filename)
+        ...attributesFor(child, graphicAttributes, filename)
       }
     })
   }

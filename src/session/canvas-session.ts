@@ -31,8 +31,7 @@ import {
 import {
   DraftJournal,
   type CanvasDraft,
-  type DraftJournalFailed,
-  type DraftJournalShape
+  type DraftJournalFailed
 } from "./draft-journal.js"
 
 export const CanvasSessionSaveStatus = Schema.Union([
@@ -133,7 +132,7 @@ const open = (
     const authoritative = opened.authoritative
     const currentAuthor = opened.currentAuthor
     const journalOption = yield* Effect.serviceOption(DraftJournal)
-    const journal: DraftJournalShape | undefined = Option.getOrUndefined(journalOption)
+    const journal: DraftJournal["Service"] | undefined = Option.getOrUndefined(journalOption)
     const sessionId = options.sessionId ?? crypto.randomUUID()
     let recoveryDraft: CanvasDraft | null = null
     let recoveryStatus: CanvasSessionRecoveryStatus =

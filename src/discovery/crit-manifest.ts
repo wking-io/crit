@@ -15,10 +15,7 @@ import {
   CritClientNotFound,
   CritClientUnavailable
 } from "../runtime/canvas-failure.js"
-import {
-  CanvasRepository,
-  type CanvasRepositoryShape
-} from "../runtime/canvas-repository.js"
+import { CanvasRepository } from "../runtime/canvas-repository.js"
 
 export const CRIT_MANIFEST_PATH = "/.well-known/crit.json"
 export const CRIT_MANIFEST_FILE = "crit.manifest.json"
@@ -308,7 +305,7 @@ const planFrameCommands = (
 }
 
 const syncWith = (
-  documents: CanvasRepositoryShape,
+  documents: CanvasRepository["Service"],
   manifest: ResolvedCritManifest,
   options: { readonly owner: Author; readonly canvasId?: string }
 ) => {

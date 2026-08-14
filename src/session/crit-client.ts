@@ -13,7 +13,7 @@ export {
   type CritClientError
 } from "../runtime/canvas-failure.js"
 
-export interface CritClientShape {
+export class CritClient extends Context.Service<CritClient, {
   readonly currentAuthor: () => Effect.Effect<Author, CritClientError>
   readonly load: (id: string) => Effect.Effect<CanvasDocument, CritClientError>
   readonly apply: (
@@ -27,8 +27,6 @@ export interface CritClientShape {
   readonly activities?: (
     canvasId: string
   ) => Effect.Effect<AgentActivityCollection, CritClientError>
-}
-
-export class CritClient extends Context.Service<CritClient, CritClientShape>()(
+}>()(
   "@riff-refine/crit/CritClient"
 ) {}

@@ -9,7 +9,7 @@ import {
 } from "../../src/http/contract.js"
 import {
   CritClientCommandFailed,
-  type CritClientShape
+  CritClient
 } from "../../src/session/crit-client.js"
 import { TEST_AUTHOR } from "../support/author-identity.js"
 
@@ -17,7 +17,7 @@ const document = Canvas.export(
   Canvas.create({ id: "homepage", title: "Homepage", owner: { id: "git:test", name: "Test Author" } })
 )
 
-const makeClient = (): CritClientShape & {
+const makeClient = (): CritClient["Service"] & {
   readonly applied: Array<ReadonlyArray<unknown>>
   readonly snapshots: Array<string>
 } => {
@@ -98,7 +98,7 @@ describe("makeCritHttpHandler", () => {
   })
 
   it("round-trips durable failures through HTTP without translating them", async () => {
-    const client: CritClientShape = {
+    const client: CritClient["Service"] = {
       ...makeClient(),
       apply: () =>
         Effect.fail(

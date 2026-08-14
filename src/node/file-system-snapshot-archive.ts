@@ -13,8 +13,7 @@ import {
   CRIT_SNAPSHOT_PATH,
   SnapshotCaptureFailed,
   SnapshotNotFound,
-  SnapshotStorageFailed,
-  type SnapshotArchiveShape
+  SnapshotStorageFailed
 } from "../runtime/snapshot-archive.js"
 import { hasNodeErrorCode } from "./internal/node-error.js"
 
@@ -41,7 +40,7 @@ type FetchResource = (url: string) => Promise<FetchedResource>
 
 const make = (
   options: FileSystemSnapshotArchiveOptions
-): SnapshotArchiveShape => {
+): SnapshotArchive["Service"] => {
   const directory = path.join(options.root, SNAPSHOT_DIRECTORY)
   const fetchImplementation = options.fetch ?? globalThis.fetch
   const now = options.now ?? (() => new Date())
