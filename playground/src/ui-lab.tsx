@@ -41,7 +41,11 @@ import "dialkit/styles.css"
 import "./base-tokens.css"
 import "./ui-lab.css"
 
-type TokenStep = "s1" | "s2" | "c1" | "c2" | "c3" | "p1" | "p2" | "t1" | "t2"
+const TOKEN_STEPS = [
+  "s1", "s2", "c1", "c2", "c3", "p1", "p2", "t1", "t2"
+] as const
+
+type TokenStep = (typeof TOKEN_STEPS)[number]
 type PaletteName = "neutral" | "orange" | "blue" | "green" | "purple" | "red"
 type ChromaticPalette = Exclude<PaletteName, "neutral">
 type TokenName =
@@ -58,14 +62,12 @@ type TokenName =
 
 type TokenValues = ReadonlyMap<TokenName, string>
 
-const TOKEN_STEPS: ReadonlyArray<TokenStep> = [
-  "s1", "s2", "c1", "c2", "c3", "p1", "p2", "t1", "t2"
-]
-
-const COLUMN_DEFAULTS: Record<TokenStep, {
+type ColorColumnDefault = {
   readonly lightness: number
   readonly chroma: number
-}> = {
+}
+
+const COLUMN_DEFAULTS = {
   s1: { lightness: 99, chroma: 0.003 },
   s2: { lightness: 97.5, chroma: 0.009 },
   c1: { lightness: 95.25, chroma: 0.024 },
@@ -75,15 +77,15 @@ const COLUMN_DEFAULTS: Record<TokenStep, {
   p2: { lightness: 65, chroma: 0.2 },
   t1: { lightness: 52, chroma: 0.2 },
   t2: { lightness: 28, chroma: 0.1 }
-}
+} as const satisfies Readonly<Record<TokenStep, ColorColumnDefault>>
 
-const HUE_DEFAULTS: Record<ChromaticPalette, number> = {
+const HUE_DEFAULTS = {
   red: 9,
   orange: 55,
   blue: 245.3,
   green: 156.3,
   purple: 302
-}
+} as const satisfies Readonly<Record<ChromaticPalette, number>>
 
 const slider = (
   value: number,

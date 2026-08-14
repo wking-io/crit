@@ -826,11 +826,13 @@ export type CanvasControlsInstance = {
   ) => Effect.Effect<A, E | CanvasActionUnavailable, R>
 }
 
+export type CanvasControlResolver = {
+  readonly resolve: (input: CanvasControlState) => CanvasControlsInstance
+}
+
 export const makeCanvasControls = (
   declarations: ReadonlyArray<CanvasActionPolicy> = CANVAS_ACTION_POLICIES
-): {
-  readonly resolve: (input: CanvasControlState) => CanvasControlsInstance
-} => {
+): CanvasControlResolver => {
   const policies = declarations
   validatePolicies(policies)
   const byId = new Map(policies.map((declaration) => [declaration.id, declaration]))
