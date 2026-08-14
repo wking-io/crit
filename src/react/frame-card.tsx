@@ -28,6 +28,10 @@ import {
   CritContextMenu,
   type ContextMenuPosition
 } from "./canvas-context-menu.js"
+import {
+  useCanvasActionRunner,
+  useCanvasControls
+} from "./canvas-action-runner.js"
 import { canvasItemStyle } from "./canvas-item-style.js"
 import {
   CanvasSelection,
@@ -36,8 +40,8 @@ import {
 import { CanvasCommentPin } from "./canvas-comment-pin.js"
 import {
   CanvasHelpPanel,
-  NO_HELP_HOTKEY,
-  helpTarget
+  actionHelpTarget,
+  informationalHelpTarget
 } from "./canvas-help.js"
 import {
   FRAME_STATUSES,
@@ -193,14 +197,6 @@ export const frameChromeLayout = (
 
 export { FRAME_SIZE_PRESETS } from "./frame-breakpoints.js"
 
-const statusHelpDescriptions: Readonly<Record<FrameStatus, string>> = {
-  "changes-requested": "Mark this frame as needing another iteration.",
-  "in-progress": "Mark this frame as actively being worked on.",
-  archived: "Capture the current page as an immutable snapshot frame.",
-  approved: "Mark this frame as accepted for the reviewed direction.",
-  "ready-for-review": "Mark this frame as ready for feedback or approval."
-}
-
 export function FrameCard({
   frame,
   frameChrome,
@@ -248,10 +244,10 @@ export function FrameCard({
   readonly commentThreads: ReadonlyArray<CanvasCommentThread>
   readonly defaultStatusMenuOpen?: boolean
   readonly openCommentId?: string
-  readonly onBringToFront: () => void
-  readonly onFitContent: (height: number) => void
+  readonly onBringToFront: () => Effect.Effect<unknown, unknown>
+  readonly onFitContent: (height: number) => Effect.Effect<unknown, unknown>
   readonly onMove: (event: ReactPointerEvent, item: CanvasFrame) => void
-  readonly onRemove: () => void
+  readonly onRemove: () => Effect.Effect<unknown, unknown>
   readonly onResize: (
     event: ReactPointerEvent,
     item: CanvasFrame,
@@ -259,26 +255,39 @@ export function FrameCard({
   ) => void
   readonly onSelect: (additive?: boolean) => void
   readonly onInputIntent: (intent: FrameInputIntent) => void
-  readonly onCommentAnchor: (anchor: CommentAnchor) => void
-  readonly onCompleteBreakpoints: () => void
-  readonly onDuplicateAt: (preset: FrameSizePreset) => void
-  readonly onOpenComment: (id: string) => void
+  readonly onCommentAnchor: (anchor: CommentAnchor) => Effect.Effect<unknown, unknown>
+  readonly onCompleteBreakpoints: () => Effect.Effect<unknown, unknown>
+  readonly onDuplicateAt: (preset: FrameSizePreset) => Effect.Effect<unknown, unknown>
+  readonly onOpenComment: (id: string) => Effect.Effect<unknown, unknown>
   readonly onSnapshot?: () => Effect.Effect<unknown, unknown>
   readonly onSnapshotError: (cause: unknown) => void
-  readonly onSendToBack: () => void
-  readonly onSetSize: (width: number, height: number) => void
-  readonly onStatus: (status: FrameReviewStatus) => void
-  readonly onTitle: (title: string) => void
+  readonly onSendToBack: () => Effect.Effect<unknown, unknown>
+  readonly onSetSize: (width: number, height: number) => Effect.Effect<unknown, unknown>
+  readonly onStatus: (status: FrameReviewStatus) => Effect.Effect<unknown, unknown>
+  readonly onTitle: (title: string) => Effect.Effect<unknown, unknown>
 }) {
   const frameRef = useRef<HTMLElement>(null)
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const [contextMenu, setContextMenu] = useState<ContextMenuPosition | null>(null)
   const [fullscreen, setFullscreen] = useState(false)
-  const [snapshotting, setSnapshotting] = useState(false)
   const [statusMenuOpen, setStatusMenuOpen] = useState(defaultStatusMenuOpen)
   const [titleDraft, setTitleDraft] = useState(frame.title)
   const [titleEditing, setTitleEditing] = useState(false)
   const [commentBridgeReady, setCommentBridgeReady] = useState(false)
+  const actionScopes = contextMenu !== null
+    ? ["canvas", "menu"] as const
+    : titleEditing
+      ? ["canvas", "frame-title-edit"] as const
+      : fullscreen
+        ? ["canvas", "fullscreen"] as const
+        : ["canvas"] as const
+  const controls = useCanvasControls(actionScopes, true)
+  const runner = useCanvasActionRunner()
+  const target = {
+    kind: "frame" as const,
+    id: frame.id,
+    label: frame.title
+  }
   const commentBridgeRef = useRef<ReturnType<typeof connectBridgedFrameComments> | null>(null)
   const onCommentAnchorRef = useRef(onCommentAnchor)
   const onOpenCommentRef = useRef(onOpenComment)
@@ -332,11 +341,10 @@ export function FrameCard({
     "--frame-stroke": status.stroke
   } as CSSProperties
 
-  const measureContentHeight = useCallback((force = false) => {
+  const measureContentHeight = useCallback((force = false) => Effect.suspend(() => {
     const iframe = iframeRef.current
     if (iframe === null) {
-      onSnapshotError(new Error("Frame content is not currently loaded"))
-      return
+      return Effect.fail(new Error("Frame content is not currently loaded"))
     }
     try {
       const contentDocument = iframe.contentDocument
@@ -355,14 +363,15 @@ export function FrameCard({
       )
       const nextHeight = Math.ceil(contentHeight)
       if (force || Math.abs(nextHeight - geometry.height) > 1) {
-        onFitContent(nextHeight)
+        return onFitContent(nextHeight)
       }
+      return Effect.void
     } catch {
-      onSnapshotError(new Error(
+      return Effect.fail(new Error(
         "Fit content requires a same-origin frame or a Crit height bridge"
       ))
     }
-  }, [geometry.height, onFitContent, onSnapshotError])
+  }), [geometry.height, onFitContent])
 
   useEffect(() => {
     const iframe = iframeRef.current
@@ -390,13 +399,19 @@ export function FrameCard({
         }
         iframeWindow.addEventListener("contextmenu", openContextMenu, true)
         const resizeObserver = frame.display.heightMode === "fit-page"
-          ? new ResizeObserver(() => measureContentHeight())
+          ? new ResizeObserver(() => Effect.runFork(
+              measureContentHeight().pipe(
+                Effect.catch((cause) => Effect.sync(() => onSnapshotError(cause)))
+              )
+            ))
           : null
         const contentDocument = iframe.contentDocument
         if (resizeObserver !== null && contentDocument !== null) {
           resizeObserver.observe(contentDocument.documentElement)
           if (contentDocument.body !== null) resizeObserver.observe(contentDocument.body)
-          measureContentHeight()
+          Effect.runFork(measureContentHeight().pipe(
+            Effect.catch((cause) => Effect.sync(() => onSnapshotError(cause)))
+          ))
         }
         disconnect = () => {
           try {
@@ -443,8 +458,25 @@ export function FrameCard({
       frameElement: iframe,
       onEvent: (event) => {
         if (event.type === "ready") setCommentBridgeReady(true)
-        else if (event.type === "select") onCommentAnchorRef.current(event.anchor)
-        else onOpenCommentRef.current(event.id)
+        else if (event.type === "select") {
+          runner.run(
+            controls,
+            placeCommentAction,
+            onCommentAnchorRef.current(event.anchor),
+            onSnapshotError
+          )
+        } else {
+          const action = controls.action({
+            id: "open-comment",
+            target: { kind: "comment-thread", id: event.id, label: "comment" }
+          })
+          runner.run(
+            controls,
+            action,
+            onOpenCommentRef.current(event.id),
+            onSnapshotError
+          )
+        }
       }
     })
     commentBridgeRef.current = bridge
@@ -469,28 +501,66 @@ export function FrameCard({
       )
     })
   }, [commentBridgeReady, commentMode, commentThreads, openCommentId, status.ink])
+  const snapshotAction = controls.action({
+    id: "take-frame-snapshot",
+    target,
+    snapshotAvailable: frame.snapshot === undefined && onSnapshot !== undefined
+  })
   const takeSnapshot = () => {
-    if (onSnapshot === undefined || snapshotting) return
-    setSnapshotting(true)
-    Effect.runFork(
-      onSnapshot().pipe(
-        Effect.tapError((cause) => Effect.sync(() => onSnapshotError(cause))),
-        Effect.ensuring(Effect.sync(() => setSnapshotting(false))),
-        Effect.catch(() => Effect.void)
-      )
-    )
+    if (onSnapshot === undefined) return
+    runner.run(controls, snapshotAction, onSnapshot(), onSnapshotError)
   }
+  const beginTitleEditAction = controls.action({
+    id: "begin-frame-title-edit",
+    target,
+    editable: frame.snapshot === undefined
+  })
+  const saveTitleAction = controls.action({
+    id: "save-frame-title-edit",
+    target,
+    editable: frame.snapshot === undefined
+  })
+  const cancelTitleAction = controls.action({
+    id: "cancel-frame-title-edit",
+    target,
+    editable: frame.snapshot === undefined
+  })
+  const breakpointAction = controls.action({
+    id: "show-frame-breakpoints",
+    target,
+    frameIsLive: frame.snapshot === undefined
+  })
+  const openAction = controls.action({ id: "open-frame-new-tab", target })
+  const fullscreenAction = controls.action({
+    id: fullscreen ? "exit-frame-fullscreen" : "enter-frame-fullscreen",
+    target
+  })
+  const removeAction = controls.action({
+    id: "remove-item",
+    target
+  })
+  const placeCommentAction = controls.action({
+    id: "place-comment",
+    target,
+    frameIsLive: frame.snapshot === undefined
+  })
   const commitTitle = () => {
     const title = titleDraft.trim()
-    if (title.length > 0 && title !== frame.title) onTitle(title)
-    else setTitleDraft(frame.title)
-    setTitleEditing(false)
+    const effect = title.length > 0 && title !== frame.title
+      ? onTitle(title)
+      : Effect.sync(() => setTitleDraft(frame.title))
+    runner.run(
+      controls,
+      saveTitleAction,
+      effect.pipe(Effect.ensuring(Effect.sync(() => setTitleEditing(false)))),
+      onSnapshotError
+    )
   }
   const toggleFullscreen = () => {
     if (document.fullscreenElement === frameRef.current) {
-      void document.exitFullscreen()
+      return document.exitFullscreen()
     } else {
-      void frameRef.current?.requestFullscreen()
+      return frameRef.current?.requestFullscreen() ?? Promise.resolve()
     }
   }
 
@@ -537,19 +607,37 @@ export function FrameCard({
                     STATUS_PILL_MOTION.originOffset
                   const selectStatus = () => {
                     if (option.id === "archived") takeSnapshot()
-                    else onStatus(option.id)
+                    else {
+                      const action = controls.action({
+                        id: "set-frame-status",
+                        target,
+                        status: option.id,
+                        frameIsLive: frame.snapshot === undefined
+                      })
+                      const reviewStatus = option.id
+                      runner.run(
+                        controls,
+                        action,
+                        onStatus(reviewStatus),
+                        onSnapshotError
+                      )
+                    }
                     setStatusMenuOpen(false)
                   }
+                  const statusAction = option.id === "archived"
+                    ? snapshotAction
+                    : controls.action({
+                        id: "set-frame-status",
+                        target,
+                        status: option.id,
+                        frameIsLive: frame.snapshot === undefined
+                      })
                   return (
                     <motion.button
                       aria-checked={false}
                       className="crit-status-option"
-                      disabled={option.id === "archived" && onSnapshot === undefined}
-                      {...helpTarget({
-                        name: option.label,
-                        hotkey: NO_HELP_HOTKEY,
-                        description: statusHelpDescriptions[option.id]
-                      })}
+                      disabled={statusAction.availability !== "enabled"}
+                      {...actionHelpTarget(statusAction)}
                       key={option.id}
                       onClick={(event) => {
                         if (event.detail === 0) selectStatus()
@@ -593,7 +681,7 @@ export function FrameCard({
                       type="button"
                     >
                       <Glyph name={option.glyph} />
-                      <span>{option.label}</span>
+                      <span>{statusAction.label}</span>
                     </motion.button>
                   )
                 })
@@ -604,9 +692,8 @@ export function FrameCard({
       <div className="crit-frame__surface">
         <header
         className="crit-frame__chrome"
-        {...helpTarget({
+        {...informationalHelpTarget({
           name: "Move frame",
-          hotkey: NO_HELP_HOTKEY,
           description: "Drag the frame header to reposition it on the canvas."
         })}
         data-toolbar-mode={toolbarMode}
@@ -618,16 +705,28 @@ export function FrameCard({
             aria-haspopup="menu"
             aria-label={`Status: ${status.label}. Change status`}
             className="crit-frame__mark"
-            disabled={frame.snapshot !== undefined}
-            {...helpTarget({
-              name: "Frame status",
-              hotkey: NO_HELP_HOTKEY,
-              description:
-                frame.snapshot === undefined
-                  ? "Review or change this frame's current workflow status."
-                  : "Snapshot frames remain archived and cannot change status."
-            })}
-            onClick={() => setStatusMenuOpen((open) => !open)}
+            disabled={controls.action({
+              id: "open-frame-status",
+              target,
+              frameIsLive: frame.snapshot === undefined
+            }).availability !== "enabled"}
+            {...actionHelpTarget(controls.action({
+              id: "open-frame-status",
+              target,
+              frameIsLive: frame.snapshot === undefined
+            }))}
+            onClick={() => {
+              const action = controls.action({
+                id: "open-frame-status",
+                target,
+                frameIsLive: frame.snapshot === undefined
+              })
+              runner.run(
+                controls,
+                action,
+                Effect.sync(() => setStatusMenuOpen((open) => !open))
+              )
+            }}
             onPointerDown={(event) => event.stopPropagation()}
             type="button"
           >
@@ -662,11 +761,8 @@ export function FrameCard({
                       autoComplete="off"
                       autoFocus
                       spellCheck={false}
-                      {...helpTarget({
-                        name: "Frame title",
-                        hotkey: "Enter · Esc",
-                        description: "Rename the frame. Press Enter to save or Escape to cancel."
-                      })}
+                      aria-keyshortcuts={`${saveTitleAction.ariaKeyShortcuts ?? ""} ${cancelTitleAction.ariaKeyShortcuts ?? ""}`.trim()}
+                      {...actionHelpTarget(saveTitleAction)}
                       onChange={(event) => setTitleDraft(event.currentTarget.value)}
                       onKeyDown={(event) => {
                         event.stopPropagation()
@@ -676,16 +772,25 @@ export function FrameCard({
                         }
                         if (event.key === "Escape") {
                           event.preventDefault()
-                          setTitleDraft(frame.title)
-                          setTitleEditing(false)
+                          runner.run(
+                            controls,
+                            cancelTitleAction,
+                            Effect.sync(() => {
+                              setTitleDraft(frame.title)
+                              setTitleEditing(false)
+                            })
+                          )
                         }
                       }}
                       value={titleDraft}
                     />
                   </span>
                   <button
-                    aria-label="Save frame title"
+                    aria-keyshortcuts={saveTitleAction.ariaKeyShortcuts}
+                    aria-label={saveTitleAction.label}
                     className="crit-frame__title-save"
+                    disabled={saveTitleAction.availability !== "enabled"}
+                    {...actionHelpTarget(saveTitleAction)}
                     onClick={commitTitle}
                     type="button"
                   >
@@ -696,12 +801,13 @@ export function FrameCard({
                 <button
                   aria-label={`Edit frame title: ${frame.title}`}
                   className="crit-frame__title-button"
-                  {...helpTarget({
-                    name: "Edit frame title",
-                    hotkey: NO_HELP_HOTKEY,
-                    description: "Rename this frame while preserving its stable frame ID."
-                  })}
-                  onClick={() => setTitleEditing(true)}
+                  disabled={beginTitleEditAction.availability !== "enabled"}
+                  {...actionHelpTarget(beginTitleEditAction)}
+                  onClick={() => runner.run(
+                    controls,
+                    beginTitleEditAction,
+                    Effect.sync(() => setTitleEditing(true))
+                  )}
                   onPointerDown={(event) => event.stopPropagation()}
                   type="button"
                 >
@@ -725,14 +831,16 @@ export function FrameCard({
         <div className="crit-frame__actions" onPointerDown={(event) => event.stopPropagation()}>
             {frame.snapshot === undefined && actions.breakpoints ? (
               <button
-                aria-label={`Show ${frame.title} at all breakpoints`}
+                aria-label={breakpointAction.label}
                 className="crit-frame__action"
-                {...helpTarget({
-                  name: "Show all breakpoints",
-                  hotkey: NO_HELP_HOTKEY,
-                  description: "Duplicate this live page at every missing standard viewport size."
-                })}
-                onClick={onCompleteBreakpoints}
+                disabled={breakpointAction.availability !== "enabled"}
+                {...actionHelpTarget(breakpointAction)}
+                onClick={() => runner.run(
+                  controls,
+                  breakpointAction,
+                  onCompleteBreakpoints(),
+                  onSnapshotError
+                )}
                 type="button"
               >
                 <Glyph name="responsiveBreakpoints" />
@@ -740,15 +848,11 @@ export function FrameCard({
             ) : null}
             {frame.snapshot === undefined && onSnapshot !== undefined && actions.snapshot ? (
               <button
-                aria-label={snapshotting ? "Taking snapshot" : "Take snapshot"}
+                aria-label={snapshotAction.reason === "action-pending" ? "Taking snapshot" : snapshotAction.label}
                 className="crit-frame__action"
-                data-snapshotting={snapshotting || undefined}
-                disabled={snapshotting}
-                {...helpTarget({
-                  name: snapshotting ? "Taking snapshot" : "Take snapshot",
-                  hotkey: NO_HELP_HOTKEY,
-                  description: "Preserve the live page as a separate immutable snapshot frame."
-                })}
+                data-snapshotting={snapshotAction.reason === "action-pending" || undefined}
+                disabled={snapshotAction.availability !== "enabled"}
+                {...actionHelpTarget(snapshotAction)}
                 onClick={takeSnapshot}
                 type="button"
               >
@@ -756,13 +860,9 @@ export function FrameCard({
               </button>
             ) : null}
             {actions.open ? <a
-              aria-label={`Open ${frame.title}`}
+              aria-label={openAction.label}
               className="crit-frame__action"
-              {...helpTarget({
-                name: "Open in new tab",
-                hotkey: NO_HELP_HOTKEY,
-                description: "Open this frame's page in a separate browser tab."
-              })}
+              {...actionHelpTarget(openAction)}
               href={frame.url}
               rel="noreferrer"
               target="_blank"
@@ -770,30 +870,33 @@ export function FrameCard({
               <Glyph name="openExternal" />
             </a> : null}
             {actions.fullscreen ? <button
-              aria-label={fullscreen ? `Collapse ${frame.title} to canvas` : `Enter ${frame.title} fullscreen`}
+              aria-label={fullscreenAction.label}
               className="crit-frame__action"
-              {...helpTarget({
-                name: fullscreen ? "Collapse to canvas" : "Enter fullscreen",
-                hotkey: fullscreen ? "Esc" : NO_HELP_HOTKEY,
-                description: fullscreen
-                  ? "Return this frame to its position on the canvas."
-                  : "Expand this frame to fill the screen for focused review."
-              })}
-              onClick={toggleFullscreen}
+              aria-keyshortcuts={fullscreenAction.ariaKeyShortcuts}
+              disabled={fullscreenAction.availability !== "enabled"}
+              {...actionHelpTarget(fullscreenAction)}
+              onClick={() => runner.run(
+                controls,
+                fullscreenAction,
+                Effect.promise(toggleFullscreen),
+                onSnapshotError
+              )}
               type="button"
             >
               <Glyph name={fullscreen ? "minimize" : "fullscreen"} />
             </button> : null}
             {actions.delete ? <button
-              aria-keyshortcuts="Backspace"
-              aria-label={`Delete ${frame.title}`}
+              aria-keyshortcuts={removeAction.ariaKeyShortcuts}
+              aria-label={removeAction.label}
               className="crit-frame__action"
-              {...helpTarget({
-                name: "Remove frame",
-                hotkey: "Del",
-                description: "Remove this frame from the canvas."
-              })}
-              onClick={onRemove}
+              disabled={removeAction.availability !== "enabled"}
+              {...actionHelpTarget(removeAction)}
+              onClick={() => runner.run(
+                controls,
+                removeAction,
+                onRemove(),
+                onSnapshotError
+              )}
               type="button"
             ><Glyph name="trash" /></button> : null}
         </div>
@@ -804,7 +907,6 @@ export function FrameCard({
             allow={iframeAllow}
             // The relay URL is stable by Frame identity, so recreate the
             // browsing context when that Frame's canonical URL changes.
-            key={frame.url}
             ref={iframeRef}
             referrerPolicy="no-referrer"
             // Snapshot Artifacts are captured foreign pages with their CSP
@@ -819,9 +921,8 @@ export function FrameCard({
           />
         ) : <div
           className="crit-frame__paused"
-          {...helpTarget({
+          {...informationalHelpTarget({
             name: "Paused frame",
-            hotkey: NO_HELP_HOTKEY,
             description: "This frame is unloaded while far outside the current view to save resources."
           })}
         >Frame paused while offscreen</div>}
@@ -835,6 +936,7 @@ export function FrameCard({
               color={status.ink}
               key={thread.id}
               onOpen={() => onOpenComment(thread.id)}
+              threadId={thread.id}
               xRatio={thread.anchor.xRatio}
               yRatio={thread.anchor.yRatio}
             />
@@ -843,13 +945,20 @@ export function FrameCard({
           <button
             aria-label={`Place a comment on ${frame.title}`}
             className="crit-frame__comment-fallback"
+            disabled={placeCommentAction.availability !== "enabled"}
+            {...actionHelpTarget(placeCommentAction)}
             onClick={(event) => {
               const rect = event.currentTarget.getBoundingClientRect()
-              onCommentAnchor({
-                kind: "frame",
-                xRatio: Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width)),
-                yRatio: Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height))
-              })
+              runner.run(
+                controls,
+                placeCommentAction,
+                onCommentAnchor({
+                  kind: "frame",
+                  xRatio: Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width)),
+                  yRatio: Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height))
+                }),
+                onSnapshotError
+              )
             }}
             onContextMenu={(event) => event.preventDefault()}
             onPointerDown={(event) => event.stopPropagation()}
@@ -872,57 +981,69 @@ export function FrameCard({
         ariaLabel={`Actions for ${frame.title}`}
         items={[
           {
-            help: "Remove this frame from the canvas.",
-            label: "Delete",
-            onSelect: onRemove,
-            tone: "danger"
+            action: removeAction,
+            execute: onRemove(),
+            onFailure: onSnapshotError
           },
           {
-            help: fullscreen
-              ? "Return this frame to its position on the canvas."
-              : "Expand this frame to fill the screen for focused review.",
-            label: fullscreen ? "Collapse to canvas" : "Fullscreen",
-            onSelect: toggleFullscreen
+            action: fullscreenAction,
+            execute: Effect.promise(toggleFullscreen),
+            onFailure: onSnapshotError
           },
           {
-            help: "Open this frame's page in a separate browser tab.",
+            action: openAction,
             href: frame.url,
-            label: "Open in new tab"
           },
           {
-            help: "Place this frame above every other canvas item.",
-            label: "Bring to front",
-            onSelect: onBringToFront
+            action: controls.action({
+              id: "bring-item-to-front",
+              target
+            }),
+            execute: onBringToFront()
           },
           {
-            help: "Place this frame behind every other canvas item.",
-            label: "Send to back",
-            onSelect: onSendToBack
+            action: controls.action({
+              id: "send-item-to-back",
+              target
+            }),
+            execute: onSendToBack()
           },
           {
-            help: "Choose a standard viewport size for this frame.",
-            label: "Set size to...",
+            action: controls.action({
+              id: "open-frame-size-menu",
+              target
+            }),
             items: FRAME_SIZE_PRESETS.map((preset) => ({
+              action: controls.action({
+                id: "resize-frame-to-preset",
+                target,
+                preset: preset.id
+              }),
               detail: `${preset.width} × ${preset.height}`,
-              help: `Resize this frame to the ${preset.label.toLowerCase()} preset at ${preset.width} by ${preset.height} pixels.`,
-              label: preset.label,
-              onSelect: () => onSetSize(preset.width, preset.height)
+              execute: onSetSize(preset.width, preset.height)
             }))
           },
           ...(frame.snapshot === undefined ? [{
-            help: "Create another live Frame at a standard viewport size.",
-            label: "Duplicate at...",
+            action: controls.action({
+              id: "open-frame-duplicate-menu" as const,
+              target,
+              frameIsLive: true
+            }),
             items: FRAME_SIZE_PRESETS.map((preset) => ({
+              action: controls.action({
+                id: "duplicate-frame-at-preset",
+                target,
+                preset: preset.id,
+                frameIsLive: true
+              }),
               detail: `${preset.width} × ${preset.height}`,
-              help: `Duplicate this frame at the ${preset.label.toLowerCase()} preset.`,
-              label: preset.label,
-              onSelect: () => onDuplicateAt(preset)
+              execute: onDuplicateAt(preset)
             }))
           }] : []),
           {
-            help: "Resize the frame height to fit its same-origin page content.",
-            label: "Fit content",
-            onSelect: () => measureContentHeight(true)
+            action: controls.action({ id: "fit-frame-content", target }),
+            execute: measureContentHeight(true),
+            onFailure: onSnapshotError
           }
         ]}
         onClose={() => setContextMenu(null)}

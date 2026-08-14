@@ -147,7 +147,51 @@ export const critStyles = String.raw`
 .crit-icon-button[aria-expanded="true"] { background: oklch(14.7% 0.004 49.3 / 8%); }
 .crit-icon-button[aria-pressed="true"] { background: oklch(14.7% 0.004 49.3 / 8%); }
 .crit-icon-button[aria-disabled="true"] { cursor: default; }
+.crit-icon-button:disabled { cursor: default; opacity: .42; }
 .crit-icon-button svg { height: 16px; width: 16px; }
+
+.crit-arrangement-control { display: block; position: relative; }
+.crit-arrangement-popover {
+  background: oklch(97% 0.001 106.4);
+  border-radius: 8px;
+  box-shadow: oklch(14.7% 0.004 49.3 / 20%) 0 0 0 .5px, oklch(14.7% 0.004 49.3 / 18%) 0 10px 30px;
+  display: grid;
+  gap: 4px;
+  left: 50%;
+  padding: 5px;
+  position: absolute;
+  top: calc(100% + 9px);
+  translate: -50% 0;
+  z-index: 5000;
+}
+.crit-arrangement-popover__grid {
+  display: grid;
+  gap: 2px;
+  grid-template-columns: repeat(6, 28px);
+}
+.crit-arrangement-popover__grid--distribution {
+  border-top: .5px solid oklch(14.7% 0.004 49.3 / 18%);
+  padding-top: 4px;
+}
+.crit-arrangement-popover__button {
+  background: transparent;
+  border: 0;
+  border-radius: 5px;
+  color: inherit;
+  cursor: pointer;
+  display: grid;
+  height: 28px;
+  padding: 0;
+  place-items: center;
+  width: 28px;
+}
+.crit-arrangement-popover__button:hover,
+.crit-arrangement-popover__button:focus-visible {
+  background: oklch(14.7% 0.004 49.3 / 8%);
+  outline: 0;
+}
+.crit-arrangement-popover__button:disabled { cursor: default; opacity: .36; }
+.crit-arrangement-popover__button svg { height: 16px; width: 16px; }
 
 .crit-frame {
   --crit-frame-chrome-height: calc(28px * var(--crit-ui));

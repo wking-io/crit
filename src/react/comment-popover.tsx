@@ -5,12 +5,21 @@ import {
   useState,
   type FormEvent
 } from "react"
+import { Effect } from "effect"
 import type {
   CanvasCommentThread,
   CanvasGeometry,
   CommentMessage
 } from "../core/index.js"
 import { frameUiScale } from "./frame-card.js"
+import {
+  useCanvasActionRunner,
+  useCanvasControls
+} from "./canvas-action-runner.js"
+import {
+  actionHelpTarget,
+  informationalHelpTarget
+} from "./canvas-help.js"
 import { Glyph } from "./glyph.js"
 
 export const COMMENT_POPOVER_WIDTH = 332
@@ -38,6 +47,7 @@ const Message = ({
   editable,
   message,
   pending,
+  onActionError,
   onDirty,
   onEdit
 }: {
@@ -45,9 +55,12 @@ const Message = ({
   readonly editable: boolean
   readonly message: CommentMessage
   readonly pending: boolean
+  readonly onActionError?: (cause: unknown) => void
   readonly onDirty: (messageId: string, dirty: boolean) => void
-  readonly onEdit: (expected: string, body: string) => void
+  readonly onEdit: (expected: string, body: string) => Effect.Effect<unknown, unknown>
 }) => {
+  const controls = useCanvasControls(["canvas", "comment-edit"], true)
+  const runner = useCanvasActionRunner()
   const [editing, setEditing] = useState(false)
   const [body, setBody] = useState(message.body)
   useEffect(() => {
@@ -65,6 +78,37 @@ const Message = ({
   useEffect(() => {
     onDirty(message.id, editing && body !== message.body)
   }, [body, editing, message.body, message.id, onDirty])
+  const target = {
+    kind: "comment" as const,
+    id: message.id,
+    label: "comment"
+  }
+  const beginEdit = controls.action({
+    id: "begin-comment-edit",
+    target,
+    editable
+  })
+  const cancelEdit = controls.action({
+    id: "cancel-comment-edit",
+    target,
+    editable
+  })
+  const saveEdit = controls.action({
+    id: "save-comment-edit",
+    target,
+    editable,
+    bodyPresent: body.trim().length > 0
+  })
+  const save = () => {
+    const next = body.trim()
+    if (next.length === 0) return
+    runner.run(
+      controls,
+      saveEdit,
+      onEdit(message.body, next),
+      onActionError
+    )
+  }
 
   return (
     <article className="crit-comment__message">
@@ -75,38 +119,66 @@ const Message = ({
       {editing ? (
         <form onSubmit={(event) => {
           event.preventDefault()
-          const next = body.trim()
-          if (next.length > 0) onEdit(message.body, next)
+          save()
         }}>
           <textarea
             autoFocus
             disabled={pending}
+            {...informationalHelpTarget({
+              name: "Comment text",
+              description: "Edit this comment message."
+            })}
             onChange={(event) => setBody(event.currentTarget.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+                event.preventDefault()
+                save()
+              }
+            }}
             value={body}
           />
           <div className="crit-comment__actions">
-            <button onClick={() => {
-              setEditing(false)
-              setBody(message.body)
-            }} type="button">Cancel</button>
-            <button disabled={pending || body.trim().length === 0} type="submit">
-              Save
+            <button
+              disabled={pending || cancelEdit.availability !== "enabled"}
+              {...actionHelpTarget(cancelEdit)}
+              onClick={() => runner.run(
+                controls,
+                cancelEdit,
+                Effect.sync(() => {
+                  setEditing(false)
+                  setBody(message.body)
+                })
+              )}
+              type="button"
+            >{cancelEdit.label}</button>
+            <button
+              aria-keyshortcuts={saveEdit.ariaKeyShortcuts}
+              disabled={pending || saveEdit.availability !== "enabled"}
+              {...actionHelpTarget(saveEdit)}
+              type="submit"
+            >
+              {saveEdit.label}
             </button>
           </div>
         </form>
       ) : (
         <>
           <p>{message.body}</p>
-          {editable ? (
+          {beginEdit.availability === "hidden" ? null : (
             <button
               className="crit-comment__text-action"
-              disabled={pending}
-              onClick={() => setEditing(true)}
+              disabled={pending || beginEdit.availability !== "enabled"}
+              {...actionHelpTarget(beginEdit)}
+              onClick={() => runner.run(
+                controls,
+                beginEdit,
+                Effect.sync(() => setEditing(true))
+              )}
               type="button"
             >
               Edit
             </button>
-          ) : null}
+          )}
         </>
       )}
     </article>
@@ -114,22 +186,26 @@ const Message = ({
 }
 
 export function CommentPopover(props: {
+  readonly frameId: string
   readonly canSubmit: boolean
   readonly clearDraft: CommentDraftClear | null
-  readonly editableCommentIds: ReadonlySet<string>
+  readonly currentAuthorId: string | null
   readonly frameGeometry?: CanvasGeometry
   readonly inline?: boolean
   readonly pending: boolean
-  readonly resolution: "resolve" | "reopen" | null
+  readonly threadManageable: boolean
   readonly statusColor: string
   readonly thread?: CanvasCommentThread
   readonly zoom?: number
-  readonly onClose: () => void
+  readonly onClose: () => Effect.Effect<unknown, unknown>
+  readonly onActionError?: (cause: unknown) => void
   readonly onDraftStatus: (dirty: boolean) => void
-  readonly onEdit: (commentId: string, expected: string, body: string) => void
-  readonly onResolve: (resolved: boolean) => void
-  readonly onSubmit: (body: string) => void
+  readonly onEdit: (commentId: string, expected: string, body: string) => Effect.Effect<unknown, unknown>
+  readonly onResolve: (resolved: boolean) => Effect.Effect<unknown, unknown>
+  readonly onSubmit: (body: string) => Effect.Effect<unknown, unknown>
 }) {
+  const controls = useCanvasControls(["canvas", "comment-compose"], true)
+  const runner = useCanvasActionRunner()
   const [body, setBody] = useState("")
   const composerDirty = useRef(false)
   const editingDirty = useRef(new Set<string>())
@@ -163,8 +239,45 @@ export function CommentPopover(props: {
   const submit = (event: FormEvent) => {
     event.preventDefault()
     const next = body.trim()
-    if (next.length > 0) props.onSubmit(next)
+    if (next.length === 0) return
+    runner.run(
+      controls,
+      submitAction,
+      props.onSubmit(next),
+      props.onActionError
+    )
   }
+  const frameTarget = { kind: "frame" as const, id: props.frameId, label: "frame" }
+  const threadTarget = props.thread === undefined
+    ? undefined
+    : { kind: "comment-thread" as const, id: props.thread.id, label: "comment" }
+  const close = controls.action({
+    id: "close-comment",
+    target: threadTarget ?? frameTarget
+  })
+  const submitAction = props.thread === undefined
+    ? controls.action({
+        id: "submit-comment",
+        target: frameTarget,
+        bodyPresent: body.trim().length > 0
+      })
+    : controls.action({
+        id: "submit-reply",
+        target: threadTarget!,
+        bodyPresent: body.trim().length > 0
+      })
+  const resolutionAction = props.thread === undefined
+    ? null
+    : props.thread.resolvedAt === null ? controls.action({
+        id: "resolve-comment-thread",
+        target: { kind: "comment-thread", id: props.thread.id, label: "comment" },
+        manageable: props.threadManageable
+      })
+      : controls.action({
+          id: "reopen-comment-thread",
+          target: { kind: "comment-thread", id: props.thread.id, label: "comment" },
+          manageable: props.threadManageable
+        })
   const placement = props.inline || props.frameGeometry === undefined || props.zoom === undefined
     ? undefined
     : commentPopoverProjection(props.frameGeometry, props.zoom)
@@ -176,16 +289,19 @@ export function CommentPopover(props: {
       transform: `scale(${placement.scale})`
     })
   }}>
-    <header className="crit-comment-popover__header"><span><Glyph name="commentPin" />{props.thread === undefined ? "New comment" : "Comment"}</span><button aria-label="Close comment" onClick={props.onClose} type="button"><Glyph name="close" /></button></header>
+    <header className="crit-comment-popover__header"><span><Glyph name="commentPin" />{props.thread === undefined ? "New comment" : "Comment"}</span><button aria-label={close.label} disabled={close.availability !== "enabled"} {...actionHelpTarget(close)} onClick={() => runner.run(controls, close, props.onClose(), props.onActionError)} type="button"><Glyph name="close" /></button></header>
     {props.thread === undefined ? null : (
       <div className="crit-comment__messages">
         {[props.thread.opening, ...props.thread.replies].map((message) => (
           <Message
             clearDraft={props.clearDraft}
-            editable={props.editableCommentIds.has(message.id)}
+            editable={props.currentAuthorId === message.author.id}
             key={message.id}
             message={message}
             pending={props.pending}
+            {...(props.onActionError === undefined
+              ? {}
+              : { onActionError: props.onActionError })}
             onDirty={onEditingDirty}
             onEdit={(expected, next) => props.onEdit(message.id, expected, next)}
           />
@@ -198,27 +314,50 @@ export function CommentPopover(props: {
           aria-label={props.thread === undefined ? "Comment" : "Reply"}
           autoFocus={!props.inline}
           disabled={props.pending}
+          {...informationalHelpTarget({
+            name: props.thread === undefined ? "Comment text" : "Reply text",
+            description: props.thread === undefined
+              ? "Write feedback for this frame."
+              : "Write a reply to this comment thread."
+          })}
           onChange={(event) => {
             const next = event.currentTarget.value
             setBody(next)
             composerDirty.current = next.trim().length > 0
             reportDraftStatus()
           }}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+              event.preventDefault()
+              event.currentTarget.form?.requestSubmit()
+            }
+          }}
           placeholder={props.thread === undefined ? "Leave feedback…" : "Reply…"}
           value={body}
         />
         <div className="crit-comment__actions">
-          {props.resolution !== null && props.thread ? (
+          {resolutionAction !== null && props.thread ? (
             <button
-              disabled={props.pending}
-              onClick={() => props.onResolve(props.resolution === "resolve")}
+              disabled={props.pending || resolutionAction.availability !== "enabled"}
+              {...actionHelpTarget(resolutionAction)}
+              onClick={() => runner.run(
+                controls,
+                resolutionAction,
+                props.onResolve(resolutionAction.id === "resolve-comment-thread"),
+                props.onActionError
+              )}
               type="button"
             >
-              {props.resolution === "resolve" ? "Resolve" : "Reopen"}
+              {resolutionAction.label}
             </button>
           ) : <span />}
-          <button disabled={props.pending || body.trim().length === 0} type="submit">
-            {props.thread === undefined ? "Comment" : "Reply"}
+          <button
+            aria-keyshortcuts={submitAction.ariaKeyShortcuts}
+            disabled={props.pending || submitAction.availability !== "enabled"}
+            {...actionHelpTarget(submitAction)}
+            type="submit"
+          >
+            {submitAction.label}
           </button>
         </div>
       </form>
