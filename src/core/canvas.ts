@@ -74,6 +74,7 @@ export const CanvasDocument = Schema.Struct({
   )
 })
 export type CanvasDocument = typeof CanvasDocument.Type
+export type CanvasOpenInput = Schema.Json | CanvasDocument
 
 export const CanvasSummary = Schema.Struct({
   id: Schema.String,
@@ -254,7 +255,7 @@ const create = (input: {
     comments: []
   })
 
-const encodedBytes = (input: unknown) => {
+const encodedBytes = (input: CanvasOpenInput) => {
   const serialized = JSON.stringify(input)
   if (serialized === undefined) throw new TypeError("Value is not JSON serializable")
   return new TextEncoder().encode(serialized).byteLength
@@ -348,7 +349,7 @@ const documentTooLarge = (actualBytes: number) =>
   })
 
 const open = (
-  input: unknown
+  input: CanvasOpenInput
 ): Effect.Effect<Canvas, CanvasOpenFailed | CanvasDocumentTooLarge> =>
   Effect.gen(function*() {
     const actualBytes = yield* Effect.try({

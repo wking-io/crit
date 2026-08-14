@@ -1,5 +1,5 @@
 import { describe, expect, it } from "@effect/vitest"
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
 
 import { Canvas, type CanvasDocument } from "../../src/core/index.js"
 
@@ -15,7 +15,9 @@ describe("Canvas lifecycle", () => {
       )
       const { owner: _owner, ...ownerless } = document
 
-      const failure = yield* Effect.flip(Canvas.open(ownerless))
+      const failure = yield* Effect.flip(
+        Canvas.open(Schema.decodeUnknownSync(Schema.Json)(ownerless))
+      )
 
       expect(failure).toMatchObject({ reason: "invalid-envelope" })
     }))

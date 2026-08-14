@@ -827,13 +827,11 @@ export type CanvasControlsInstance = {
 }
 
 export const makeCanvasControls = (
-  declarations: unknown = CANVAS_ACTION_POLICIES
+  declarations: ReadonlyArray<CanvasActionPolicy> = CANVAS_ACTION_POLICIES
 ): {
   readonly resolve: (input: CanvasControlState) => CanvasControlsInstance
 } => {
-  const policies = Schema.decodeUnknownSync(Schema.Array(CanvasActionPolicy))(
-    declarations
-  )
+  const policies = declarations
   validatePolicies(policies)
   const byId = new Map(policies.map((declaration) => [declaration.id, declaration]))
 

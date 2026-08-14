@@ -17,7 +17,8 @@ export {
   CanvasOpenFailed,
   CanvasSummary,
   MAX_CANVAS_DOCUMENT_BYTES,
-  type Canvas as CanvasHandle
+  type Canvas as CanvasHandle,
+  type CanvasOpenInput
 } from "./canvas.js"
 export {
   Author,

@@ -22,10 +22,10 @@ const draft = (
   commands: []
 })
 
-const putRawRecord = (
+const putRawRecord = <Value>(
   indexedDB: IDBFactory,
   databaseName: string,
-  value: unknown
+  value: Value
 ) =>
   Effect.promise(
     () =>

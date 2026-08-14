@@ -56,7 +56,7 @@ describe("CritManifest", () => {
         CritManifest.resolve(
           {
             ...input,
-            canvases: [input.canvases[0], input.canvases[0]]
+            canvases: [input.canvases[0]!, input.canvases[0]!]
           },
           { baseUrl: "https://iteration.localhost" }
         )

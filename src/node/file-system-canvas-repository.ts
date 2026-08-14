@@ -1,6 +1,6 @@
 import * as NodeServices from "@effect/platform-node/NodeServices"
 import { open as openFile, readFile, stat, unlink } from "node:fs/promises"
-import { Effect, FileSystem, Layer, Path } from "effect"
+import { Effect, FileSystem, Layer, Path, Schema } from "effect"
 
 import {
   Canvas,
@@ -99,7 +99,7 @@ const make = (root: string) =>
           .readFileString(target)
           .pipe(Effect.mapError((cause) => storageFailure("load", id, cause)))
         const input = yield* Effect.try({
-          try: () => JSON.parse(contents),
+          try: () => Schema.decodeUnknownSync(Schema.Json)(JSON.parse(contents)),
           catch: (cause) =>
             new CritClientInvalidDocument({
               id,

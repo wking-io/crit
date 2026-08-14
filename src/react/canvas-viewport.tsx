@@ -151,9 +151,9 @@ const CanvasActionFailure = Schema.Union([
   Schema.ErrorInstance()
 ])
 
-const messageOf = (input: unknown) => {
-  const decoded = Schema.decodeUnknownOption(CanvasActionFailure)(input)
-  const failure = Option.getOrElse(decoded, () => new Error(String(input)))
+const messageOf = (cause: unknown) => {
+  const decoded = Schema.decodeUnknownOption(CanvasActionFailure)(cause)
+  const failure = Option.getOrElse(decoded, () => new Error(String(cause)))
   if (Schema.is(CanvasCommandFailed)(failure)) return failure.detail
   if (Schema.is(CritClientErrorSchema)(failure)) {
     return critClientErrorMessage(failure)

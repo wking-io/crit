@@ -36,14 +36,15 @@ export interface HttpCritClientServices extends CritHttpServices {
 
 const parseJson = (response: Response) =>
   Effect.tryPromise({
-    try: () => response.json(),
+    try: async () =>
+      Schema.decodeUnknownSync(Schema.Json)(await response.json()),
     catch: (cause) =>
       new Error(cause instanceof Error ? cause.message : "Invalid JSON response")
   })
 
 const responseError = (
   response: Response,
-  input: unknown,
+  input: Schema.Json,
   operation: "current-author" | "load" | "apply" | "snapshot" | "activity",
   id: string
 ): CritClientError => {

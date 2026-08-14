@@ -66,6 +66,13 @@ export interface CritHttpHandlerOptions {
 
 export type CritHttpServices = CritClientServices
 
+type CritHttpErrorResponse = typeof CritHttpErrorBody.Encoded
+type CritHttpResponseBody =
+  | typeof Author.Type
+  | typeof CanvasDocument.Type
+  | typeof AgentActivityCollection.Type
+  | CritHttpErrorResponse
+
 const stripTrailingSlash = (value: string) => value.replace(/\/+$/, "")
 
 export const critCanvasUrl = (apiPath: string, canvasId: string) =>
@@ -126,7 +133,11 @@ export const parseCritHttpRoute = (
   }
 }
 
-const json = (status: number, body: unknown, headers?: HeadersInit) =>
+const json = (
+  status: number,
+  body: CritHttpResponseBody,
+  headers?: HeadersInit
+) =>
   new Response(JSON.stringify(body), {
     status,
     headers: {
@@ -145,7 +156,7 @@ const errorBody = (
   details: {
     readonly id?: string
   } = {}
-): CritHttpErrorBody => ({
+): CritHttpErrorResponse => ({
   error: { code, message, ...details }
 })
 
@@ -379,7 +390,7 @@ export const makeCritHttpHandler = (
   }
 }
 
-export const decodeCanvasDocument = (input: unknown, id: string) =>
+export const decodeCanvasDocument = (input: Schema.Json, id: string) =>
   Schema.decodeUnknownEffect(CanvasDocument)(input).pipe(
     Effect.mapError(
       (cause) =>
@@ -387,7 +398,7 @@ export const decodeCanvasDocument = (input: unknown, id: string) =>
     )
   )
 
-export const decodeCurrentAuthor = (input: unknown) =>
+export const decodeCurrentAuthor = (input: Schema.Json) =>
   Schema.decodeUnknownEffect(Author)(input).pipe(
     Effect.mapError(
       (cause) =>
@@ -398,7 +409,7 @@ export const decodeCurrentAuthor = (input: unknown) =>
     )
   )
 
-export const decodeAgentActivities = (input: unknown, id: string) =>
+export const decodeAgentActivities = (input: Schema.Json, id: string) =>
   Schema.decodeUnknownEffect(AgentActivityCollection)(input).pipe(
     Effect.mapError(
       (cause) =>

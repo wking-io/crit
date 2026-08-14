@@ -3,7 +3,8 @@ import { describe, expect, it } from "vitest"
 import {
   connectBridgedFrameComments,
   CRIT_FRAME_COMMENT_SOURCE,
-  critFrameCommentBridgeScript
+  critFrameCommentBridgeScript,
+  type FrameCommentConfigureMessage
 } from "../../src/frame-bridge/comment-bridge.js"
 
 describe("Frame Comment bridge", () => {
@@ -18,9 +19,9 @@ describe("Frame Comment bridge", () => {
         disconnected = true
       }
     }
-    const posted: Array<unknown> = []
+    const posted: Array<FrameCommentConfigureMessage> = []
     const frameWindow = {
-      postMessage: (value: unknown) => posted.push(value)
+      postMessage: (value: FrameCommentConfigureMessage) => posted.push(value)
     }
     const frameElement = { contentWindow: frameWindow }
     const events: Array<unknown> = []

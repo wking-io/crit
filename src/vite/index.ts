@@ -14,6 +14,7 @@ import {
   CRIT_MANIFEST_FILE,
   CRIT_MANIFEST_PATH,
   CritManifest,
+  type CritManifestDocument,
   type ResolvedCritManifest
 } from "../discovery/index.js"
 import {
@@ -137,7 +138,20 @@ const sendUnexpectedFailure = (response: ServerResponse, cause: unknown) => {
   )
 }
 
-const sendJson = (response: ServerResponse, status: number, body: unknown) => {
+type CritViteJsonResponse =
+  | CritManifestDocument
+  | {
+      readonly error: {
+        readonly code: string
+        readonly message: string
+      }
+    }
+
+const sendJson = (
+  response: ServerResponse,
+  status: number,
+  body: CritViteJsonResponse
+) => {
   response.statusCode = status
   response.setHeader("Cache-Control", "no-store")
   response.setHeader("Content-Type", "application/json; charset=utf-8")
@@ -611,12 +625,15 @@ export const crit = (options: CritVitePluginOptions = {}): Plugin => {
           ? "https:"
           : "http:"
       return Effect.runPromise(
-          CritManifest.resolve(JSON.parse(source), {
-          baseUrl: publicOrigin === undefined
-            ? `${protocol}//${host}/`
-            : `${publicOrigin}/`,
-          source: manifestFile
-        })
+        CritManifest.resolve(
+          Schema.decodeUnknownSync(Schema.Json)(JSON.parse(source)),
+          {
+            baseUrl: publicOrigin === undefined
+              ? `${protocol}//${host}/`
+              : `${publicOrigin}/`,
+            source: manifestFile
+          }
+        )
       )
     }
 

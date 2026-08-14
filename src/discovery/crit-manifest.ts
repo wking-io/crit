@@ -51,6 +51,7 @@ export const CritManifestDocument = Schema.Struct({
   canvases: Schema.Array(CritManifestCanvas)
 })
 export type CritManifestDocument = typeof CritManifestDocument.Type
+export type CritManifestInput = Schema.Json | CritManifestDocument
 
 export type CritManifestField<A> =
   | { readonly _tag: "Unmanaged" }
@@ -191,7 +192,7 @@ const validate = (manifest: CritManifestDocument, source: string) =>
         : invalid(source, cause instanceof Error ? cause.message : String(cause))
   })
 
-const decode = (input: unknown, source = "manifest") =>
+const decode = (input: CritManifestInput, source = "manifest") =>
   Schema.decodeUnknownEffect(CritManifestDocument)(input).pipe(
     Effect.mapError((cause) => invalid(source, String(cause))),
     Effect.flatMap((manifest) => validate(manifest, source))
@@ -213,7 +214,7 @@ const absoluteHttpUrl = (value: string, baseUrl: string, source: string) =>
   })
 
 const resolve = (
-  input: unknown,
+  input: CritManifestInput,
   options: { readonly baseUrl: string; readonly source?: string }
 ): Effect.Effect<ResolvedCritManifest, CritManifestInvalid> =>
   Effect.gen(function*() {
@@ -240,9 +241,6 @@ const resolve = (
     )
     return { ...manifest, canvases }
   })
-
-const same = (left: unknown, right: unknown) =>
-  JSON.stringify(left) === JSON.stringify(right)
 
 const planFrameCommands = (
   manifest: ResolvedCritManifest,
@@ -299,7 +297,11 @@ const planFrameCommands = (
       continue
     }
 
-    if (existing.url !== frame.url || !same(existing.provenance, provenance)) {
+    if (
+      existing.url !== frame.url ||
+      existing.provenance.kind !== provenance.kind ||
+      existing.provenance.sourceId !== provenance.sourceId
+    ) {
       commands.push(
         CanvasCommand.setFrameSource({
           id,
@@ -321,7 +323,7 @@ const planFrameCommands = (
     }
     if (
       frame.display._tag === "Managed" &&
-      !same(existing.display, frame.display.value)
+      existing.display.heightMode !== frame.display.value.heightMode
     ) {
       commands.push(
         CanvasCommand.setFrameDisplay({ id, display: frame.display.value })

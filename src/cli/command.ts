@@ -58,7 +58,7 @@ const canvasMutation = (mutation: CanvasRepositoryMutation) => ({
 
 const parseJson = (source: string, contents: string) =>
   Effect.try({
-    try: () => JSON.parse(contents),
+    try: () => Schema.decodeUnknownSync(Schema.Json)(JSON.parse(contents)),
     catch: (cause) =>
       new CritManifestInvalid({
         source,
@@ -108,7 +108,8 @@ const loadManifest = (
         })
       }
       const input = yield* Effect.tryPromise({
-          try: () => response.json(),
+        try: async () =>
+          Schema.decodeUnknownSync(Schema.Json)(await response.json()),
         catch: (cause) =>
           new CritManifestInvalid({
             source: requested.toString(),

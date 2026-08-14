@@ -14,6 +14,9 @@ const StoredDraft = Schema.Struct({
   draft: CanvasDraft
 })
 type StoredDraft = typeof StoredDraft.Type
+const decodeStoredDraftRecord = Schema.decodeUnknownSync(
+  Schema.UndefinedOr(StoredDraft)
+)
 
 export type IndexedDbDraftJournalOptions = {
   readonly indexedDB?: IDBFactory
@@ -47,13 +50,12 @@ const openDatabase = (
       reject(new Error("Opening the draft database was blocked"))
   })
 
-const decodeStoredDraft = (
-  value: unknown,
+const validateStoredDraft = (
+  stored: StoredDraft | undefined,
   canvasId: string,
   sessionId: string
 ) => {
-  if (value === undefined) return undefined
-  const stored = Schema.decodeUnknownSync(StoredDraft)(value)
+  if (stored === undefined) return undefined
   const expectedKey = draftKey(canvasId, sessionId)
   if (stored.key !== expectedKey) {
     throw new Error("Draft journal record key does not match the request")
@@ -79,7 +81,11 @@ const loadDraft = (
       try {
         resolve(
           Option.fromUndefinedOr(
-            decodeStoredDraft(request.result, canvasId, sessionId)
+            validateStoredDraft(
+              decodeStoredDraftRecord(request.result),
+              canvasId,
+              sessionId
+            )
           )
         )
       } catch (cause) {
@@ -101,8 +107,8 @@ const saveDraft = (database: IDBDatabase, draft: CanvasDraft) =>
 
     request.onsuccess = () => {
       try {
-        const current = decodeStoredDraft(
-          request.result,
+        const current = validateStoredDraft(
+          decodeStoredDraftRecord(request.result),
           draft.canvasId,
           draft.sessionId
         )
@@ -137,7 +143,11 @@ const clearDraft = (
 
     request.onsuccess = () => {
       try {
-        const current = decodeStoredDraft(request.result, canvasId, sessionId)
+        const current = validateStoredDraft(
+          decodeStoredDraftRecord(request.result),
+          canvasId,
+          sessionId
+        )
         if (current !== undefined && current.mutation <= throughMutation) {
           store.delete(key)
         }

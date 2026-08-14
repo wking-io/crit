@@ -30,6 +30,19 @@ const FrameCommentMessage = Schema.Struct({
   event: FrameCommentEventSchema
 })
 
+const FrameCommentConfigureMessageSchema = Schema.Struct({
+  source: Schema.Literal(CRIT_FRAME_COMMENT_SOURCE),
+  event: Schema.Struct({
+    type: Schema.Literal("configure"),
+    activeId: Schema.NullOr(Schema.String),
+    enabled: Schema.Boolean,
+    color: Schema.String,
+    pins: Schema.Array(FrameCommentPinSchema)
+  })
+})
+export type FrameCommentConfigureMessage =
+  typeof FrameCommentConfigureMessageSchema.Type
+
 const decodeFrameCommentMessage = Schema.decodeUnknownOption(
   FrameCommentMessage
 )
@@ -52,7 +65,10 @@ interface FrameCommentMessageTarget {
 
 interface BridgedCommentFrame {
   readonly contentWindow: {
-    postMessage(message: unknown, targetOrigin: string): void
+    postMessage(
+      message: FrameCommentConfigureMessage,
+      targetOrigin: string
+    ): void
   } | null
 }
 
