@@ -4,7 +4,6 @@ import {
   useMemo,
   useRef,
   useState,
-  type CSSProperties,
   type PointerEvent as ReactPointerEvent
 } from "react"
 import { Effect } from "effect"
@@ -16,6 +15,7 @@ import {
   type CanvasGeometry,
   type CanvasNote
 } from "../core/index.js"
+import { cssVariableStyle } from "./css-variable-style.js"
 import {
   CritContextMenu,
   type ContextMenuItem,
@@ -189,10 +189,10 @@ export function NoteCard({
       onPointerDown={(event) => onSelect(
         event.shiftKey || event.metaKey || event.ctrlKey
       )}
-      style={{
+      style={cssVariableStyle({
         ...canvasItemStyle({ ...geometry, height }, note.zIndex),
         "--crit-ui": 1
-      } as CSSProperties}
+      })}
     >
       <textarea
         aria-label="Note"

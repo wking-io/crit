@@ -1,52 +1,61 @@
 import { Effect } from "effect"
 
 import {
-  CritClientUnavailable,
-  type CritClientShape
+  CritActivityClient,
+  CritClient,
+  CritSnapshotClient,
+  CritClientUnavailable
 } from "../session/crit-client.js"
-import type { CanvasRepositoryShape } from "./canvas-repository.js"
-import type { AgentActivityStoreShape } from "./agent-activity.js"
-import type { SnapshotServiceShape } from "./snapshot-service.js"
+import type { CanvasRepository } from "./canvas-repository.js"
+import type { AgentActivityStore } from "./agent-activity.js"
+import type { SnapshotService } from "./snapshot-service.js"
 
 export interface CanvasRepositoryCritClientOptions {
-  readonly currentAuthor: CritClientShape["currentAuthor"]
-  readonly snapshotFrame?: SnapshotServiceShape["snapshotFrame"]
-  readonly loadAgentActivities?: AgentActivityStoreShape["read"]
+  readonly currentAuthor: CritClient["Service"]["currentAuthor"]
 }
 
 const make = (
-  documents: CanvasRepositoryShape,
+  documents: CanvasRepository["Service"],
   options: CanvasRepositoryCritClientOptions
-): CritClientShape => {
+): CritClient["Service"] => {
   return {
     currentAuthor: options.currentAuthor,
     load: (id) => documents.load(id),
     apply: (id, commands) =>
       documents.apply(id, commands).pipe(
         Effect.map((mutation) => mutation.document)
-      ),
-    ...(options.snapshotFrame === undefined
-      ? {}
-      : {
-          snapshot: (id: string, frameId: string) =>
-            options.snapshotFrame!(id, frameId)
-        }),
-    ...(options.loadAgentActivities === undefined
-      ? {}
-      : {
-          activities: (id: string) =>
-            options.loadAgentActivities!(id).pipe(
-              Effect.mapError(
-                (cause) =>
-                  new CritClientUnavailable({
-                    operation: "activity",
-                    id,
-                    detail: cause.detail
-                  })
-              )
-            )
-        })
+      )
   }
 }
 
 export const CanvasRepositoryCritClient = { make } as const
+
+const makeSnapshotClient = (
+  snapshotFrame: SnapshotService["Service"]["snapshotFrame"]
+): CritSnapshotClient["Service"] => ({
+  snapshot: snapshotFrame
+})
+
+export const CanvasRepositoryCritSnapshotClient = {
+  make: makeSnapshotClient
+} as const
+
+const makeActivityClient = (
+  loadAgentActivities: AgentActivityStore["Service"]["read"]
+): CritActivityClient["Service"] => ({
+  activities: (id) =>
+    loadAgentActivities(id).pipe(
+      Effect.mapError(
+        (cause) =>
+          new CritClientUnavailable({
+            operation: "activity",
+            id,
+            detail: cause.detail
+          })
+      )
+    )
+})
+
+export const CanvasRepositoryCritActivityClient = {
+  make: makeActivityClient
+} as const

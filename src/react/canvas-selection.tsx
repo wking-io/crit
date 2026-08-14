@@ -1,10 +1,8 @@
-import type {
-  CSSProperties,
-  PointerEvent as ReactPointerEvent
-} from "react"
+import type { PointerEvent as ReactPointerEvent } from "react"
 
 import type { CanvasGeometry } from "../core/index.js"
 import { informationalHelpTarget } from "./canvas-help.js"
+import { cssVariableStyle } from "./css-variable-style.js"
 import { FRAME_CORNER_RADIUS } from "./frame-geometry.js"
 
 const SELECTION_HANDLE_SIZE = 13.95
@@ -70,32 +68,31 @@ const allHandles: ReadonlyArray<ResizeHandlePosition> = [
   "west"
 ]
 
-const cornerHandles = new Set<ResizeHandlePosition>([
-  "north-west",
-  "north-east",
-  "south-east",
-  "south-west"
-])
+type SelectionHandleArtwork =
+  | { readonly kind: "corner"; readonly rotation: number }
+  | {
+      readonly kind: "side"
+      readonly transform: string | undefined
+      readonly viewBox: string
+    }
+  | { readonly kind: "none" }
 
-const sideHandles = new Set<ResizeHandlePosition>([
-  "east",
-  "west"
-])
-
-const cornerRotation: Readonly<Partial<Record<ResizeHandlePosition, number>>> = {
-  "north-west": 0,
-  "north-east": 90,
-  "south-east": 180,
-  "south-west": 270
-}
-
-const sideGeometry: Readonly<Partial<Record<ResizeHandlePosition, {
-  readonly transform?: string
-  readonly viewBox: string
-}>>> = {
-  west: { viewBox: "0 0 4.95 18" },
-  east: { transform: "translate(4.95 18) rotate(180)", viewBox: "0 0 4.95 18" }
-}
+const SELECTION_HANDLE_ARTWORK = {
+  "north-west": { kind: "corner", rotation: 0 },
+  north: { kind: "none" },
+  "north-east": { kind: "corner", rotation: 90 },
+  east: {
+    kind: "side",
+    transform: "translate(4.95 18) rotate(180)",
+    viewBox: "0 0 4.95 18"
+  },
+  "south-east": { kind: "corner", rotation: 180 },
+  south: { kind: "none" },
+  "south-west": { kind: "corner", rotation: 270 },
+  west: { kind: "side", transform: undefined, viewBox: "0 0 4.95 18" }
+} as const satisfies Readonly<
+  Record<ResizeHandlePosition, SelectionHandleArtwork>
+>
 
 export function CanvasSelection({
   handles = allHandles,
@@ -118,22 +115,25 @@ export function CanvasSelection({
   readonly zoom: number
 }) {
   const resolvedHandleStyle = handleStyle ?? (handles === allHandles ? "corners" : "sides")
-  const visibleHandles = resolvedHandleStyle === "sides" ? sideHandles : cornerHandles
   return (
     <div
       aria-label={`Selected ${label}`}
       className="crit-selection"
       data-handle-style={resolvedHandleStyle}
-      style={{
+      style={cssVariableStyle({
         "--selection-ink": ink,
         "--selection-handle-accent": shell,
         "--selection-handle-size": SELECTION_HANDLE_SIZE,
         "--selection-handle-offset": SELECTION_HANDLE_OFFSET,
         "--selection-ui": 1 / zoom
-      } as CSSProperties}
+      })}
     >
-      {handles.map((handle) => (
-        <button
+      {handles.map((handle) => {
+        const artwork = SELECTION_HANDLE_ARTWORK[handle]
+        const visible = resolvedHandleStyle === "corners"
+          ? artwork.kind === "corner"
+          : artwork.kind === "side"
+        return <button
           aria-label={`Resize ${label} from ${handle}`}
           className="crit-selection__handle"
           {...informationalHelpTarget({
@@ -141,29 +141,29 @@ export function CanvasSelection({
             description: `Drag to resize the ${label} in this direction.`
           })}
           data-resize-handle={handle}
-          data-visible-handle={visibleHandles.has(handle) || undefined}
+          data-visible-handle={visible || undefined}
           key={handle}
           onPointerDown={(event) => onResize(event, handle)}
           type="button"
         >
-          {resolvedHandleStyle === "corners" && cornerHandles.has(handle) ? (
+          {resolvedHandleStyle === "corners" && artwork.kind === "corner" ? (
             <svg
               aria-hidden="true"
               className="crit-selection__handle-shape"
-              style={{ transform: `rotate(${cornerRotation[handle] ?? 0}deg)` }}
+              style={{ transform: `rotate(${artwork.rotation}deg)` }}
               viewBox="0 0 13.95 13.95"
             >
               <path className="crit-selection__handle-isolation" d={SELECTION_HANDLE_ISOLATION_PATH} />
               <path d={SELECTION_HANDLE_PATH} />
               <path className="crit-selection__handle-accent" d={SELECTION_HANDLE_ACCENT_PATH} />
             </svg>
-          ) : resolvedHandleStyle === "sides" && sideHandles.has(handle) ? (
+          ) : resolvedHandleStyle === "sides" && artwork.kind === "side" ? (
             <svg
               aria-hidden="true"
               className="crit-selection__side-handle-shape"
-              viewBox={sideGeometry[handle]?.viewBox}
+              viewBox={artwork.viewBox}
             >
-              <g transform={sideGeometry[handle]?.transform}>
+              <g transform={artwork.transform}>
                 <path className="crit-selection__handle-isolation" d={SIDE_HANDLE_ISOLATION_PATH} />
                 <path d={SIDE_HANDLE_PATH} />
                 <path className="crit-selection__handle-accent" d={SIDE_HANDLE_ACCENT_PATH} />
@@ -171,7 +171,7 @@ export function CanvasSelection({
             </svg>
           ) : null}
         </button>
-      ))}
+      })}
     </div>
   )
 }

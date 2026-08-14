@@ -152,7 +152,7 @@ const Message = ({
               type="button"
             >{cancelEdit.label}</button>
             <button
-              aria-keyshortcuts={saveEdit.ariaKeyShortcuts}
+              aria-keyshortcuts={saveEdit.ariaKeyShortcuts ?? undefined}
               disabled={pending || saveEdit.availability !== "enabled"}
               {...actionHelpTarget(saveEdit)}
               type="submit"
@@ -195,7 +195,7 @@ export function CommentPopover(props: {
   readonly pending: boolean
   readonly threadManageable: boolean
   readonly statusColor: string
-  readonly thread?: CanvasCommentThread
+  readonly thread?: CanvasCommentThread | undefined
   readonly zoom?: number
   readonly onClose: () => Effect.Effect<unknown, unknown>
   readonly onActionError?: (cause: unknown) => void
@@ -283,11 +283,11 @@ export function CommentPopover(props: {
     : commentPopoverProjection(props.frameGeometry, props.zoom)
   return <aside aria-label={props.thread === undefined ? "New comment" : "Comment thread"} className="crit-comment-popover" data-inline={props.inline || undefined} onPointerDown={(event) => event.stopPropagation()} style={{
     color: props.statusColor,
-    ...(placement === undefined ? {} : {
-      left: placement.left,
-      top: placement.top,
-      transform: `scale(${placement.scale})`
-    })
+    left: placement?.left,
+    top: placement?.top,
+    transform: placement === undefined
+      ? undefined
+      : `scale(${placement.scale})`
   }}>
     <header className="crit-comment-popover__header"><span><Glyph name="commentPin" />{props.thread === undefined ? "New comment" : "Comment"}</span><button aria-label={close.label} disabled={close.availability !== "enabled"} {...actionHelpTarget(close)} onClick={() => runner.run(controls, close, props.onClose(), props.onActionError)} type="button"><Glyph name="close" /></button></header>
     {props.thread === undefined ? null : (
@@ -352,7 +352,7 @@ export function CommentPopover(props: {
             </button>
           ) : <span />}
           <button
-            aria-keyshortcuts={submitAction.ariaKeyShortcuts}
+            aria-keyshortcuts={submitAction.ariaKeyShortcuts ?? undefined}
             disabled={props.pending || submitAction.availability !== "enabled"}
             {...actionHelpTarget(submitAction)}
             type="submit"

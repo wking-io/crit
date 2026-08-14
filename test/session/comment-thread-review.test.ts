@@ -5,11 +5,19 @@ import {
   type CanvasDocument
 } from "../../src/core/index.js"
 import {
-  makeCommentThreadReview
+  makeCommentThreadReview,
+  type CommentThreadReviewTransition
 } from "../../src/session/comment-thread-review.js"
 
 const alice = { id: "git-alice", name: "Alice" }
 const bob = { id: "git-bob", name: "Bob" }
+
+const dispatchKey = (transition: CommentThreadReviewTransition) => {
+  if (transition.type !== "dispatch") {
+    throw new TypeError(`Expected a dispatch transition, received ${transition.type}`)
+  }
+  return transition.key
+}
 
 const document = (): CanvasDocument => ({
   format: "crit-canvas",
@@ -215,7 +223,7 @@ describe("Comment Thread Review", () => {
       }]
     })
 
-    expect(review.settle(transition.type === "dispatch" ? transition.key : 0 as never, {
+    expect(review.settle(dispatchKey(transition), {
       type: "accepted"
     })).toMatchObject({ type: "changed", clearDraft: "editing" })
   })
@@ -354,7 +362,7 @@ describe("Comment Thread Review", () => {
     })
 
     const rejected = review.settle(
-      dispatch.type === "dispatch" ? dispatch.key : 0 as never,
+      dispatchKey(dispatch),
       {
         type: "rejected",
         cause: new CanvasCommandFailed({
@@ -397,7 +405,7 @@ describe("Comment Thread Review", () => {
       pending: { kind: "create" }
     })
     expect(review.settle(
-      dispatch.type === "dispatch" ? dispatch.key : 0 as never,
+      dispatchKey(dispatch),
       { type: "accepted" }
     )).toMatchObject({
       type: "changed",

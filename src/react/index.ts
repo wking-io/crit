@@ -32,20 +32,21 @@ export {
   type CanvasSessionOptions
 } from "../session/canvas-session.js"
 export {
+  CritActivityClient,
   CritClient,
   CritClientCommandFailed,
   CritClientErrorSchema,
   CritClientInvalidDocument,
   CritClientNotFound,
+  CritSnapshotClient,
   CritClientUnavailable,
-  type CritClientError,
-  type CritClientShape
+  type CritClientServices,
+  type CritClientError
 } from "../session/crit-client.js"
 export {
   DraftJournal,
   DraftJournalFailed,
-  type CanvasDraft,
-  type DraftJournalShape
+  type CanvasDraft
 } from "../session/draft-journal.js"
 export { Crit, type CritProps } from "./crit.js"
 export {

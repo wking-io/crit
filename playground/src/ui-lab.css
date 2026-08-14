@@ -1270,6 +1270,10 @@
   position: relative;
 }
 
+.ui-frame-stage[data-status-menu="true"] {
+  min-height: 420px;
+}
+
 .ui-frame-stage { flex: 0 0 auto; }
 
 .ui-frame-grid,

@@ -15,10 +15,7 @@ import {
   CritClientNotFound,
   CritClientUnavailable
 } from "../runtime/canvas-failure.js"
-import {
-  CanvasRepository,
-  type CanvasRepositoryShape
-} from "../runtime/canvas-repository.js"
+import { CanvasRepository } from "../runtime/canvas-repository.js"
 
 export const CRIT_MANIFEST_PATH = "/.well-known/crit.json"
 export const CRIT_MANIFEST_FILE = "crit.manifest.json"
@@ -54,9 +51,19 @@ export const CritManifestDocument = Schema.Struct({
   canvases: Schema.Array(CritManifestCanvas)
 })
 export type CritManifestDocument = typeof CritManifestDocument.Type
+export type CritManifestInput = Schema.Json | CritManifestDocument
 
-export type ResolvedCritManifestFrame = Omit<CritManifestFrame, "url"> & {
+export type CritManifestField<A> =
+  | { readonly _tag: "Unmanaged" }
+  | { readonly _tag: "Managed"; readonly value: A }
+
+export type ResolvedCritManifestFrame = {
+  readonly id: string
   readonly url: string
+  readonly title: string
+  readonly status: CritManifestField<typeof FrameReviewStatus.Type>
+  readonly display: CritManifestField<typeof FrameDisplay.Type>
+  readonly geometry: CritManifestField<CritManifestGeometry>
 }
 
 export type ResolvedCritManifestCanvas = Omit<CritManifestCanvas, "frames"> & {
@@ -66,6 +73,43 @@ export type ResolvedCritManifestCanvas = Omit<CritManifestCanvas, "frames"> & {
 export type ResolvedCritManifest = Omit<CritManifestDocument, "canvases"> & {
   readonly canvases: ReadonlyArray<ResolvedCritManifestCanvas>
 }
+
+const manifestField = <A>(value: A | undefined): CritManifestField<A> =>
+  value === undefined
+    ? { _tag: "Unmanaged" }
+    : { _tag: "Managed", value }
+
+const encodeResolvedFrame = (
+  frame: ResolvedCritManifestFrame
+): CritManifestFrame => {
+  let encoded: CritManifestFrame = {
+    id: frame.id,
+    url: frame.url,
+    title: frame.title
+  }
+  if (frame.status._tag === "Managed") {
+    encoded = { ...encoded, status: frame.status.value }
+  }
+  if (frame.display._tag === "Managed") {
+    encoded = { ...encoded, display: frame.display.value }
+  }
+  if (frame.geometry._tag === "Managed") {
+    encoded = { ...encoded, geometry: frame.geometry.value }
+  }
+  return encoded
+}
+
+const toDocument = (
+  manifest: ResolvedCritManifest
+): CritManifestDocument => ({
+  schemaVersion: manifest.schemaVersion,
+  id: manifest.id,
+  canvases: manifest.canvases.map((canvas) => ({
+    id: canvas.id,
+    title: canvas.title,
+    frames: canvas.frames.map(encodeResolvedFrame)
+  }))
+})
 
 export type CritManifestCanvasSync = {
   readonly id: string
@@ -148,7 +192,7 @@ const validate = (manifest: CritManifestDocument, source: string) =>
         : invalid(source, cause instanceof Error ? cause.message : String(cause))
   })
 
-const decode = (input: unknown, source = "manifest") =>
+const decode = (input: CritManifestInput, source = "manifest") =>
   Schema.decodeUnknownEffect(CritManifestDocument)(input).pipe(
     Effect.mapError((cause) => invalid(source, String(cause))),
     Effect.flatMap((manifest) => validate(manifest, source))
@@ -170,7 +214,7 @@ const absoluteHttpUrl = (value: string, baseUrl: string, source: string) =>
   })
 
 const resolve = (
-  input: unknown,
+  input: CritManifestInput,
   options: { readonly baseUrl: string; readonly source?: string }
 ): Effect.Effect<ResolvedCritManifest, CritManifestInvalid> =>
   Effect.gen(function*() {
@@ -182,8 +226,12 @@ const resolve = (
           absoluteHttpUrl(frame.url, options.baseUrl, source).pipe(
             Effect.map(
               (url): ResolvedCritManifestFrame => ({
-                ...frame,
-                url
+                id: frame.id,
+                url,
+                title: frame.title,
+                status: manifestField(frame.status),
+                display: manifestField(frame.display),
+                geometry: manifestField(frame.geometry)
               })
             )
           )
@@ -193,9 +241,6 @@ const resolve = (
     )
     return { ...manifest, canvases }
   })
-
-const same = (left: unknown, right: unknown) =>
-  JSON.stringify(left) === JSON.stringify(right)
 
 const planFrameCommands = (
   manifest: ResolvedCritManifest,
@@ -218,37 +263,33 @@ const planFrameCommands = (
     }
 
     if (existing === undefined) {
+      const status = frame.status._tag === "Managed"
+        ? frame.status.value
+        : "in-progress"
+      const display = frame.display._tag === "Managed"
+        ? frame.display.value
+        : { heightMode: "viewport" as const }
       commands.push(
         CanvasCommand.addFrame({
           id: frame.id,
           url: frame.url,
           title: frame.title,
-          ...(frame.status === undefined ? {} : { status: frame.status }),
+          status,
           provenance
-        })
+        }),
+        CanvasCommand.setFrameDisplay({ id: frame.id, display })
       )
-      if (
-        frame.display !== undefined &&
-        frame.display.heightMode !== "viewport"
-      ) {
-        commands.push(
-          CanvasCommand.updateFrame({
-            id: frame.id,
-            changes: { display: frame.display }
-          })
-        )
-      }
-      if (frame.geometry !== undefined) {
+      if (frame.geometry._tag === "Managed") {
         commands.push(
           CanvasCommand.moveFrame({
             id: frame.id,
-            x: frame.geometry.x,
-            y: frame.geometry.y
+            x: frame.geometry.value.x,
+            y: frame.geometry.value.y
           }),
           CanvasCommand.resizeFrame({
             id: frame.id,
-            width: frame.geometry.width,
-            height: frame.geometry.height
+            width: frame.geometry.value.width,
+            height: frame.geometry.value.height
           })
         )
       }
@@ -256,43 +297,61 @@ const planFrameCommands = (
       continue
     }
 
-    const changes = {
-      ...(existing.url === frame.url ? {} : { url: frame.url }),
-      ...(existing.title === frame.title ? {} : { title: frame.title }),
-      ...(frame.status === undefined || existing.status === frame.status
-        ? {}
-        : { status: frame.status }),
-      ...(same(existing.provenance, provenance) ? {} : { provenance }),
-      ...(frame.display === undefined || same(existing.display, frame.display)
-        ? {}
-        : { display: frame.display })
+    if (
+      existing.url !== frame.url ||
+      existing.provenance.kind !== provenance.kind ||
+      existing.provenance.sourceId !== provenance.sourceId
+    ) {
+      commands.push(
+        CanvasCommand.setFrameSource({
+          id,
+          url: frame.url,
+          provenance
+        })
+      )
     }
-    if (Object.keys(changes).length > 0) {
-      commands.push(CanvasCommand.updateFrame({ id: frame.id, changes }))
+    if (existing.title !== frame.title) {
+      commands.push(CanvasCommand.setFrameTitle({ id, title: frame.title }))
     }
     if (
-      frame.geometry !== undefined &&
-      (existing.geometry.x !== frame.geometry.x ||
-        existing.geometry.y !== frame.geometry.y)
+      frame.status._tag === "Managed" &&
+      existing.status !== frame.status.value
+    ) {
+      commands.push(
+        CanvasCommand.setFrameStatus({ id, status: frame.status.value })
+      )
+    }
+    if (
+      frame.display._tag === "Managed" &&
+      existing.display.heightMode !== frame.display.value.heightMode
+    ) {
+      commands.push(
+        CanvasCommand.setFrameDisplay({ id, display: frame.display.value })
+      )
+    }
+    if (
+      frame.geometry._tag === "Managed" &&
+      (existing.geometry.x !== frame.geometry.value.x ||
+        existing.geometry.y !== frame.geometry.value.y)
     ) {
       commands.push(
         CanvasCommand.moveFrame({
           id: frame.id,
-          x: frame.geometry.x,
-          y: frame.geometry.y
+          x: frame.geometry.value.x,
+          y: frame.geometry.value.y
         })
       )
     }
     if (
-      frame.geometry !== undefined &&
-      (existing.geometry.width !== frame.geometry.width ||
-        existing.geometry.height !== frame.geometry.height)
+      frame.geometry._tag === "Managed" &&
+      (existing.geometry.width !== frame.geometry.value.width ||
+        existing.geometry.height !== frame.geometry.value.height)
     ) {
       commands.push(
         CanvasCommand.resizeFrame({
           id: frame.id,
-          width: frame.geometry.width,
-          height: frame.geometry.height
+          width: frame.geometry.value.width,
+          height: frame.geometry.value.height
         })
       )
     }
@@ -308,7 +367,7 @@ const planFrameCommands = (
 }
 
 const syncWith = (
-  documents: CanvasRepositoryShape,
+  documents: CanvasRepository["Service"],
   manifest: ResolvedCritManifest,
   options: { readonly owner: Author; readonly canvasId?: string }
 ) => {
@@ -399,5 +458,6 @@ const sync = (
 export const CritManifest = {
   decode,
   resolve,
-  sync
+  sync,
+  toDocument
 } as const

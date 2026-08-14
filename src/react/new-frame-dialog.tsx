@@ -5,6 +5,8 @@ import {
 } from "react"
 import { createPortal } from "react-dom"
 
+import { defaultRuntimeCapabilities } from "../runtime/runtime-capabilities.js"
+
 import {
   useCanvasActionRunner,
   useCanvasControls
@@ -90,13 +92,13 @@ export function NewFrameForm({
       </label>
       <div className="crit-new-frame-dialog__actions">
         <button
-          aria-keyshortcuts={cancel.ariaKeyShortcuts}
+          aria-keyshortcuts={cancel.ariaKeyShortcuts ?? undefined}
           {...actionHelpTarget(cancel)}
           onClick={() => runner.run(controls, cancel, Effect.sync(onCancel))}
           type="button"
         >{cancel.label}</button>
         <button
-          aria-keyshortcuts={create.ariaKeyShortcuts}
+          aria-keyshortcuts={create.ariaKeyShortcuts ?? undefined}
           data-primary=""
           disabled={create.availability !== "enabled"}
           {...actionHelpTarget(create)}
@@ -122,7 +124,8 @@ export function NewFrameDialog({
   const runner = useCanvasActionRunner()
   const cancel = controls.action({ id: "cancel-new-frame" })
 
-  if (!open || typeof document === "undefined") return null
+  const document = defaultRuntimeCapabilities.document()
+  if (!open || document === undefined) return null
 
   return createPortal(
     <div

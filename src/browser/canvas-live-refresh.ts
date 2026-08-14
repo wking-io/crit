@@ -1,27 +1,35 @@
-import { Effect } from "effect"
+import { Effect, Option, Schema } from "effect"
 
 import type { CanvasSession } from "../session/canvas-session.js"
 
+/** The Vite dev server has no live-refresh channel for this page. */
+export interface DisabledCanvasLiveRefreshEndpoint {
+  readonly enabled: false
+}
+
 /**
- * Where the Vite dev server's HMR WebSocket endpoint lives, as resolved by the
- * Crit Vite plugin from the dev server's own configuration. Every field is
- * optional; missing pieces fall back to the page's location, mirroring how
- * Vite's own client resolves its socket URL.
+ * Where the editor reaches Vite's HMR WebSocket. A null authority component
+ * explicitly inherits from the page location; unlike undefined, that intent
+ * survives the JSON handoff from the Vite plugin to the browser.
  */
-export interface CanvasLiveRefreshEndpoint {
-  readonly enabled?: boolean
-  readonly protocol?: string
-  readonly host?: string
-  readonly port?: number | string
-  readonly path?: string
+export interface EnabledCanvasLiveRefreshEndpoint {
+  readonly enabled: true
+  readonly protocol: string | null
+  readonly host: string | null
+  readonly port: number | null
+  readonly path: string
   /**
    * Vite rejects browser WebSocket connections (requests carrying an Origin
    * header) without its per-server token. The token is embedded in every
    * script Vite serves, so sharing it with the served editor grants nothing
    * new.
    */
-  readonly token?: string
+  readonly token: string
 }
+
+export type CanvasLiveRefreshEndpoint =
+  | DisabledCanvasLiveRefreshEndpoint
+  | EnabledCanvasLiveRefreshEndpoint
 
 /** The subset of the page location needed to resolve the socket URL. */
 export interface CanvasLiveRefreshLocation {
@@ -43,29 +51,37 @@ export interface CanvasLiveRefreshSocket {
 export interface CanvasLiveRefreshOptions {
   readonly canvasId: string
   readonly session: Pick<CanvasSession, "refresh" | "refreshPresence">
-  readonly endpoint?: CanvasLiveRefreshEndpoint
+  readonly endpoint: CanvasLiveRefreshEndpoint
   readonly location?: CanvasLiveRefreshLocation
   readonly createSocket?: (url: string) => CanvasLiveRefreshSocket
   readonly reconnectDelayMillis?: number
   readonly heartbeatIntervalMillis?: number
 }
 
+const CanvasLiveRefreshPayload = Schema.Struct({
+  type: Schema.optionalKey(Schema.String),
+  event: Schema.optionalKey(Schema.String),
+  data: Schema.optionalKey(Schema.Struct({
+    id: Schema.optionalKey(Schema.String)
+  }))
+})
+const decodeCanvasLiveRefreshPayload = Schema.decodeUnknownOption(
+  Schema.fromJsonString(CanvasLiveRefreshPayload)
+)
+
 export const canvasLiveRefreshSocketUrl = (
-  endpoint: CanvasLiveRefreshEndpoint,
+  endpoint: EnabledCanvasLiveRefreshEndpoint,
   location: CanvasLiveRefreshLocation
 ) => {
   const protocol =
     endpoint.protocol ?? (location.protocol === "https:" ? "wss" : "ws")
   const hostname = endpoint.host ?? location.hostname
-  const port = endpoint.port === undefined || endpoint.port === ""
+  const port = endpoint.port === null
     ? location.port
     : String(endpoint.port)
-  const rawPath = endpoint.path ?? "/"
+  const rawPath = endpoint.path
   const path = rawPath.startsWith("/") ? rawPath : `/${rawPath}`
-  const query =
-    endpoint.token === undefined
-      ? ""
-      : `?token=${encodeURIComponent(endpoint.token)}`
+  const query = `?token=${encodeURIComponent(endpoint.token)}`
   return `${protocol}://${hostname}${port === "" ? "" : `:${port}`}${path}${query}`
 }
 
@@ -80,11 +96,11 @@ export const canvasLiveRefreshSocketUrl = (
 export const connectCanvasLiveRefresh = (
   options: CanvasLiveRefreshOptions
 ): (() => void) => {
-  const endpoint = options.endpoint ?? {}
+  const endpoint = options.endpoint
   const location =
     options.location ??
-    (globalThis.location as CanvasLiveRefreshLocation | undefined)
-  if (endpoint.enabled === false || location === undefined) return () => {}
+    globalThis.location
+  if (!endpoint.enabled || location === undefined) return () => {}
 
   const url = canvasLiveRefreshSocketUrl(endpoint, location)
   const createSocket =
@@ -104,17 +120,9 @@ export const connectCanvasLiveRefresh = (
   }
 
   const deliver = (event: { readonly data?: unknown }) => {
-    if (typeof event.data !== "string") return
-    let payload: {
-      readonly type?: string
-      readonly event?: string
-      readonly data?: { readonly id?: string }
-    }
-    try {
-      payload = JSON.parse(event.data) as typeof payload
-    } catch {
-      return
-    }
+    const decoded = decodeCanvasLiveRefreshPayload(event.data)
+    if (Option.isNone(decoded)) return
+    const payload = decoded.value
     if (payload.type !== "custom" || payload.data?.id !== options.canvasId) {
       return
     }

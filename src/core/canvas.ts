@@ -74,6 +74,7 @@ export const CanvasDocument = Schema.Struct({
   )
 })
 export type CanvasDocument = typeof CanvasDocument.Type
+export type CanvasOpenInput = Schema.Json | CanvasDocument
 
 export const CanvasSummary = Schema.Struct({
   id: Schema.String,
@@ -188,8 +189,12 @@ const states = new WeakMap<object, CanvasState>()
 
 const clone = <A>(value: A): A => structuredClone(value)
 
+class CanvasHandle implements Canvas {
+  readonly [CanvasTypeId]: typeof CanvasTypeId = CanvasTypeId
+}
+
 const makeCanvas = (state: CanvasState): Canvas => {
-  const handle = Object.freeze({}) as Canvas
+  const handle = Object.freeze(new CanvasHandle())
   states.set(handle, state)
   return handle
 }
@@ -250,7 +255,7 @@ const create = (input: {
     comments: []
   })
 
-const encodedBytes = (input: unknown) => {
+const encodedBytes = (input: CanvasOpenInput) => {
   const serialized = JSON.stringify(input)
   if (serialized === undefined) throw new TypeError("Value is not JSON serializable")
   return new TextEncoder().encode(serialized).byteLength
@@ -344,7 +349,7 @@ const documentTooLarge = (actualBytes: number) =>
   })
 
 const open = (
-  input: unknown
+  input: CanvasOpenInput
 ): Effect.Effect<Canvas, CanvasOpenFailed | CanvasDocumentTooLarge> =>
   Effect.gen(function*() {
     const actualBytes = yield* Effect.try({
@@ -676,7 +681,9 @@ const apply = (
 
             if (
               command._tag === "SetFrameStatus" ||
-              command._tag === "UpdateFrame" ||
+              command._tag === "SetFrameSource" ||
+              command._tag === "SetFrameTitle" ||
+              command._tag === "SetFrameDisplay" ||
               command._tag === "MoveFrame" ||
               command._tag === "ResizeFrame" ||
               command._tag === "BringFrameToFront" ||
@@ -689,10 +696,7 @@ const apply = (
               if (
                 frame.snapshot !== undefined &&
                 (command._tag === "SetFrameStatus" ||
-                  (command._tag === "UpdateFrame" &&
-                    (command.changes.url !== undefined ||
-                      command.changes.status !== undefined ||
-                      command.changes.provenance !== undefined)))
+                  command._tag === "SetFrameSource")
               ) {
                 throw new CanvasCommandFailed({
                   reason: "snapshot-frame-immutable",
@@ -701,8 +705,8 @@ const apply = (
               }
 
               if (
-                command._tag === "UpdateFrame" &&
-                command.changes.provenance?.kind === "snapshot"
+                command._tag === "SetFrameSource" &&
+                command.provenance.kind === "snapshot"
               ) {
                 throw new CanvasCommandFailed({
                   reason: "snapshot-source-invalid",
@@ -725,33 +729,16 @@ const apply = (
                 for (const thread of removedThreads) markCommentThread(thread.id)
               } else if (command._tag === "SetFrameStatus") {
                 draft.frames[index] = { ...frame, status: command.status }
-              } else if (command._tag === "UpdateFrame") {
-                if (
-                  Object.values(command.changes).every(
-                    (value) => value === undefined
-                  )
-                ) {
-                  throw new CanvasCommandFailed({
-                    reason: "invalid-command",
-                    detail: `UpdateFrame requires at least one change: ${command.id}`
-                  })
-                }
+              } else if (command._tag === "SetFrameSource") {
                 draft.frames[index] = {
                   ...frame,
-                  ...(command.changes.url === undefined
-                    ? {}
-                    : { url: command.changes.url }),
-                  ...(command.changes.title === undefined
-                    ? {}
-                    : { title: command.changes.title }),
-                  ...(command.changes.status === undefined
-                    ? {}
-                    : { status: command.changes.status }),
-                  ...(command.changes.provenance === undefined
-                    ? {}
-                    : { provenance: command.changes.provenance }),
-                  display: command.changes.display ?? frame.display
+                  url: command.url,
+                  provenance: command.provenance
                 }
+              } else if (command._tag === "SetFrameTitle") {
+                draft.frames[index] = { ...frame, title: command.title }
+              } else if (command._tag === "SetFrameDisplay") {
+                draft.frames[index] = { ...frame, display: command.display }
               } else if (command._tag === "MoveFrame") {
                 const deltaX = command.x - frame.geometry.x
                 const deltaY = command.y - frame.geometry.y

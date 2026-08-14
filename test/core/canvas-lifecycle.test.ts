@@ -1,5 +1,5 @@
 import { describe, expect, it } from "@effect/vitest"
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
 
 import { Canvas, type CanvasDocument } from "../../src/core/index.js"
 
@@ -15,7 +15,9 @@ describe("Canvas lifecycle", () => {
       )
       const { owner: _owner, ...ownerless } = document
 
-      const failure = yield* Effect.flip(Canvas.open(ownerless))
+      const failure = yield* Effect.flip(
+        Canvas.open(Schema.decodeUnknownSync(Schema.Json)(ownerless))
+      )
 
       expect(failure).toMatchObject({ reason: "invalid-envelope" })
     }))
@@ -26,7 +28,10 @@ describe("Canvas lifecycle", () => {
     )
 
     const opened = Canvas.fromDocument(document)
-    ;(document as { title: string }).title = "Mutated outside the Canvas"
+    // SAFETY: This test intentionally mutates an exported readonly value at
+    // runtime to prove Canvas owns an isolated copy of its state.
+    const mutableDocument = document as { title: string }
+    mutableDocument.title = "Mutated outside the Canvas"
 
     expect(Canvas.summarize(opened).title).toBe("Trusted")
   })
@@ -59,7 +64,7 @@ describe("Canvas lifecycle", () => {
           zIndex: 2
         }
       ]
-    } as CanvasDocument
+    } satisfies CanvasDocument
 
     expect(() => Canvas.fromDocument(broken)).toThrow(
       "Duplicate Canvas item ID: duplicate"

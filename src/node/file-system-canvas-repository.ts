@@ -1,6 +1,6 @@
 import * as NodeServices from "@effect/platform-node/NodeServices"
 import { open as openFile, readFile, stat, unlink } from "node:fs/promises"
-import { Effect, FileSystem, Layer, Path } from "effect"
+import { Effect, FileSystem, Layer, Path, Schema } from "effect"
 
 import {
   Canvas,
@@ -10,8 +10,7 @@ import {
 } from "../core/canvas.js"
 import {
   DocumentAlreadyExists,
-  CanvasRepository,
-  type CanvasRepositoryShape
+  CanvasRepository
 } from "../runtime/canvas-repository.js"
 import {
   CritClientCommandFailed,
@@ -88,7 +87,7 @@ const make = (root: string) =>
     const directory = path.join(root, ".crit", "canvases")
     const filePath = (id: string) => path.join(directory, `${encodeURIComponent(id)}.json`)
 
-    const load: CanvasRepositoryShape["load"] = (id) => {
+    const load: CanvasRepository["Service"]["load"] = (id) => {
       const target = filePath(id)
       return Effect.gen(function*() {
         const exists = yield* fs
@@ -100,7 +99,7 @@ const make = (root: string) =>
           .readFileString(target)
           .pipe(Effect.mapError((cause) => storageFailure("load", id, cause)))
         const input = yield* Effect.try({
-          try: () => JSON.parse(contents) as unknown,
+          try: () => Schema.decodeUnknownSync(Schema.Json)(JSON.parse(contents)),
           catch: (cause) =>
             new CritClientInvalidDocument({
               id,
@@ -111,7 +110,7 @@ const make = (root: string) =>
       })
     }
 
-    const create: CanvasRepositoryShape["create"] = (document) =>
+    const create: CanvasRepository["Service"]["create"] = (document) =>
       Effect.gen(function*() {
         const canonical = yield* canonicalizeDocument(document.id, document)
         yield* fs
@@ -146,7 +145,7 @@ const make = (root: string) =>
         return canonical
       })
 
-    const list: CanvasRepositoryShape["list"] = () =>
+    const list: CanvasRepository["Service"]["list"] = () =>
       Effect.gen(function*() {
         const exists = yield* fs
           .exists(directory)
@@ -178,7 +177,7 @@ const make = (root: string) =>
           .sort((left, right) => left.id.localeCompare(right.id))
       })
 
-    const apply: CanvasRepositoryShape["apply"] = (id, commands) => {
+    const apply: CanvasRepository["Service"]["apply"] = (id, commands) => {
       const target = filePath(id)
       const lock = `${target}.lock`
       const temporary = `${target}.${process.pid}.${crypto.randomUUID()}.tmp`
@@ -252,7 +251,7 @@ const make = (root: string) =>
       )
     }
 
-    return { create, load, list, apply } satisfies CanvasRepositoryShape
+    return { create, load, list, apply } satisfies CanvasRepository["Service"]
   })
 
 const layer = (options: { readonly root: string }) =>

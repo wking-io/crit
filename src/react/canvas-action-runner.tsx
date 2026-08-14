@@ -127,10 +127,11 @@ export const useCanvasControls = (
   commentAuthorPresent: boolean
 ) => {
   const runner = useCanvasActionRunner()
-  const scopesKey = [...activeScopes].sort().join("|")
+  const normalizedScopes = [...activeScopes].sort()
+  const scopesKey = normalizedScopes.join("|")
   return useMemo(() => CanvasControls.resolve({
     platform: canvasControlPlatform(),
-    activeScopes: scopesKey.split("|") as Array<CanvasControlScope>,
+    activeScopes: normalizedScopes,
     globalFacts: { commentAuthorPresent },
     pendingActions: runner.pendingActions
   }), [commentAuthorPresent, runner.pendingActions, scopesKey])

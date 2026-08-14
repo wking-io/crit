@@ -12,7 +12,6 @@ export {
   CanvasRepository,
   DocumentAlreadyExists,
   type CanvasRepositoryError,
-  type CanvasRepositoryShape,
   type CanvasRepositoryMutation
 } from "../runtime/canvas-repository.js"
 export {
@@ -27,18 +26,20 @@ export { SnapshotArtifact } from "../core/index.js"
 export {
   AGENT_ACTIVITY_LEASE_SECONDS,
   AgentActivity,
+  AgentActivityClearFailed,
   AgentActivityCollection,
-  AgentActivityFailed,
+  AgentActivityErrorSchema,
+  AgentActivityReadFailed,
   AgentActivityReference,
+  AgentActivitySignalFailed,
   AgentActivityStore,
-  type AgentActivityStoreShape,
+  type AgentActivityError,
   type SignalAgentActivityInput
 } from "../runtime/agent-activity.js"
 export {
   AuthorIdentity,
   AuthorIdentityFailed,
-  GIT_AUTHOR_REMEDIATION_PROMPT,
-  type AuthorIdentityShape
+  GIT_AUTHOR_REMEDIATION_PROMPT
 } from "../runtime/author-identity.js"
 export {
   CRIT_SNAPSHOT_PATH,
@@ -47,12 +48,10 @@ export {
   SnapshotNotFound,
   SnapshotStorageFailed,
   snapshotArtifactUrl,
-  type SnapshotArchiveError,
-  type SnapshotArchiveShape
+  type SnapshotArchiveError
 } from "../runtime/snapshot-archive.js"
 export {
   SnapshotService,
   SnapshotServiceLive,
-  type SnapshotFrameError,
-  type SnapshotServiceShape
+  type SnapshotFrameError
 } from "../runtime/snapshot-service.js"

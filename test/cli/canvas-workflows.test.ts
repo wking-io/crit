@@ -3,7 +3,7 @@ import { tmpdir } from "node:os"
 import path from "node:path"
 
 import { afterEach, beforeEach, describe, expect, it } from "@effect/vitest"
-import { Effect, FileSystem, Layer, Path, Sink, Stdio, Terminal } from "effect"
+import { Effect, FileSystem, Layer, Path, Stdio, Terminal } from "effect"
 import { ChildProcessSpawner } from "effect/unstable/process"
 
 import { runCrit } from "../../src/cli/command.js"
@@ -15,6 +15,7 @@ import {
   SnapshotServiceLive
 } from "../../src/runtime/snapshot-service.js"
 import { TEST_AUTHOR, TestAuthorIdentityLayer } from "../support/author-identity.js"
+import { collectStdout } from "../support/stdout.js"
 
 describe("crit Canvas workflows", () => {
   let root = ""
@@ -54,13 +55,7 @@ describe("crit Canvas workflows", () => {
       Path.layer,
       Stdio.layerTest({
         stdout: () =>
-          Sink.forEach((chunk: string | Uint8Array) =>
-            Effect.sync(() => {
-              stdout.push(
-                typeof chunk === "string" ? chunk : new TextDecoder().decode(chunk)
-              )
-            })
-          )
+          collectStdout((value) => stdout.push(value))
       }),
       Layer.succeed(
         Terminal.Terminal,
@@ -228,13 +223,7 @@ describe("crit Canvas workflows", () => {
       Path.layer,
       Stdio.layerTest({
         stdout: () =>
-          Sink.forEach((chunk: string | Uint8Array) =>
-            Effect.sync(() => {
-              stdout.push(
-                typeof chunk === "string" ? chunk : new TextDecoder().decode(chunk)
-              )
-            })
-          )
+          collectStdout((value) => stdout.push(value))
       }),
       Layer.succeed(
         Terminal.Terminal,
@@ -266,13 +255,20 @@ describe("crit Canvas workflows", () => {
           provenance: { kind: "agent", sourceId: "codex" }
         },
         {
-          _tag: "UpdateFrame",
+          _tag: "SetFrameSource",
           id: "candidate",
-          changes: {
-            url: "https://checkout.localhost/v2",
-            title: "Checkout candidate v2",
-            display: { heightMode: "fit-page" }
-          }
+          url: "https://checkout.localhost/v2",
+          provenance: { kind: "agent", sourceId: "codex" }
+        },
+        {
+          _tag: "SetFrameTitle",
+          id: "candidate",
+          title: "Checkout candidate v2"
+        },
+        {
+          _tag: "SetFrameDisplay",
+          id: "candidate",
+          display: { heightMode: "fit-page" }
         },
         {
           _tag: "SetFrameStatus",
@@ -323,7 +319,7 @@ describe("crit Canvas workflows", () => {
         command: "apply",
         mutation: {
           revision: 1,
-          change: { commandCount: 8 },
+          change: { commandCount: 10 },
           canvas: {
             id: "review",
             frameCount: 1,
@@ -368,13 +364,7 @@ describe("crit Canvas workflows", () => {
       Path.layer,
       Stdio.layerTest({
         stdout: () =>
-          Sink.forEach((chunk: string | Uint8Array) =>
-            Effect.sync(() => {
-              stdout.push(
-                typeof chunk === "string" ? chunk : new TextDecoder().decode(chunk)
-              )
-            })
-          )
+          collectStdout((value) => stdout.push(value))
       }),
       Layer.succeed(
         Terminal.Terminal,
@@ -437,15 +427,7 @@ describe("crit Canvas workflows", () => {
         Path.layer,
         Stdio.layerTest({
           stdout: () =>
-            Sink.forEach((chunk: string | Uint8Array) =>
-              Effect.sync(() => {
-                stdout.push(
-                  typeof chunk === "string"
-                    ? chunk
-                    : new TextDecoder().decode(chunk)
-                )
-              })
-            )
+            collectStdout((value) => stdout.push(value))
         }),
         Layer.succeed(
           Terminal.Terminal,

@@ -5,6 +5,7 @@ import {
   CANVAS_ACTION_POLICIES,
   CanvasActionUnavailable,
   CanvasControls,
+  canvasControlPlatform,
   makeCanvasControls,
   tanStackHotkeysForAction,
   type CanvasControlPlatform,
@@ -28,6 +29,13 @@ const resolve = (
 })
 
 describe("CanvasControls", () => {
+  it("normalizes raw runtime platform names at the capability boundary", () => {
+    expect(canvasControlPlatform("MacIntel")).toBe("macos")
+    expect(canvasControlPlatform("Win32")).toBe("windows")
+    expect(canvasControlPlatform("Linux x86_64")).toBe("linux")
+    expect(canvasControlPlatform("Plan 9")).toBe("unknown")
+  })
+
   it("resolves one action into consistent help, ARIA, and hotkey projections", () => {
     const action = resolve({ platform: "unknown" }).action({
       id: "remove-item",
@@ -44,8 +52,8 @@ describe("CanvasControls", () => {
       ariaKeyShortcuts: "Backspace Delete"
     })
     expect(tanStackHotkeysForAction(action)).toEqual([
-      { key: "Backspace" },
-      { key: "Delete" }
+      { key: "Backspace", mod: false, shift: false, alt: false },
+      { key: "Delete", mod: false, shift: false, alt: false }
     ])
   })
 
@@ -57,10 +65,14 @@ describe("CanvasControls", () => {
     expect(actionFor("unknown").shortcut).toBe("⌘=")
     expect(actionFor("windows").shortcut).toBe("Ctrl+=")
     expect(actionFor("linux").ariaKeyShortcuts).toBe("Control+= Control+Shift+=")
+    expect(tanStackHotkeysForAction(actionFor("linux"))).toEqual([
+      { key: "=", mod: true, shift: false, alt: false },
+      { key: "=", mod: true, shift: true, alt: false }
+    ])
   })
 
   it("projects bindings only while one of the action's scopes is active", () => {
-    expect(resolve().action({ id: "create-frame" }).shortcut).toBeUndefined()
+    expect(resolve().action({ id: "create-frame" }).shortcut).toBeNull()
     expect(resolve({
       activeScopes: ["canvas", "new-frame-form"]
     }).action({ id: "create-frame" }).shortcut).toBe("Enter")

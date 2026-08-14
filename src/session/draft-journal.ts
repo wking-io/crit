@@ -21,7 +21,7 @@ export class DraftJournalFailed extends Schema.TaggedError<DraftJournalFailed>()
   }
 ) {}
 
-export interface DraftJournalShape {
+export class DraftJournal extends Context.Service<DraftJournal, {
   readonly load: (
     canvasId: string,
     sessionId: string
@@ -34,8 +34,6 @@ export interface DraftJournalShape {
     sessionId: string,
     throughMutation: number
   ) => Effect.Effect<void, DraftJournalFailed>
-}
-
-export class DraftJournal extends Context.Service<DraftJournal, DraftJournalShape>()(
+}>()(
   "@riff-refine/crit/DraftJournal"
 ) {}

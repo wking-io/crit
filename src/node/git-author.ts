@@ -2,17 +2,18 @@ import { execFile } from "node:child_process"
 import { createHash } from "node:crypto"
 import { promisify } from "node:util"
 
-import { Effect, Layer } from "effect"
+import { Effect, Layer, Schema } from "effect"
 
 import type { Author } from "../core/index.js"
 import {
   AuthorIdentity,
   AuthorIdentityFailed,
-  GIT_AUTHOR_REMEDIATION_PROMPT,
-  type AuthorIdentityShape
+  GIT_AUTHOR_REMEDIATION_PROMPT
 } from "../runtime/author-identity.js"
 
 const execFileAsync = promisify(execFile)
+const GitConfigMissing = Schema.Struct({ code: Schema.Literal(1) })
+const isGitConfigMissing = Schema.is(GitConfigMissing)
 
 const missing = (reason: "missing-name" | "missing-email", detail: string) =>
   new AuthorIdentityFailed({
@@ -46,12 +47,7 @@ const gitConfig = async (root: string, key: "user.name" | "user.email") => {
     })
     return result.stdout.trim()
   } catch (cause) {
-    if (
-      typeof cause === "object" &&
-      cause !== null &&
-      "code" in cause &&
-      cause.code === 1
-    ) {
+    if (isGitConfigMissing(cause)) {
       return ""
     }
     throw cause
@@ -79,7 +75,7 @@ const authorFrom = (nameInput: string, emailInput: string): Author => {
   return { id: `git:${id}`, name }
 }
 
-const make = (): AuthorIdentityShape => ({
+const make = (): AuthorIdentity["Service"] => ({
   resolve: (root) =>
     Effect.tryPromise({
       try: async () => {

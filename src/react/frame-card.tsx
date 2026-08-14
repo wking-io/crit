@@ -5,7 +5,7 @@ import {
   useEffect,
   useRef,
   useState,
-  type CSSProperties,
+  type ComponentProps,
   type PointerEvent as ReactPointerEvent
 } from "react"
 
@@ -23,6 +23,10 @@ import {
   connectSameOriginFrameInput,
   type FrameInputIntent
 } from "../frame-bridge/index.js"
+import {
+  cssVariableStyle,
+  type CssVariableStyle
+} from "./css-variable-style.js"
 import { canvasUiScale } from "./canvas-camera.js"
 import {
   CritContextMenu,
@@ -211,7 +215,7 @@ export function FrameCard({
   commentMode,
   commentThreads,
   defaultStatusMenuOpen = false,
-  openCommentId,
+  openCommentId = null,
   onBringToFront,
   onFitContent,
   onMove,
@@ -231,10 +235,10 @@ export function FrameCard({
   onTitle
 }: {
   readonly frame: CanvasFrame
-  readonly frameChrome?: Partial<FrameChromeSettings>
+  readonly frameChrome?: Partial<FrameChromeSettings> | undefined
   readonly geometry: CanvasGeometry
   readonly iframeAllow: string
-  readonly iframeSandbox?: string
+  readonly iframeSandbox?: string | undefined
   readonly iframeUrl?: string
   readonly iframeVisible: boolean
   readonly selected: boolean
@@ -243,7 +247,7 @@ export function FrameCard({
   readonly commentMode: boolean
   readonly commentThreads: ReadonlyArray<CanvasCommentThread>
   readonly defaultStatusMenuOpen?: boolean
-  readonly openCommentId?: string
+  readonly openCommentId?: string | null
   readonly onBringToFront: () => Effect.Effect<unknown, unknown>
   readonly onFitContent: (height: number) => Effect.Effect<unknown, unknown>
   readonly onMove: (event: ReactPointerEvent, item: CanvasFrame) => void
@@ -259,7 +263,7 @@ export function FrameCard({
   readonly onCompleteBreakpoints: () => Effect.Effect<unknown, unknown>
   readonly onDuplicateAt: (preset: FrameSizePreset) => Effect.Effect<unknown, unknown>
   readonly onOpenComment: (id: string) => Effect.Effect<unknown, unknown>
-  readonly onSnapshot?: () => Effect.Effect<unknown, unknown>
+  readonly onSnapshot?: (() => Effect.Effect<unknown, unknown>) | undefined
   readonly onSnapshotError: (cause: unknown) => void
   readonly onSendToBack: () => Effect.Effect<unknown, unknown>
   readonly onSetSize: (width: number, height: number) => Effect.Effect<unknown, unknown>
@@ -339,7 +343,7 @@ export function FrameCard({
     "--frame-ink": status.ink,
     "--frame-shell": status.shell,
     "--frame-stroke": status.stroke
-  } as CSSProperties
+  } satisfies CssVariableStyle
 
   const measureContentHeight = useCallback((force = false) => Effect.suspend(() => {
     const iframe = iframeRef.current
@@ -482,7 +486,12 @@ export function FrameCard({
     commentBridgeRef.current = bridge
     // Probe immediately in case the iframe's initial ready event fired before
     // this effect subscribed. The bridge acknowledges configure with ready.
-    bridge.configure({ enabled: false, color: status.ink, pins: [] })
+    bridge.configure({
+      activeId: null,
+      enabled: false,
+      color: status.ink,
+      pins: []
+    })
     return () => {
       bridge.disconnect()
       if (commentBridgeRef.current === bridge) commentBridgeRef.current = null
@@ -491,7 +500,7 @@ export function FrameCard({
   useEffect(() => {
     if (!commentBridgeReady) return
     commentBridgeRef.current?.configure({
-      ...(openCommentId === undefined ? {} : { activeId: openCommentId }),
+      activeId: openCommentId,
       enabled: commentMode,
       color: status.ink,
       pins: commentThreads.flatMap((thread) =>
@@ -506,6 +515,9 @@ export function FrameCard({
     target,
     snapshotAvailable: frame.snapshot === undefined && onSnapshot !== undefined
   })
+  const snapshotPending =
+    snapshotAction.availability !== "enabled" &&
+    snapshotAction.reason === "action-pending"
   const takeSnapshot = () => {
     if (onSnapshot === undefined) return
     runner.run(controls, snapshotAction, onSnapshot(), onSnapshotError)
@@ -587,11 +599,11 @@ export function FrameCard({
           className="crit-status-menu"
           onPointerDown={(event) => event.stopPropagation()}
           role="menu"
-          style={{
-            ["--crit-status-ui" as string]: statusFan.scale,
+          style={cssVariableStyle({
+            "--crit-status-ui": statusFan.scale,
             bottom: `calc(100% + ${statusFan.frameGap}px)`,
             pointerEvents: statusMenuOpen ? "all" : "none"
-          }}
+          })}
         >
           <AnimatePresence>
             {statusMenuOpen
@@ -632,6 +644,16 @@ export function FrameCard({
                         status: option.id,
                         frameIsLive: frame.snapshot === undefined
                       })
+                  const optionStyle = cssVariableStyle({
+                    "--status-ink": option.ink,
+                    "--status-shell": option.shell,
+                    "--status-stroke": option.stroke
+                  })
+                  // SAFETY: Motion forwards CSS custom properties to the DOM,
+                  // but its style type conflicts with React's optional SVG x property.
+                  const motionOptionStyle = optionStyle as ComponentProps<
+                    typeof motion.button
+                  >["style"] & {}
                   return (
                     <motion.button
                       aria-checked={false}
@@ -650,11 +672,7 @@ export function FrameCard({
                         selectStatus()
                       }}
                       role="menuitemradio"
-                      style={{
-                        ["--status-ink" as string]: option.ink,
-                        ["--status-shell" as string]: option.shell,
-                        ["--status-stroke" as string]: option.stroke
-                      }}
+                      style={motionOptionStyle}
                       initial={{
                         opacity: 0,
                         scale: STATUS_PILL_MOTION.initialScale,
@@ -761,7 +779,7 @@ export function FrameCard({
                       autoComplete="off"
                       autoFocus
                       spellCheck={false}
-                      aria-keyshortcuts={`${saveTitleAction.ariaKeyShortcuts ?? ""} ${cancelTitleAction.ariaKeyShortcuts ?? ""}`.trim()}
+                      aria-keyshortcuts={`${saveTitleAction.ariaKeyShortcuts ?? ""} ${cancelTitleAction.ariaKeyShortcuts ?? ""}`.trim() || undefined}
                       {...actionHelpTarget(saveTitleAction)}
                       onChange={(event) => setTitleDraft(event.currentTarget.value)}
                       onKeyDown={(event) => {
@@ -786,7 +804,7 @@ export function FrameCard({
                     />
                   </span>
                   <button
-                    aria-keyshortcuts={saveTitleAction.ariaKeyShortcuts}
+                    aria-keyshortcuts={saveTitleAction.ariaKeyShortcuts ?? undefined}
                     aria-label={saveTitleAction.label}
                     className="crit-frame__title-save"
                     disabled={saveTitleAction.availability !== "enabled"}
@@ -848,9 +866,9 @@ export function FrameCard({
             ) : null}
             {frame.snapshot === undefined && onSnapshot !== undefined && actions.snapshot ? (
               <button
-                aria-label={snapshotAction.reason === "action-pending" ? "Taking snapshot" : snapshotAction.label}
+                aria-label={snapshotPending ? "Taking snapshot" : snapshotAction.label}
                 className="crit-frame__action"
-                data-snapshotting={snapshotAction.reason === "action-pending" || undefined}
+                data-snapshotting={snapshotPending || undefined}
                 disabled={snapshotAction.availability !== "enabled"}
                 {...actionHelpTarget(snapshotAction)}
                 onClick={takeSnapshot}
@@ -872,7 +890,7 @@ export function FrameCard({
             {actions.fullscreen ? <button
               aria-label={fullscreenAction.label}
               className="crit-frame__action"
-              aria-keyshortcuts={fullscreenAction.ariaKeyShortcuts}
+              aria-keyshortcuts={fullscreenAction.ariaKeyShortcuts ?? undefined}
               disabled={fullscreenAction.availability !== "enabled"}
               {...actionHelpTarget(fullscreenAction)}
               onClick={() => runner.run(
@@ -886,7 +904,7 @@ export function FrameCard({
               <Glyph name={fullscreen ? "minimize" : "fullscreen"} />
             </button> : null}
             {actions.delete ? <button
-              aria-keyshortcuts={removeAction.ariaKeyShortcuts}
+              aria-keyshortcuts={removeAction.ariaKeyShortcuts ?? undefined}
               aria-label={removeAction.label}
               className="crit-frame__action"
               disabled={removeAction.availability !== "enabled"}

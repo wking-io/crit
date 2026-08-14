@@ -2,7 +2,13 @@ import { randomUUID } from "node:crypto"
 import { link, mkdir, readFile, unlink, writeFile } from "node:fs/promises"
 import path from "node:path"
 
-import { build, transform, type Loader, type Plugin } from "esbuild"
+import {
+  build,
+  transform,
+  type BuildOptions,
+  type Loader,
+  type Plugin
+} from "esbuild"
 import { Effect, Layer } from "effect"
 import { NodeType, parse, type Node as HtmlNode } from "node-html-parser"
 
@@ -13,8 +19,7 @@ import {
   CRIT_SNAPSHOT_PATH,
   SnapshotCaptureFailed,
   SnapshotNotFound,
-  SnapshotStorageFailed,
-  type SnapshotArchiveShape
+  SnapshotStorageFailed
 } from "../runtime/snapshot-archive.js"
 import { hasNodeErrorCode } from "./internal/node-error.js"
 
@@ -41,7 +46,7 @@ type FetchResource = (url: string) => Promise<FetchedResource>
 
 const make = (
   options: FileSystemSnapshotArchiveOptions
-): SnapshotArchiveShape => {
+): SnapshotArchive["Service"] => {
   const directory = path.join(options.root, SNAPSHOT_DIRECTORY)
   const fetchImplementation = options.fetch ?? globalThis.fetch
   const now = options.now ?? (() => new Date())
@@ -399,10 +404,9 @@ const bundleRemoteEntry = async (
   documentUrl: URL,
   fetchResource: FetchResource
 ) => {
-  const result = await build({
+  let options: BuildOptions = {
     entryPoints: [entryUrl],
     bundle: true,
-    ...(loader === "js" ? { format: "iife" as const } : {}),
     legalComments: "none",
     logLevel: "silent",
     minify: true,
@@ -410,7 +414,11 @@ const bundleRemoteEntry = async (
     target: ["es2020"],
     write: false,
     plugins: [createHttpBundlePlugin(documentUrl, fetchResource)]
-  })
+  }
+  if (loader === "js") {
+    options = { ...options, format: "iife" }
+  }
+  const result = await build(options)
   return readBuildOutput(result.outputFiles ?? [], loader)
 }
 
@@ -420,14 +428,13 @@ const bundleInlineSource = async (
   documentUrl: URL,
   fetchResource: FetchResource
 ) => {
-  const result = await build({
+  let options: BuildOptions = {
     stdin: {
       contents: source,
       loader,
       sourcefile: `snapshot-inline.${loader}`
     },
     bundle: true,
-    ...(loader === "js" ? { format: "iife" as const } : {}),
     legalComments: "none",
     logLevel: "silent",
     minify: true,
@@ -435,7 +442,11 @@ const bundleInlineSource = async (
     target: ["es2020"],
     write: false,
     plugins: [createHttpBundlePlugin(documentUrl, fetchResource)]
-  })
+  }
+  if (loader === "js") {
+    options = { ...options, format: "iife" }
+  }
+  const result = await build(options)
   return readBuildOutput(result.outputFiles ?? [], loader)
 }
 

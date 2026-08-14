@@ -7,6 +7,8 @@ export {
   CritManifestFrame,
   CritManifestGeometry,
   CritManifestInvalid,
+  type CritManifestInput,
+  type CritManifestField,
   type CritManifestCanvasSync,
   type CritManifestSyncError,
   type CritManifestSyncResult,

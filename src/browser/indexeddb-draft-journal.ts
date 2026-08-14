@@ -3,17 +3,20 @@ import { Effect, Layer, Option, Schema } from "effect"
 import {
   CanvasDraft,
   DraftJournal,
-  DraftJournalFailed,
-  type DraftJournalShape
+  DraftJournalFailed
 } from "../session/draft-journal.js"
 
 const DATABASE_VERSION = 1
 const STORE_NAME = "drafts"
 
-type StoredDraft = {
-  readonly key: string
-  readonly draft: unknown
-}
+const StoredDraft = Schema.Struct({
+  key: Schema.String,
+  draft: CanvasDraft
+})
+type StoredDraft = typeof StoredDraft.Type
+const decodeStoredDraftRecord = Schema.decodeUnknownSync(
+  Schema.UndefinedOr(StoredDraft)
+)
 
 export type IndexedDbDraftJournalOptions = {
   readonly indexedDB?: IDBFactory
@@ -47,18 +50,17 @@ const openDatabase = (
       reject(new Error("Opening the draft database was blocked"))
   })
 
-const decodeStoredDraft = (
-  value: unknown,
+const validateStoredDraft = (
+  stored: StoredDraft | undefined,
   canvasId: string,
   sessionId: string
 ) => {
-  if (value === undefined) return undefined
-  if (typeof value !== "object" || value === null || !("draft" in value)) {
-    throw new Error("Draft journal record is malformed")
+  if (stored === undefined) return undefined
+  const expectedKey = draftKey(canvasId, sessionId)
+  if (stored.key !== expectedKey) {
+    throw new Error("Draft journal record key does not match the request")
   }
-  const draft = Schema.decodeUnknownSync(CanvasDraft)(
-    (value as StoredDraft).draft
-  )
+  const draft = stored.draft
   if (draft.canvasId !== canvasId || draft.sessionId !== sessionId) {
     throw new Error("Draft journal record identity does not match its key")
   }
@@ -79,7 +81,11 @@ const loadDraft = (
       try {
         resolve(
           Option.fromUndefinedOr(
-            decodeStoredDraft(request.result, canvasId, sessionId)
+            validateStoredDraft(
+              decodeStoredDraftRecord(request.result),
+              canvasId,
+              sessionId
+            )
           )
         )
       } catch (cause) {
@@ -101,8 +107,8 @@ const saveDraft = (database: IDBDatabase, draft: CanvasDraft) =>
 
     request.onsuccess = () => {
       try {
-        const current = decodeStoredDraft(
-          request.result,
+        const current = validateStoredDraft(
+          decodeStoredDraftRecord(request.result),
           draft.canvasId,
           draft.sessionId
         )
@@ -137,7 +143,11 @@ const clearDraft = (
 
     request.onsuccess = () => {
       try {
-        const current = decodeStoredDraft(request.result, canvasId, sessionId)
+        const current = validateStoredDraft(
+          decodeStoredDraftRecord(request.result),
+          canvasId,
+          sessionId
+        )
         if (current !== undefined && current.mutation <= throughMutation) {
           store.delete(key)
         }
@@ -155,13 +165,14 @@ const clearDraft = (
       reject(transaction.error ?? new Error("Clearing the draft was aborted"))
   })
 
-const make = (options: IndexedDbDraftJournalOptions = {}): DraftJournalShape => {
+const indexedDbFromRuntime = (): IDBFactory | undefined =>
+  globalThis.indexedDB
+
+const make = (options: IndexedDbDraftJournalOptions = {}): DraftJournal["Service"] => {
   const databaseName = options.databaseName ?? "@riff-refine/crit/drafts/v1"
   const factory =
     options.indexedDB ??
-    (typeof globalThis.indexedDB === "undefined"
-      ? undefined
-      : globalThis.indexedDB)
+    indexedDbFromRuntime()
 
   const run = <A>(
     operation: string,

@@ -42,9 +42,10 @@ Use Frame IDs returned by `open --json`. Submit related operations as one JSON
 array to `apply`:
 
 - `AddFrame`: `id`, `url`, `title`, `status`, and `provenance`.
-- `UpdateFrame`: `id` plus non-empty `changes` containing URL, title, status,
-  provenance, or `display`.
+- `SetFrameSource`: `id`, `url`, and `provenance`.
+- `SetFrameTitle`: `id` and `title`.
 - `SetFrameStatus`: `id` and `status`.
+- `SetFrameDisplay`: `id` and `display`.
 - `MoveFrame`: `id`, `x`, and `y`.
 - `ResizeFrame`: `id`, positive `width`, and positive `height`.
 - `BringFrameToFront` and `SendFrameToBack`: `id`.
@@ -79,8 +80,7 @@ when an agent does not have an element anchor from the browser:
   every 20 seconds and clear it with `activity <canvas> --id <run-id> --clear
   --json` when work ends. Ordinary Canvas commands do not create presence.
 - Use Crit commands and interfaces; never edit `.crit/canvases/*.json`.
-- Use one `apply` call for related `AddFrame`, `UpdateFrame`, `SetFrameStatus`,
-  `MoveFrame`, `ResizeFrame`, `RemoveFrame`, and Note operations so they commit
+- Use one `apply` call for related Frame and Note operations so they commit
   atomically.
 - Preserve Frame identity. Do not remove and recreate a Frame merely to change
   its status, title, URL, position, or size.

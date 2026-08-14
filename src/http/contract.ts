@@ -12,8 +12,8 @@ import {
   CritClientInvalidDocument,
   CritClientNotFound,
   CritClientUnavailable,
-  type CritClientError,
-  type CritClientShape
+  type CritClientServices,
+  type CritClientError
 } from "../session/crit-client.js"
 import { AgentActivityCollection } from "../runtime/agent-activity.js"
 
@@ -63,6 +63,15 @@ export interface CritHttpHandlerOptions {
   readonly apiPath?: string
   readonly maxBodyBytes?: number
 }
+
+export type CritHttpServices = CritClientServices
+
+type CritHttpErrorResponse = typeof CritHttpErrorBody.Encoded
+type CritHttpResponseBody =
+  | typeof Author.Type
+  | typeof CanvasDocument.Type
+  | typeof AgentActivityCollection.Type
+  | CritHttpErrorResponse
 
 const stripTrailingSlash = (value: string) => value.replace(/\/+$/, "")
 
@@ -124,7 +133,11 @@ export const parseCritHttpRoute = (
   }
 }
 
-const json = (status: number, body: unknown, headers?: HeadersInit) =>
+const json = (
+  status: number,
+  body: CritHttpResponseBody,
+  headers?: HeadersInit
+) =>
   new Response(JSON.stringify(body), {
     status,
     headers: {
@@ -143,7 +156,7 @@ const errorBody = (
   details: {
     readonly id?: string
   } = {}
-): CritHttpErrorBody => ({
+): CritHttpErrorResponse => ({
   error: { code, message, ...details }
 })
 
@@ -228,7 +241,7 @@ const readApplyRequest = (request: Request, maxBodyBytes: number) =>
     ),
     Effect.flatMap((body) =>
       Effect.try({
-        try: () => JSON.parse(body) as unknown,
+          try: () => JSON.parse(body),
         catch: () =>
           new InvalidApplyRequest({
             detail: "Request body must be valid JSON"
@@ -245,11 +258,12 @@ const readApplyRequest = (request: Request, maxBodyBytes: number) =>
   )
 
 export const makeCritHttpHandler = (
-  client: CritClientShape,
+  services: CritHttpServices,
   options: CritHttpHandlerOptions = {}
 ): CritHttpHandler => {
   const apiPath = options.apiPath ?? DEFAULT_CRIT_API_PATH
   const maxBodyBytes = options.maxBodyBytes ?? MAX_CRIT_HTTP_BODY_BYTES
+  const { activity, client, snapshots } = services
 
   return (request, parsedRoute) => {
     const route = parsedRoute ?? parseCritHttpRoute(request.url, apiPath)
@@ -275,7 +289,7 @@ export const makeCritHttpHandler = (
       if (request.method !== "GET") {
         return Effect.succeed(methodNotAllowed(id, ["GET"]))
       }
-      if (client.activities === undefined) {
+      if (activity === null) {
         return Effect.succeed(
           clientErrorResponse(
             new CritClientUnavailable({
@@ -286,7 +300,7 @@ export const makeCritHttpHandler = (
           )
         )
       }
-      return client.activities(id).pipe(
+      return activity.activities(id).pipe(
         Effect.map((activities) => json(200, activities)),
         Effect.catch((cause) => Effect.succeed(clientErrorResponse(cause)))
       )
@@ -298,7 +312,7 @@ export const makeCritHttpHandler = (
       }
       const rejected = crossOriginRejection(request, id)
       if (rejected !== undefined) return Effect.succeed(rejected)
-      if (client.snapshot === undefined) {
+      if (snapshots === null) {
         return Effect.succeed(
           clientErrorResponse(
             new CritClientUnavailable({
@@ -309,7 +323,7 @@ export const makeCritHttpHandler = (
           )
         )
       }
-      return client.snapshot(id, route.frameId).pipe(
+      return snapshots.snapshot(id, route.frameId).pipe(
         Effect.map((document) => json(200, document)),
         Effect.catch((cause) => Effect.succeed(clientErrorResponse(cause)))
       )
@@ -376,7 +390,7 @@ export const makeCritHttpHandler = (
   }
 }
 
-export const decodeCanvasDocument = (input: unknown, id: string) =>
+export const decodeCanvasDocument = (input: Schema.Json, id: string) =>
   Schema.decodeUnknownEffect(CanvasDocument)(input).pipe(
     Effect.mapError(
       (cause) =>
@@ -384,7 +398,7 @@ export const decodeCanvasDocument = (input: unknown, id: string) =>
     )
   )
 
-export const decodeCurrentAuthor = (input: unknown) =>
+export const decodeCurrentAuthor = (input: Schema.Json) =>
   Schema.decodeUnknownEffect(Author)(input).pipe(
     Effect.mapError(
       (cause) =>
@@ -395,7 +409,7 @@ export const decodeCurrentAuthor = (input: unknown) =>
     )
   )
 
-export const decodeAgentActivities = (input: unknown, id: string) =>
+export const decodeAgentActivities = (input: Schema.Json, id: string) =>
   Schema.decodeUnknownEffect(AgentActivityCollection)(input).pipe(
     Effect.mapError(
       (cause) =>

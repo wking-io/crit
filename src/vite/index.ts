@@ -6,7 +6,7 @@ import { Readable } from "node:stream"
 import { fileURLToPath } from "node:url"
 
 import { build } from "esbuild"
-import { Effect, Layer, ManagedRuntime } from "effect"
+import { Effect, Layer, ManagedRuntime, Schema } from "effect"
 import type { Plugin, ResolvedConfig, ViteDevServer } from "vite"
 
 import type { CanvasLiveRefreshEndpoint } from "../browser/canvas-live-refresh.js"
@@ -14,6 +14,7 @@ import {
   CRIT_MANIFEST_FILE,
   CRIT_MANIFEST_PATH,
   CritManifest,
+  type CritManifestDocument,
   type ResolvedCritManifest
 } from "../discovery/index.js"
 import {
@@ -25,7 +26,11 @@ import { FileSystemCanvasRepository } from "../node/file-system-canvas-repositor
 import { FileSystemAgentActivity } from "../node/file-system-agent-activity.js"
 import { FileSystemSnapshotArchive } from "../node/file-system-snapshot-archive.js"
 import { GitAuthorIdentity } from "../node/git-author.js"
-import { CanvasRepositoryCritClient } from "../runtime/canvas-repository-crit-client.js"
+import {
+  CanvasRepositoryCritActivityClient,
+  CanvasRepositoryCritClient,
+  CanvasRepositoryCritSnapshotClient
+} from "../runtime/canvas-repository-crit-client.js"
 import { CanvasRepository } from "../runtime/canvas-repository.js"
 import { AgentActivityStore } from "../runtime/agent-activity.js"
 import {
@@ -97,6 +102,8 @@ const webRequest = (request: IncomingMessage) => {
   if (method === "GET" || method === "HEAD") {
     return new Request(url, base)
   }
+  // SAFETY: Node's Readable.toWeb stream implements the Fetch body contract,
+  // but the Node and DOM declarations use incompatible Uint8Array generics.
   return new Request(url, {
     ...base,
     body: Readable.toWeb(request) as ReadableStream<Uint8Array>,
@@ -131,7 +138,20 @@ const sendUnexpectedFailure = (response: ServerResponse, cause: unknown) => {
   )
 }
 
-const sendJson = (response: ServerResponse, status: number, body: unknown) => {
+type CritViteJsonResponse =
+  | CritManifestDocument
+  | {
+      readonly error: {
+        readonly code: string
+        readonly message: string
+      }
+    }
+
+const sendJson = (
+  response: ServerResponse,
+  status: number,
+  body: CritViteJsonResponse
+) => {
   response.statusCode = status
   response.setHeader("Cache-Control", "no-store")
   response.setHeader("Content-Type", "application/json; charset=utf-8")
@@ -176,19 +196,33 @@ const internalRequestOrigin = (request: IncomingMessage) => {
   return `${protocol}//${hostname}:${request.socket.localPort ?? 80}`
 }
 
+const FrameRelayRequestHeaders = Schema.Struct({
+  accept: Schema.optionalKey(Schema.String),
+  "accept-language": Schema.optionalKey(Schema.String),
+  authorization: Schema.optionalKey(Schema.String),
+  cookie: Schema.optionalKey(Schema.String),
+  host: Schema.optionalKey(Schema.String),
+  "user-agent": Schema.optionalKey(Schema.String)
+})
+
+const decodeFrameRelayRequestHeaders = Schema.decodeUnknownSync(
+  FrameRelayRequestHeaders
+)
+
 const relayRequestHeaders = (request: IncomingMessage) => {
+  const source = decodeFrameRelayRequestHeaders(request.headers)
   const headers = new Headers()
-  for (const name of [
-    "accept",
-    "accept-language",
-    "authorization",
-    "cookie",
-    "user-agent"
-  ]) {
-    const value = request.headers[name]
-    if (typeof value === "string") headers.set(name, value)
+  const forwarded = [
+    ["accept", source.accept],
+    ["accept-language", source["accept-language"]],
+    ["authorization", source.authorization],
+    ["cookie", source.cookie],
+    ["user-agent", source["user-agent"]]
+  ] as const
+  for (const [name, value] of forwarded) {
+    if (value !== undefined) headers.set(name, value)
   }
-  if (request.headers.host !== undefined) headers.set("host", request.headers.host)
+  if (source.host !== undefined) headers.set("host", source.host)
   headers.set("accept", "text/html,application/xhtml+xml")
   return headers
 }
@@ -319,8 +353,10 @@ const editorHtml = (
 const liveRefreshEndpointFromConfig = (
   config: ResolvedConfig
 ): CanvasLiveRefreshEndpoint => {
-  if (config.server.ws === false) return { enabled: false }
-  const hmr = typeof config.server.hmr === "object" ? config.server.hmr : undefined
+  if (config.server.ws === false || config.server.hmr === false) {
+    return { enabled: false }
+  }
+  const hmr = config.server.hmr === true ? undefined : config.server.hmr
   const port =
     hmr?.clientPort ??
     hmr?.port ??
@@ -333,10 +369,10 @@ const liveRefreshEndpointFromConfig = (
   return {
     enabled: true,
     token: config.webSocketToken,
-    ...(hmr?.protocol === undefined ? {} : { protocol: hmr.protocol }),
-    ...(hmr?.host === undefined ? {} : { host: hmr.host }),
-    ...(port === undefined ? {} : { port }),
-    ...(base === "/" ? {} : { path: base })
+    protocol: hmr?.protocol ?? null,
+    host: hmr?.host ?? null,
+    port: port ?? null,
+    path: base
   }
 }
 
@@ -492,8 +528,8 @@ export const crit = (options: CritVitePluginOptions = {}): Plugin => {
         Effect.map(({ activity, documents, snapshots }) => ({
           documents,
           snapshots,
-          handler: makeCritHttpHandler(
-            CanvasRepositoryCritClient.make(documents, {
+          handler: makeCritHttpHandler({
+            client: CanvasRepositoryCritClient.make(documents, {
               currentAuthor: () =>
                 authorIdentity.resolve(resolvedRoot).pipe(
                   Effect.mapError(
@@ -504,12 +540,13 @@ export const crit = (options: CritVitePluginOptions = {}): Plugin => {
                         detail: cause.detail
                       })
                   )
-                ),
-              loadAgentActivities: activity.read,
-              snapshotFrame: snapshots.snapshotFrame
+                )
             }),
-            { apiPath }
-          )
+            snapshots: CanvasRepositoryCritSnapshotClient.make(
+              snapshots.snapshotFrame
+            ),
+            activity: CanvasRepositoryCritActivityClient.make(activity.read)
+          }, { apiPath })
         }))
       )
     )
@@ -588,12 +625,15 @@ export const crit = (options: CritVitePluginOptions = {}): Plugin => {
           ? "https:"
           : "http:"
       return Effect.runPromise(
-        CritManifest.resolve(JSON.parse(source) as unknown, {
-          baseUrl: publicOrigin === undefined
-            ? `${protocol}//${host}/`
-            : `${publicOrigin}/`,
-          source: manifestFile
-        })
+        CritManifest.resolve(
+          Schema.decodeUnknownSync(Schema.Json)(JSON.parse(source)),
+          {
+            baseUrl: publicOrigin === undefined
+              ? `${protocol}//${host}/`
+              : `${publicOrigin}/`,
+            source: manifestFile
+          }
+        )
       )
     }
 
@@ -741,7 +781,7 @@ export const crit = (options: CritVitePluginOptions = {}): Plugin => {
               })
               return
             }
-            sendJson(response, 200, manifest)
+            sendJson(response, 200, CritManifest.toDocument(manifest))
           })
           .catch((cause: unknown) => sendUnexpectedFailure(response, cause))
         return

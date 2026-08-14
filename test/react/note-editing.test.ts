@@ -55,7 +55,7 @@ describe("Note editing", () => {
   it("commits once after the fixed idle and flushes immediately on blur", () => {
     let scheduled: (() => void) | undefined
     let delay = 0
-    const timer = {} as ReturnType<typeof globalThis.setTimeout>
+    const timer = { cancel: () => {} }
     const batches: Array<ReadonlyArray<CanvasCommand>> = []
     const session = createNoteEditingSession({
       actorId: "author",
@@ -122,7 +122,7 @@ describe("Note editing", () => {
       note,
       setTimer: () => {
         scheduled = true
-        return {} as ReturnType<typeof globalThis.setTimeout>
+        return { cancel: () => {} }
       }
     })
 

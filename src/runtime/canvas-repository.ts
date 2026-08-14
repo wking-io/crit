@@ -30,7 +30,7 @@ export interface CanvasRepositoryMutation {
   readonly change: CanvasChange
 }
 
-export interface CanvasRepositoryShape {
+export class CanvasRepository extends Context.Service<CanvasRepository, {
   readonly create: (
     document: CanvasDocument
   ) => Effect.Effect<CanvasDocument, DocumentAlreadyExists | CritClientInvalidDocument | CritClientUnavailable>
@@ -51,8 +51,6 @@ export interface CanvasRepositoryShape {
     | CritClientUnavailable
     | CritClientCommandFailed
   >
-}
-
-export class CanvasRepository extends Context.Service<CanvasRepository, CanvasRepositoryShape>()(
+}>()(
   "@riff-refine/crit/CanvasRepository"
 ) {}

@@ -25,9 +25,13 @@ describe("Canvas.listFrames", () => {
       yield* Canvas.apply(
         canvas,
         CanvasCommand.moveFrame({ id: "checkout-v1", x: 600, y: 300 }),
-        CanvasCommand.updateFrame({
+        CanvasCommand.setFrameStatus({
           id: "checkout-v2",
-          changes: { status: "approved", display: { heightMode: "fit-page" } }
+          status: "approved"
+        }),
+        CanvasCommand.setFrameDisplay({
+          id: "checkout-v2",
+          display: { heightMode: "fit-page" }
         })
       )
       const reopened = yield* Canvas.open(Canvas.export(canvas))

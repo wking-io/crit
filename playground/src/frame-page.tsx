@@ -4,10 +4,11 @@ import {
   useMemo,
   useRef,
   useState,
-  type CSSProperties,
   type PointerEvent as ReactPointerEvent,
   type PropsWithChildren
 } from "react"
+
+import { cssVariableStyle } from "../../src/react/css-variable-style.js"
 
 export type FrameVariant = "A" | "B" | "C"
 
@@ -34,8 +35,23 @@ type ActiveVoice = {
 const NOTE_KEYS = ["q", "w", "e", "r", "a", "s", "d"] as const
 const CHORD_KEYS = ["u", "i", "o", "p", "j", "k", "l"] as const
 const NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"] as const
+type NoteName = typeof NOTE_NAMES[number]
 const MAJOR = [0, 2, 4, 5, 7, 9, 11]
 const MINOR = [0, 2, 3, 5, 7, 8, 10]
+
+declare global {
+  interface Window {
+    readonly webkitAudioContext?: typeof AudioContext
+  }
+}
+
+const isNoteName = (value: string): value is NoteName =>
+  NOTE_NAMES.some((name) => name === value)
+const isMode = (value: string): value is "major" | "minor" =>
+  value === "major" || value === "minor"
+const isWave = (value: string): value is Wave =>
+  value === "sine" || value === "triangle" ||
+  value === "sawtooth" || value === "square"
 
 const midiFrequency = (midi: number) => 440 * 2 ** ((midi - 69) / 12)
 const midiName = (midi: number) => `${NOTE_NAMES[midi % 12]}${Math.floor(midi / 12) - 1}`
@@ -81,8 +97,7 @@ const usePlayableSynth = ({
 
   const ensureAudio = useCallback(async () => {
     const AudioContextConstructor = window.AudioContext ??
-      (window as typeof window & { webkitAudioContext?: typeof AudioContext })
-        .webkitAudioContext
+      window.webkitAudioContext
     if (AudioContextConstructor === undefined) return null
     const context = audioRef.current ?? new AudioContextConstructor({ latencyHint: "interactive" })
     audioRef.current = context
@@ -160,7 +175,7 @@ const usePlayableSynth = ({
 }
 
 export function FramePage({ variant }: { readonly variant: FrameVariant }) {
-  const [root, setRoot] = useState("C")
+  const [root, setRoot] = useState<NoteName>("C")
   const [mode, setMode] = useState<"major" | "minor">("major")
   const [wave, setWave] = useState<Wave>("triangle")
   const [voices, setVoices] = useState(3)
@@ -174,7 +189,7 @@ export function FramePage({ variant }: { readonly variant: FrameVariant }) {
   })
   const synth = usePlayableSynth({ wave, voices, parameters })
   const intervals = mode === "major" ? MAJOR : MINOR
-  const rootIndex = NOTE_NAMES.indexOf(root as typeof NOTE_NAMES[number])
+  const rootIndex = NOTE_NAMES.findIndex((name) => name === root)
   const noteScale = intervals.map((interval) => 12 * (parameters.noteOctave + 1) + rootIndex + interval)
   const chordScale = intervals.map((interval) => 12 * (parameters.chordOctave + 1) + rootIndex + interval)
 
@@ -184,8 +199,8 @@ export function FramePage({ variant }: { readonly variant: FrameVariant }) {
       if (event.repeat || event.metaKey || event.ctrlKey || event.altKey) return
       if (event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement) return
       const key = event.key.toLowerCase()
-      const noteIndex = NOTE_KEYS.indexOf(key as typeof NOTE_KEYS[number])
-      const chordIndex = CHORD_KEYS.indexOf(key as typeof CHORD_KEYS[number])
+      const noteIndex = NOTE_KEYS.findIndex((noteKey) => noteKey === key)
+      const chordIndex = CHORD_KEYS.findIndex((chordKey) => chordKey === key)
       if (noteIndex < 0 && chordIndex < 0) return
       event.preventDefault()
       const kind = noteIndex >= 0 ? "notes" : "chords"
@@ -255,7 +270,7 @@ interface SynthView {
   readonly onEffectChange: (name: EffectName, enabled: boolean) => void
   readonly onParameterChange: (name: keyof SynthParameters, value: number) => void
   readonly setMode: (mode: "major" | "minor") => void
-  readonly setRoot: (root: string) => void
+  readonly setRoot: (root: NoteName) => void
   readonly setVoices: (voices: number) => void
   readonly setWave: (wave: Wave) => void
   readonly startGate: (id: string, notes: ReadonlyArray<number>, kind: "notes" | "chords") => Promise<void>
@@ -300,9 +315,9 @@ const InstrumentHeader = ({ kicker, title, view }: { readonly kicker: string; re
 const ModuleHeading = ({ index, title }: { readonly index: string; readonly title: string }) => <div className="synth-module-heading"><span>{index}</span><h2>{title}</h2></div>
 
 const VoiceSetup = ({ view, compact = false }: { readonly view: SynthView; readonly compact?: boolean }) => <div className="synth-voice-setup" data-compact={compact}>
-  <label><span>Root</span><select aria-label="Root" onChange={(event) => view.setRoot(event.currentTarget.value)} value={view.root}>{NOTE_NAMES.map((name) => <option key={name}>{name}</option>)}</select></label>
-  <label><span>Mode</span><select aria-label="Mode" onChange={(event) => view.setMode(event.currentTarget.value as "major" | "minor")} value={view.mode}><option value="major">Major</option><option value="minor">Minor</option></select></label>
-  <label><span>Wave</span><select aria-label="Wave" onChange={(event) => view.setWave(event.currentTarget.value as Wave)} value={view.wave}><option value="triangle">Triangle</option><option value="sine">Sine</option><option value="sawtooth">Saw</option><option value="square">Square</option></select></label>
+  <label><span>Root</span><select aria-label="Root" onChange={(event) => { if (isNoteName(event.currentTarget.value)) view.setRoot(event.currentTarget.value) }} value={view.root}>{NOTE_NAMES.map((name) => <option key={name}>{name}</option>)}</select></label>
+  <label><span>Mode</span><select aria-label="Mode" onChange={(event) => { if (isMode(event.currentTarget.value)) view.setMode(event.currentTarget.value) }} value={view.mode}><option value="major">Major</option><option value="minor">Minor</option></select></label>
+  <label><span>Wave</span><select aria-label="Wave" onChange={(event) => { if (isWave(event.currentTarget.value)) view.setWave(event.currentTarget.value) }} value={view.wave}><option value="triangle">Triangle</option><option value="sine">Sine</option><option value="sawtooth">Saw</option><option value="square">Square</option></select></label>
   <label><span>Voices</span><select aria-label="Voices" onChange={(event) => view.setVoices(Number(event.currentTarget.value))} value={view.voices}><option value="1">1</option><option value="3">3</option><option value="5">5</option></select></label>
 </div>
 
@@ -336,7 +351,7 @@ const PARAMETER_DEFINITIONS: ReadonlyArray<{ readonly key: keyof SynthParameters
 const ParameterBank = ({ kind, view }: { readonly kind: "knobs" | "sliders" | "faders"; readonly view: SynthView }) => <div className="synth-parameters" data-kind={kind}>{PARAMETER_DEFINITIONS.map((parameter) => {
   const value = view.parameters[parameter.key]
   const progress = (value - parameter.min) / (parameter.max - parameter.min)
-  return <label className="synth-parameter" key={parameter.key}><span className="synth-parameter__label">{kind === "knobs" ? parameter.short : parameter.label}</span><span className="synth-parameter__control" style={{ "--parameter-progress": progress } as CSSProperties}><i /><input aria-label={parameter.label} max={parameter.max} min={parameter.min} onChange={(event) => view.onParameterChange(parameter.key, Number(event.currentTarget.value))} step={parameter.step} type="range" value={value} /></span><output>{parameter.format(value)}</output></label>
+  return <label className="synth-parameter" key={parameter.key}><span className="synth-parameter__label">{kind === "knobs" ? parameter.short : parameter.label}</span><span className="synth-parameter__control" style={cssVariableStyle({ "--parameter-progress": progress })}><i /><input aria-label={parameter.label} max={parameter.max} min={parameter.min} onChange={(event) => view.onParameterChange(parameter.key, Number(event.currentTarget.value))} step={parameter.step} type="range" value={value} /></span><output>{parameter.format(value)}</output></label>
 })}</div>
 
 const MacroBank = () => <div className="synth-macro-bank"><Macro label="Macro A" detail="Tremolo × Vibrato" /><Macro label="Macro B" detail="Chorus × Delay" /></div>

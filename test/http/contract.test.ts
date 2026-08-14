@@ -1,15 +1,16 @@
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
 import { describe, expect, it } from "vitest"
 
 import { Canvas, CanvasCommand } from "../../src/core/index.js"
 import { HttpCritClient } from "../../src/http/client.js"
 import {
   makeCritHttpHandler,
-  parseCritHttpRoute
+  parseCritHttpRoute,
+  type CritHttpServices
 } from "../../src/http/contract.js"
 import {
   CritClientCommandFailed,
-  type CritClientShape
+  CritClient
 } from "../../src/session/crit-client.js"
 import { TEST_AUTHOR } from "../support/author-identity.js"
 
@@ -17,29 +18,45 @@ const document = Canvas.export(
   Canvas.create({ id: "homepage", title: "Homepage", owner: { id: "git:test", name: "Test Author" } })
 )
 
-const makeClient = (): CritClientShape & {
+const TestErrorBody = Schema.Struct({
+  error: Schema.Struct({ message: Schema.String })
+})
+
+const makeServices = (): CritHttpServices & {
   readonly applied: Array<ReadonlyArray<unknown>>
-  readonly snapshots: Array<string>
+  readonly capturedFrames: Array<string>
 } => {
   const applied: Array<ReadonlyArray<unknown>> = []
-  const snapshots: Array<string> = []
+  const capturedFrames: Array<string> = []
   return {
     applied,
-    snapshots,
-    currentAuthor: () => Effect.succeed(TEST_AUTHOR),
-    load: () => Effect.succeed(document),
-    apply: (_id, commands) => {
-      applied.push(commands)
-      return Effect.succeed(document)
+    capturedFrames,
+    client: {
+      currentAuthor: () => Effect.succeed(TEST_AUTHOR),
+      load: () => Effect.succeed(document),
+      apply: (_id, commands) => {
+        applied.push(commands)
+        return Effect.succeed(document)
+      }
     },
-    snapshot: (_canvasId, frameId) => {
-      snapshots.push(frameId)
-      return Effect.succeed(document)
+    snapshots: {
+      snapshot: (_canvasId, frameId) => {
+        capturedFrames.push(frameId)
+        return Effect.succeed(document)
+      }
+    },
+    activity: {
+      activities: (canvasId) => Effect.succeed({
+        schemaVersion: 1,
+        canvasId,
+        activities: []
+      })
     }
   }
 }
 
 const canvasUrl = "http://localhost:5173/__crit/api/canvases/homepage"
+const activityUrl = `${canvasUrl}/activity`
 const snapshotUrl = `${canvasUrl}/frames/candidate/snapshot`
 
 const applyBody = JSON.stringify({
@@ -89,7 +106,7 @@ describe("parseCritHttpRoute", () => {
 
 describe("makeCritHttpHandler", () => {
   it("serves Current Author through the shared client contract", async () => {
-    const handler = makeCritHttpHandler(makeClient())
+    const handler = makeCritHttpHandler(makeServices())
     const response = await Effect.runPromise(
       handler(new Request("http://localhost:5173/__crit/api/identity"))
     )
@@ -98,8 +115,9 @@ describe("makeCritHttpHandler", () => {
   })
 
   it("round-trips durable failures through HTTP without translating them", async () => {
-    const client: CritClientShape = {
-      ...makeClient(),
+    const services = makeServices()
+    const client: CritClient["Service"] = {
+      ...services.client,
       apply: () =>
         Effect.fail(
           new CritClientCommandFailed({
@@ -109,7 +127,7 @@ describe("makeCritHttpHandler", () => {
           })
         )
     }
-    const handler = makeCritHttpHandler(client)
+    const handler = makeCritHttpHandler({ ...services, client })
     const http = HttpCritClient.make({
       apiPath: "http://localhost:5173/__crit/api",
       fetch: async (input, init) => {
@@ -123,7 +141,7 @@ describe("makeCritHttpHandler", () => {
 
     const failure = await Effect.runPromise(
       Effect.flip(
-        http.apply("homepage", [
+        http.client.apply("homepage", [
           CanvasCommand.setFrameStatus({
             id: "candidate",
             status: "approved"
@@ -141,7 +159,7 @@ describe("makeCritHttpHandler", () => {
   })
 
   it("applies same-origin PATCH command batches", async () => {
-    const client = makeClient()
+    const client = makeServices()
     const handler = makeCritHttpHandler(client)
     const response = await Effect.runPromise(
       handler(
@@ -157,7 +175,7 @@ describe("makeCritHttpHandler", () => {
   })
 
   it("returns 413 when the PATCH body exceeds the configured limit", async () => {
-    const client = makeClient()
+    const client = makeServices()
     const handler = makeCritHttpHandler(client, { maxBodyBytes: 8 })
     const response = await Effect.runPromise(
       handler(
@@ -180,7 +198,7 @@ describe("makeCritHttpHandler", () => {
   })
 
   it("returns 400 when a body-read failure mentions 'exceeds'", async () => {
-    const client = makeClient()
+    const client = makeServices()
     const handler = makeCritHttpHandler(client)
     const request = new Request(canvasUrl, {
       method: "PATCH",
@@ -193,15 +211,13 @@ describe("makeCritHttpHandler", () => {
     const response = await Effect.runPromise(handler(request))
 
     expect(response?.status).toBe(400)
-    const body = (await response?.json()) as {
-      readonly error: { readonly message: string }
-    }
+    const body = Schema.decodeUnknownSync(TestErrorBody)(await response?.json())
     expect(body.error.message).toBe("Body stream exceeds transport budget")
     expect(client.applied).toHaveLength(0)
   })
 
   it("rejects cross-origin PATCH command batches", async () => {
-    const client = makeClient()
+    const client = makeServices()
     const handler = makeCritHttpHandler(client)
     const response = await Effect.runPromise(
       handler(
@@ -217,7 +233,7 @@ describe("makeCritHttpHandler", () => {
   })
 
   it("rejects cross-origin snapshot capture", async () => {
-    const client = makeClient()
+    const client = makeServices()
     const handler = makeCritHttpHandler(client)
     const response = await Effect.runPromise(
       handler(
@@ -228,11 +244,11 @@ describe("makeCritHttpHandler", () => {
       )
     )
     expect(response?.status).toBe(403)
-    expect(client.snapshots).toHaveLength(0)
+    expect(client.capturedFrames).toHaveLength(0)
   })
 
   it("rejects snapshot capture from sandboxed documents (Origin: null)", async () => {
-    const client = makeClient()
+    const client = makeServices()
     const handler = makeCritHttpHandler(client)
     const response = await Effect.runPromise(
       handler(
@@ -243,21 +259,40 @@ describe("makeCritHttpHandler", () => {
       )
     )
     expect(response?.status).toBe(403)
-    expect(client.snapshots).toHaveLength(0)
+    expect(client.capturedFrames).toHaveLength(0)
   })
 
   it("allows snapshot capture without an Origin header", async () => {
-    const client = makeClient()
+    const client = makeServices()
     const handler = makeCritHttpHandler(client)
     const response = await Effect.runPromise(
       handler(new Request(snapshotUrl, { method: "POST" }))
     )
     expect(response?.status).toBe(200)
-    expect(client.snapshots).toEqual(["candidate"])
+    expect(client.capturedFrames).toEqual(["candidate"])
+  })
+
+  it("returns unavailable responses for absent optional capabilities", async () => {
+    const services = makeServices()
+    const handler = makeCritHttpHandler({
+      ...services,
+      snapshots: null,
+      activity: null
+    })
+
+    const activityResponse = await Effect.runPromise(
+      handler(new Request(activityUrl))
+    )
+    const snapshotResponse = await Effect.runPromise(
+      handler(new Request(snapshotUrl, { method: "POST" }))
+    )
+
+    expect(activityResponse?.status).toBe(503)
+    expect(snapshotResponse?.status).toBe(503)
   })
 
   it("rejects AddSnapshotFrame on the public apply surface", async () => {
-    const client = makeClient()
+    const client = makeServices()
     const handler = makeCritHttpHandler(client)
     const response = await Effect.runPromise(
       handler(
@@ -284,9 +319,7 @@ describe("makeCritHttpHandler", () => {
       )
     )
     expect(response?.status).toBe(400)
-    const body = (await response?.json()) as {
-      readonly error: { readonly message: string }
-    }
+    const body = Schema.decodeUnknownSync(TestErrorBody)(await response?.json())
     expect(body.error.message).toContain("AddSnapshotFrame")
     expect(client.applied).toHaveLength(0)
   })

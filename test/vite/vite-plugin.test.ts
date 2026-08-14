@@ -1,12 +1,11 @@
 import { execFile } from "node:child_process"
 import { readFile, rm, mkdtemp, writeFile } from "node:fs/promises"
 import { createServer as createHttpServer, type Server } from "node:http"
-import type { AddressInfo } from "node:net"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { promisify } from "node:util"
 
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import { createServer, type ViteDevServer } from "vite"
 
@@ -23,8 +22,37 @@ import {
 } from "../../src/session/crit-client.js"
 import { crit } from "../../src/vite/index.js"
 import { TEST_AUTHOR } from "../support/author-identity.js"
+import { serverPort } from "../support/server-address.js"
 
 const execFileAsync = promisify(execFile)
+
+const TestErrorBody = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.optionalKey(Schema.String),
+    message: Schema.optionalKey(Schema.String)
+  })
+})
+const TestPublishedManifest = Schema.Struct({
+  canvases: Schema.Array(Schema.Struct({
+    frames: Schema.Array(Schema.Struct({ url: Schema.String }))
+  }))
+})
+const TestLiveRefreshEndpoint = Schema.Union([
+  Schema.Struct({ enabled: Schema.Literal(false) }),
+  Schema.Struct({
+    enabled: Schema.Literal(true),
+    protocol: Schema.NullOr(Schema.String),
+    host: Schema.NullOr(Schema.String),
+    port: Schema.NullOr(Schema.Number),
+    path: Schema.String,
+    token: Schema.String
+  })
+])
+const TestHmrPayload = Schema.Struct({
+  type: Schema.optionalKey(Schema.String),
+  event: Schema.optionalKey(Schema.String),
+  data: Schema.optionalKey(Schema.Struct({ id: Schema.optionalKey(Schema.String) }))
+})
 
 describe("crit Vite plugin", () => {
   let root = ""
@@ -55,7 +83,8 @@ describe("crit Vite plugin", () => {
 
   const start = async (
     options: Parameters<typeof crit>[0] = {},
-    viteRoot = root
+    viteRoot = root,
+    hmr: false | undefined = undefined
   ) => {
     server = await createServer({
       root: viteRoot,
@@ -63,15 +92,16 @@ describe("crit Vite plugin", () => {
       logLevel: "silent",
       plugins: [crit(options)],
       optimizeDeps: { noDiscovery: true, include: [] },
-      server: { middlewareMode: true }
+      server: hmr === false
+        ? { hmr: false, middlewareMode: true }
+        : { middlewareMode: true }
     })
     httpServer = createHttpServer(server.middlewares)
     await new Promise<void>((resolve, reject) => {
       httpServer?.once("error", reject)
       httpServer?.listen(0, "127.0.0.1", resolve)
     })
-    const address = httpServer.address() as AddressInfo
-    return `http://127.0.0.1:${address.port}`
+    return `http://127.0.0.1:${serverPort(httpServer)}`
   }
 
   const createCanvas = (id: string, title = id) =>
@@ -86,7 +116,9 @@ describe("crit Vite plugin", () => {
   it("loads and applies commands to an explicitly created Canvas over HTTP", async () => {
     await createCanvas("homepage")
     const origin = await start()
-    const client = HttpCritClient.make({ apiPath: `${origin}/__crit/api` })
+    const { activity, client } = HttpCritClient.make({
+      apiPath: `${origin}/__crit/api`
+    })
     const currentAuthor = await Effect.runPromise(client.currentAuthor())
     const editorResponse = await fetch(`${origin}/crit/homepage`)
     const editorHtml = await editorResponse.text()
@@ -95,9 +127,11 @@ describe("crit Vite plugin", () => {
       canvasId: "homepage",
       activityId: "codex-1",
       harness: "Codex",
-      detail: "Agent is arranging Frames"
+      model: null,
+      detail: "Agent is arranging Frames",
+      reference: null
     }))
-    const activity = await Effect.runPromise(client.activities!("homepage"))
+    const activities = await Effect.runPromise(activity.activities("homepage"))
 
     const initialLoads = await Promise.all(
       Array.from({ length: 8 }, () =>
@@ -134,9 +168,9 @@ describe("crit Vite plugin", () => {
       })
     ])))
     const loaded = await Effect.runPromise(client.load("homepage"))
-    const persisted = JSON.parse(
+    const persisted = Schema.decodeUnknownSync(Schema.Struct({ revision: Schema.Number }))(JSON.parse(
       await readFile(path.join(root, ".crit/canvases/homepage.json"), "utf8")
-    ) as { revision: number }
+    ))
     const methodResponse = await fetch(
       `${origin}/__crit/api/canvases/homepage`,
       { method: "PUT" }
@@ -149,9 +183,9 @@ describe("crit Vite plugin", () => {
         body: "{}"
       }
     )
-    const invalidBody = (await invalidResponse.json()) as {
-      error: { code: string }
-    }
+    const invalidBody = Schema.decodeUnknownSync(TestErrorBody)(
+      await invalidResponse.json()
+    )
 
     expect(initial).toMatchObject({
       format: "crit-canvas",
@@ -167,7 +201,7 @@ describe("crit Vite plugin", () => {
     expect(editorHtml).toContain("overflow:hidden;overscroll-behavior:none")
     expect(editorHtml).toContain("overscroll-behavior-x:none")
     expect(editorHtml).toContain("data-crit-live-refresh=")
-    expect(activity).toMatchObject({
+    expect(activities).toMatchObject({
       canvasId: "homepage",
       activities: [{
         activityId: "codex-1",
@@ -229,7 +263,7 @@ describe("crit Vite plugin", () => {
 <html><head><meta name="crit-frame-url" content="/stale"></head>
 <body><script>window.__frameLocation = window.location.href</script></body></html>`)
     const origin = await start({ root, frameLoading: "relay" })
-    const client = HttpCritClient.make({ apiPath: `${origin}/__crit/api` })
+    const { client } = HttpCritClient.make({ apiPath: `${origin}/__crit/api` })
     const canonicalUrl = `${origin}/frame.html?variant=ready#details`
     await Effect.runPromise(client.apply("review", [CanvasCommand.addFrame({
       id: "candidate",
@@ -259,7 +293,7 @@ describe("crit Vite plugin", () => {
     )
     const publicOrigin = "https://portal.example"
     const origin = await start({ root, frameLoading: "relay", publicOrigin })
-    const client = HttpCritClient.make({ apiPath: `${origin}/__crit/api` })
+    const { client } = HttpCritClient.make({ apiPath: `${origin}/__crit/api` })
     const canonicalUrl = `${publicOrigin}/frame.html?variant=alias#details`
     await Effect.runPromise(client.apply("review", [CanvasCommand.addFrame({
       id: "candidate",
@@ -280,7 +314,7 @@ describe("crit Vite plugin", () => {
   it("rejects relay requests for Frame URLs outside the trusted origin", async () => {
     await createCanvas("review")
     const origin = await start({ root, frameLoading: "relay" })
-    const client = HttpCritClient.make({ apiPath: `${origin}/__crit/api` })
+    const { client } = HttpCritClient.make({ apiPath: `${origin}/__crit/api` })
     await Effect.runPromise(client.apply("review", [CanvasCommand.addFrame({
       id: "untrusted",
       url: "https://untrusted.example/frame.html",
@@ -289,7 +323,7 @@ describe("crit Vite plugin", () => {
     })]))
 
     const response = await fetch(`${origin}${frameRelayUrl("review", "untrusted")}`)
-    const body = await response.json() as { error: { message: string } }
+    const body = Schema.decodeUnknownSync(TestErrorBody)(await response.json())
 
     expect(response.status).toBe(403)
     expect(body.error.message).toContain("trusted application origin")
@@ -313,9 +347,9 @@ describe("crit Vite plugin", () => {
       httpServer?.once("error", reject)
       httpServer?.listen(0, "127.0.0.1", resolve)
     })
-    const port = (httpServer.address() as AddressInfo).port
+    const port = serverPort(httpServer)
     const origin = `http://127.0.0.1:${port}`
-    const client = HttpCritClient.make({ apiPath: `${origin}/__crit/api` })
+    const { client } = HttpCritClient.make({ apiPath: `${origin}/__crit/api` })
     await Effect.runPromise(client.load("homepage"))
 
     const editorPage = await (await fetch(`${origin}/crit/homepage`)).text()
@@ -323,13 +357,19 @@ describe("crit Vite plugin", () => {
       /data-crit-live-refresh="([^"]*)"/
     )?.[1]
     expect(encodedEndpoint).toBeDefined()
-    const endpoint = JSON.parse(
-      encodedEndpoint!
+    if (encodedEndpoint === undefined) {
+      throw new TypeError("Editor did not include a live refresh endpoint")
+    }
+    const endpoint = Schema.decodeUnknownSync(TestLiveRefreshEndpoint)(JSON.parse(
+      encodedEndpoint
         .replace(/&quot;/g, '"')
         .replace(/&lt;/g, "<")
         .replace(/&gt;/g, ">")
         .replace(/&amp;/g, "&")
-    ) as { enabled?: boolean; token?: string }
+    ))
+    if (!endpoint.enabled) {
+      throw new TypeError("Editor unexpectedly disabled live refresh")
+    }
 
     const socket = new WebSocket(
       canvasLiveRefreshSocketUrl(endpoint, {
@@ -341,11 +381,9 @@ describe("crit Vite plugin", () => {
     )
     const hint = new Promise<{ data?: { id?: string } }>((resolve, reject) => {
       socket.addEventListener("message", (message) => {
-        const payload = JSON.parse(String(message.data)) as {
-          type?: string
-          event?: string
-          data?: { id?: string }
-        }
+        const payload = Schema.decodeUnknownSync(TestHmrPayload)(
+          JSON.parse(String(message.data))
+        )
         if (payload.type === "custom" && payload.event === "crit:canvas-changed") {
           resolve(payload)
         }
@@ -370,13 +408,36 @@ describe("crit Vite plugin", () => {
     socket.close()
 
     expect(endpoint.enabled).toBe(true)
-    expect(typeof endpoint.token).toBe("string")
+    expect(endpoint.token).not.toHaveLength(0)
     expect(payload.data?.id).toBe("homepage")
+  })
+
+  it("disables editor live refresh when Vite HMR is disabled", async () => {
+    await createCanvas("homepage")
+    const origin = await start({}, root, false)
+    const editorPage = await (await fetch(`${origin}/crit/homepage`)).text()
+    const encodedEndpoint = editorPage.match(
+      /data-crit-live-refresh="([^"]*)"/
+    )?.[1]
+    if (encodedEndpoint === undefined) {
+      throw new TypeError("Editor did not include a live refresh endpoint")
+    }
+    const endpoint = Schema.decodeUnknownSync(TestLiveRefreshEndpoint)(
+      JSON.parse(
+        encodedEndpoint
+          .replace(/&quot;/g, '"')
+          .replace(/&lt;/g, "<")
+          .replace(/&gt;/g, ">")
+          .replace(/&amp;/g, "&")
+      )
+    )
+
+    expect(endpoint).toEqual({ enabled: false })
   })
 
   it("requires explicit Canvas creation", async () => {
     const origin = await start()
-    const client = HttpCritClient.make({ apiPath: `${origin}/__crit/api` })
+    const { client } = HttpCritClient.make({ apiPath: `${origin}/__crit/api` })
 
     const failure = await Effect.runPromise(
       Effect.flip(client.load("missing"))
@@ -444,10 +505,10 @@ describe("crit Vite plugin", () => {
     const manifestResponse = await fetch(`${origin}/.well-known/crit.json`, {
       headers: forwardedHeaders
     })
-    const manifest = await manifestResponse.json() as {
-      canvases: Array<{ frames: Array<{ url: string }> }>
-    }
-    const client = HttpCritClient.make({ apiPath: `${origin}/__crit/api` })
+    const manifest = Schema.decodeUnknownSync(TestPublishedManifest)(
+      await manifestResponse.json()
+    )
+    const { client } = HttpCritClient.make({ apiPath: `${origin}/__crit/api` })
     const failure = await Effect.runPromise(Effect.flip(client.load("default")))
 
     expect(manifestResponse.status).toBe(200)
@@ -476,9 +537,9 @@ describe("crit Vite plugin", () => {
     const origin = await start({ publicOrigin: "https://portal.example" })
     const headers = { Host: "32043-sandbox.e2b.app" }
     const manifestResponse = await fetch(`${origin}/.well-known/crit.json`, { headers })
-    const manifest = await manifestResponse.json() as {
-      canvases: Array<{ frames: Array<{ url: string }> }>
-    }
+    const manifest = Schema.decodeUnknownSync(TestPublishedManifest)(
+      await manifestResponse.json()
+    )
     expect(manifest.canvases[0]?.frames[0]?.url).toBe(
       "https://portal.example/frames/ready"
     )
@@ -499,7 +560,9 @@ describe("crit Vite plugin", () => {
     )
     await createCanvas("review")
     const origin = await start()
-    const client = HttpCritClient.make({ apiPath: `${origin}/__crit/api` })
+    const { client, snapshots } = HttpCritClient.make({
+      apiPath: `${origin}/__crit/api`
+    })
     await Effect.runPromise(client.load("review"))
     await Effect.runPromise(
       client.apply("review", [
@@ -512,7 +575,9 @@ describe("crit Vite plugin", () => {
       ])
     )
 
-    const saved = await Effect.runPromise(client.snapshot!("review", "candidate"))
+    const saved = await Effect.runPromise(
+      snapshots.snapshot("review", "candidate")
+    )
     const archived = saved.frames.at(-1)!
     const response = await fetch(`${origin}${archived.url}`)
     const html = await response.text()

@@ -25,9 +25,9 @@ export function CritBoundaryMessage({
   style
 }: {
   readonly children: ReactNode
-  readonly className?: string
+  readonly className?: string | undefined
   readonly error?: boolean
-  readonly style?: CSSProperties
+  readonly style?: CSSProperties | undefined
 }) {
   return (
     <div
@@ -121,7 +121,7 @@ export function CanvasPresenceIndicator({
             {activity.reference === null ? null : (
               <>
                 <span>{activity.reference.kind}</span>
-                {activity.reference.uri === undefined ? (
+                {activity.reference.uri === null ? (
                   <code>{activity.reference.id}</code>
                 ) : (
                   <a

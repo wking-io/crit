@@ -1,17 +1,18 @@
 import { mkdtemp, rm } from "node:fs/promises"
 import { createServer, type Server } from "node:http"
-import type { AddressInfo } from "node:net"
 import { tmpdir } from "node:os"
 import path from "node:path"
 
 import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem"
-import { Effect, Layer, Path, Sink, Stdio, Terminal } from "effect"
+import { Effect, Layer, Path, Stdio, Terminal } from "effect"
 import { ChildProcessSpawner } from "effect/unstable/process"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 
 import { runCrit } from "../../src/cli/command.js"
 import { FileSystemCanvasRepository } from "../../src/node/file-system-canvas-repository.js"
 import { TEST_AUTHOR, TestAuthorIdentityLayer } from "../support/author-identity.js"
+import { serverPort } from "../support/server-address.js"
+import { collectStdout } from "../support/stdout.js"
 
 describe("crit sync", () => {
   let root = ""
@@ -54,8 +55,7 @@ describe("crit sync", () => {
       server?.once("error", reject)
       server?.listen(0, "127.0.0.1", resolve)
     })
-    const address = server.address() as AddressInfo
-    origin = `http://127.0.0.1:${address.port}`
+    origin = `http://127.0.0.1:${serverPort(server)}`
   })
 
   afterEach(async () => {
@@ -75,15 +75,7 @@ describe("crit sync", () => {
       Path.layer,
       Stdio.layerTest({
         stdout: () =>
-          Sink.forEach((chunk: string | Uint8Array) =>
-            Effect.sync(() => {
-              stdout.push(
-                typeof chunk === "string"
-                  ? chunk
-                  : new TextDecoder().decode(chunk)
-              )
-            })
-          )
+          collectStdout((value) => stdout.push(value))
       }),
       Layer.succeed(
         Terminal.Terminal,

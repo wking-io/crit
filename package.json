@@ -67,9 +67,10 @@
     "prepack": "npm run build",
     "prepublishOnly": "npm run verify",
     "generate:glyphs": "node scripts/generate-glyphs.mjs",
+    "lint": "oxlint",
     "test": "vitest run",
     "typecheck": "npm run check:glyphs && tsc -p tsconfig.json --noEmit",
-    "verify": "npm run typecheck && npm test && npm run check:package"
+    "verify": "npm run lint && npm run typecheck && npm test && npm run check:package"
   },
   "dependencies": {
     "@effect/platform-node": "4.0.0-beta.105",
@@ -92,10 +93,12 @@
   },
   "devDependencies": {
     "@effect/vitest": "4.0.0-beta.105",
+    "@oxlint/plugins": "^1.78.0",
     "@types/node": "24.10.0",
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
     "fake-indexeddb": "6.2.5",
+    "oxlint": "^1.78.0",
     "portless": "0.15.4",
     "react": "19.2.8",
     "react-dom": "19.2.8",

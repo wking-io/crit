@@ -12,8 +12,7 @@ import { FileSystemSnapshotArchive } from "../../src/node/file-system-snapshot-a
 import { CanvasRepository } from "../../src/runtime/canvas-repository.js"
 import {
   SnapshotArchive,
-  SnapshotNotFound,
-  type SnapshotArchiveShape
+  SnapshotNotFound
 } from "../../src/runtime/snapshot-archive.js"
 import {
   SnapshotService,
@@ -33,7 +32,7 @@ describe("SnapshotService", () => {
 
   it.effect("captures a live Frame and commits its archived Frame", () => {
     const repositoryLayer = FileSystemCanvasRepository.layer({ root })
-    const archive: SnapshotArchiveShape = {
+    const archive: SnapshotArchive["Service"] = {
       capture: (sourceUrl) =>
         Effect.succeed({
           artifactId: "20260808120000-deadbeef",
@@ -118,15 +117,16 @@ describe("SnapshotService", () => {
                 Effect.gen(function*() {
                   artifactOnDiskDuringCommit = existsSync(artifactFile())
                   yield* repository.apply("review", [
-                    CanvasCommand.updateFrame({
+                    CanvasCommand.setFrameSource({
                       id: "candidate",
-                      changes: { url: "https://app.localhost/moved" }
+                      url: "https://app.localhost/moved",
+                      provenance: { kind: "agent", sourceId: "codex" }
                     })
                   ]).pipe(Effect.orDie)
                 })
               )
             )
-        } satisfies SnapshotArchiveShape
+        } satisfies SnapshotArchive["Service"]
       })
     ).pipe(Layer.provide(repositoryLayer))
     const snapshotLayer = SnapshotServiceLive.pipe(

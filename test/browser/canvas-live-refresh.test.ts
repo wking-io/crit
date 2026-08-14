@@ -59,21 +59,30 @@ const makeSession = () => {
 const settle = () => new Promise((resolve) => setTimeout(resolve, 10))
 
 const pageLocation = { protocol: "http:", hostname: "127.0.0.1", port: "5173" }
+const inheritedEndpoint = {
+  enabled: true,
+  protocol: null,
+  host: null,
+  port: null,
+  path: "/",
+  token: "secret"
+} as const
 
 describe("connectCanvasLiveRefresh", () => {
   it("resolves the socket URL the way Vite's own client does", () => {
-    expect(canvasLiveRefreshSocketUrl({}, pageLocation)).toBe(
-      "ws://127.0.0.1:5173/"
+    expect(canvasLiveRefreshSocketUrl(inheritedEndpoint, pageLocation)).toBe(
+      "ws://127.0.0.1:5173/?token=secret"
     )
     expect(
       canvasLiveRefreshSocketUrl(
-        { token: "secret" },
+        inheritedEndpoint,
         { protocol: "https:", hostname: "crit.test", port: "" }
       )
     ).toBe("wss://crit.test/?token=secret")
     expect(
       canvasLiveRefreshSocketUrl(
         {
+          enabled: true,
           protocol: "wss",
           host: "hmr.test",
           port: 24678,
@@ -91,7 +100,7 @@ describe("connectCanvasLiveRefresh", () => {
     const dispose = connectCanvasLiveRefresh({
       canvasId: "homepage",
       session,
-      endpoint: { token: "secret" },
+      endpoint: inheritedEndpoint,
       location: pageLocation,
       createSocket: (url) => {
         const socket = new FakeSocket(url)
@@ -112,6 +121,13 @@ describe("connectCanvasLiveRefresh", () => {
     custom("crit:agent-activity", "other-canvas")
     custom("crit:unrelated", "homepage")
     socket.emit("message", { data: JSON.stringify({ type: "update" }) })
+    socket.emit("message", {
+      data: JSON.stringify({
+        type: "custom",
+        event: "crit:canvas-changed",
+        data: { id: 42 }
+      })
+    })
     socket.emit("message", { data: "not json" })
     socket.emit("message", { data: undefined })
     await settle()
@@ -128,6 +144,7 @@ describe("connectCanvasLiveRefresh", () => {
     const dispose = connectCanvasLiveRefresh({
       canvasId: "homepage",
       session,
+      endpoint: inheritedEndpoint,
       location: pageLocation,
       reconnectDelayMillis: 1,
       createSocket: (url) => {
@@ -154,6 +171,7 @@ describe("connectCanvasLiveRefresh", () => {
     const dispose = connectCanvasLiveRefresh({
       canvasId: "homepage",
       session,
+      endpoint: inheritedEndpoint,
       location: pageLocation,
       heartbeatIntervalMillis: 1,
       createSocket: (url) => {

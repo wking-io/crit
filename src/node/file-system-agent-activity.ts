@@ -7,11 +7,12 @@ import { Effect, Layer, Schema } from "effect"
 import {
   AGENT_ACTIVITY_LEASE_SECONDS,
   AgentActivity,
+  AgentActivityClearFailed,
   AgentActivityReference,
-  AgentActivityFailed,
+  AgentActivityReadFailed,
+  AgentActivitySignalFailed,
   AgentActivityStore,
   type AgentActivityCollection,
-  type AgentActivityStoreShape,
   type SignalAgentActivityInput
 } from "../runtime/agent-activity.js"
 import { hasNodeErrorCode } from "./internal/node-error.js"
@@ -23,18 +24,8 @@ export interface FileSystemAgentActivityOptions {
   readonly now?: () => Date
 }
 
-const failure = (
-  operation: string,
-  canvasId: string,
-  cause: unknown,
-  activityId?: string
-) =>
-  new AgentActivityFailed({
-    operation,
-    canvasId,
-    ...(activityId === undefined ? {} : { activityId }),
-    detail: cause instanceof Error ? cause.message : String(cause)
-  })
+const failureDetail = (cause: unknown) =>
+  cause instanceof Error ? cause.message : String(cause)
 
 const required = (value: string, label: string) => {
   const trimmed = value.trim()
@@ -42,11 +33,15 @@ const required = (value: string, label: string) => {
   return trimmed
 }
 
-const optional = (value: string | undefined) => value?.trim() || null
+const nullableText = (value: string | null) => {
+  if (value === null) return null
+  const trimmed = value.trim()
+  return trimmed.length === 0 ? null : trimmed
+}
 
 const make = (
   options: FileSystemAgentActivityOptions
-): AgentActivityStoreShape => {
+): AgentActivityStore["Service"] => {
   const directory = path.join(options.root, ACTIVITY_DIRECTORY)
   const now = options.now ?? (() => new Date())
   const directoryFor = (canvasId: string) =>
@@ -66,7 +61,7 @@ const make = (
     try {
       const source = await readFile(targetFor(canvasId, activityId), "utf8")
       const decoded = Schema.decodeUnknownSync(AgentActivity)(
-        JSON.parse(source) as unknown
+        JSON.parse(source)
       )
       if (decoded.canvasId !== canvasId || decoded.activityId !== activityId) {
         throw new Error("Agent Activity identity does not match its path")
@@ -124,7 +119,11 @@ const make = (
         )
         return { schemaVersion: 1, canvasId, activities }
       },
-      catch: (cause) => failure("read", canvasId, cause)
+      catch: (cause) =>
+        new AgentActivityReadFailed({
+          canvasId,
+          detail: failureDetail(cause)
+        })
     })
 
   const signal = (input: SignalAgentActivityInput) =>
@@ -133,14 +132,14 @@ const make = (
         const canvasId = required(input.canvasId, "Canvas ID")
         const activityId = required(input.activityId, "Activity ID")
         const harness = required(input.harness, "Harness name")
-        const reference = input.reference === undefined
+        const reference = input.reference === null
           ? null
           : {
               kind: required(input.reference.kind, "Reference kind"),
               id: required(input.reference.id, "Reference ID"),
-              ...(input.reference.uri === undefined
-                ? {}
-                : { uri: input.reference.uri })
+              uri: input.reference.uri === null
+                ? null
+                : required(input.reference.uri, "Reference URI")
             }
         if (reference !== null) {
           Schema.decodeUnknownSync(AgentActivityReference)(reference)
@@ -152,8 +151,8 @@ const make = (
           canvasId,
           activityId,
           harness,
-          model: optional(input.model),
-          detail: optional(input.detail),
+          model: nullableText(input.model),
+          detail: nullableText(input.detail),
           reference,
           createdAt: existing?.createdAt ?? updatedAt.toISOString(),
           updatedAt: updatedAt.toISOString(),
@@ -164,7 +163,12 @@ const make = (
         await write(activity)
         return activity
       },
-      catch: (cause) => failure("signal", input.canvasId, cause, input.activityId)
+      catch: (cause) =>
+        new AgentActivitySignalFailed({
+          canvasId: input.canvasId,
+          activityId: input.activityId,
+          detail: failureDetail(cause)
+        })
     })
 
   return {
@@ -173,7 +177,12 @@ const make = (
     clear: (canvasId, activityId) =>
       Effect.tryPromise({
         try: () => removeFile(canvasId, activityId),
-        catch: (cause) => failure("clear", canvasId, cause, activityId)
+        catch: (cause) =>
+          new AgentActivityClearFailed({
+            canvasId,
+            activityId,
+            detail: failureDetail(cause)
+          })
       })
   }
 }

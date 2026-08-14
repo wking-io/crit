@@ -1,6 +1,5 @@
 import { readFile } from "node:fs/promises"
 import { createServer as createHttpServer } from "node:http"
-import type { AddressInfo } from "node:net"
 import path from "node:path"
 
 import { describe, expect, it } from "vitest"
@@ -11,9 +10,10 @@ import { CanvasCommandSchema } from "../../src/core/index.js"
 import { CritManifest } from "../../src/discovery/index.js"
 import { isOrbFrameSource } from "../../playground/vite.config.js"
 import { migrateLegacyPlaygroundCanvas } from "../../playground/migrate-state.mjs"
+import { serverPort } from "../support/server-address.js"
 
 const readJson = async (file: string) =>
-  JSON.parse(await readFile(path.resolve(file), "utf8")) as unknown
+  JSON.parse(await readFile(path.resolve(file), "utf8"))
 
 describe("Crit feature lab", () => {
   it("preserves legacy playground state while adding required identities", () => {
@@ -24,22 +24,34 @@ describe("Crit feature lab", () => {
       id: "feature-lab",
       owner: null,
       notes: [
-        { id: "legacy", text: "Keep me" },
+        { id: "legacy", text: "Keep me", extension: { retained: true } },
         { id: "authored", text: "Keep my Author", author: { id: "git:other", name: "Other" } }
       ],
-      revision: 42
+      revision: 42,
+      extension: { retained: true }
     }
 
     expect(migrateLegacyPlaygroundCanvas(legacy, author)).toEqual({
       ...legacy,
       owner: author,
       notes: [
-        { id: "legacy", text: "Keep me", author },
+        {
+          id: "legacy",
+          text: "Keep me",
+          extension: { retained: true },
+          author
+        },
         legacy.notes[1]
       ]
     })
     const current = { ...legacy, owner: author }
     expect(migrateLegacyPlaygroundCanvas(current, author)).toBe(current)
+    expect(() => migrateLegacyPlaygroundCanvas({
+      format: "crit-canvas",
+      version: 1,
+      owner: null,
+      notes: "invalid"
+    }, author)).toThrow(/Expected array/)
   })
 
   it("reloads inline orb frames for first-party frame dependencies", () => {
@@ -56,7 +68,7 @@ describe("Crit feature lab", () => {
     const http = createHttpServer(vite.middlewares)
     try {
       await new Promise<void>((resolve, reject) => { http.once("error", reject); http.listen(0, "127.0.0.1", resolve) })
-      const response = await fetch(`http://127.0.0.1:${(http.address() as AddressInfo).port}/synth?variant=B&preview=1`, { headers: { Connection: "close" } })
+      const response = await fetch(`http://127.0.0.1:${serverPort(http)}/synth?variant=B&preview=1`, { headers: { Connection: "close" } })
       const html = await response.text()
       expect(response.status).toBe(200)
       expect(response.headers.get("x-amp-review-widget")).toBe("off")
@@ -88,7 +100,7 @@ describe("Crit feature lab", () => {
         http.once("error", reject)
         http.listen(0, "127.0.0.1", resolve)
       })
-      const port = (http.address() as AddressInfo).port
+      const port = serverPort(http)
       const origin = `http://127.0.0.1:${port}`
       const [home, ui, mainSource, uiSource, uiStyles, baseTokens, frameCardSource] = await Promise.all([
         fetch(origin, {
@@ -195,10 +207,13 @@ describe("Crit feature lab", () => {
   })
 
   it("uses the real manifest and semantic command schemas", async () => {
-    const packageJson = await readJson("package.json") as {
-      readonly scripts?: Record<string, string>
-      readonly portless?: { readonly name?: string; readonly script?: string }
-    }
+    const packageJson = Schema.decodeUnknownSync(Schema.Struct({
+      scripts: Schema.optionalKey(Schema.Record(Schema.String, Schema.String)),
+      portless: Schema.optionalKey(Schema.Struct({
+        name: Schema.optionalKey(Schema.String),
+        script: Schema.optionalKey(Schema.String)
+      }))
+    }))(await readJson("package.json"))
     const manifest = await Effect.runPromise(
       CritManifest.decode(
         await readJson("playground/crit.manifest.json"),

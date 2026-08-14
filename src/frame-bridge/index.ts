@@ -1,7 +1,9 @@
+import { Option, Schema } from "effect"
+
 import {
   createFrameInputRelay,
+  FrameInputIntent,
   offsetFrameInputIntent,
-  type FrameInputIntent
 } from "./input-relay.js"
 
 export {
@@ -22,57 +24,14 @@ export {
 
 export const CRIT_FRAME_INPUT_SOURCE = "@riff-refine/crit/frame-input"
 
-export type CritFrameInputMessage = FrameInputIntent & {
-  readonly source: typeof CRIT_FRAME_INPUT_SOURCE
-}
+const CritFrameInputMessage = Schema.Struct({
+  source: Schema.Literal(CRIT_FRAME_INPUT_SOURCE),
+  intent: FrameInputIntent
+})
 
-const finiteNumber = (value: unknown): value is number =>
-  typeof value === "number" && Number.isFinite(value)
-
-export const isCritFrameInputMessage = (
-  value: unknown
-): value is CritFrameInputMessage => {
-  if (
-    typeof value !== "object" ||
-    value === null ||
-    !("source" in value) ||
-    value.source !== CRIT_FRAME_INPUT_SOURCE ||
-    !("type" in value)
-  ) return false
-  if (value.type === "select") {
-    return "additive" in value && typeof value.additive === "boolean"
-  }
-  if (value.type === "delete") return true
-  if (value.type === "tool") {
-    return "tool" in value && (value.tool === "select" || value.tool === "pan")
-  }
-  if (value.type === "zoom-step") {
-    return "direction" in value &&
-      (value.direction === -1 || value.direction === 1)
-  }
-  if (value.type === "pinch") {
-    return "clientX" in value && finiteNumber(value.clientX) &&
-      "clientY" in value && finiteNumber(value.clientY) &&
-      "deltaX" in value && finiteNumber(value.deltaX) &&
-      "deltaY" in value && finiteNumber(value.deltaY) &&
-      "scaleFactor" in value && finiteNumber(value.scaleFactor) &&
-      value.scaleFactor > 0
-  }
-  return value.type === "wheel" &&
-    "clientX" in value && finiteNumber(value.clientX) &&
-    "clientY" in value && finiteNumber(value.clientY) &&
-    "deltaX" in value && finiteNumber(value.deltaX) &&
-    "deltaY" in value && finiteNumber(value.deltaY) &&
-    "ctrlKey" in value && typeof value.ctrlKey === "boolean" &&
-    "metaKey" in value && typeof value.metaKey === "boolean"
-}
-
-export const frameInputIntentFromMessage = (
-  message: CritFrameInputMessage
-): FrameInputIntent => {
-  const { source: _source, ...intent } = message
-  return intent as FrameInputIntent
-}
+const decodeCritFrameInputMessage = Schema.decodeUnknownOption(
+  CritFrameInputMessage
+)
 
 export const connectBridgedFrameInput = (input: {
   readonly target: Window
@@ -80,13 +39,12 @@ export const connectBridgedFrameInput = (input: {
   readonly onIntent: (intent: FrameInputIntent) => void
 }) => {
   const relayMessage = (event: MessageEvent) => {
-    if (
-      event.source !== input.frameElement.contentWindow ||
-      !isCritFrameInputMessage(event.data)
-    ) return
+    if (event.source !== input.frameElement.contentWindow) return
+    const decoded = decodeCritFrameInputMessage(event.data)
+    if (Option.isNone(decoded)) return
     input.onIntent(
       offsetFrameInputIntent(
-        frameInputIntentFromMessage(event.data),
+        decoded.value.intent,
         input.frameElement.getBoundingClientRect()
       )
     )
@@ -100,10 +58,11 @@ export const critFrameInputBridgeScript = String.raw`
   if (window.parent === window) return
   const source = "${CRIT_FRAME_INPUT_SOURCE}"
   const relay = (${createFrameInputRelay.toString()})()
-  const send = (message) => window.parent.postMessage({ source, ...message }, "*")
+  const send = (intent) => window.parent.postMessage({ source, intent }, "*")
+  const isSelectorTarget = (target) => target !== null && "matches" in target
   window.addEventListener("keydown", (event) => {
     const target = event.target
-    const input = target instanceof HTMLElement && (
+    const input = isSelectorTarget(target) && (
       target.isContentEditable ||
       target.matches('input:not([type="button"]):not([type="submit"]):not([type="reset"]), textarea, select')
     )
@@ -133,16 +92,16 @@ export const critFrameInputBridgeScript = String.raw`
     event.preventDefault()
     event.stopImmediatePropagation()
     relay.gestureStart(event.scale, {
-      x: typeof event.clientX === "number" ? event.clientX : window.innerWidth / 2,
-      y: typeof event.clientY === "number" ? event.clientY : window.innerHeight / 2
+      x: Number.isFinite(event.clientX) ? event.clientX : window.innerWidth / 2,
+      y: Number.isFinite(event.clientY) ? event.clientY : window.innerHeight / 2
     })
   }
   const changeGesture = (event) => {
     event.preventDefault()
     event.stopImmediatePropagation()
     send(relay.gestureChange(event.scale, {
-      x: typeof event.clientX === "number" ? event.clientX : window.innerWidth / 2,
-      y: typeof event.clientY === "number" ? event.clientY : window.innerHeight / 2
+      x: Number.isFinite(event.clientX) ? event.clientX : window.innerWidth / 2,
+      y: Number.isFinite(event.clientY) ? event.clientY : window.innerHeight / 2
     }))
   }
   const endGesture = (event) => {

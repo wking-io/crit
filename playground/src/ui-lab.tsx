@@ -2,6 +2,7 @@ import {
   DialRoot,
   useDialKit,
   type DialConfig,
+  type ResolvedValues,
   type SelectConfig
 } from "dialkit"
 import { Effect } from "effect"
@@ -10,7 +11,6 @@ import {
   useMemo,
   useRef,
   useState,
-  type CSSProperties,
   type ReactNode
 } from "react"
 
@@ -24,6 +24,7 @@ import type {
 import { CritContextMenu, type ContextMenuItem } from "../../src/react/canvas-context-menu.js"
 import { CanvasActionRunnerProvider } from "../../src/react/canvas-action-runner.js"
 import { CanvasControls } from "../../src/react/canvas-controls.js"
+import { cssVariableStyle } from "../../src/react/css-variable-style.js"
 import { CanvasPresenceIndicator, CanvasSaveIndicator, CritBoundaryMessage } from "../../src/react/canvas-feedback.js"
 import { actionHelpDetails, CanvasHelpPanel } from "../../src/react/canvas-help.js"
 import { CanvasCommentPin } from "../../src/react/canvas-comment-pin.js"
@@ -40,7 +41,11 @@ import "dialkit/styles.css"
 import "./base-tokens.css"
 import "./ui-lab.css"
 
-type TokenStep = "s1" | "s2" | "c1" | "c2" | "c3" | "p1" | "p2" | "t1" | "t2"
+const TOKEN_STEPS = [
+  "s1", "s2", "c1", "c2", "c3", "p1", "p2", "t1", "t2"
+] as const
+
+type TokenStep = (typeof TOKEN_STEPS)[number]
 type PaletteName = "neutral" | "orange" | "blue" | "green" | "purple" | "red"
 type ChromaticPalette = Exclude<PaletteName, "neutral">
 type TokenName =
@@ -55,17 +60,14 @@ type TokenName =
   | "--crit-color-t2"
   | `--crit-color-${Exclude<PaletteName, "neutral">}-${TokenStep}`
 
-type LabStyle = CSSProperties & Record<`--${string}`, string | number>
-type TokenValues = Readonly<Record<TokenName, string>>
+type TokenValues = ReadonlyMap<TokenName, string>
 
-const TOKEN_STEPS: ReadonlyArray<TokenStep> = [
-  "s1", "s2", "c1", "c2", "c3", "p1", "p2", "t1", "t2"
-]
-
-const COLUMN_DEFAULTS: Record<TokenStep, {
+type ColorColumnDefault = {
   readonly lightness: number
   readonly chroma: number
-}> = {
+}
+
+const COLUMN_DEFAULTS = {
   s1: { lightness: 99, chroma: 0.003 },
   s2: { lightness: 97.5, chroma: 0.009 },
   c1: { lightness: 95.25, chroma: 0.024 },
@@ -75,15 +77,15 @@ const COLUMN_DEFAULTS: Record<TokenStep, {
   p2: { lightness: 65, chroma: 0.2 },
   t1: { lightness: 52, chroma: 0.2 },
   t2: { lightness: 28, chroma: 0.1 }
-}
+} as const satisfies Readonly<Record<TokenStep, ColorColumnDefault>>
 
-const HUE_DEFAULTS: Record<ChromaticPalette, number> = {
+const HUE_DEFAULTS = {
   red: 9,
   orange: 55,
   blue: 245.3,
   green: 156.3,
   purple: 302
-}
+} as const satisfies Readonly<Record<ChromaticPalette, number>>
 
 const slider = (
   value: number,
@@ -92,10 +94,10 @@ const slider = (
   step: number
 ): [number, number, number, number] => [value, min, max, step]
 
-const tokenName = (palette: PaletteName, step: TokenStep): TokenName =>
-  (palette === "neutral"
-    ? `--crit-color-${step}`
-    : `--crit-color-${palette}-${step}`) as TokenName
+const tokenName = (palette: PaletteName, step: TokenStep): TokenName => {
+  if (palette === "neutral") return `--crit-color-${step}`
+  return `--crit-color-${palette}-${step}`
+}
 
 const BASE_PALETTES: ReadonlyArray<{
   readonly id: PaletteName
@@ -126,6 +128,10 @@ const TOKEN_OPTIONS = BASE_TOKENS.map(({ name, palette, shortName }) => ({
   label: `${palette} · ${shortName}`
 }))
 
+const TOKEN_NAMES = new Set<string>(BASE_TOKENS.map(({ name }) => name))
+const isTokenName = (value: string): value is TokenName =>
+  TOKEN_NAMES.has(value)
+
 const tokenSelect = (defaultValue: TokenName): SelectConfig => ({
   type: "select",
   options: TOKEN_OPTIONS,
@@ -142,15 +148,19 @@ const BASE_SCALE_CONFIG = {
     green: slider(HUE_DEFAULTS.green, 0, 360, 0.1),
     purple: slider(HUE_DEFAULTS.purple, 0, 360, 0.1)
   },
-  ...Object.fromEntries(TOKEN_STEPS.map((step) => [step, {
+  s1: {
     _collapsed: true,
-    lightness: slider(COLUMN_DEFAULTS[step].lightness, 0, 100, 0.25),
-    chroma: slider(COLUMN_DEFAULTS[step].chroma, 0, 0.3, 0.001)
-  }])) as Record<TokenStep, {
-    readonly _collapsed: boolean
-    readonly lightness: [number, number, number, number]
-    readonly chroma: [number, number, number, number]
-  }>
+    lightness: slider(COLUMN_DEFAULTS.s1.lightness, 0, 100, 0.25),
+    chroma: slider(COLUMN_DEFAULTS.s1.chroma, 0, 0.3, 0.001)
+  },
+  s2: { _collapsed: true, lightness: slider(COLUMN_DEFAULTS.s2.lightness, 0, 100, 0.25), chroma: slider(COLUMN_DEFAULTS.s2.chroma, 0, 0.3, 0.001) },
+  c1: { _collapsed: true, lightness: slider(COLUMN_DEFAULTS.c1.lightness, 0, 100, 0.25), chroma: slider(COLUMN_DEFAULTS.c1.chroma, 0, 0.3, 0.001) },
+  c2: { _collapsed: true, lightness: slider(COLUMN_DEFAULTS.c2.lightness, 0, 100, 0.25), chroma: slider(COLUMN_DEFAULTS.c2.chroma, 0, 0.3, 0.001) },
+  c3: { _collapsed: true, lightness: slider(COLUMN_DEFAULTS.c3.lightness, 0, 100, 0.25), chroma: slider(COLUMN_DEFAULTS.c3.chroma, 0, 0.3, 0.001) },
+  p1: { _collapsed: true, lightness: slider(COLUMN_DEFAULTS.p1.lightness, 0, 100, 0.25), chroma: slider(COLUMN_DEFAULTS.p1.chroma, 0, 0.3, 0.001) },
+  p2: { _collapsed: true, lightness: slider(COLUMN_DEFAULTS.p2.lightness, 0, 100, 0.25), chroma: slider(COLUMN_DEFAULTS.p2.chroma, 0, 0.3, 0.001) },
+  t1: { _collapsed: true, lightness: slider(COLUMN_DEFAULTS.t1.lightness, 0, 100, 0.25), chroma: slider(COLUMN_DEFAULTS.t1.chroma, 0, 0.3, 0.001) },
+  t2: { _collapsed: true, lightness: slider(COLUMN_DEFAULTS.t2.lightness, 0, 100, 0.25), chroma: slider(COLUMN_DEFAULTS.t2.chroma, 0, 0.3, 0.001) }
 }
 
 // One base-scale assignment study, switchable live through DialKit at /ui.
@@ -265,26 +275,107 @@ type Assignment = {
   readonly variable: `--ui-${string}`
 }
 
-const kebabCase = (value: string) =>
-  value.replace(/([a-z0-9])([A-Z])/g, "$1-$2").toLowerCase()
+type RecipeValues = ResolvedValues<typeof RECIPE_CONFIG>
 
-const assignmentVariable = (path: ReadonlyArray<string>): `--ui-${string}` =>
-  `--ui-${path.map(kebabCase).join("-")}`
+const RECIPE_SELECTOR_COUNT =
+  JSON.stringify(RECIPE_CONFIG).match(/"type":"select"/g)?.length ?? 0
 
-const flattenAssignments = (
-  value: unknown,
-  path: ReadonlyArray<string> = []
-): ReadonlyArray<Assignment> => {
-  if (typeof value === "string" && value.startsWith("--crit-color-")) {
-    return [{
-      token: value as TokenName,
-      variable: assignmentVariable(path)
-    }]
+const assignment = (
+  variable: Assignment["variable"],
+  value: string
+): Assignment => {
+  if (!isTokenName(value)) {
+    throw new TypeError(`Unknown UI lab token assignment ${value}`)
   }
-  if (typeof value !== "object" || value === null) return []
-  return Object.entries(value).flatMap(([key, child]) =>
-    key === "_collapsed" ? [] : flattenAssignments(child, [...path, key])
-  )
+  return { token: value, variable }
+}
+
+const explicitAssignmentsFor = (
+  values: RecipeValues
+): ReadonlyArray<Assignment> => [
+  assignment("--ui-page-section-border", values.page.sectionBorder),
+  assignment("--ui-page-text", values.page.text),
+  assignment("--ui-page-muted-text", values.page.mutedText),
+  assignment("--ui-toolbar-surface", values.toolbar.surface),
+  assignment("--ui-toolbar-border", values.toolbar.border),
+  assignment("--ui-toolbar-text", values.toolbar.text),
+  assignment("--ui-toolbar-divider", values.toolbar.divider),
+  assignment("--ui-toolbar-button-background", values.toolbar.button.background),
+  assignment("--ui-toolbar-button-hover-background", values.toolbar.button.hoverBackground),
+  assignment("--ui-toolbar-button-pressed-background", values.toolbar.button.pressedBackground),
+  assignment("--ui-toolbar-button-foreground", values.toolbar.button.foreground),
+  assignment("--ui-toolbar-button-disabled-foreground", values.toolbar.button.disabledForeground),
+  assignment("--ui-toolbar-button-focus-ring", values.toolbar.button.focusRing),
+  assignment("--ui-status-menu-surface", values.statusMenu.surface),
+  assignment("--ui-status-menu-border", values.statusMenu.border),
+  assignment("--ui-status-menu-text", values.statusMenu.text),
+  assignment("--ui-status-menu-hover-surface", values.statusMenu.hoverSurface),
+  assignment("--ui-status-menu-selected-border", values.statusMenu.selectedBorder),
+  assignment("--ui-status-menu-disabled-text", values.statusMenu.disabledText),
+  assignment("--ui-help-surface", values.help.surface),
+  assignment("--ui-help-border", values.help.border),
+  assignment("--ui-help-title", values.help.title),
+  assignment("--ui-help-description", values.help.description),
+  assignment("--ui-help-shortcut-surface", values.help.shortcutSurface),
+  assignment("--ui-help-shortcut-text", values.help.shortcutText),
+  assignment("--ui-help-shortcut-border", values.help.shortcutBorder),
+  assignment("--ui-presence-surface", values.presence.surface),
+  assignment("--ui-presence-text", values.presence.text),
+  assignment("--ui-presence-dot", values.presence.dot),
+  assignment("--ui-presence-save-surface", values.presence.saveSurface),
+  assignment("--ui-presence-save-text", values.presence.saveText),
+  assignment("--ui-presence-conflict-surface", values.presence.conflictSurface),
+  assignment("--ui-presence-conflict-text", values.presence.conflictText),
+  assignment("--ui-menu-surface", values.menu.surface),
+  assignment("--ui-menu-border", values.menu.border),
+  assignment("--ui-menu-text", values.menu.text),
+  assignment("--ui-menu-detail-text", values.menu.detailText),
+  assignment("--ui-menu-hover-surface", values.menu.hoverSurface),
+  assignment("--ui-menu-focus-ring", values.menu.focusRing),
+  assignment("--ui-menu-danger-text", values.menu.dangerText),
+  assignment("--ui-dialog-backdrop", values.dialog.backdrop),
+  assignment("--ui-dialog-surface", values.dialog.surface),
+  assignment("--ui-dialog-border", values.dialog.border),
+  assignment("--ui-dialog-text", values.dialog.text),
+  assignment("--ui-dialog-muted-text", values.dialog.mutedText),
+  assignment("--ui-dialog-input-surface", values.dialog.inputSurface),
+  assignment("--ui-dialog-input-border", values.dialog.inputBorder),
+  assignment("--ui-dialog-focus-ring", values.dialog.focusRing),
+  assignment("--ui-dialog-button-surface", values.dialog.buttonSurface),
+  assignment("--ui-dialog-button-hover-surface", values.dialog.buttonHoverSurface),
+  assignment("--ui-dialog-primary-surface", values.dialog.primarySurface),
+  assignment("--ui-dialog-primary-text", values.dialog.primaryText),
+  assignment("--ui-dialog-disabled-surface", values.dialog.disabledSurface),
+  assignment("--ui-dialog-disabled-text", values.dialog.disabledText),
+  assignment("--ui-comment-pin-surface", values.comment.pinSurface),
+  assignment("--ui-comment-pin-border", values.comment.pinBorder),
+  assignment("--ui-comment-surface", values.comment.surface),
+  assignment("--ui-comment-border", values.comment.border),
+  assignment("--ui-comment-text", values.comment.text),
+  assignment("--ui-comment-muted-text", values.comment.mutedText),
+  assignment("--ui-comment-separator", values.comment.separator),
+  assignment("--ui-comment-input-surface", values.comment.inputSurface),
+  assignment("--ui-comment-input-border", values.comment.inputBorder),
+  assignment("--ui-comment-action-surface", values.comment.actionSurface),
+  assignment("--ui-comment-action-text", values.comment.actionText),
+  assignment("--ui-comment-hover-surface", values.comment.hoverSurface),
+  assignment("--ui-comment-disabled-text", values.comment.disabledText),
+  assignment("--ui-message-surface", values.message.surface),
+  assignment("--ui-message-text", values.message.text),
+  assignment("--ui-message-error-surface", values.message.errorSurface),
+  assignment("--ui-message-error-text", values.message.errorText),
+  assignment("--ui-message-empty-surface", values.message.emptySurface),
+  assignment("--ui-message-empty-border", values.message.emptyBorder)
+]
+
+const assignmentsFor = (values: RecipeValues): ReadonlyArray<Assignment> => {
+  const assignments = explicitAssignmentsFor(values)
+  if (assignments.length !== RECIPE_SELECTOR_COUNT) {
+    throw new TypeError(
+      "Every Crit UI color selector requires one explicit CSS assignment"
+    )
+  }
+  return assignments
 }
 
 function SpecimenSection({
@@ -405,18 +496,21 @@ function ColorScale({ values }: { readonly values: TokenValues }) {
             <span className="ui-palette-row__label">{palette.label}</span>
             <ol aria-label={`${palette.label} base color tokens`} className="ui-scale">
               {BASE_TOKENS.filter((token) => token.palette === palette.id).map((token, index) => {
-                const oklch = values[token.name]
+                const oklch = values.get(token.name)
+                if (oklch === undefined) {
+                  throw new TypeError(`Missing UI lab token ${token.name}`)
+                }
                 const displayedColor = shiftHeld ? oklchToHex(oklch) : oklch
                 const tooltipId = `ui-color-${palette.id}-${token.shortName}`
                 return <li
                   className="ui-scale__token"
                   key={token.name}
-                  style={{
+                  style={cssVariableStyle({
                     "--ui-scale-color": `var(${token.name})`,
                     "--ui-scale-ink": index < 5
                       ? "var(--crit-color-t2)"
                       : "var(--crit-color-s1)"
-                  } as LabStyle}
+                  })}
                 >
                   <button
                     aria-describedby={tooltipId}
@@ -520,8 +614,7 @@ function FrameSpecimen({
       data-state={state}
       data-status-menu={defaultStatusMenuOpen || undefined}
       style={{
-        width: defaultStatusMenuOpen ? width + 214 : width + 24,
-        ...(defaultStatusMenuOpen ? { minHeight: 420 } : {})
+        width: defaultStatusMenuOpen ? width + 214 : width + 24
       }}
     >
       <FrameCard
@@ -706,19 +799,23 @@ const LAB_CONTROLS = CanvasControls.resolve({
   pendingActions: []
 })
 const LAB_FRAME_TARGET = { kind: "frame" as const, id: "lab", label: "Checkout candidate" }
+const LAB_FRAME_PRESETS = [
+  { preset: "mobile", detail: "402 × 874" },
+  { preset: "tablet", detail: "832 × 1194" },
+  { preset: "laptop", detail: "1280 × 832" },
+  { preset: "desktop", detail: "1512 × 982" },
+  { preset: "widescreen", detail: "2560 × 1440" }
+] satisfies ReadonlyArray<{
+  readonly preset: "mobile" | "tablet" | "laptop" | "desktop" | "widescreen"
+  readonly detail: string
+}>
 const FRAME_MENU_ITEMS: ReadonlyArray<ContextMenuItem> = [
   { action: LAB_CONTROLS.action({ id: "open-frame-new-tab", target: LAB_FRAME_TARGET }), href: "about:blank", detail: <Glyph name="externalArrow" /> },
   { action: LAB_CONTROLS.action({ id: "fit-frame-content", target: LAB_FRAME_TARGET }), execute: Effect.void, detail: "F" },
   {
     action: LAB_CONTROLS.action({ id: "open-frame-size-menu", target: LAB_FRAME_TARGET }),
-    items: [
-      ["mobile", "402 × 874"],
-      ["tablet", "832 × 1194"],
-      ["laptop", "1280 × 832"],
-      ["desktop", "1512 × 982"],
-      ["widescreen", "2560 × 1440"]
-    ].map(([preset, detail]) => ({
-      action: LAB_CONTROLS.action({ id: "resize-frame-to-preset", target: LAB_FRAME_TARGET, preset: preset as "mobile" | "tablet" | "laptop" | "desktop" | "widescreen" }),
+    items: LAB_FRAME_PRESETS.map(({ preset, detail }) => ({
+      action: LAB_CONTROLS.action({ id: "resize-frame-to-preset", target: LAB_FRAME_TARGET, preset }),
       execute: Effect.void,
       detail
     }))
@@ -858,28 +955,28 @@ export default function UiLab() {
   const recipes = useDialKit("Crit UI color assignments", RECIPE_CONFIG, {
     id: "crit-ui-color-assignments"
   })
-  const assignments = useMemo(() => flattenAssignments(recipes), [recipes])
-  const tokenValues = useMemo(() => Object.fromEntries(
-    BASE_TOKENS.map((token) => {
+  const assignments = useMemo(() => assignmentsFor(recipes), [recipes])
+  const tokenValues = useMemo(() => new Map<TokenName, string>(
+    BASE_TOKENS.map((token): readonly [TokenName, string] => {
       const column = recipes.baseScale[token.shortName]
       const chroma = recipes.baseScale.greyscale || token.palette === "neutral"
         ? 0
         : column.chroma
-      const hue = chroma === 0
+      const hue = token.palette === "neutral" || chroma === 0
         ? "none"
-        : recipes.baseScale.hues[token.palette as ChromaticPalette]
+        : recipes.baseScale.hues[token.palette]
       return [
         token.name,
         `oklch(${column.lightness}% ${chroma} ${hue})`
       ]
     })
-  ) as Record<TokenName, string>, [recipes.baseScale])
-  const recipeStyle = useMemo(() => Object.fromEntries(
+  ), [recipes.baseScale])
+  const recipeStyle = useMemo(() => cssVariableStyle(Object.fromEntries(
     [
       ...assignments.map(({ token, variable }) => [variable, `var(${token})`]),
-      ...Object.entries(tokenValues)
+      ...tokenValues
     ]
-  ) as LabStyle, [assignments, tokenValues])
+  )), [assignments, tokenValues])
   return (
     <CanvasActionRunnerProvider>
       <style data-crit-ui-styles="">{critStyles}</style>

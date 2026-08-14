@@ -147,16 +147,16 @@ const distribute = (
   })
 }
 
-type GridShape = {
+type GridLayout = {
   readonly columns: number
   readonly rows: number
   readonly score: number
 }
 
-const gridShape = (
+const selectGridLayout = (
   items: ReadonlyArray<CanvasArrangementItem>,
   bounds: Bounds
-): GridShape => {
+): GridLayout => {
   const averageWidth = items.reduce((sum, item) => sum + item.width, 0) / items.length
   const averageHeight = items.reduce((sum, item) => sum + item.height, 0) / items.length
   const itemAspect = averageWidth / Math.max(averageHeight, Number.EPSILON)
@@ -184,7 +184,7 @@ const arrangeGrid = (
 ): ReadonlyArray<CanvasArrangementMove> => {
   const ordered = spatialOrder(items)
   const bounds = boundsOf(items)
-  const { columns, rows } = gridShape(ordered, bounds)
+  const { columns, rows } = selectGridLayout(ordered, bounds)
   const columnWidths = Array.from({ length: columns }, (_, column) =>
     Math.max(...ordered
       .filter((_, index) => index % columns === column)

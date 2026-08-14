@@ -13,22 +13,37 @@ export {
   type CritClientError
 } from "../runtime/canvas-failure.js"
 
-export interface CritClientShape {
+export class CritClient extends Context.Service<CritClient, {
   readonly currentAuthor: () => Effect.Effect<Author, CritClientError>
   readonly load: (id: string) => Effect.Effect<CanvasDocument, CritClientError>
   readonly apply: (
     id: string,
     commands: ReadonlyArray<CanvasCommand>
   ) => Effect.Effect<CanvasDocument, CritClientError>
-  readonly snapshot?: (
+}>()(
+  "@riff-refine/crit/CritClient"
+) {}
+
+export class CritSnapshotClient extends Context.Service<CritSnapshotClient, {
+  readonly snapshot: (
     canvasId: string,
     frameId: string
   ) => Effect.Effect<CanvasDocument, CritClientError>
-  readonly activities?: (
+}>()(
+  "@riff-refine/crit/CritSnapshotClient"
+) {}
+
+export class CritActivityClient extends Context.Service<CritActivityClient, {
+  readonly activities: (
     canvasId: string
   ) => Effect.Effect<AgentActivityCollection, CritClientError>
-}
-
-export class CritClient extends Context.Service<CritClient, CritClientShape>()(
-  "@riff-refine/crit/CritClient"
+}>()(
+  "@riff-refine/crit/CritActivityClient"
 ) {}
+
+/** Stable service bundle used at non-Effect boundaries such as React. */
+export interface CritClientServices {
+  readonly client: CritClient["Service"]
+  readonly snapshots: CritSnapshotClient["Service"] | null
+  readonly activity: CritActivityClient["Service"] | null
+}

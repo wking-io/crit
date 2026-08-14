@@ -32,7 +32,10 @@ import {
 import { CanvasCommentPin } from "../../src/react/canvas-comment-pin.js"
 import { critStyles } from "../../src/react/crit-styles.js"
 import { CanvasSelection } from "../../src/react/canvas-selection.js"
-import { FRAME_STATUSES } from "../../src/react/frame-chrome.js"
+import {
+  FRAME_STATUSES,
+  measureStatusPillWidth
+} from "../../src/react/frame-chrome.js"
 import { CanvasToolbar } from "../../src/react/canvas-toolbar.js"
 import { CanvasActionRunnerProvider } from "../../src/react/canvas-action-runner.js"
 import { CanvasControls } from "../../src/react/canvas-controls.js"
@@ -54,10 +57,10 @@ const cssRule = (selector: string) => {
 describe("Crit", () => {
   it("creates a session ID when randomUUID is unavailable on an HTTP origin", () => {
     const sessionId = sessionIdForCanvas("mobile", {
-      storage: undefined,
-      randomUUID: undefined,
       now: () => 123,
-      random: () => 0.5
+      randomUUID: () => undefined,
+      random: () => 0.5,
+      sessionStorage: () => undefined
     })
 
     expect(sessionId).toMatch(/^session-123-/)
@@ -246,6 +249,11 @@ describe("Crit", () => {
     expect(cssRule(".crit-selection__handle[data-visible-handle]")).toContain(
       "height: calc(var(--selection-handle-size) * var(--selection-ui) * 1px)"
     )
+  })
+
+  it("measures status pills with the same deterministic heuristic everywhere", () => {
+    expect(measureStatusPillWidth("Approved")).toBe(92)
+    expect(measureStatusPillWidth("Ready for review")).toBe(144)
   })
 
   it("keeps iframe viewport geometry independent from the Canvas shell zoom", () => {

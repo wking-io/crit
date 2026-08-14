@@ -1,5 +1,7 @@
 import { Effect, Schema } from "effect"
 
+import { defaultRuntimeCapabilities } from "../runtime/runtime-capabilities.js"
+
 const actionIds = [
   "select-tool",
   "hand-tool",
@@ -398,20 +400,30 @@ export const CanvasControlState = Schema.Struct({
 })
 export type CanvasControlState = typeof CanvasControlState.Type
 
-export const ResolvedCanvasAction = Schema.Struct({
+const resolvedCanvasActionFields = {
   key: Schema.String,
   id: CanvasActionId,
-  target: Schema.optionalKey(CanvasActionTarget),
+  target: Schema.NullOr(CanvasActionTarget),
   label: Schema.String,
   description: Schema.String,
   consequence: CanvasActionConsequence,
-  availability: CanvasActionAvailability,
-  reason: Schema.optionalKey(CanvasActionUnavailableReason),
-  availabilityMessage: Schema.optionalKey(Schema.String),
-  shortcut: Schema.optionalKey(Schema.String),
-  ariaKeyShortcuts: Schema.optionalKey(Schema.String),
+  shortcut: Schema.NullOr(Schema.String),
+  ariaKeyShortcuts: Schema.NullOr(Schema.String),
   bindings: Schema.Array(CanvasActionBinding)
-})
+}
+
+export const ResolvedCanvasAction = Schema.Union([
+  Schema.Struct({
+    ...resolvedCanvasActionFields,
+    availability: Schema.Literal("enabled")
+  }),
+  Schema.Struct({
+    ...resolvedCanvasActionFields,
+    availability: Schema.Literals(["disabled", "hidden"]),
+    reason: CanvasActionUnavailableReason,
+    availabilityMessage: Schema.String
+  })
+])
 export type ResolvedCanvasAction = typeof ResolvedCanvasAction.Type
 
 export class CanvasActionUnavailable extends Schema.TaggedError<CanvasActionUnavailable>()(
@@ -420,7 +432,7 @@ export class CanvasActionUnavailable extends Schema.TaggedError<CanvasActionUnav
     actionKey: Schema.String,
     actionId: CanvasActionId,
     availability: Schema.Literals(["disabled", "hidden"]),
-    reason: Schema.optionalKey(CanvasActionUnavailableReason)
+    reason: CanvasActionUnavailableReason
   }
 ) {}
 
@@ -446,12 +458,24 @@ const failedGuard = (
   reason: CanvasActionUnavailableReason,
   message: string,
   state: "disabled" | "hidden" = "disabled"
-): Guard => ({
-  requirement: source === "global"
-    ? { source, fact: "commentAuthorPresent", equals: true }
-    : { source, fact: fact as Exclude<typeof fact, "commentAuthorPresent">, equals: true },
-  onFailure: { state, reason, message }
-})
+): Guard => {
+  if (source === "global") {
+    if (fact !== "commentAuthorPresent") {
+      throw new TypeError(`Global guard cannot use target fact ${fact}`)
+    }
+    return {
+      requirement: { source, fact, equals: true },
+      onFailure: { state, reason, message }
+    }
+  }
+  if (fact === "commentAuthorPresent") {
+    throw new TypeError("Target guard cannot use global fact commentAuthorPresent")
+  }
+  return {
+    requirement: { source, fact, equals: true },
+    onFailure: { state, reason, message }
+  }
+}
 
 const notPending: Guard = {
   requirement: { source: "execution", fact: "actionPending", equals: false },
@@ -614,11 +638,11 @@ const bindingKey = (binding: CanvasActionBinding) =>
   [...binding.modifiers].sort().join("+") + ":" + binding.key.toLowerCase()
 
 const actionTargetOf = (request: CanvasActionRequest) =>
-  "target" in request ? request.target : undefined
+  "target" in request ? request.target : null
 
 export const canvasActionKey = (request: CanvasActionRequest) => {
   const target = actionTargetOf(request)
-  if (target !== undefined) return `${request.id}:${target.kind}:${target.id}`
+  if (target !== null) return `${request.id}:${target.kind}:${target.id}`
   if ("alignment" in request) return `${request.id}:${request.alignment}`
   if ("axis" in request) return `${request.id}:${request.axis}`
   return request.id
@@ -633,7 +657,7 @@ const factValue = (
   const target = actionTargetOf(request)
   if (
     guard.targetKinds !== undefined &&
-    (target === undefined || !guard.targetKinds.includes(target.kind))
+    (target === null || !guard.targetKinds.includes(target.kind))
   ) return requirement.equals
   if (requirement.source === "global") {
     return state.globalFacts.commentAuthorPresent
@@ -694,12 +718,36 @@ const templateValues = (request: CanvasActionRequest) => {
   }
 }
 
+const emptyTemplateValues: ReturnType<typeof templateValues> = {
+  targetLabel: "",
+  targetKind: "",
+  statusLabel: "",
+  presetLabel: "",
+  presetLabelLower: "",
+  width: "",
+  height: "",
+  alignmentLabel: "",
+  alignmentDescription: "",
+  distributionAxisLabel: "",
+  distributionGapLabel: ""
+}
+
 const interpolate = (
   template: string,
   values: ReturnType<typeof templateValues>
 ) => template.replace(/\{([A-Za-z]+)\}/g, (_, key: string) => {
-  if (!(key in values)) throw new TypeError(`Unknown Canvas action template value: ${key}`)
-  return values[key as keyof typeof values]
+  if (key === "targetLabel") return values.targetLabel
+  if (key === "targetKind") return values.targetKind
+  if (key === "statusLabel") return values.statusLabel
+  if (key === "presetLabel") return values.presetLabel
+  if (key === "presetLabelLower") return values.presetLabelLower
+  if (key === "width") return values.width
+  if (key === "height") return values.height
+  if (key === "alignmentLabel") return values.alignmentLabel
+  if (key === "alignmentDescription") return values.alignmentDescription
+  if (key === "distributionAxisLabel") return values.distributionAxisLabel
+  if (key === "distributionGapLabel") return values.distributionGapLabel
+  throw new TypeError(`Unknown Canvas action template value: ${key}`)
 })
 
 const resolvedPlatform = (platform: CanvasControlPlatform) =>
@@ -743,8 +791,8 @@ const validatePolicies = (policies: ReadonlyArray<CanvasActionPolicy>) => {
   const counts = new Map<CanvasActionId, number>()
   for (const declaration of policies) {
     counts.set(declaration.id, (counts.get(declaration.id) ?? 0) + 1)
-    interpolate(declaration.label, templateValues({ id: declaration.id } as CanvasActionRequest))
-    interpolate(declaration.description, templateValues({ id: declaration.id } as CanvasActionRequest))
+    interpolate(declaration.label, emptyTemplateValues)
+    interpolate(declaration.description, emptyTemplateValues)
   }
   for (const id of actionIds) {
     if (counts.get(id) !== 1) {
@@ -778,14 +826,14 @@ export type CanvasControlsInstance = {
   ) => Effect.Effect<A, E | CanvasActionUnavailable, R>
 }
 
-export const makeCanvasControls = (
-  declarations: unknown = CANVAS_ACTION_POLICIES
-): {
+export type CanvasControlResolver = {
   readonly resolve: (input: CanvasControlState) => CanvasControlsInstance
-} => {
-  const policies = Schema.decodeUnknownSync(Schema.Array(CanvasActionPolicy))(
-    declarations
-  )
+}
+
+export const makeCanvasControls = (
+  declarations: ReadonlyArray<CanvasActionPolicy> = CANVAS_ACTION_POLICIES
+): CanvasControlResolver => {
+  const policies = declarations
   validatePolicies(policies)
   const byId = new Map(policies.map((declaration) => [declaration.id, declaration]))
 
@@ -811,28 +859,34 @@ export const makeCanvasControls = (
           ) ? declaration.bindings : []
           const primaryBinding = bindings.find((binding) => binding.role === "primary")
           const target = actionTargetOf(request)
-          return Schema.decodeUnknownSync(ResolvedCanvasAction)({
+          const commonAction = {
             key: canvasActionKey(request),
             id: request.id,
-            ...(target === undefined ? {} : { target }),
+            target,
             label: interpolate(declaration.label, values),
             description: interpolate(declaration.description, values),
             consequence: declaration.consequence,
-            availability: failed?.onFailure.state ?? "enabled",
-            ...(failed === undefined ? {} : {
-              reason: failed.onFailure.reason,
-              availabilityMessage: failed.onFailure.message
-            }),
-            ...(primaryBinding === undefined ? {} : {
-              shortcut: displayBinding(primaryBinding, state.platform)
-            }),
-            ...(bindings.length === 0 ? {} : {
-              ariaKeyShortcuts: bindings
-                .map((binding) => ariaBinding(binding, state.platform))
-                .join(" ")
-            }),
+            shortcut: primaryBinding === undefined
+              ? null
+              : displayBinding(primaryBinding, state.platform),
+            ariaKeyShortcuts: bindings.length === 0
+              ? null
+              : bindings
+                  .map((binding) => ariaBinding(binding, state.platform))
+                  .join(" "),
             bindings
-          })
+          }
+          return failed === undefined
+            ? Schema.decodeUnknownSync(ResolvedCanvasAction)({
+                ...commonAction,
+                availability: "enabled"
+              })
+            : Schema.decodeUnknownSync(ResolvedCanvasAction)({
+                ...commonAction,
+                availability: failed.onFailure.state,
+                reason: failed.onFailure.reason,
+                availabilityMessage: failed.onFailure.message
+              })
         },
         invoke: (action, effect) => action.availability === "enabled"
           ? effect
@@ -840,7 +894,7 @@ export const makeCanvasControls = (
               actionKey: action.key,
               actionId: action.id,
               availability: action.availability,
-              ...(action.reason === undefined ? {} : { reason: action.reason })
+              reason: action.reason
             }))
       }
     }
@@ -850,7 +904,7 @@ export const makeCanvasControls = (
 export const CanvasControls = makeCanvasControls()
 
 export const canvasControlPlatform = (
-  platform = typeof navigator === "undefined" ? "" : navigator.platform
+  platform = defaultRuntimeCapabilities.platform()
 ): CanvasControlPlatform => /Mac|iPhone|iPad|iPod/i.test(platform)
   ? "macos"
   : /Win/i.test(platform) ? "windows"
@@ -860,14 +914,14 @@ export const tanStackHotkeysForAction = (
   action: ResolvedCanvasAction
 ): ReadonlyArray<{
   readonly key: string
-  readonly mod?: true
-  readonly shift?: true
-  readonly alt?: true
+  readonly mod: boolean
+  readonly shift: boolean
+  readonly alt: boolean
 }> => action.bindings
   .filter((binding) => binding.delivery === "registered")
   .map((binding) => ({
     key: binding.key,
-    ...(binding.modifiers.includes("mod") ? { mod: true as const } : {}),
-    ...(binding.modifiers.includes("shift") ? { shift: true as const } : {}),
-    ...(binding.modifiers.includes("alt") ? { alt: true as const } : {})
+    mod: binding.modifiers.includes("mod"),
+    shift: binding.modifiers.includes("shift"),
+    alt: binding.modifiers.includes("alt")
   }))

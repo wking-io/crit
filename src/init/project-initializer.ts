@@ -45,13 +45,18 @@ export type CritInitOptions = {
   readonly root: string
 }
 
-type PackageJson = {
-  readonly name?: string
-  readonly packageManager?: string
-  dependencies?: Record<string, string>
-  devDependencies?: Record<string, string>
-  peerDependencies?: Record<string, string>
-}
+const PackageJson = Schema.Struct({
+  name: Schema.optionalKey(Schema.String),
+  packageManager: Schema.optionalKey(Schema.String),
+  dependencies: Schema.mutableKey(
+    Schema.optionalKey(Schema.Record(Schema.String, Schema.String))
+  ),
+  devDependencies: Schema.mutableKey(
+    Schema.optionalKey(Schema.Record(Schema.String, Schema.String))
+  ),
+  peerDependencies: Schema.optionalKey(Schema.Record(Schema.String, Schema.String))
+})
+type PackageJson = typeof PackageJson.Type
 
 const failure = (
   operation: string,
@@ -193,7 +198,11 @@ const addPackageDependency = (
     [PACKAGE_NAME]: existing ?? `^${PACKAGE_VERSION}`
   })
   if (packageJson.devDependencies?.[PACKAGE_NAME] !== undefined) {
-    delete packageJson.devDependencies[PACKAGE_NAME]
+    packageJson.devDependencies = Object.fromEntries(
+      Object.entries(packageJson.devDependencies).filter(
+        ([name]) => name !== PACKAGE_NAME
+      )
+    )
   }
   const indentation = original.match(/^(\s+)["}]/m)?.[1] ?? "  "
   return `${JSON.stringify(packageJson, null, indentation)}\n`
@@ -257,7 +266,7 @@ const init = (
       .readFileString(packagePath)
       .pipe(Effect.mapError((cause) => failure("read", packagePath, cause)))
     const packageJson = yield* Effect.try({
-      try: () => JSON.parse(packageSource) as PackageJson,
+      try: () => Schema.decodeUnknownSync(PackageJson)(JSON.parse(packageSource)),
       catch: (cause) => failure("parse", packagePath, cause)
     })
     if (!hasDependency(packageJson, "vite") || !hasDependency(packageJson, "react")) {

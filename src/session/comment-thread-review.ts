@@ -1,3 +1,5 @@
+import { Brand } from "effect"
+
 import {
   CanvasCommand,
   canEditComment,
@@ -11,10 +13,13 @@ import {
   type CommentAnchor
 } from "../core/index.js"
 
-declare const dispatchKeyBrand: unique symbol
-export type CommentThreadReviewDispatchKey = number & {
-  readonly [dispatchKeyBrand]: true
-}
+export type CommentThreadReviewDispatchKey = Brand.Branded<
+  number,
+  "CommentThreadReviewDispatchKey"
+>
+
+const commentThreadReviewDispatchKey =
+  Brand.nominal<CommentThreadReviewDispatchKey>()
 
 export type CommentThreadReviewTarget =
   | {
@@ -291,7 +296,7 @@ export const makeCommentThreadReview = (
       }
       const body = action.body.trim()
       if (body.length === 0) return blocked("empty-comment")
-      const key = nextDispatchKey++ as CommentThreadReviewDispatchKey
+      const key = commentThreadReviewDispatchKey(nextDispatchKey++)
       const state: CommentThreadReviewState = {
         ...currentState,
         pending: { kind: "edit", commentId: action.commentId, key },
@@ -323,7 +328,7 @@ export const makeCommentThreadReview = (
       ) {
         return blocked("comment-forbidden")
       }
-      const key = nextDispatchKey++ as CommentThreadReviewDispatchKey
+      const key = commentThreadReviewDispatchKey(nextDispatchKey++)
       const state: CommentThreadReviewState = {
         ...currentState,
         pending: {
@@ -350,7 +355,7 @@ export const makeCommentThreadReview = (
     const body = action.body.trim()
     if (body.length === 0) return blocked("empty-comment")
 
-    const key = nextDispatchKey++ as CommentThreadReviewDispatchKey
+    const key = commentThreadReviewDispatchKey(nextDispatchKey++)
     const message = {
       id: input.ids.commentId(),
       body,
