@@ -9,6 +9,8 @@ import {
 } from "react"
 import { createPortal } from "react-dom"
 
+import { defaultRuntimeCapabilities } from "../runtime/runtime-capabilities.js"
+
 import {
   useCanvasActionRunner,
   useCanvasControls
@@ -187,7 +189,8 @@ export function CritContextMenu({
     }
   }, [inline, position])
 
-  if (position === null || typeof document === "undefined") return null
+  const document = defaultRuntimeCapabilities.document()
+  if (position === null || document === undefined) return null
   const visibleItems = items.filter((item) => item.action.availability !== "hidden")
   const menuWidth = 208
   const menuHeight = visibleItems.length * 34 + 8

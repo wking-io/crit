@@ -5,6 +5,7 @@ import {
   CANVAS_ACTION_POLICIES,
   CanvasActionUnavailable,
   CanvasControls,
+  canvasControlPlatform,
   makeCanvasControls,
   tanStackHotkeysForAction,
   type CanvasControlPlatform,
@@ -28,6 +29,13 @@ const resolve = (
 })
 
 describe("CanvasControls", () => {
+  it("normalizes raw runtime platform names at the capability boundary", () => {
+    expect(canvasControlPlatform("MacIntel")).toBe("macos")
+    expect(canvasControlPlatform("Win32")).toBe("windows")
+    expect(canvasControlPlatform("Linux x86_64")).toBe("linux")
+    expect(canvasControlPlatform("Plan 9")).toBe("unknown")
+  })
+
   it("resolves one action into consistent help, ARIA, and hotkey projections", () => {
     const action = resolve({ platform: "unknown" }).action({
       id: "remove-item",

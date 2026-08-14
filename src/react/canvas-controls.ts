@@ -1,5 +1,7 @@
 import { Effect, Schema } from "effect"
 
+import { defaultRuntimeCapabilities } from "../runtime/runtime-capabilities.js"
+
 const actionIds = [
   "select-tool",
   "hand-tool",
@@ -902,7 +904,7 @@ export const makeCanvasControls = (
 export const CanvasControls = makeCanvasControls()
 
 export const canvasControlPlatform = (
-  platform = typeof navigator === "undefined" ? "" : navigator.platform
+  platform = defaultRuntimeCapabilities.platform()
 ): CanvasControlPlatform => /Mac|iPhone|iPad|iPod/i.test(platform)
   ? "macos"
   : /Win/i.test(platform) ? "windows"

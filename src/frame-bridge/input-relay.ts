@@ -1,25 +1,38 @@
-export type FrameInputIntent =
-  | { readonly type: "select"; readonly additive: boolean }
-  | { readonly type: "delete" }
-  | { readonly type: "tool"; readonly tool: "select" | "pan" }
-  | { readonly type: "zoom-step"; readonly direction: -1 | 1 }
-  | {
-      readonly type: "wheel"
-      readonly clientX: number
-      readonly clientY: number
-      readonly ctrlKey: boolean
-      readonly metaKey: boolean
-      readonly deltaX: number
-      readonly deltaY: number
-    }
-  | {
-      readonly type: "pinch"
-      readonly clientX: number
-      readonly clientY: number
-      readonly deltaX: number
-      readonly deltaY: number
-      readonly scaleFactor: number
-    }
+import { Predicate, Schema } from "effect"
+
+export const FrameInputIntent = Schema.Union([
+  Schema.Struct({
+    type: Schema.Literal("select"),
+    additive: Schema.Boolean
+  }),
+  Schema.Struct({ type: Schema.Literal("delete") }),
+  Schema.Struct({
+    type: Schema.Literal("tool"),
+    tool: Schema.Literals(["select", "pan"])
+  }),
+  Schema.Struct({
+    type: Schema.Literal("zoom-step"),
+    direction: Schema.Literals([-1, 1])
+  }),
+  Schema.Struct({
+    type: Schema.Literal("wheel"),
+    clientX: Schema.Finite,
+    clientY: Schema.Finite,
+    ctrlKey: Schema.Boolean,
+    metaKey: Schema.Boolean,
+    deltaX: Schema.Finite,
+    deltaY: Schema.Finite
+  }),
+  Schema.Struct({
+    type: Schema.Literal("pinch"),
+    clientX: Schema.Finite,
+    clientY: Schema.Finite,
+    deltaX: Schema.Finite,
+    deltaY: Schema.Finite,
+    scaleFactor: Schema.Finite.check(Schema.isGreaterThan(0))
+  })
+])
+export type FrameInputIntent = typeof FrameInputIntent.Type
 
 export type FrameWheelDecision = {
   readonly handled: boolean
@@ -274,15 +287,24 @@ const usesNativeGestureEvents = (target: Window) => {
   return !ios && "GestureEvent" in target
 }
 
+type SelectorTarget = EventTarget & {
+  readonly isContentEditable?: boolean
+  matches(selectors: string): boolean
+}
+
+const isSelectorTarget = (
+  target: EventTarget | null
+): target is SelectorTarget =>
+  Predicate.hasProperty(target, "matches") &&
+  Predicate.isFunction(target.matches)
+
 const inputTarget = (target: EventTarget | null) => {
-  return target !== null &&
-    "matches" in target &&
-    typeof target.matches === "function" && (
-      ("isContentEditable" in target && target.isContentEditable === true) ||
-      target.matches(
-        'input:not([type="button"]):not([type="submit"]):not([type="reset"]), textarea, select'
-      )
+  return isSelectorTarget(target) && (
+    target.isContentEditable === true ||
+    target.matches(
+      'input:not([type="button"]):not([type="submit"]):not([type="reset"]), textarea, select'
     )
+  )
 }
 
 export const connectCanvasInput = (input: {

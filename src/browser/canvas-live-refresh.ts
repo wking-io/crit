@@ -1,4 +1,4 @@
-import { Effect, Schema } from "effect"
+import { Effect, Option, Schema } from "effect"
 
 import type { CanvasSession } from "../session/canvas-session.js"
 
@@ -65,6 +65,9 @@ const CanvasLiveRefreshPayload = Schema.Struct({
     id: Schema.optionalKey(Schema.String)
   }))
 })
+const decodeCanvasLiveRefreshPayload = Schema.decodeUnknownOption(
+  Schema.fromJsonString(CanvasLiveRefreshPayload)
+)
 
 export const canvasLiveRefreshSocketUrl = (
   endpoint: EnabledCanvasLiveRefreshEndpoint,
@@ -117,15 +120,9 @@ export const connectCanvasLiveRefresh = (
   }
 
   const deliver = (event: { readonly data?: unknown }) => {
-    if (typeof event.data !== "string") return
-    let payload: typeof CanvasLiveRefreshPayload.Type
-    try {
-      payload = Schema.decodeUnknownSync(CanvasLiveRefreshPayload)(
-        JSON.parse(event.data)
-      )
-    } catch {
-      return
-    }
+    const decoded = decodeCanvasLiveRefreshPayload(event.data)
+    if (Option.isNone(decoded)) return
+    const payload = decoded.value
     if (payload.type !== "custom" || payload.data?.id !== options.canvasId) {
       return
     }

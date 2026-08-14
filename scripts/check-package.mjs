@@ -5,6 +5,8 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { promisify } from "node:util"
 
+import { Option, Schema } from "effect"
+
 const execFileAsync = promisify(execFile)
 const root = path.resolve(fileURLToPath(new URL("..", import.meta.url)))
 const temporary = await mkdtemp(path.join(tmpdir(), "crit-package-check-"))
@@ -13,21 +15,36 @@ const npmEnvironment = { ...process.env, npm_config_dry_run: "false" }
 const executable = (name) =>
   path.join(root, "node_modules", ".bin", `${name}${process.platform === "win32" ? ".cmd" : ""}`)
 
+const ExecFileFailure = Schema.Struct({
+  message: Schema.String,
+  stdout: Schema.optionalKey(Schema.String),
+  stderr: Schema.optionalKey(Schema.String)
+})
+
+const NpmPackReport = Schema.Struct({
+  filename: Schema.String,
+  files: Schema.Array(Schema.Struct({ path: Schema.String })),
+  size: Schema.Number
+})
+
+const NpmPackReports = Schema.Array(NpmPackReport)
+
 const run = async (command, args, options = {}) => {
   try {
     return await execFileAsync(command, args, {
+      encoding: "utf8",
       maxBuffer: 20 * 1024 * 1024,
       ...options
     })
   } catch (cause) {
+    const failure = Option.getOrElse(
+      Schema.decodeUnknownOption(ExecFileFailure)(cause),
+      () => ({ message: String(cause) })
+    )
     const detail = [
-      cause instanceof Error ? cause.message : String(cause),
-      typeof cause === "object" && cause !== null && "stdout" in cause
-        ? String(cause.stdout)
-        : "",
-      typeof cause === "object" && cause !== null && "stderr" in cause
-        ? String(cause.stderr)
-        : ""
+      failure.message,
+      failure.stdout ?? "",
+      failure.stderr ?? ""
     ]
       .filter((value) => value.length > 0)
       .join("\n")
@@ -44,26 +61,16 @@ try {
       env: npmEnvironment
     }
   )
-  const reports = JSON.parse(packed.stdout)
-  const report = Array.isArray(reports) ? reports[0] : undefined
-  if (
-    typeof report !== "object" ||
-    report === null ||
-    typeof report.filename !== "string" ||
-    !Array.isArray(report.files)
-  ) {
+  const reports = Schema.decodeUnknownSync(NpmPackReports)(
+    JSON.parse(packed.stdout)
+  )
+  const report = reports[0]
+  if (report === undefined) {
     throw new Error("npm pack did not return a package report")
   }
 
   const packagedFiles = new Set(
-    report.files.flatMap((file) =>
-      typeof file === "object" &&
-      file !== null &&
-      "path" in file &&
-      typeof file.path === "string"
-        ? [file.path]
-        : []
-    )
+    report.files.map((file) => file.path)
   )
   const requiredFiles = [
     "dist/cli.js",

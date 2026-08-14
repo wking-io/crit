@@ -83,7 +83,8 @@ describe("crit Vite plugin", () => {
 
   const start = async (
     options: Parameters<typeof crit>[0] = {},
-    viteRoot = root
+    viteRoot = root,
+    hmr: false | undefined = undefined
   ) => {
     server = await createServer({
       root: viteRoot,
@@ -91,7 +92,9 @@ describe("crit Vite plugin", () => {
       logLevel: "silent",
       plugins: [crit(options)],
       optimizeDeps: { noDiscovery: true, include: [] },
-      server: { middlewareMode: true }
+      server: hmr === false
+        ? { hmr: false, middlewareMode: true }
+        : { middlewareMode: true }
     })
     httpServer = createHttpServer(server.middlewares)
     await new Promise<void>((resolve, reject) => {
@@ -405,8 +408,31 @@ describe("crit Vite plugin", () => {
     socket.close()
 
     expect(endpoint.enabled).toBe(true)
-    expect(typeof endpoint.token).toBe("string")
+    expect(endpoint.token).not.toHaveLength(0)
     expect(payload.data?.id).toBe("homepage")
+  })
+
+  it("disables editor live refresh when Vite HMR is disabled", async () => {
+    await createCanvas("homepage")
+    const origin = await start({}, root, false)
+    const editorPage = await (await fetch(`${origin}/crit/homepage`)).text()
+    const encodedEndpoint = editorPage.match(
+      /data-crit-live-refresh="([^"]*)"/
+    )?.[1]
+    if (encodedEndpoint === undefined) {
+      throw new TypeError("Editor did not include a live refresh endpoint")
+    }
+    const endpoint = Schema.decodeUnknownSync(TestLiveRefreshEndpoint)(
+      JSON.parse(
+        encodedEndpoint
+          .replace(/&quot;/g, '"')
+          .replace(/&lt;/g, "<")
+          .replace(/&gt;/g, ">")
+          .replace(/&amp;/g, "&")
+      )
+    )
+
+    expect(endpoint).toEqual({ enabled: false })
   })
 
   it("requires explicit Canvas creation", async () => {

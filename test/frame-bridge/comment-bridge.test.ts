@@ -33,19 +33,23 @@ describe("Frame Comment bridge", () => {
     bridge.configure({ activeId: "thread-1", enabled: true, color: "rebeccapurple", pins: [] })
     expect(posted).toEqual([{
       source: CRIT_FRAME_COMMENT_SOURCE,
-      type: "configure",
-      activeId: "thread-1",
-      enabled: true,
-      color: "rebeccapurple",
-      pins: []
+      event: {
+        type: "configure",
+        activeId: "thread-1",
+        enabled: true,
+        color: "rebeccapurple",
+        pins: []
+      }
     }])
 
     receive?.({
       source: frameWindow,
       data: {
         source: CRIT_FRAME_COMMENT_SOURCE,
-        type: "open",
-        id: "thread-1"
+        event: {
+          type: "open",
+          id: "thread-1"
+        }
       }
     })
     expect(events).toEqual([{
@@ -55,7 +59,22 @@ describe("Frame Comment bridge", () => {
 
     receive?.({
       source: {},
-      data: { source: CRIT_FRAME_COMMENT_SOURCE, type: "ready" }
+      data: {
+        source: CRIT_FRAME_COMMENT_SOURCE,
+        event: { type: "ready" }
+      }
+    })
+    expect(events).toHaveLength(1)
+
+    receive?.({
+      source: frameWindow,
+      data: {
+        source: CRIT_FRAME_COMMENT_SOURCE,
+        event: {
+          type: "select",
+          anchor: { kind: "element", xRatio: 2, yRatio: 0 }
+        }
+      }
     })
     expect(events).toHaveLength(1)
 
@@ -64,11 +83,18 @@ describe("Frame Comment bridge", () => {
   })
 
   it("acknowledges configure only from the parent to close the ready race", () => {
+    expect(() => new Function(critFrameCommentBridgeScript)).not.toThrow()
     expect(critFrameCommentBridgeScript).toContain(
       "event.source !== window.parent"
+    )
+    expect(critFrameCommentBridgeScript).toContain("const configure = message.event")
+    expect(critFrameCommentBridgeScript).toContain(
+      "pins = normalizePins(configure.pins)"
     )
     expect(critFrameCommentBridgeScript).toContain('send({ type: "ready" })')
     expect(critFrameCommentBridgeScript).toContain("data-crit-comment-dot")
     expect(critFrameCommentBridgeScript).toContain("pin.id === activeId")
+    expect(critFrameCommentBridgeScript).not.toContain("typeof")
+    expect(critFrameCommentBridgeScript).not.toContain("instanceof Element")
   })
 })

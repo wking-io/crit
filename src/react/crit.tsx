@@ -1,6 +1,9 @@
 import {
+  Cause,
   Effect,
   Exit,
+  Option,
+  Schema,
   Scope,
   Stream,
   SubscriptionRef,
@@ -19,6 +22,16 @@ import { IndexedDbDraftJournal } from "../browser/indexeddb-draft-journal.js"
 import type { CanvasDocument } from "../core/index.js"
 import { HttpCritClient } from "../http/client.js"
 import { GIT_AUTHOR_REMEDIATION_PROMPT } from "../runtime/author-identity.js"
+import {
+  critClientErrorMessage,
+  isCurrentAuthorError,
+  type CritClientError
+} from "../runtime/canvas-failure.js"
+import {
+  defaultRuntimeCapabilities,
+  runtimeId,
+  type RuntimeCapabilities
+} from "../runtime/runtime-capabilities.js"
 import {
   CanvasSession,
   DEFAULT_CANVAS_SESSION_AUTOSAVE_DELAY,
@@ -92,58 +105,53 @@ type CritSessionConfig = {
   readonly presenceRefreshInterval: Duration.Input | false
 }
 
-type SessionIdRuntime = {
-  readonly storage: Pick<Storage, "getItem" | "setItem"> | undefined
-  readonly randomUUID: (() => string) | undefined
-  readonly now: () => number
-  readonly random: () => number
-}
+type SessionIdRuntime = Pick<
+  RuntimeCapabilities,
+  "now" | "random" | "randomUUID" | "sessionStorage"
+>
 
-const createSessionId = (runtime?: SessionIdRuntime) => {
-  if (runtime?.randomUUID !== undefined) return runtime.randomUUID()
-  if (
-    runtime === undefined &&
-    typeof globalThis.crypto?.randomUUID === "function"
-  ) {
-    return globalThis.crypto.randomUUID()
+export type CritOpeningFailure =
+  | { readonly kind: "client"; readonly failure: CritClientError }
+  | { readonly kind: "defect"; readonly message: string }
+
+export const critOpeningFailure = (
+  cause: Cause.Cause<CritClientError>
+): CritOpeningFailure => {
+  const defect = cause.reasons.find(Cause.isDieReason)
+  if (defect !== undefined) {
+    const decoded = Schema.decodeUnknownOption(Schema.ErrorInstance())(
+      defect.defect
+    )
+    return {
+      kind: "defect",
+      message: Option.match(decoded, {
+        onNone: () => String(defect.defect),
+        onSome: (failure) => failure.message
+      })
+    }
   }
-  const now = runtime?.now ?? Date.now
-  const random = runtime?.random ?? Math.random
-  return `session-${now()}-${random().toString(36).slice(2)}`
+  const expected = cause.reasons.find(Cause.isFailReason)
+  return expected === undefined
+    ? { kind: "defect", message: Cause.pretty(cause) }
+    : { kind: "client", failure: expected.error }
 }
 
 export const sessionIdForCanvas = (
   canvasId: string,
-  runtime?: SessionIdRuntime
+  runtime: SessionIdRuntime = defaultRuntimeCapabilities
 ) => {
   const key = `@riff-refine/crit/session/${canvasId}`
   try {
-    const storage = runtime === undefined
-      ? globalThis.sessionStorage
-      : runtime.storage
+    const storage = runtime.sessionStorage()
     const existing = storage?.getItem(key)
     if (existing) return existing
-    const created = createSessionId(runtime)
+    const created = runtimeId("session", runtime)
     storage?.setItem(key, created)
     return created
   } catch {
-    return createSessionId(runtime)
+    return runtimeId("session", runtime)
   }
 }
-
-const errorMessage = (cause: unknown) => {
-  if (cause instanceof Error) return cause.message
-  if (typeof cause === "object" && cause !== null && "detail" in cause) {
-    return String(cause.detail)
-  }
-  return String(cause)
-}
-
-const isCurrentAuthorError = (cause: unknown) =>
-  typeof cause === "object" &&
-  cause !== null &&
-  (("operation" in cause && cause.operation === "current-author") ||
-    ("id" in cause && cause.id === "current-author"))
 
 export interface CritProps {
   readonly canvasId: string
@@ -191,7 +199,7 @@ export function Crit({
   const [session, setSession] = useState<CanvasSessionHandle | null>(null)
   const [sessionState, setSessionState] = useState<CanvasSessionState | null>(null)
   const [document, setDocument] = useState<CanvasDocument | null>(null)
-  const [error, setError] = useState<unknown | null>(null)
+  const [error, setError] = useState<CritOpeningFailure | null>(null)
   const onSessionRef = useRef(onSession)
   onSessionRef.current = onSession
   const resolvedSessionId = useMemo(
@@ -242,9 +250,14 @@ export function Crit({
       opening = opening.pipe(Effect.provideService(DraftJournal, resolvedJournal))
     }
 
-    void Effect.runPromise(opening).then(
-      (opened) => {
+    void Effect.runPromise(Effect.exit(opening)).then(
+      (result) => {
         if (cancelled) return
+        if (Exit.isFailure(result)) {
+          setError(critOpeningFailure(result.cause))
+          return
+        }
+        const opened = result.value
         setSession(opened)
         setSessionState(opened.state.value)
         setDocument(opened.document.value)
@@ -266,8 +279,7 @@ export function Crit({
             scope
           )
         )
-      },
-      (cause) => !cancelled && setError(cause)
+      }
     )
 
     return () => {
@@ -309,7 +321,9 @@ export function Crit({
   }, [canvasId, session])
 
   if (error !== null) {
-    const message = errorMessage(error)
+    const message = error.kind === "client"
+      ? critClientErrorMessage(error.failure)
+      : error.message
     return (
       <CritBoundaryMessage
         error
@@ -317,7 +331,7 @@ export function Crit({
         style={style}
       >
         {errorFallback?.(message) ?? (
-          isCurrentAuthorError(error) ? (
+          error.kind === "client" && isCurrentAuthorError(error.failure) ? (
             <GitIdentityBoundary
               detail={message}
               prompt={GIT_AUTHOR_REMEDIATION_PROMPT}
@@ -369,7 +383,10 @@ export function Crit({
               Effect.runFork(
                 session.discardLocalChanges().pipe(
                   Effect.catch((cause) =>
-                    Effect.sync(() => setError(cause))
+                    Effect.sync(() => setError({
+                      kind: "client",
+                      failure: cause
+                    }))
                   )
                 )
               )

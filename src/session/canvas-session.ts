@@ -21,6 +21,8 @@ import { CanvasInternals } from "../core/canvas.js"
 import {
   AgentActivity
 } from "../runtime/agent-activity.js"
+import { critClientErrorMessage } from "../runtime/canvas-failure.js"
+import { runtimeId } from "../runtime/runtime-capabilities.js"
 import {
   CritActivityClient,
   CritClient,
@@ -166,7 +168,7 @@ const open = (
     const currentAuthor = opened.currentAuthor
     const journalOption = yield* Effect.serviceOption(DraftJournal)
     const journal: DraftJournal["Service"] | undefined = Option.getOrUndefined(journalOption)
-    const sessionId = options.sessionId ?? crypto.randomUUID()
+    const sessionId = options.sessionId ?? runtimeId("session")
     let recoveryDraft: CanvasDraft | null = null
     let recoveryStatus: CanvasSessionRecoveryStatus =
       journal === undefined ? "unavailable" : "available"
@@ -377,7 +379,7 @@ const open = (
       })
     )
 
-    const markPresenceUnavailable = (cause: unknown | null) =>
+    const markPresenceUnavailable = (cause: CritClientError | null) =>
       Effect.gen(function*() {
         const current = yield* SubscriptionRef.get(state)
         yield* SubscriptionRef.update(
@@ -397,13 +399,7 @@ const open = (
         ) {
           yield* Effect.logWarning(
             `Canvas Presence is unavailable for ${canvasId}: ${
-              cause instanceof Error
-                ? cause.message
-                : typeof cause === "object" &&
-                    cause !== null &&
-                    "detail" in cause
-                  ? String(cause.detail)
-                  : String(cause)
+              critClientErrorMessage(cause)
             }`
           )
         }

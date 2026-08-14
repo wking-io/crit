@@ -6,7 +6,7 @@ import { Readable } from "node:stream"
 import { fileURLToPath } from "node:url"
 
 import { build } from "esbuild"
-import { Effect, Layer, ManagedRuntime } from "effect"
+import { Effect, Layer, ManagedRuntime, Schema } from "effect"
 import type { Plugin, ResolvedConfig, ViteDevServer } from "vite"
 
 import type { CanvasLiveRefreshEndpoint } from "../browser/canvas-live-refresh.js"
@@ -182,19 +182,33 @@ const internalRequestOrigin = (request: IncomingMessage) => {
   return `${protocol}//${hostname}:${request.socket.localPort ?? 80}`
 }
 
+const FrameRelayRequestHeaders = Schema.Struct({
+  accept: Schema.optionalKey(Schema.String),
+  "accept-language": Schema.optionalKey(Schema.String),
+  authorization: Schema.optionalKey(Schema.String),
+  cookie: Schema.optionalKey(Schema.String),
+  host: Schema.optionalKey(Schema.String),
+  "user-agent": Schema.optionalKey(Schema.String)
+})
+
+const decodeFrameRelayRequestHeaders = Schema.decodeUnknownSync(
+  FrameRelayRequestHeaders
+)
+
 const relayRequestHeaders = (request: IncomingMessage) => {
+  const source = decodeFrameRelayRequestHeaders(request.headers)
   const headers = new Headers()
-  for (const name of [
-    "accept",
-    "accept-language",
-    "authorization",
-    "cookie",
-    "user-agent"
-  ]) {
-    const value = request.headers[name]
-    if (typeof value === "string") headers.set(name, value)
+  const forwarded = [
+    ["accept", source.accept],
+    ["accept-language", source["accept-language"]],
+    ["authorization", source.authorization],
+    ["cookie", source.cookie],
+    ["user-agent", source["user-agent"]]
+  ] as const
+  for (const [name, value] of forwarded) {
+    if (value !== undefined) headers.set(name, value)
   }
-  if (request.headers.host !== undefined) headers.set("host", request.headers.host)
+  if (source.host !== undefined) headers.set("host", source.host)
   headers.set("accept", "text/html,application/xhtml+xml")
   return headers
 }
@@ -325,8 +339,10 @@ const editorHtml = (
 const liveRefreshEndpointFromConfig = (
   config: ResolvedConfig
 ): CanvasLiveRefreshEndpoint => {
-  if (config.server.ws === false) return { enabled: false }
-  const hmr = typeof config.server.hmr === "object" ? config.server.hmr : undefined
+  if (config.server.ws === false || config.server.hmr === false) {
+    return { enabled: false }
+  }
+  const hmr = config.server.hmr === true ? undefined : config.server.hmr
   const port =
     hmr?.clientPort ??
     hmr?.port ??

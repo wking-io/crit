@@ -7,8 +7,8 @@ import {
 } from "../../src/frame-bridge/input-relay.js"
 import {
   CRIT_FRAME_INPUT_SOURCE,
-  frameInputIntentFromMessage,
-  isCritFrameInputMessage
+  connectBridgedFrameInput,
+  critFrameInputBridgeScript
 } from "../../src/frame-bridge/index.js"
 
 const wheel = {
@@ -30,6 +30,16 @@ const canvasInputRoot = (target: EventTarget): HTMLElement => {
   // SAFETY: This fixture supplies getBoundingClientRect, the only HTMLElement
   // member read by connectCanvasInput, and inherits real event dispatch.
   return target as HTMLElement
+}
+
+const bridgedInputFrame = (contentWindow: Window): HTMLIFrameElement => {
+  const frame = {
+    contentWindow,
+    getBoundingClientRect: () => ({ left: 100, top: 200 })
+  }
+  // SAFETY: This fixture supplies every HTMLIFrameElement member read by the
+  // bridged input adapter.
+  return frame as HTMLIFrameElement
 }
 
 describe("Frame input relay", () => {
@@ -196,44 +206,78 @@ describe("Frame input relay", () => {
     )).toEqual({ type: "tool", tool: "pan" })
   })
 
-  it("accepts only normalized intents from the postMessage adapter", () => {
-    const message = {
-      source: CRIT_FRAME_INPUT_SOURCE,
-      type: "tool",
-      tool: "pan"
-    } as const
-
-    expect(isCritFrameInputMessage(message)).toBe(true)
-    expect(frameInputIntentFromMessage(message)).toEqual({
-      type: "tool",
-      tool: "pan"
+  it("decodes normalized postMessage intents and ignores malformed traffic", () => {
+    const target = new EventTarget()
+    const frameChannel = new MessageChannel()
+    const frameWindow = canvasInputWindow(frameChannel.port1)
+    const intents: Array<unknown> = []
+    const disconnect = connectBridgedFrameInput({
+      target: canvasInputWindow(target),
+      frameElement: bridgedInputFrame(frameWindow),
+      onIntent: (intent) => intents.push(intent)
     })
-    expect(isCritFrameInputMessage({
-      source: CRIT_FRAME_INPUT_SOURCE,
-      type: "hotkey",
-      key: "h"
-    })).toBe(false)
-    expect(isCritFrameInputMessage({
-      source: CRIT_FRAME_INPUT_SOURCE,
-      type: "select",
-      additive: true
-    })).toBe(true)
-    expect(isCritFrameInputMessage({
-      source: CRIT_FRAME_INPUT_SOURCE,
-      type: "select"
-    })).toBe(false)
-    expect(isCritFrameInputMessage({
-      source: CRIT_FRAME_INPUT_SOURCE,
-      type: "delete"
-    })).toBe(true)
-    expect(isCritFrameInputMessage({
-      source: CRIT_FRAME_INPUT_SOURCE,
-      type: "pinch",
-      clientX: 20,
-      clientY: 30,
-      deltaX: 2,
-      deltaY: -1,
-      scaleFactor: 1.1
-    })).toBe(true)
+    const dispatch = (event: MessageEvent) => target.dispatchEvent(event)
+
+    dispatch(
+      new MessageEvent("message", {
+        source: frameWindow,
+        data: { source: CRIT_FRAME_INPUT_SOURCE, type: "wheel", ...wheel }
+      })
+    )
+    dispatch(
+      new MessageEvent("message", {
+        source: frameWindow,
+        data: {
+          source: CRIT_FRAME_INPUT_SOURCE,
+          intent: { type: "select" }
+        }
+      })
+    )
+    dispatch(
+      new MessageEvent("message", {
+        source: canvasInputWindow(frameChannel.port2),
+        data: {
+          source: CRIT_FRAME_INPUT_SOURCE,
+          intent: { type: "delete" }
+        }
+      })
+    )
+    dispatch(
+      new MessageEvent("message", {
+        source: frameWindow,
+        data: {
+          source: CRIT_FRAME_INPUT_SOURCE,
+          intent: { type: "wheel", ...wheel }
+        }
+      })
+    )
+    disconnect()
+    frameChannel.port1.close()
+    frameChannel.port2.close()
+    dispatch(
+      new MessageEvent("message", {
+        source: frameWindow,
+        data: {
+          source: CRIT_FRAME_INPUT_SOURCE,
+          intent: { type: "delete" }
+        }
+      })
+    )
+
+    expect(intents).toEqual([{
+      type: "wheel",
+      ...wheel,
+      clientX: 120,
+      clientY: 230
+    }])
+  })
+
+  it("serializes the private intent envelope without reflective type checks", () => {
+    expect(() => new Function(critFrameInputBridgeScript)).not.toThrow()
+    expect(critFrameInputBridgeScript).toContain(
+      'postMessage({ source, intent }, "*")'
+    )
+    expect(critFrameInputBridgeScript).not.toContain("typeof")
+    expect(critFrameInputBridgeScript).not.toContain("instanceof HTMLElement")
   })
 })

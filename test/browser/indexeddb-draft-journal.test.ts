@@ -113,4 +113,44 @@ describe("IndexedDbDraftJournal", () => {
       expect(failure.detail).toContain("schemaVersion")
     }).pipe(Effect.provide(layer))
   })
+
+  it.effect("rejects a malformed persisted record envelope", () => {
+    const indexedDB = new IDBFactory()
+    const databaseName = "crit-draft-journal-malformed-envelope"
+    const layer = IndexedDbDraftJournal.layer({ indexedDB, databaseName })
+
+    return Effect.gen(function*() {
+      const journal = yield* DraftJournal
+      yield* journal.save(draft("session-a", 1))
+      yield* putRawRecord(indexedDB, databaseName, {
+        key: "review\u0000session-a",
+        payload: draft("session-a", 1)
+      })
+
+      const failure = yield* Effect.flip(journal.load("review", "session-a"))
+
+      expect(failure).toBeInstanceOf(DraftJournalFailed)
+      expect(failure.detail).toContain("draft")
+    }).pipe(Effect.provide(layer))
+  })
+
+  it.effect("rejects a draft whose identity disagrees with its storage key", () => {
+    const indexedDB = new IDBFactory()
+    const databaseName = "crit-draft-journal-key-mismatch"
+    const layer = IndexedDbDraftJournal.layer({ indexedDB, databaseName })
+
+    return Effect.gen(function*() {
+      const journal = yield* DraftJournal
+      yield* journal.save(draft("session-a", 1))
+      yield* putRawRecord(indexedDB, databaseName, {
+        key: "review\u0000session-a",
+        draft: draft("session-b", 1)
+      })
+
+      const failure = yield* Effect.flip(journal.load("review", "session-a"))
+
+      expect(failure).toBeInstanceOf(DraftJournalFailed)
+      expect(failure.detail).toContain("identity does not match its key")
+    }).pipe(Effect.provide(layer))
+  })
 })

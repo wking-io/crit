@@ -1,5 +1,5 @@
 import { useHotkeys } from "@tanstack/react-hotkeys"
-import { Effect } from "effect"
+import { Effect, Option, Schema } from "effect"
 import {
   useCallback,
   useEffect,
@@ -11,8 +11,8 @@ import {
 
 import {
   CanvasCommand,
+  CanvasCommandFailed,
   canManageCommentThread,
-  type CanvasCommandFailed,
   type CanvasDocument,
   type CanvasFrame,
   type CanvasGeometry,
@@ -20,6 +20,14 @@ import {
   type Author,
   type CanvasCommand as CanvasCommandValue
 } from "../core/index.js"
+import {
+  CritClientErrorSchema,
+  critClientErrorMessage
+} from "../runtime/canvas-failure.js"
+import {
+  defaultRuntimeCapabilities,
+  runtimeId
+} from "../runtime/runtime-capabilities.js"
 import {
   connectCanvasInput,
   type FrameInputIntent
@@ -137,19 +145,24 @@ export interface CanvasViewportProps {
   readonly cameraOptions?: Partial<CanvasCameraOptions> | undefined
 }
 
-const messageOf = (cause: unknown) =>
-  typeof cause === "object" && cause !== null && "detail" in cause
-    ? String(cause.detail)
-    : cause instanceof Error
-      ? cause.message
-      : String(cause)
+const CanvasActionFailure = Schema.Union([
+  CanvasCommandFailed,
+  CritClientErrorSchema,
+  Schema.ErrorInstance()
+])
+
+const messageOf = (input: unknown) => {
+  const decoded = Schema.decodeUnknownOption(CanvasActionFailure)(input)
+  const failure = Option.getOrElse(decoded, () => new Error(String(input)))
+  if (Schema.is(CanvasCommandFailed)(failure)) return failure.detail
+  if (Schema.is(CritClientErrorSchema)(failure)) {
+    return critClientErrorMessage(failure)
+  }
+  return failure.message
+}
 
 const localId = (prefix: string) =>
-  `${prefix}-${
-    typeof globalThis.crypto?.randomUUID === "function"
-      ? globalThis.crypto.randomUUID()
-      : `${Date.now()}-${Math.random().toString(36).slice(2)}`
-  }`
+  runtimeId(prefix)
 
 const intersectsViewport = (
   geometry: CanvasGeometry,
@@ -338,8 +351,8 @@ function CanvasViewportContent({
     if (
       transition.type === "blocked" &&
       transition.reason === "dirty-draft" &&
-      typeof globalThis.confirm === "function" &&
-      globalThis.confirm("Discard the unfinished comment?")
+      defaultRuntimeCapabilities.confirm("Discard the unfinished comment?") ===
+        true
     ) {
       transition = commentReviewRef.current!.focus(target, {
         draft: "dirty",

@@ -3,13 +3,14 @@ import { tmpdir } from "node:os"
 import path from "node:path"
 
 import { afterEach, beforeEach, describe, expect, it } from "@effect/vitest"
-import { Effect, FileSystem, Layer, Path, Sink, Stdio, Terminal } from "effect"
+import { Effect, FileSystem, Layer, Path, Stdio, Terminal } from "effect"
 import { ChildProcessSpawner } from "effect/unstable/process"
 
 import { runCrit } from "../../src/cli/command.js"
 import { FileSystemCanvasRepository } from "../../src/node/file-system-canvas-repository.js"
 import { CanvasRepository } from "../../src/runtime/canvas-repository.js"
 import { TEST_AUTHOR, TestAuthorIdentityLayer } from "../support/author-identity.js"
+import { collectStdout } from "../support/stdout.js"
 
 describe("crit create", () => {
   let root = ""
@@ -32,11 +33,7 @@ describe("crit create", () => {
       Path.layer,
       Stdio.layerTest({
         stdout: () =>
-          Sink.forEach((chunk: string | Uint8Array) =>
-            Effect.sync(() => {
-              stdout.push(typeof chunk === "string" ? chunk : new TextDecoder().decode(chunk))
-            })
-          )
+          collectStdout((value) => stdout.push(value))
       }),
       Layer.succeed(
         Terminal.Terminal,

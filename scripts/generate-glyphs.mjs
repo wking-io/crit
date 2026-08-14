@@ -138,8 +138,13 @@ for (const filename of (await readdir(iconsDirectory)).filter((file) => file.end
     throw new Error(`${filename}: expected exactly one <svg> root`)
   }
   const rootAttrs = attributesFor(svg, rootAttributes, filename)
-  const viewBox = rootAttrs.viewBox
-  if (typeof viewBox !== "string" || viewBox.trim() === "") {
+  const viewBox = svg.getAttribute("viewBox")
+  const viewBoxNumbers = viewBox?.trim().split(/[\s,]+/)
+  if (
+    viewBoxNumbers === undefined ||
+    viewBoxNumbers.length !== 4 ||
+    viewBoxNumbers.some((value) => !Number.isFinite(Number(value)))
+  ) {
     throw new Error(`${filename}: <svg> requires a viewBox`)
   }
   delete rootAttrs.viewBox

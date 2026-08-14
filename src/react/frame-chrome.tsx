@@ -25,25 +25,8 @@ export const STATUS_PILL_MOTION = {
   frameGap: 6
 } as const
 
-let statusPillMeasurementContext: CanvasRenderingContext2D | null
-
-export function measureStatusPillWidth(label: string) {
-  if (typeof document === "undefined") {
-    return STATUS_PILL_CHROME_WIDTH + label.length * STATUS_PILL_CHARACTER_WIDTH
-  }
-  statusPillMeasurementContext ??= document
-    .createElement("canvas")
-    .getContext("2d")
-  if (!statusPillMeasurementContext) {
-    return STATUS_PILL_CHROME_WIDTH + label.length * STATUS_PILL_CHARACTER_WIDTH
-  }
-  statusPillMeasurementContext.font =
-    "400 12px system-ui, -apple-system, sans-serif"
-  return (
-    STATUS_PILL_CHROME_WIDTH +
-    statusPillMeasurementContext.measureText(label).width
-  )
-}
+export const measureStatusPillWidth = (label: string) =>
+  STATUS_PILL_CHROME_WIDTH + label.length * STATUS_PILL_CHARACTER_WIDTH
 
 const roundedRectangleSupport = (
   width: number,

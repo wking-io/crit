@@ -1,14 +1,38 @@
-import type { ElementCommentAnchor } from "../core/comment.js"
+import { Option, Schema } from "effect"
+
+import { ElementCommentAnchor } from "../core/comment.js"
 import { glyphSvgMarkup } from "../glyphs/index.js"
 
 export const CRIT_FRAME_COMMENT_SOURCE = "@riff-refine/crit/frame-comments"
 const COMMENT_PIN_GLYPH_SOURCE = JSON.stringify(glyphSvgMarkup("commentPin"))
 
-export type FrameCommentPin = { readonly id: string; readonly anchor: ElementCommentAnchor }
-export type FrameCommentEvent =
-  | { readonly type: "ready" }
-  | { readonly type: "select"; readonly anchor: ElementCommentAnchor }
-  | { readonly type: "open"; readonly id: string }
+const FrameCommentPinSchema = Schema.Struct({
+  id: Schema.String,
+  anchor: ElementCommentAnchor
+})
+export type FrameCommentPin = typeof FrameCommentPinSchema.Type
+
+const FrameCommentEventSchema = Schema.Union([
+  Schema.Struct({ type: Schema.Literal("ready") }),
+  Schema.Struct({
+    type: Schema.Literal("select"),
+    anchor: ElementCommentAnchor
+  }),
+  Schema.Struct({
+    type: Schema.Literal("open"),
+    id: Schema.String
+  })
+])
+export type FrameCommentEvent = typeof FrameCommentEventSchema.Type
+
+const FrameCommentMessage = Schema.Struct({
+  source: Schema.Literal(CRIT_FRAME_COMMENT_SOURCE),
+  event: FrameCommentEventSchema
+})
+
+const decodeFrameCommentMessage = Schema.decodeUnknownOption(
+  FrameCommentMessage
+)
 
 type FrameCommentMessageEvent = {
   readonly source: unknown
@@ -32,29 +56,30 @@ interface BridgedCommentFrame {
   } | null
 }
 
-const isEvent = (value: unknown): value is FrameCommentEvent & { readonly source: string } => {
-  if (typeof value !== "object" || value === null || !("source" in value) || value.source !== CRIT_FRAME_COMMENT_SOURCE || !("type" in value)) return false
-  if (value.type === "ready") return true
-  if (value.type !== "select" && value.type !== "open") return false
-  return value.type === "open"
-    ? "id" in value && typeof value.id === "string"
-    : "anchor" in value && typeof value.anchor === "object" && value.anchor !== null
-}
-
 export const connectBridgedFrameComments = (input: {
   readonly target: FrameCommentMessageTarget
   readonly frameElement: BridgedCommentFrame
   readonly onEvent: (event: FrameCommentEvent) => void
 }) => {
   const receive = (event: FrameCommentMessageEvent) => {
-    if (event.source !== input.frameElement.contentWindow || !isEvent(event.data)) return
-    const { source: _source, ...message } = event.data
-    input.onEvent(message)
+    if (event.source !== input.frameElement.contentWindow) return
+    const message = decodeFrameCommentMessage(event.data)
+    if (Option.isNone(message)) return
+    input.onEvent(message.value.event)
   }
   input.target.addEventListener("message", receive)
   return {
     configure: (value: { readonly activeId: string | null; readonly enabled: boolean; readonly color: string; readonly pins: ReadonlyArray<FrameCommentPin> }) =>
-      input.frameElement.contentWindow?.postMessage({ source: CRIT_FRAME_COMMENT_SOURCE, type: "configure", ...value }, "*"),
+      input.frameElement.contentWindow?.postMessage({
+        source: CRIT_FRAME_COMMENT_SOURCE,
+        event: {
+          type: "configure",
+          activeId: value.activeId,
+          enabled: value.enabled,
+          color: value.color,
+          pins: value.pins
+        }
+      }, "*"),
     disconnect: () => input.target.removeEventListener("message", receive)
   }
 }
@@ -63,7 +88,7 @@ export const critFrameCommentBridgeScript = String.raw`
 (() => {
   if (window.parent === window) return
   const source = "${CRIT_FRAME_COMMENT_SOURCE}"
-  const send = (message) => window.parent.postMessage({ source, ...message }, "*")
+  const send = (event) => window.parent.postMessage({ source, event }, "*")
   const layer = document.createElement("div")
   layer.dataset.critCommentLayer = ""
   Object.assign(layer.style, { inset: "0", pointerEvents: "none", position: "fixed", zIndex: "2147483647" })
@@ -78,6 +103,48 @@ export const critFrameCommentBridgeScript = String.raw`
   let pins = []
   let queued = false
   const icon = ${COMMENT_PIN_GLYPH_SOURCE}
+  const isElementTarget = (target) => target !== null &&
+    "matches" in target &&
+    "closest" in target &&
+    "getBoundingClientRect" in target
+  const normalizePins = (candidates) => {
+    if (!Array.isArray(candidates)) return []
+    const normalized = []
+    for (const candidate of candidates) {
+      const anchor = candidate?.anchor
+      const fingerprint = anchor?.fingerprint
+      const xRatio = Number(anchor?.xRatio)
+      const yRatio = Number(anchor?.yRatio)
+      if (
+        candidate?.id == null ||
+        anchor?.kind !== "element" ||
+        anchor.documentUrl == null ||
+        anchor.selector == null ||
+        fingerprint?.tagName == null ||
+        !Number.isFinite(xRatio) ||
+        !Number.isFinite(yRatio) ||
+        xRatio < 0 || xRatio > 1 ||
+        yRatio < 0 || yRatio > 1
+      ) continue
+      const normalizedFingerprint = { tagName: String(fingerprint.tagName) }
+      if (fingerprint.id != null) normalizedFingerprint.id = String(fingerprint.id)
+      if (fingerprint.testId != null) normalizedFingerprint.testId = String(fingerprint.testId)
+      if (fingerprint.ariaLabel != null) normalizedFingerprint.ariaLabel = String(fingerprint.ariaLabel)
+      if (fingerprint.text != null) normalizedFingerprint.text = String(fingerprint.text)
+      normalized.push({
+        id: String(candidate.id),
+        anchor: {
+          kind: "element",
+          documentUrl: String(anchor.documentUrl),
+          selector: String(anchor.selector),
+          fingerprint: normalizedFingerprint,
+          xRatio,
+          yRatio
+        }
+      })
+    }
+    return normalized
+  }
   const pageUrl = () => { const url = new URL(location.href); url.hash = ""; return url.toString() }
   const escape = (value) => CSS.escape ? CSS.escape(value) : value.replace(/[^a-zA-Z0-9_-]/g, (character) => "\\\\" + character)
   const selectorFor = (element) => {
@@ -152,8 +219,12 @@ export const critFrameCommentBridgeScript = String.raw`
   }
   addEventListener("message", (event) => {
     const message = event.data
-    if (event.source !== window.parent || !message || message.source !== source || message.type !== "configure") return
-    enabled = message.enabled === true; color = typeof message.color === "string" ? message.color : color; pins = Array.isArray(message.pins) ? message.pins : []; activeId = typeof message.activeId === "string" ? message.activeId : null
+    if (event.source !== window.parent || !message || message.source !== source || !message.event || message.event.type !== "configure") return
+    const configure = message.event
+    enabled = configure.enabled === true
+    color = configure.color == null ? color : String(configure.color)
+    pins = normalizePins(configure.pins)
+    activeId = configure.activeId == null ? null : String(configure.activeId)
     if (!enabled) hovered = null
     syncPins()
     // The initial ready event can race the parent's React effect on a cached
@@ -161,18 +232,18 @@ export const critFrameCommentBridgeScript = String.raw`
     // reliably distinguish an instrumented frame from the fallback overlay.
     send({ type: "ready" })
   })
-  addEventListener("pointermove", (event) => { if (!enabled || !(event.target instanceof Element) || event.target.closest("[data-crit-comment-layer]")) return; hovered = event.target; queue() }, true)
+  addEventListener("pointermove", (event) => { if (!enabled || !isElementTarget(event.target) || event.target.closest("[data-crit-comment-layer]")) return; hovered = event.target; queue() }, true)
   addEventListener("pointerleave", () => { hovered = null; queue() }, true)
   addEventListener("click", (event) => {
     const target = event.target
-    if (!enabled || !(target instanceof Element) || target.closest("[data-crit-comment-layer]")) return
+    if (!enabled || !isElementTarget(target) || target.closest("[data-crit-comment-layer]")) return
     event.preventDefault(); event.stopImmediatePropagation()
     const rect = target.getBoundingClientRect(); if (!rect.width || !rect.height) return
     send({ type: "select", anchor: { kind: "element", documentUrl: pageUrl(), selector: selectorFor(target), fingerprint: fingerprintFor(target), xRatio: Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width)), yRatio: Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height)) } })
   }, true)
   addEventListener("scroll", queue, { capture: true, passive: true })
   addEventListener("resize", queue, { passive: true })
-  new MutationObserver((records) => { if (records.some((record) => !(record.target instanceof Element) || !record.target.closest("[data-crit-comment-layer]"))) queue() }).observe(document.documentElement, { attributes: true, childList: true, subtree: true })
+  new MutationObserver((records) => { if (records.some((record) => !isElementTarget(record.target) || !record.target.closest("[data-crit-comment-layer]"))) queue() }).observe(document.documentElement, { attributes: true, childList: true, subtree: true })
   if (window.ResizeObserver) new ResizeObserver(queue).observe(document.documentElement)
   send({ type: "ready" })
 })()

@@ -24,22 +24,34 @@ describe("Crit feature lab", () => {
       id: "feature-lab",
       owner: null,
       notes: [
-        { id: "legacy", text: "Keep me" },
+        { id: "legacy", text: "Keep me", extension: { retained: true } },
         { id: "authored", text: "Keep my Author", author: { id: "git:other", name: "Other" } }
       ],
-      revision: 42
+      revision: 42,
+      extension: { retained: true }
     }
 
     expect(migrateLegacyPlaygroundCanvas(legacy, author)).toEqual({
       ...legacy,
       owner: author,
       notes: [
-        { id: "legacy", text: "Keep me", author },
+        {
+          id: "legacy",
+          text: "Keep me",
+          extension: { retained: true },
+          author
+        },
         legacy.notes[1]
       ]
     })
     const current = { ...legacy, owner: author }
     expect(migrateLegacyPlaygroundCanvas(current, author)).toBe(current)
+    expect(() => migrateLegacyPlaygroundCanvas({
+      format: "crit-canvas",
+      version: 1,
+      owner: null,
+      notes: "invalid"
+    }, author)).toThrow(/Expected array/)
   })
 
   it("reloads inline orb frames for first-party frame dependencies", () => {

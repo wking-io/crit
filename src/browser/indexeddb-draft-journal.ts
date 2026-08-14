@@ -9,10 +9,11 @@ import {
 const DATABASE_VERSION = 1
 const STORE_NAME = "drafts"
 
-type StoredDraft = {
-  readonly key: string
-  readonly draft: unknown
-}
+const StoredDraft = Schema.Struct({
+  key: Schema.String,
+  draft: CanvasDraft
+})
+type StoredDraft = typeof StoredDraft.Type
 
 export type IndexedDbDraftJournalOptions = {
   readonly indexedDB?: IDBFactory
@@ -52,10 +53,12 @@ const decodeStoredDraft = (
   sessionId: string
 ) => {
   if (value === undefined) return undefined
-  if (typeof value !== "object" || value === null || !("draft" in value)) {
-    throw new Error("Draft journal record is malformed")
+  const stored = Schema.decodeUnknownSync(StoredDraft)(value)
+  const expectedKey = draftKey(canvasId, sessionId)
+  if (stored.key !== expectedKey) {
+    throw new Error("Draft journal record key does not match the request")
   }
-  const draft = Schema.decodeUnknownSync(CanvasDraft)(value.draft)
+  const draft = stored.draft
   if (draft.canvasId !== canvasId || draft.sessionId !== sessionId) {
     throw new Error("Draft journal record identity does not match its key")
   }
@@ -152,13 +155,14 @@ const clearDraft = (
       reject(transaction.error ?? new Error("Clearing the draft was aborted"))
   })
 
+const indexedDbFromRuntime = (): IDBFactory | undefined =>
+  globalThis.indexedDB
+
 const make = (options: IndexedDbDraftJournalOptions = {}): DraftJournal["Service"] => {
   const databaseName = options.databaseName ?? "@riff-refine/crit/drafts/v1"
   const factory =
     options.indexedDB ??
-    (typeof globalThis.indexedDB === "undefined"
-      ? undefined
-      : globalThis.indexedDB)
+    indexedDbFromRuntime()
 
   const run = <A>(
     operation: string,

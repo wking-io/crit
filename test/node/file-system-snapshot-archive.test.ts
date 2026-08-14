@@ -12,6 +12,7 @@ import {
   SnapshotArchive,
   SnapshotNotFound
 } from "../../src/runtime/snapshot-archive.js"
+import { serverPort } from "../support/server-address.js"
 
 describe("FileSystemSnapshotArchive", () => {
   let root = ""
@@ -177,12 +178,15 @@ describe("FileSystemSnapshotArchive", () => {
       })
       server.once("error", reject)
       server.listen(0, "127.0.0.1", () => {
-        const address = server?.address()
-        if (address === null || address === undefined || typeof address === "string") {
+        if (server === undefined) {
           reject(new Error("Fixture server did not bind"))
           return
         }
-        resolve(`http://127.0.0.1:${address.port}`)
+        try {
+          resolve(`http://127.0.0.1:${serverPort(server)}`)
+        } catch (cause) {
+          reject(cause)
+        }
       })
     })
 })

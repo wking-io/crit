@@ -121,6 +121,13 @@ describe("connectCanvasLiveRefresh", () => {
     custom("crit:agent-activity", "other-canvas")
     custom("crit:unrelated", "homepage")
     socket.emit("message", { data: JSON.stringify({ type: "update" }) })
+    socket.emit("message", {
+      data: JSON.stringify({
+        type: "custom",
+        event: "crit:canvas-changed",
+        data: { id: 42 }
+      })
+    })
     socket.emit("message", { data: "not json" })
     socket.emit("message", { data: undefined })
     await settle()

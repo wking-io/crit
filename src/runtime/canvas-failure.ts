@@ -46,6 +46,36 @@ export const CritClientErrorSchema = Schema.Union([
 
 export type CritClientError = typeof CritClientErrorSchema.Type
 
+const unreachableCritClientError = (failure: never): never => {
+  throw new TypeError(`Unreachable CritClientError variant: ${String(failure)}`)
+}
+
+export const critClientErrorMessage = (failure: CritClientError): string => {
+  switch (failure._tag) {
+    case "CritClientNotFound":
+      return `Canvas not found: ${failure.id}`
+    case "CritClientCommandFailed":
+    case "CritClientInvalidDocument":
+    case "CritClientUnavailable":
+      return failure.detail
+    default:
+      return unreachableCritClientError(failure)
+  }
+}
+
+export const isCurrentAuthorError = (failure: CritClientError): boolean => {
+  switch (failure._tag) {
+    case "CritClientNotFound":
+    case "CritClientCommandFailed":
+    case "CritClientInvalidDocument":
+      return false
+    case "CritClientUnavailable":
+      return failure.operation === "current-author"
+    default:
+      return unreachableCritClientError(failure)
+  }
+}
+
 export const invalidCanvasDocument = (
   id: string,
   cause: CanvasOpenFailed | CanvasDocumentTooLarge

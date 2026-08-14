@@ -2,6 +2,7 @@ import {
   DialRoot,
   useDialKit,
   type DialConfig,
+  type ResolvedValues,
   type SelectConfig
 } from "dialkit"
 import { Effect } from "effect"
@@ -272,26 +273,107 @@ type Assignment = {
   readonly variable: `--ui-${string}`
 }
 
-const kebabCase = (value: string) =>
-  value.replace(/([a-z0-9])([A-Z])/g, "$1-$2").toLowerCase()
+type RecipeValues = ResolvedValues<typeof RECIPE_CONFIG>
 
-const assignmentVariable = (path: ReadonlyArray<string>): `--ui-${string}` =>
-  `--ui-${path.map(kebabCase).join("-")}`
+const RECIPE_SELECTOR_COUNT =
+  JSON.stringify(RECIPE_CONFIG).match(/"type":"select"/g)?.length ?? 0
 
-const flattenAssignments = (
-  value: unknown,
-  path: ReadonlyArray<string> = []
-): ReadonlyArray<Assignment> => {
-  if (typeof value === "string" && isTokenName(value)) {
-    return [{
-      token: value,
-      variable: assignmentVariable(path)
-    }]
+const assignment = (
+  variable: Assignment["variable"],
+  value: string
+): Assignment => {
+  if (!isTokenName(value)) {
+    throw new TypeError(`Unknown UI lab token assignment ${value}`)
   }
-  if (typeof value !== "object" || value === null) return []
-  return Object.entries(value).flatMap(([key, child]) =>
-    key === "_collapsed" ? [] : flattenAssignments(child, [...path, key])
-  )
+  return { token: value, variable }
+}
+
+const explicitAssignmentsFor = (
+  values: RecipeValues
+): ReadonlyArray<Assignment> => [
+  assignment("--ui-page-section-border", values.page.sectionBorder),
+  assignment("--ui-page-text", values.page.text),
+  assignment("--ui-page-muted-text", values.page.mutedText),
+  assignment("--ui-toolbar-surface", values.toolbar.surface),
+  assignment("--ui-toolbar-border", values.toolbar.border),
+  assignment("--ui-toolbar-text", values.toolbar.text),
+  assignment("--ui-toolbar-divider", values.toolbar.divider),
+  assignment("--ui-toolbar-button-background", values.toolbar.button.background),
+  assignment("--ui-toolbar-button-hover-background", values.toolbar.button.hoverBackground),
+  assignment("--ui-toolbar-button-pressed-background", values.toolbar.button.pressedBackground),
+  assignment("--ui-toolbar-button-foreground", values.toolbar.button.foreground),
+  assignment("--ui-toolbar-button-disabled-foreground", values.toolbar.button.disabledForeground),
+  assignment("--ui-toolbar-button-focus-ring", values.toolbar.button.focusRing),
+  assignment("--ui-status-menu-surface", values.statusMenu.surface),
+  assignment("--ui-status-menu-border", values.statusMenu.border),
+  assignment("--ui-status-menu-text", values.statusMenu.text),
+  assignment("--ui-status-menu-hover-surface", values.statusMenu.hoverSurface),
+  assignment("--ui-status-menu-selected-border", values.statusMenu.selectedBorder),
+  assignment("--ui-status-menu-disabled-text", values.statusMenu.disabledText),
+  assignment("--ui-help-surface", values.help.surface),
+  assignment("--ui-help-border", values.help.border),
+  assignment("--ui-help-title", values.help.title),
+  assignment("--ui-help-description", values.help.description),
+  assignment("--ui-help-shortcut-surface", values.help.shortcutSurface),
+  assignment("--ui-help-shortcut-text", values.help.shortcutText),
+  assignment("--ui-help-shortcut-border", values.help.shortcutBorder),
+  assignment("--ui-presence-surface", values.presence.surface),
+  assignment("--ui-presence-text", values.presence.text),
+  assignment("--ui-presence-dot", values.presence.dot),
+  assignment("--ui-presence-save-surface", values.presence.saveSurface),
+  assignment("--ui-presence-save-text", values.presence.saveText),
+  assignment("--ui-presence-conflict-surface", values.presence.conflictSurface),
+  assignment("--ui-presence-conflict-text", values.presence.conflictText),
+  assignment("--ui-menu-surface", values.menu.surface),
+  assignment("--ui-menu-border", values.menu.border),
+  assignment("--ui-menu-text", values.menu.text),
+  assignment("--ui-menu-detail-text", values.menu.detailText),
+  assignment("--ui-menu-hover-surface", values.menu.hoverSurface),
+  assignment("--ui-menu-focus-ring", values.menu.focusRing),
+  assignment("--ui-menu-danger-text", values.menu.dangerText),
+  assignment("--ui-dialog-backdrop", values.dialog.backdrop),
+  assignment("--ui-dialog-surface", values.dialog.surface),
+  assignment("--ui-dialog-border", values.dialog.border),
+  assignment("--ui-dialog-text", values.dialog.text),
+  assignment("--ui-dialog-muted-text", values.dialog.mutedText),
+  assignment("--ui-dialog-input-surface", values.dialog.inputSurface),
+  assignment("--ui-dialog-input-border", values.dialog.inputBorder),
+  assignment("--ui-dialog-focus-ring", values.dialog.focusRing),
+  assignment("--ui-dialog-button-surface", values.dialog.buttonSurface),
+  assignment("--ui-dialog-button-hover-surface", values.dialog.buttonHoverSurface),
+  assignment("--ui-dialog-primary-surface", values.dialog.primarySurface),
+  assignment("--ui-dialog-primary-text", values.dialog.primaryText),
+  assignment("--ui-dialog-disabled-surface", values.dialog.disabledSurface),
+  assignment("--ui-dialog-disabled-text", values.dialog.disabledText),
+  assignment("--ui-comment-pin-surface", values.comment.pinSurface),
+  assignment("--ui-comment-pin-border", values.comment.pinBorder),
+  assignment("--ui-comment-surface", values.comment.surface),
+  assignment("--ui-comment-border", values.comment.border),
+  assignment("--ui-comment-text", values.comment.text),
+  assignment("--ui-comment-muted-text", values.comment.mutedText),
+  assignment("--ui-comment-separator", values.comment.separator),
+  assignment("--ui-comment-input-surface", values.comment.inputSurface),
+  assignment("--ui-comment-input-border", values.comment.inputBorder),
+  assignment("--ui-comment-action-surface", values.comment.actionSurface),
+  assignment("--ui-comment-action-text", values.comment.actionText),
+  assignment("--ui-comment-hover-surface", values.comment.hoverSurface),
+  assignment("--ui-comment-disabled-text", values.comment.disabledText),
+  assignment("--ui-message-surface", values.message.surface),
+  assignment("--ui-message-text", values.message.text),
+  assignment("--ui-message-error-surface", values.message.errorSurface),
+  assignment("--ui-message-error-text", values.message.errorText),
+  assignment("--ui-message-empty-surface", values.message.emptySurface),
+  assignment("--ui-message-empty-border", values.message.emptyBorder)
+]
+
+const assignmentsFor = (values: RecipeValues): ReadonlyArray<Assignment> => {
+  const assignments = explicitAssignmentsFor(values)
+  if (assignments.length !== RECIPE_SELECTOR_COUNT) {
+    throw new TypeError(
+      "Every Crit UI color selector requires one explicit CSS assignment"
+    )
+  }
+  return assignments
 }
 
 function SpecimenSection({
@@ -871,7 +953,7 @@ export default function UiLab() {
   const recipes = useDialKit("Crit UI color assignments", RECIPE_CONFIG, {
     id: "crit-ui-color-assignments"
   })
-  const assignments = useMemo(() => flattenAssignments(recipes), [recipes])
+  const assignments = useMemo(() => assignmentsFor(recipes), [recipes])
   const tokenValues = useMemo(() => new Map<TokenName, string>(
     BASE_TOKENS.map((token): readonly [TokenName, string] => {
       const column = recipes.baseScale[token.shortName]
