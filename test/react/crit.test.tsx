@@ -33,6 +33,8 @@ import {
 } from "../../src/react/comment-popover.js"
 import { CanvasCommentPin } from "../../src/react/canvas-comment-pin.js"
 import {
+  advanceContextMenuDismissal,
+  contextMenuIsOpen,
   CritContextActions,
   type ContextMenuItem
 } from "../../src/react/canvas-context-menu.js"
@@ -57,7 +59,10 @@ import {
 import { CanvasActionRunnerProvider } from "../../src/react/canvas-action-runner.js"
 import { CanvasControls } from "../../src/react/canvas-controls.js"
 import {
+  blurNoteEditorOnSurfacePress,
+  listenForNoteEditorBlur,
   NoteCard,
+  NOTE_INTERACTION_BAND_HEIGHT,
   NOTE_MINIMUM_ROWS,
   noteContextMenuItems,
   noteHeightForContent
@@ -503,10 +508,14 @@ describe("Crit", () => {
     expect(marquee).not.toContain("border:")
   })
 
-  it("keeps the shared-overlay status fan at header scale", () => {
+  it("keeps the frame-local status fan at header scale", () => {
     expect(statusFanProjection(8)).toEqual({
       scale: 1,
       frameGap: 8
+    })
+    expect(statusFanProjection(8, 0.5)).toEqual({
+      scale: 0.5,
+      frameGap: 4
     })
   })
 
@@ -843,7 +852,8 @@ describe("Crit", () => {
     })
 
     expect(NOTE_MINIMUM_ROWS).toBe(3)
-    expect(noteHeightForContent(84)).toBe(86)
+    expect(NOTE_INTERACTION_BAND_HEIGHT).toBe(28.5)
+    expect(noteHeightForContent(84)).toBe(115)
     expect(items.map((item) => item.action.label)).toEqual([
       "Note color",
       "Bring to front",
@@ -865,10 +875,24 @@ describe("Crit", () => {
       { label: "Blue", selected: true },
       { label: "Purple", selected: false }
     ])
+    expect(colorItem !== undefined && "swatches" in colorItem
+      ? colorItem.swatches.find((swatch) => swatch.selected)
+        ?.selectedShadowColor
+      : undefined).toBe(
+      "var(--crit-color-blue-t2, oklch(28% .1 245.3))"
+    )
     expect(cssRule(".crit-context-menu__swatches")).toContain("display: flex")
     expect(cssRule(
       ".crit-context-menu button.crit-context-menu__swatch"
     )).toContain("border-radius: 2px")
+    expect(cssRule(
+      ".crit-context-menu button.crit-context-menu__swatch[data-selected]"
+    )).toContain(
+      "box-shadow: 0 0 0 1px var(--crit-swatch-selected-shadow, currentColor)"
+    )
+    expect(critStyles).not.toContain(
+      ".crit-context-menu button.crit-context-menu__swatch:hover"
+    )
     const forbiddenItems = noteContextMenuItems({
       controls,
       target,
@@ -892,13 +916,39 @@ describe("Crit", () => {
     expect(cssRule(".crit-note textarea")).toContain(
       "font: 400 calc(14px * var(--crit-ui))/calc(20px * var(--crit-ui)) system-ui, -apple-system, sans-serif"
     )
-    expect(cssRule(".crit-note::after")).toContain("box-shadow:")
+    expect(cssRule(".crit-note__interaction-band")).toContain(
+      "height: var(--crit-note-corner-size)"
+    )
+    expect(cssRule(".crit-note__interaction-band")).toContain("bottom: 0")
+    expect(cssRule(".crit-note__select-shield")).toContain(
+      "inset: 0 0 var(--crit-note-corner-size)"
+    )
+    expect(cssRule(".crit-note::after")).toContain(
+      "border: calc(1px * var(--crit-ui)) solid var(--crit-note-outline)"
+    )
+    expect(cssRule(".crit-note::after")).not.toMatch(
+      /box-shadow:[^;]*\binset\b/
+    )
+    expect(cssRule(".crit-note::after")).not.toContain(
+      "color-mix(in oklch, var(--crit-note-pure)"
+    )
     expect(cssRule(".crit-note::after")).toContain("-webkit-mask:")
     expect(cssRule(".crit-note::after")).toContain(
       "var(--crit-note-corner-size)"
     )
+    expect(cssRule(".crit-note::after")).toContain(
+      "+ var(--crit-note-mask-overlap)"
+    )
     expect(cssRule(".crit-note__corner")).toContain("bottom: 0")
     expect(cssRule(".crit-note__corner")).toContain("right: 0")
+    expect(cssRule(
+      ".crit-note[data-selected], .crit-note:focus-visible"
+    )).toContain(
+      "--crit-note-outline: var(--crit-color-t2, oklch(28% 0 none))"
+    )
+    expect(cssRule(
+      ".crit-note[data-selected], .crit-note:focus-visible"
+    )).toContain("outline: 0")
     expect(critStyles).not.toContain(".crit-note__chrome")
     expect(critStyles).not.toContain(".crit-note__more-actions")
     expect(critStyles).not.toContain(".crit-frame__more-actions")
@@ -943,10 +993,35 @@ describe("Crit", () => {
     )
     expect(noteSurface).not.toContain("data-crit-help-name")
     expect(noteSurface).toContain('tabindex="0"')
+    expect(html).toContain('class="crit-note__interaction-band"')
     expect(html).toContain('class="crit-note__corner"')
     expect(html).toContain('viewBox="0 0 28.5 28.5"')
+    expect(html).toContain('stroke="var(--crit-note-outline)"')
+    expect(html).not.toContain('class="crit-selection"')
     expect(html).not.toContain('class="crit-selection__handle"')
     expect(html).not.toContain("More note actions")
+  })
+
+  it("blurs a Note editor when its non-text surface is pressed", () => {
+    let blurCount = 0
+    const textarea = Object.assign(new EventTarget(), {
+      blur: () => { blurCount += 1 }
+    })
+
+    blurNoteEditorOnSurfacePress(textarea, new EventTarget())
+    expect(blurCount).toBe(1)
+
+    blurNoteEditorOnSurfacePress(textarea, textarea)
+    expect(blurCount).toBe(1)
+
+    const pointerSource = new EventTarget()
+    const stopListening = listenForNoteEditorBlur(pointerSource, textarea)
+    pointerSource.dispatchEvent(new Event("pointerdown"))
+    expect(blurCount).toBe(2)
+
+    stopListening()
+    pointerSource.dispatchEvent(new Event("pointerdown"))
+    expect(blurCount).toBe(2)
   })
 
   it("elevates an expanded Note above the canvas without changing its saved layer", () => {
@@ -1025,6 +1100,21 @@ describe("Crit", () => {
     }
     expect(html.match(/-webkit-touch-callout:none/g)).toHaveLength(2)
     expect(html).not.toContain("•••")
+  })
+
+  it("closes every context menu when the canvas zoom changes", () => {
+    const initialDismissal = { revision: 0, signal: 1 }
+    const openMenu = { open: true, revision: initialDismissal.revision }
+
+    expect(contextMenuIsOpen(openMenu, initialDismissal.revision)).toBe(true)
+
+    const zoomed = advanceContextMenuDismissal(initialDismissal, 1.25)
+    expect(zoomed.revision).toBe(1)
+    expect(contextMenuIsOpen(openMenu, zoomed.revision)).toBe(false)
+
+    const returnedToInitialZoom = advanceContextMenuDismissal(zoomed, 1)
+    expect(returnedToInitialZoom.revision).toBe(2)
+    expect(contextMenuIsOpen(openMenu, returnedToInitialZoom.revision)).toBe(false)
   })
 
   it("uses compact context-menu spacing without changing its color rules", () => {

@@ -9,10 +9,7 @@ import {
   CritMenuSpecimen,
   type ContextMenuItem
 } from "../../src/react/canvas-context-menu.js"
-import {
-  CritOverlayProvider,
-  CritUnderlayProvider
-} from "../../src/react/overlay-container.js"
+import { CritOverlayProvider } from "../../src/react/overlay-container.js"
 
 describe("Crit overlay container", () => {
   it("renders a scoped portal target beside the themed surface", () => {
@@ -34,18 +31,6 @@ describe("Crit overlay container", () => {
       'class="crit-overlay-container host-theme__overlays"'
     )
     expect(html).toContain('data-crit-overlay-container=""')
-  })
-
-  it("renders the Canvas underlay target before its transformed content", () => {
-    const html = renderToStaticMarkup(
-      <CritUnderlayProvider>
-        <main className="crit-canvas__plane">Canvas plane</main>
-      </CritUnderlayProvider>
-    )
-
-    expect(html.indexOf("data-crit-underlay-container")).toBeLessThan(
-      html.indexOf("crit-canvas__plane")
-    )
   })
 
   it("reserves the Base UI lab menu's themed portal anchor", () => {

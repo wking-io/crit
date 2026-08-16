@@ -5,8 +5,7 @@ import { FRAME_CORNER_RADIUS } from "./frame-geometry.js"
 export const critStyles = String.raw`
 @import url("https://rsms.me/inter/inter.css");
 
-.crit-overlay-container,
-.crit-underlay-container { display: contents; }
+.crit-overlay-container { display: contents; }
 
 .crit-canvas {
   --crit-ink: #191918;
@@ -625,23 +624,31 @@ button.crit-toolbar__title:focus-visible { border-radius: 2px; outline: 2px soli
 .crit-comment__actions button:disabled { cursor: default; opacity: .45; }
 
 .crit-status-positioner {
+  height: 0;
+  left: 0 !important;
+  position: absolute !important;
+  top: 0 !important;
+  transform: none !important;
+  width: 0;
   z-index: -1;
 }
 
 .crit-status-menu {
   align-items: flex-start;
+  bottom: var(--crit-status-frame-gap, 0);
   display: flex;
   flex-direction: column;
   gap: 16px;
+  left: 0;
   outline: 0;
   pointer-events: auto;
+  position: absolute;
   transform: scale(var(--crit-status-ui, 1));
   transform-origin: bottom left;
   width: max-content;
 }
 
 .crit-canvas .crit-status-option,
-.crit-underlay-container .crit-status-option,
 .crit-overlay-container .crit-status-option {
   align-items: center;
   background: var(--status-shell);
@@ -666,6 +673,9 @@ button.crit-toolbar__title:focus-visible { border-radius: 2px; outline: 2px soli
 
 .crit-note {
   --crit-note-corner-size: calc(28.5px * var(--crit-ui));
+  --crit-note-mask-overlap: calc(1px * var(--crit-ui));
+  --crit-note-outline: var(--crit-note-ink);
+  --crit-note-outline-spread: calc(.5px * var(--crit-ui));
   background: transparent;
   border: 0;
   border-radius: calc(8px * var(--crit-ui));
@@ -676,18 +686,24 @@ button.crit-toolbar__title:focus-visible { border-radius: 2px; outline: 2px soli
   overflow: visible;
   position: absolute;
 }
-.crit-note:focus-visible { outline: calc(2px * var(--crit-ui)) solid var(--crit-note-ink); outline-offset: calc(2px * var(--crit-ui)); }
+.crit-note[data-selected], .crit-note:focus-visible {
+  --crit-note-outline: var(--crit-color-t2, oklch(28% 0 none));
+  --crit-note-outline-spread: calc(1px * var(--crit-ui));
+  outline: 0;
+}
 .crit-note[data-mode="collapsed"] { background: transparent; box-shadow: none; }
 .crit-note[data-mode="collapsed"]:focus-visible { outline: 0; }
 .crit-note[data-mode="expanded"] { overflow: auto; overscroll-behavior: contain; }
 .crit-note::after {
   background: var(--crit-note-surface);
+  border: calc(1px * var(--crit-ui)) solid var(--crit-note-outline);
   border-radius: inherit;
-  box-shadow: var(--crit-note-ink) 0 0 0 calc(.5px * var(--crit-ui)), color-mix(in oklch, var(--crit-note-pure) 50%, transparent) 0 0 0 calc(1px * var(--crit-ui)) inset, var(--crit-note-pure) 0 calc(1px * var(--crit-ui)) 0 inset;
+  box-shadow: var(--crit-note-outline) 0 0 0 var(--crit-note-outline-spread);
+  box-sizing: border-box;
   content: "";
   inset: 0;
-  -webkit-mask: linear-gradient(#fff 0 0) top / 100% calc(100% - var(--crit-note-corner-size)) no-repeat, linear-gradient(#fff 0 0) bottom left / calc(100% - var(--crit-note-corner-size)) var(--crit-note-corner-size) no-repeat, url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 28.5 28.5'%3E%3Cpath fill='white' d='M0 0h28c0 2.21-1.79 4-4 4H12c-4.42 0-8 3.58-8 8v12c0 2.21-1.79 4-4 4Z'/%3E%3C/svg%3E") bottom right / var(--crit-note-corner-size) var(--crit-note-corner-size) no-repeat;
-  mask: linear-gradient(#fff 0 0) top / 100% calc(100% - var(--crit-note-corner-size)) no-repeat, linear-gradient(#fff 0 0) bottom left / calc(100% - var(--crit-note-corner-size)) var(--crit-note-corner-size) no-repeat, url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 28.5 28.5'%3E%3Cpath fill='white' d='M0 0h28c0 2.21-1.79 4-4 4H12c-4.42 0-8 3.58-8 8v12c0 2.21-1.79 4-4 4Z'/%3E%3C/svg%3E") bottom right / var(--crit-note-corner-size) var(--crit-note-corner-size) no-repeat;
+  -webkit-mask: linear-gradient(#fff 0 0) top / 100% calc(100% - var(--crit-note-corner-size) + var(--crit-note-mask-overlap)) no-repeat, linear-gradient(#fff 0 0) bottom left / calc(100% - var(--crit-note-corner-size) + var(--crit-note-mask-overlap)) var(--crit-note-corner-size) no-repeat, url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 28.5 28.5'%3E%3Cpath fill='white' d='M0 0h28c0 2.21-1.79 4-4 4H12c-4.42 0-8 3.58-8 8v12c0 2.21-1.79 4-4 4Z'/%3E%3C/svg%3E") bottom right / var(--crit-note-corner-size) var(--crit-note-corner-size) no-repeat;
+  mask: linear-gradient(#fff 0 0) top / 100% calc(100% - var(--crit-note-corner-size) + var(--crit-note-mask-overlap)) no-repeat, linear-gradient(#fff 0 0) bottom left / calc(100% - var(--crit-note-corner-size) + var(--crit-note-mask-overlap)) var(--crit-note-corner-size) no-repeat, url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 28.5 28.5'%3E%3Cpath fill='white' d='M0 0h28c0 2.21-1.79 4-4 4H12c-4.42 0-8 3.58-8 8v12c0 2.21-1.79 4-4 4Z'/%3E%3C/svg%3E") bottom right / var(--crit-note-corner-size) var(--crit-note-corner-size) no-repeat;
   pointer-events: none;
   position: absolute;
   z-index: 0;
@@ -695,6 +711,16 @@ button.crit-toolbar__title:focus-visible { border-radius: 2px; outline: 2px soli
 .crit-note[data-mode="collapsed"]::after { display: none; }
 .crit-note textarea { -webkit-touch-callout: default; background: transparent; border: 0; border-radius: inherit; color: var(--crit-note-text); display: block; font: 400 calc(14px * var(--crit-ui))/calc(20px * var(--crit-ui)) system-ui, -apple-system, sans-serif; hyphens: auto; min-height: calc(84px * var(--crit-ui)); outline: 0; overflow: hidden; overflow-wrap: anywhere; padding: calc(12px * var(--crit-ui)); position: relative; resize: none; text-wrap: pretty; user-select: text; white-space: pre-wrap; width: 100%; z-index: 1; }
 .crit-note[data-mode="expanded"] textarea { padding-right: calc(40px * var(--crit-ui)); }
+
+.crit-note__interaction-band {
+  bottom: 0;
+  cursor: var(--crit-canvas-cursor);
+  height: var(--crit-note-corner-size);
+  left: 0;
+  position: absolute;
+  width: 100%;
+  z-index: 1;
+}
 
 .crit-note__collapsed {
   align-items: center;
@@ -762,7 +788,7 @@ button.crit-toolbar__title:focus-visible { border-radius: 2px; outline: 2px soli
   background: transparent;
   border: 0;
   cursor: var(--crit-canvas-cursor);
-  inset: 0;
+  inset: 0 0 var(--crit-note-corner-size);
   padding: 0;
   position: absolute;
   z-index: 3;
@@ -983,15 +1009,13 @@ button.crit-toolbar__title:focus-visible { border-radius: 2px; outline: 2px soli
   padding: 0;
   width: 24px;
 }
-.crit-context-menu button.crit-context-menu__swatch:hover,
-.crit-context-menu button.crit-context-menu__swatch:focus-visible,
-.crit-context-menu button.crit-context-menu__swatch[data-highlighted] {
+.crit-context-menu button.crit-context-menu__swatch:focus-visible {
   background: var(--crit-swatch, currentColor);
-  outline: 2px solid color-mix(in oklch, var(--crit-swatch, currentColor) 35%, #191918);
+  outline: 2px solid var(--crit-swatch-selected-shadow, currentColor);
   outline-offset: 1px;
 }
 .crit-context-menu button.crit-context-menu__swatch[data-selected] {
-  box-shadow: #fff 0 0 0 1px inset, #191918 0 0 0 2px inset;
+  box-shadow: 0 0 0 1px var(--crit-swatch-selected-shadow, currentColor);
 }
 
 .crit-dialog-backdrop {

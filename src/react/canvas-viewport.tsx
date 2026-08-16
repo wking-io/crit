@@ -33,6 +33,7 @@ import {
 import { cssVariableStyle } from "./css-variable-style.js"
 import {
   CritContextActions,
+  CritContextMenuDismissalScope,
   type ContextMenuItem
 } from "./canvas-context-menu.js"
 import {
@@ -119,7 +120,6 @@ import {
   type CommentThreadReviewTarget,
   type CommentThreadReviewTransition
 } from "../session/comment-thread-review.js"
-import { CritUnderlayProvider } from "./overlay-container.js"
 
 export {
   DEFAULT_FRAME_CHROME_SETTINGS,
@@ -1155,6 +1155,7 @@ function CanvasViewportContent({
     }
   ]
   return (
+    <CritContextMenuDismissalScope signal={camera.zoom}>
     <Popover.Root
       onOpenChange={(open, details) => {
         if (open || details.reason === "trigger-press") return
@@ -1204,7 +1205,6 @@ function CanvasViewportContent({
       })}
     >
       <style data-crit-styles="">{critStyles}</style>
-      <CritUnderlayProvider>
       <div
         className="crit-canvas__plane"
         style={{
@@ -1220,6 +1220,7 @@ function CanvasViewportContent({
               shortId={shortIdForIndex(
                 document.frames.findIndex((frame) => frame.id === item.id)
               )}
+              topZIndex={topCanvasZIndex}
               geometry={geometryOf(item)}
               zoom={camera.zoom}
               iframeAllow={iframeAllow}
@@ -1520,9 +1521,9 @@ function CanvasViewportContent({
         onError={(message) => onCommandError?.(message)}
         open={newFrameTarget !== null}
       />
-      </CritUnderlayProvider>
     </div>
     </CritContextActions>
     </Popover.Root>
+    </CritContextMenuDismissalScope>
   )
 }

@@ -700,6 +700,7 @@ function FrameSpecimen({
         onTitle={() => Effect.void}
         selected={selected}
         shortId="A"
+        topZIndex={2}
         zoom={1}
       />
     </div>

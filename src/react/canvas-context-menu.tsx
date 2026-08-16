@@ -3,7 +3,10 @@ import { ContextMenu } from "@base-ui/react/context-menu"
 import { Menu } from "@base-ui/react/menu"
 import { Effect } from "effect"
 import {
+  createContext,
+  useContext,
   useRef,
+  useState,
   type KeyboardEvent,
   type ReactElement,
   type ReactNode
@@ -38,6 +41,7 @@ export interface ContextMenuSwatchOption {
   readonly label: string
   readonly color: string
   readonly selected: boolean
+  readonly selectedShadowColor: string
   readonly execute: Effect.Effect<unknown, unknown>
   readonly onFailure?: (cause: unknown) => void
 }
@@ -57,6 +61,52 @@ type ActionMenuKind = "context-menu" | "menu"
 const CONTEXT_MENU_KEY_SHORTCUTS = "Shift+F10 ContextMenu"
 const CONTEXT_MENU_ITEM_HEIGHT = 28
 const CONTEXT_MENU_VERTICAL_INSET = 8
+
+export interface ContextMenuDismissalState {
+  readonly revision: number
+  readonly signal: number
+}
+
+interface ContextMenuOpenState {
+  readonly open: boolean
+  readonly revision: number
+}
+
+export const advanceContextMenuDismissal = (
+  current: ContextMenuDismissalState,
+  signal: number
+): ContextMenuDismissalState => Object.is(current.signal, signal)
+  ? current
+  : { revision: current.revision + 1, signal }
+
+export const contextMenuIsOpen = (
+  state: ContextMenuOpenState,
+  dismissalRevision: number
+) => state.revision === dismissalRevision && state.open
+
+const ContextMenuDismissalRevision = createContext(0)
+
+export function CritContextMenuDismissalScope({
+  children,
+  signal
+}: {
+  readonly children: ReactNode
+  readonly signal: number
+}) {
+  const dismissalRef = useRef<ContextMenuDismissalState>({
+    revision: 0,
+    signal
+  })
+  dismissalRef.current = advanceContextMenuDismissal(
+    dismissalRef.current,
+    signal
+  )
+  return (
+    <ContextMenuDismissalRevision.Provider value={dismissalRef.current.revision}>
+      {children}
+    </ContextMenuDismissalRevision.Provider>
+  )
+}
 
 function openContextMenuFromKeyboard(event: KeyboardEvent<HTMLElement>) {
   const isContextMenuShortcut = event.key === "ContextMenu" ||
@@ -167,7 +217,10 @@ function BaseActionMenuItems({
           option.onFailure
         ),
         render: <Button type="button" />,
-        style: cssVariableStyle({ "--crit-swatch": option.color }),
+        style: cssVariableStyle({
+          "--crit-swatch": option.color,
+          "--crit-swatch-selected-shadow": option.selectedShadowColor
+        }),
         title: option.label
       })
       return (
@@ -290,12 +343,23 @@ export function CritContextActions({
     details: ContextMenu.Root.ChangeEventDetails
   ) => void
 }) {
+  const dismissalRevision = useContext(ContextMenuDismissalRevision)
   const overlayContainer = useCritOverlayContainer()
+  const [openState, setOpenState] = useState<ContextMenuOpenState>({
+    open: false,
+    revision: dismissalRevision
+  })
   return (
     // Nested Frame and Note triggers stop the originating context-menu and
     // long-press events, so an outer Canvas trigger only handles bare canvas.
-    <ContextMenu.Root onOpenChange={(open, details) =>
-      onOpenChange?.(open, details)}>
+    <ContextMenu.Root
+      onOpenChange={(open, details) => {
+        onOpenChange?.(open, details)
+        if (details.isCanceled) return
+        setOpenState({ open, revision: dismissalRevision })
+      }}
+      open={contextMenuIsOpen(openState, dismissalRevision)}
+    >
       <ContextMenu.Trigger
         aria-haspopup="menu"
         aria-keyshortcuts={CONTEXT_MENU_KEY_SHORTCUTS}

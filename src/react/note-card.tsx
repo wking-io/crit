@@ -26,7 +26,6 @@ import { useCanvasControls } from "./canvas-action-runner.js"
 import type { CanvasControlsInstance } from "./canvas-controls.js"
 import { canvasItemStyle } from "./canvas-item-style.js"
 import { informationalHelpTarget } from "./canvas-help.js"
-import { CanvasSelection } from "./canvas-selection.js"
 import { Glyph } from "./glyph.js"
 import {
   NOTE_COLOR_DEFINITIONS,
@@ -51,6 +50,32 @@ import {
 export const NOTE_MINIMUM_ROWS = 3
 const NOTE_BORDER_HEIGHT = 2
 const NOTE_MINIMUM_TEXTAREA_HEIGHT = 84
+export const NOTE_INTERACTION_BAND_HEIGHT = 28.5
+
+type NoteEditorFocusTarget = EventTarget & { readonly blur: () => void }
+
+export const blurNoteEditorOnSurfacePress = (
+  editor: NoteEditorFocusTarget | null,
+  target: EventTarget | null
+) => {
+  if (editor !== null && target !== editor) editor.blur()
+}
+
+export const listenForNoteEditorBlur = (
+  pointerSource: EventTarget,
+  editor: NoteEditorFocusTarget
+) => {
+  const listenerOptions = { capture: true } as const
+  const onPointerDown = (event: Event) => {
+    blurNoteEditorOnSurfacePress(editor, event.target)
+  }
+  pointerSource.addEventListener("pointerdown", onPointerDown, listenerOptions)
+  return () => pointerSource.removeEventListener(
+    "pointerdown",
+    onPointerDown,
+    listenerOptions
+  )
+}
 
 const NoteCorner = () => (
   <svg
@@ -67,7 +92,7 @@ const NoteCorner = () => (
     <path
       d="M0,28c2.21,0,4-1.79,4-4v-12c0-4.42,3.58-8,8-8h12c2.21,0,4-1.79,4-4"
       fill="none"
-      stroke="var(--crit-note-ink)"
+      stroke="var(--crit-note-outline)"
       strokeMiterlimit="10"
     />
     <path
@@ -82,14 +107,20 @@ const NoteCorner = () => (
     <path
       d="M26.83,2.83S2.81,26.85,2.81,26.85c.74-.73,1.19-1.73,1.19-2.85v-12c0-4.42,3.58-8,8-8h12c1.1,0,2.1-.45,2.83-1.17Z"
       fill="none"
-      stroke="var(--crit-note-ink)"
+      stroke="var(--crit-note-outline)"
       strokeMiterlimit="10"
     />
   </svg>
 )
 
 export const noteHeightForContent = (scrollHeight: number, zoom = 1) =>
-  Math.ceil(scrollHeight + NOTE_BORDER_HEIGHT / zoom)
+  Math.ceil(
+    scrollHeight +
+    (NOTE_BORDER_HEIGHT + NOTE_INTERACTION_BAND_HEIGHT) / zoom
+  )
+
+const noteTextareaHeight = (noteHeight: number, zoom: number) =>
+  noteHeight - (NOTE_BORDER_HEIGHT + NOTE_INTERACTION_BAND_HEIGHT) / zoom
 
 export interface NotePresentationSize {
   readonly width: number
@@ -121,6 +152,7 @@ export const noteContextMenuItems = (actions: {
       label: definition.label,
       color: definition.swatch,
       selected: definition.family === actions.color,
+      selectedShadowColor: definition.text,
       execute: actions.onColor(definition.family)
     }))
   }
@@ -224,6 +256,7 @@ export function NoteCard({
   ))
   const noteRef = useRef<HTMLElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const stopListeningForEditorBlurRef = useRef<null | (() => void)>(null)
   const textRef = useRef(note.text)
   const commitRef = useRef<NoteCommandCommit>(commit)
   commitRef.current = commit
@@ -254,7 +287,7 @@ export function NoteCard({
     : presentation.displayedWidth
   const worldWidth = displayedScreenWidth / zoom
   const [measuredHeight, setMeasuredHeight] = useState(
-    () => (NOTE_MINIMUM_TEXTAREA_HEIGHT + NOTE_BORDER_HEIGHT) / zoom
+    () => noteHeightForContent(NOTE_MINIMUM_TEXTAREA_HEIGHT, zoom)
   )
   const maximumExpandedScreenHeight = viewport === null
     ? NOTE_EXPANDED_MAXIMUM_HEIGHT
@@ -296,6 +329,10 @@ export function NoteCard({
 
   useEffect(() => () => editing.dispose(), [editing])
 
+  useEffect(() => () => {
+    stopListeningForEditorBlurRef.current?.()
+  }, [])
+
   useLayoutEffect(() => {
     const wasDirty = editing.isTextDirty(textRef.current)
     editing.synchronize(note, textRef.current)
@@ -328,7 +365,7 @@ export function NoteCard({
       if (textarea === null) return
       textarea.style.height = "auto"
       const nextHeight = noteHeightForContent(textarea.scrollHeight, zoom)
-      textarea.style.height = `${nextHeight - NOTE_BORDER_HEIGHT / zoom}px`
+      textarea.style.height = `${noteTextareaHeight(nextHeight, zoom)}px`
       setMeasuredHeight((current) => current === nextHeight ? current : nextHeight)
     })
     return () => globalThis.cancelAnimationFrame(frame)
@@ -348,7 +385,7 @@ export function NoteCard({
     if (textarea !== null) {
       textarea.style.height = "auto"
       const nextHeight = noteHeightForContent(textarea.scrollHeight, zoom)
-      textarea.style.height = `${nextHeight - NOTE_BORDER_HEIGHT / zoom}px`
+      textarea.style.height = `${noteTextareaHeight(nextHeight, zoom)}px`
       setMeasuredHeight(nextHeight)
     }
     editing.flush({ text: textRef.current })
@@ -470,7 +507,11 @@ export function NoteCard({
                   ? "Write review feedback. The note sizes itself to its content."
                   : "Only the Author can edit this note. You can select and move it."
               })}
-              onBlur={measureAndFlush}
+              onBlur={() => {
+                stopListeningForEditorBlurRef.current?.()
+                stopListeningForEditorBlurRef.current = null
+                measureAndFlush()
+              }}
               onChange={(event) => {
                 const nextText = event.currentTarget.value
                 textRef.current = nextText
@@ -478,6 +519,13 @@ export function NoteCard({
                 editing.schedule({ text: nextText })
               }}
               onContextMenu={(event) => event.stopPropagation()}
+              onFocus={() => {
+                const editor = textareaRef.current
+                if (editor === null) return
+                stopListeningForEditorBlurRef.current?.()
+                stopListeningForEditorBlurRef.current =
+                  listenForNoteEditorBlur(editor.ownerDocument, editor)
+              }}
               onPointerDown={(event) => {
                 event.stopPropagation()
                 onSelect(event.shiftKey || event.metaKey || event.ctrlKey)
@@ -487,6 +535,15 @@ export function NoteCard({
               ref={textareaRef}
               rows={NOTE_MINIMUM_ROWS}
               value={text}
+            />
+            <div
+              aria-hidden="true"
+              className="crit-note__interaction-band"
+              onPointerDown={(event) => {
+                if (event.button !== 0) return
+                onSelect(event.shiftKey || event.metaKey || event.ctrlKey)
+                onMove(event, { ...note, geometry: presentedGeometry })
+              }}
             />
             <NoteCorner />
             {!selected ? (
@@ -501,20 +558,11 @@ export function NoteCard({
                   if (event.detail === 0) onSelect()
                 }}
                 onPointerDown={(event) => {
+                  if (event.button !== 0) return
                   onSelect(event.shiftKey || event.metaKey || event.ctrlKey)
                   onMove(event, { ...note, geometry: presentedGeometry })
                 }}
                 type="button"
-              />
-            ) : null}
-            {selected && presentation.mode === "preview" ? (
-              <CanvasSelection
-                handles={[]}
-                ink="#77736b"
-                label="note"
-                onResize={() => undefined}
-                shell="#f5f4f0"
-                zoom={zoom}
               />
             ) : null}
           </>

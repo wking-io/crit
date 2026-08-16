@@ -70,7 +70,6 @@ import {
   type FrameSizePreset
 } from "./frame-breakpoints.js"
 import { Glyph } from "./glyph.js"
-import { useCritUnderlayContainer } from "./overlay-container.js"
 
 export type FrameToolbarMode = "full" | "compact" | "minimal"
 export type FrameChromeAction =
@@ -243,10 +242,19 @@ export const frameContentProjection = (
   shellWidth: Math.max(0, width)
 })
 
-export const statusFanProjection = (screenFrameGap: number) => ({
-  scale: 1,
-  frameGap: screenFrameGap
+export const statusFanProjection = (
+  screenFrameGap: number,
+  uiScale = 1
+) => ({
+  scale: uiScale,
+  frameGap: screenFrameGap * uiScale
 })
+
+export const statusMenuFrameZIndex = (
+  frameZIndex: number,
+  topCanvasZIndex: number,
+  active: boolean
+) => active ? Math.max(frameZIndex, topCanvasZIndex) : frameZIndex
 
 export interface FrameChromeMetrics {
   readonly screenHeight: number
@@ -319,6 +327,7 @@ export function FrameCard({
   iframeVisible,
   selected,
   shortId,
+  topZIndex,
   zoom,
   commentMode,
   commentThreads,
@@ -351,6 +360,7 @@ export function FrameCard({
   readonly iframeVisible: boolean
   readonly selected: boolean
   readonly shortId: string
+  readonly topZIndex: number
   readonly zoom: number
   readonly commentMode: boolean
   readonly commentThreads: ReadonlyArray<CanvasCommentThread>
@@ -380,7 +390,6 @@ export function FrameCard({
 }) {
   const frameRef = useRef<HTMLElement>(null)
   const iframeRef = useRef<HTMLIFrameElement>(null)
-  const underlayContainer = useCritUnderlayContainer()
   const statusMenuActionsRef = useRef<Menu.Root.Actions | null>(null)
   const statusMenuTriggerRef = useRef<HTMLButtonElement>(null)
   const restoreStatusTriggerFocusRef = useRef(false)
@@ -388,6 +397,8 @@ export function FrameCard({
   const [statusMenuHandle] = useState(() => Menu.createHandle())
   const [contextMenuOpen, setContextMenuOpen] = useState(false)
   const [fullscreen, setFullscreen] = useState(false)
+  const [statusMenuLayerActive, setStatusMenuLayerActive] =
+    useState(defaultStatusMenuOpen)
   const [statusMenuOpen, setStatusMenuOpen] = useState(defaultStatusMenuOpen)
   const [titleDraft, setTitleDraft] = useState(frame.title)
   const [titleEditing, setTitleEditing] = useState(false)
@@ -437,9 +448,12 @@ export function FrameCard({
     geometry.height,
     zoom
   )
-  const statusFan = statusFanProjection(statusPillLayout.frameGap)
+  const statusFan = statusFanProjection(statusPillLayout.frameGap, uiScale)
   const frameStyle = {
-    ...canvasItemStyle(geometry, frame.zIndex),
+    ...canvasItemStyle(
+      geometry,
+      statusMenuFrameZIndex(frame.zIndex, topZIndex, statusMenuLayerActive)
+    ),
     height: contentProjection.shellHeight,
     "--crit-ui": uiScale,
     "--frame-ink": status.ink,
@@ -797,16 +811,18 @@ export function FrameCard({
             runner.run(
               controls,
               openStatusAction,
-              Effect.sync(() => setStatusMenuOpen(true)),
+              Effect.sync(() => {
+                setStatusMenuLayerActive(true)
+                setStatusMenuOpen(true)
+              }),
               onSnapshotError
             )
           }}
           open={statusMenuOpen}
           triggerId={statusMenuTriggerId}
         >
-          <Menu.Portal container={underlayContainer}>
+          <Menu.Portal container={frameRef}>
             <Menu.Positioner
-              align="start"
               anchor={frameRef}
               className="crit-status-positioner"
               collisionAvoidance={{
@@ -815,13 +831,13 @@ export function FrameCard({
                 side: "none"
               }}
               side="top"
-              sideOffset={statusFan.frameGap}
             >
               <Menu.Popup
                 aria-label={`Set status for ${frame.title}`}
                 className="crit-status-menu"
                 onPointerDown={(event) => event.stopPropagation()}
                 style={cssVariableStyle({
+                  "--crit-status-frame-gap": `${statusFan.frameGap}px`,
                   "--crit-status-ui": statusFan.scale
                 })}
               >
@@ -829,6 +845,7 @@ export function FrameCard({
                   onExitComplete={() => {
                     if (!statusMenuOpen) {
                       statusMenuActionsRef.current?.unmount()
+                      setStatusMenuLayerActive(false)
                       if (restoreStatusTriggerFocusRef.current) {
                         statusMenuTriggerRef.current?.focus()
                       }

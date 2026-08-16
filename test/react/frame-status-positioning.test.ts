@@ -4,20 +4,52 @@ import { describe, expect, it } from "vitest"
 
 import { critStyles } from "../../src/react/crit-styles.js"
 import { STATUS_PILL_MOTION } from "../../src/react/frame-chrome.js"
+import { statusMenuFrameZIndex } from "../../src/react/frame-card.js"
+
+const cssRule = (selector: string) => {
+  const start = critStyles.indexOf(`${selector} {`)
+  if (start < 0) return ""
+  const end = critStyles.indexOf("}", start)
+  return critStyles.slice(start, end + 1)
+}
 
 describe("Frame status positioning", () => {
-  it("positions every frame status menu in the canvas underlay coordinate space", async () => {
+  it("temporarily stacks the active frame above every Canvas item", () => {
+    expect(statusMenuFrameZIndex(3, 11, false)).toBe(3)
+    expect(statusMenuFrameZIndex(3, 11, true)).toBe(11)
+  })
+
+  it("keeps the pills inside and behind the active frame stacking context", async () => {
     const source = await readFile(
       new URL("../../src/react/frame-card.tsx", import.meta.url),
       "utf8"
     )
 
-    expect(source).toContain("const underlayContainer = useCritUnderlayContainer()")
-    expect(source).toContain("<Menu.Portal container={underlayContainer}>")
-    expect(source).not.toContain("<Menu.Portal container={frameRef}>")
-    expect(source).toContain('anchor={frameRef}')
-    expect(source).toContain('align="start"')
-    expect(source).toContain('side="top"')
+    expect(source).toContain("const [statusMenuLayerActive")
+    expect(source).toContain("statusMenuFrameZIndex(")
+    expect(source).toContain("setStatusMenuLayerActive(false)")
+    expect(source).toContain("<Menu.Portal container={frameRef}>")
+    expect(source).toContain('<Menu.Positioner')
+    expect(cssRule(".crit-status-positioner")).toContain("z-index: -1")
+  })
+
+  it("positions every status fan in its frame-local coordinate space", async () => {
+    const source = await readFile(
+      new URL("../../src/react/frame-card.tsx", import.meta.url),
+      "utf8"
+    )
+
+    expect(source).not.toContain("useCritUnderlayContainer")
+    expect(source).toContain("<Menu.Portal container={frameRef}>")
+    expect(source).toContain('className="crit-status-positioner"')
+    expect(source).toContain('"--crit-status-frame-gap"')
+    expect(cssRule(".crit-status-positioner")).toContain(
+      "transform: none !important"
+    )
+    expect(cssRule(".crit-status-menu")).toContain("position: absolute")
+    expect(cssRule(".crit-status-menu")).toContain(
+      "bottom: var(--crit-status-frame-gap, 0)"
+    )
   })
 
   it("closes the status fan in exactly 200ms", () => {
@@ -27,12 +59,12 @@ describe("Frame status positioning", () => {
     })
   })
 
-  it("preserves the complete status-pill styling inside that underlay", () => {
+  it("preserves the complete status-pill styling inside the Canvas", () => {
     expect(critStyles).toMatch(
-      /\.crit-underlay-container \.crit-status-option,[^{]*\{[^}]*background: var\(--status-shell\);/s
+      /\.crit-canvas \.crit-status-option,[^{]*\{[^}]*background: var\(--status-shell\);/s
     )
     expect(critStyles).toMatch(
-      /\.crit-underlay-container \.crit-status-option,[^{]*\{[^}]*box-sizing: border-box;/s
+      /\.crit-canvas \.crit-status-option,[^{]*\{[^}]*box-sizing: border-box;/s
     )
   })
 
