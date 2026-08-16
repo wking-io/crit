@@ -115,6 +115,7 @@ describe("crit Vite plugin", () => {
 
   it("loads and applies commands to an explicitly created Canvas over HTTP", async () => {
     await createCanvas("homepage")
+    await createCanvas("checkout", "Checkout review")
     const origin = await start()
     const { activity, client } = HttpCritClient.make({
       apiPath: `${origin}/__crit/api`
@@ -159,6 +160,9 @@ describe("crit Vite plugin", () => {
         text: "Agent updated this"
       })
     ]))
+    const renamed = await Effect.runPromise(client.apply("homepage", [
+      CanvasCommand.renameCanvas({ title: "Homepage review" })
+    ]))
     const stale = await Effect.runPromise(Effect.flip(client.apply("homepage", [
       CanvasCommand.editNote({
         id: "note",
@@ -168,7 +172,11 @@ describe("crit Vite plugin", () => {
       })
     ])))
     const loaded = await Effect.runPromise(client.load("homepage"))
-    const persisted = Schema.decodeUnknownSync(Schema.Struct({ revision: Schema.Number }))(JSON.parse(
+    const renamedEditorHtml = await (await fetch(`${origin}/crit/homepage`)).text()
+    const persisted = Schema.decodeUnknownSync(Schema.Struct({
+      revision: Schema.Number,
+      title: Schema.String
+    }))(JSON.parse(
       await readFile(path.join(root, ".crit/canvases/homepage.json"), "utf8")
     ))
     const methodResponse = await fetch(
@@ -201,6 +209,10 @@ describe("crit Vite plugin", () => {
     expect(editorHtml).toContain("overflow:hidden;overscroll-behavior:none")
     expect(editorHtml).toContain("overscroll-behavior-x:none")
     expect(editorHtml).toContain("data-crit-live-refresh=")
+    expect(editorHtml).toContain('data-crit-editor-path="/crit"')
+    expect(editorHtml).toContain("data-crit-canvas-choices=")
+    expect(editorHtml).toContain("&quot;id&quot;:&quot;checkout&quot;")
+    expect(editorHtml).toContain("&quot;title&quot;:&quot;Checkout review&quot;")
     expect(activities).toMatchObject({
       canvasId: "homepage",
       activities: [{
@@ -214,10 +226,16 @@ describe("crit Vite plugin", () => {
     expect(saved.revision).toBe(1)
     expect(second.revision).toBe(2)
     expect(updated.revision).toBe(3)
+    expect(renamed).toMatchObject({
+      id: "homepage",
+      title: "Homepage review",
+      revision: 4
+    })
     expect(stale).toBeInstanceOf(CritClientCommandFailed)
     expect(stale).toMatchObject({ reason: "note-conflict" })
-    expect(loaded.revision).toBe(3)
-    expect(persisted.revision).toBe(3)
+    expect(loaded).toMatchObject({ revision: 4, title: "Homepage review" })
+    expect(persisted).toMatchObject({ revision: 4, title: "Homepage review" })
+    expect(renamedEditorHtml).toContain("&quot;title&quot;:&quot;Homepage review&quot;")
     expect(methodResponse.status).toBe(405)
     expect(methodResponse.headers.get("allow")).toBe("GET, PATCH")
     expect(invalidResponse.status).toBe(400)
@@ -241,6 +259,7 @@ describe("crit Vite plugin", () => {
     expect(editorModule).not.toContain("dialkit")
     expect(editorModule).toContain("DEFAULT_FRAME_CHROME_SETTINGS")
     expect(editorModule).toContain("DEFAULT_CANVAS_CAMERA_OPTIONS")
+    expect(editorModule).toContain("developerTools: true")
     expect(editorModule).toContain('frameLoading: {"strategy":"navigate"}')
   })
 

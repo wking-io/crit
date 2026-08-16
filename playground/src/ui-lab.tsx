@@ -1,3 +1,8 @@
+import { Button } from "@base-ui/react/button"
+import { Input } from "@base-ui/react/input"
+import { Toast } from "@base-ui/react/toast"
+import { Toggle } from "@base-ui/react/toggle"
+import { Tooltip } from "@base-ui/react/tooltip"
 import {
   DialRoot,
   useDialKit,
@@ -9,7 +14,6 @@ import { Effect } from "effect"
 import {
   useEffect,
   useMemo,
-  useRef,
   useState,
   type ReactNode
 } from "react"
@@ -21,7 +25,10 @@ import type {
   Author,
   FrameReviewStatus
 } from "../../src/core/index.js"
-import { CritContextMenu, type ContextMenuItem } from "../../src/react/canvas-context-menu.js"
+import {
+  CritMenuSpecimen,
+  type ContextMenuItem
+} from "../../src/react/canvas-context-menu.js"
 import { CanvasActionRunnerProvider } from "../../src/react/canvas-action-runner.js"
 import { CanvasControls } from "../../src/react/canvas-controls.js"
 import { cssVariableStyle } from "../../src/react/css-variable-style.js"
@@ -36,6 +43,10 @@ import { FrameCard } from "../../src/react/frame-card.js"
 import { Glyph } from "../../src/react/glyph.js"
 import { NewFrameForm } from "../../src/react/new-frame-dialog.js"
 import { NoteCard } from "../../src/react/note-card.js"
+import {
+  CritOverlayProvider,
+  useCritOverlayContainer
+} from "../../src/react/overlay-container.js"
 
 import "dialkit/styles.css"
 import "./base-tokens.css"
@@ -399,10 +410,6 @@ function StateLabel({ children }: { readonly children: ReactNode }) {
   return <span className="ui-state-label">{children}</span>
 }
 
-function UiTooltip({ children, id }: { readonly children: ReactNode; readonly id: string }) {
-  return <span aria-live="polite" className="ui-tooltip" id={id} role="tooltip">{children}</span>
-}
-
 export const oklchToHex = (color: string) => {
   const match = color.match(/^oklch\(([\d.]+)%\s+([\d.]+)\s+(none|[-\d.]+)\)$/)
   if (match === null) return color
@@ -434,10 +441,34 @@ export const oklchToHex = (color: string) => {
   return `#${linear.map(channel).join("")}`
 }
 
-function ColorScale({ values }: { readonly values: TokenValues }) {
-  const [copiedToken, setCopiedToken] = useState<TokenName | null>(null)
+function ColorCopyToasts() {
+  const { toasts } = Toast.useToastManager()
+  const overlayContainer = useCritOverlayContainer()
+  return (
+    <Toast.Portal container={overlayContainer}>
+      <Toast.Viewport className="ui-color-toast-viewport">
+        {toasts.map((toast) => (
+          <Toast.Positioner
+            className="ui-color-toast-positioner"
+            key={toast.id}
+            toast={toast}
+          >
+            <Toast.Root className="ui-color-toast" toast={toast}>
+              <Toast.Content>
+                <Toast.Description className="ui-color-toast__description" />
+              </Toast.Content>
+            </Toast.Root>
+          </Toast.Positioner>
+        ))}
+      </Toast.Viewport>
+    </Toast.Portal>
+  )
+}
+
+function ColorScaleContent({ values }: { readonly values: TokenValues }) {
   const [shiftHeld, setShiftHeld] = useState(false)
-  const copyReset = useRef<number | undefined>(undefined)
+  const toastManager = Toast.useToastManager()
+  const overlayContainer = useCritOverlayContainer()
   useEffect(() => {
     const update = (event: KeyboardEvent) => setShiftHeld(event.shiftKey)
     const reset = () => setShiftHeld(false)
@@ -448,15 +479,16 @@ function ColorScale({ values }: { readonly values: TokenValues }) {
       window.removeEventListener("keydown", update)
       window.removeEventListener("keyup", update)
       window.removeEventListener("blur", reset)
-      window.clearTimeout(copyReset.current)
     }
   }, [])
-  const confirmCopy = (token: TokenName) => {
-    setCopiedToken(token)
-    window.clearTimeout(copyReset.current)
-    copyReset.current = window.setTimeout(() => setCopiedToken(null), 1200)
+  const confirmCopy = (anchor: Element) => {
+    toastManager.add({
+      description: "copied",
+      id: "ui-color-copy",
+      positionerProps: { anchor, sideOffset: 7 }
+    })
   }
-  const copyColor = (token: TokenName, color: string) => {
+  const copyColor = (color: string, anchor: Element) => {
     const previousFocus = document.activeElement
     const textarea = document.createElement("textarea")
     textarea.value = color
@@ -474,18 +506,15 @@ function ColorScale({ values }: { readonly values: TokenValues }) {
     textarea.remove()
     if (previousFocus instanceof HTMLElement) previousFocus.focus({ preventScroll: true })
     if (copied) {
-      confirmCopy(token)
+      confirmCopy(anchor)
       return
     }
     if (navigator.clipboard === undefined) {
-      setCopiedToken(null)
       return
     }
     void navigator.clipboard.writeText(color).then(() => {
-      confirmCopy(token)
-    }).catch(() => {
-      setCopiedToken(null)
-    })
+      confirmCopy(anchor)
+    }).catch(() => undefined)
   }
 
   return (
@@ -501,7 +530,6 @@ function ColorScale({ values }: { readonly values: TokenValues }) {
                   throw new TypeError(`Missing UI lab token ${token.name}`)
                 }
                 const displayedColor = shiftHeld ? oklchToHex(oklch) : oklch
-                const tooltipId = `ui-color-${palette.id}-${token.shortName}`
                 return <li
                   className="ui-scale__token"
                   key={token.name}
@@ -512,18 +540,26 @@ function ColorScale({ values }: { readonly values: TokenValues }) {
                       : "var(--crit-color-s1)"
                   })}
                 >
-                  <button
-                    aria-describedby={tooltipId}
-                    aria-label={`Copy ${displayedColor}`}
-                    className="ui-scale__copy"
-                    onClick={() => copyColor(token.name, displayedColor)}
-                    type="button"
-                  >
-                    <strong>{token.shortName}</strong>
-                    <UiTooltip id={tooltipId}>
-                      {copiedToken === token.name ? "copied" : displayedColor}
-                    </UiTooltip>
-                  </button>
+                  <Tooltip.Root>
+                    <Tooltip.Trigger
+                      aria-label={`Copy ${displayedColor}`}
+                      className="ui-scale__copy"
+                      onClick={(event) => copyColor(displayedColor, event.currentTarget)}
+                      render={<Button type="button" />}
+                    >
+                      <strong>{token.shortName}</strong>
+                    </Tooltip.Trigger>
+                    <Tooltip.Portal container={overlayContainer}>
+                      <Tooltip.Positioner
+                        className="ui-tooltip-positioner"
+                        sideOffset={7}
+                      >
+                        <Tooltip.Popup className="ui-tooltip">
+                          {displayedColor}
+                        </Tooltip.Popup>
+                      </Tooltip.Positioner>
+                    </Tooltip.Portal>
+                  </Tooltip.Root>
                 </li>
               })}
             </ol>
@@ -534,16 +570,28 @@ function ColorScale({ values }: { readonly values: TokenValues }) {
   )
 }
 
+function ColorScale({ values }: { readonly values: TokenValues }) {
+  return (
+    <Tooltip.Provider closeDelay={0} delay={0}>
+      <Toast.Provider limit={1} timeout={1200}>
+        <ColorScaleContent values={values} />
+        <ColorCopyToasts />
+      </Toast.Provider>
+    </Tooltip.Provider>
+  )
+}
+
 const TOOLBAR_BUTTON_STATES: ReadonlyArray<{
   readonly icon: "pointer" | "pan" | "addFrame" | "comment" | "undo"
   readonly label: string
   readonly state: "default" | "hover" | "focus" | "pressed" | "disabled"
+  readonly toggle: boolean
 }> = [
-  { icon: "pointer", label: "Default", state: "default" },
-  { icon: "pan", label: "Hover", state: "hover" },
-  { icon: "addFrame", label: "Focus", state: "focus" },
-  { icon: "comment", label: "Pressed", state: "pressed" },
-  { icon: "undo", label: "Unavailable", state: "disabled" }
+  { icon: "pointer", label: "Default", state: "default", toggle: true },
+  { icon: "pan", label: "Hover", state: "hover", toggle: true },
+  { icon: "addFrame", label: "Focus", state: "focus", toggle: false },
+  { icon: "comment", label: "Pressed", state: "pressed", toggle: true },
+  { icon: "undo", label: "Unavailable", state: "disabled", toggle: false }
 ]
 
 function ToolbarSpecimens() {
@@ -559,16 +607,24 @@ function ToolbarSpecimens() {
         />
       </div>
       <div className="ui-state-grid ui-state-grid--buttons">
-        {TOOLBAR_BUTTON_STATES.map(({ icon, label, state }) => (
+        {TOOLBAR_BUTTON_STATES.map(({ icon, label, state, toggle }) => (
           <div className="ui-state-cell" key={state}>
             <StateLabel>{label}</StateLabel>
-            <button
-              aria-disabled={state === "disabled" || undefined}
-              aria-pressed={state === "pressed" || undefined}
-              className="crit-icon-button ui-toolbar-button--large"
-              data-state={state}
-              type="button"
-            ><Glyph name={icon} /></button>
+            {toggle ? (
+              <Toggle
+                aria-disabled={state === "disabled" || undefined}
+                className="crit-icon-button ui-toolbar-button--large"
+                data-state={state}
+                pressed={state === "pressed"}
+              ><Glyph name={icon} /></Toggle>
+            ) : (
+              <Button
+                aria-disabled={state === "disabled" || undefined}
+                className="crit-icon-button ui-toolbar-button--large"
+                data-state={state}
+                type="button"
+              ><Glyph name={icon} /></Button>
+            )}
           </div>
         ))}
       </div>
@@ -707,7 +763,8 @@ function NoteSpecimen({
     author: { id: "wes", name: "Wes King" },
     geometry,
     attachedTo: attached ? "Checkout candidate" : null,
-    zIndex: 1
+    zIndex: 1,
+    color: "blue"
   }
   return (
     <div className="crit-canvas ui-production-canvas ui-note-stage">
@@ -719,7 +776,6 @@ function NoteSpecimen({
         note={note}
         onBringToFront={() => Effect.void}
         onMove={() => {}}
-        onResize={() => {}}
         onSelect={() => {}}
         onSendToBack={() => Effect.void}
         selected={selected}
@@ -835,12 +891,9 @@ function ContextMenuSpecimen({ ariaLabel, items }: {
   readonly items: ReadonlyArray<ContextMenuItem>
 }) {
   return (
-    <CritContextMenu
+    <CritMenuSpecimen
       ariaLabel={ariaLabel}
-      inline
       items={items}
-      onClose={() => {}}
-      position={{ x: 0, y: 0 }}
     />
   )
 }
@@ -865,7 +918,7 @@ function ButtonState({
   readonly primary?: boolean
   readonly state?: "default" | "hover" | "focus" | "pressed" | "disabled"
 }) {
-  return <span className="crit-new-frame-dialog__actions"><button data-primary={primary ? "" : undefined} data-state={state} disabled={state === "disabled"} type="button">{children}</button></span>
+  return <span className="crit-new-frame-dialog__actions"><Button data-primary={primary ? "" : undefined} data-state={state} disabled={state === "disabled"} type="button">{children}</Button></span>
 }
 
 function DialogSpecimens() {
@@ -875,10 +928,10 @@ function DialogSpecimens() {
         <NewFrameForm onCancel={() => {}} onCreate={() => Effect.void} onError={() => {}} />
       </div>
       <div className="crit-new-frame-dialog ui-form-state-grid">
-        <label><StateLabel>Empty</StateLabel><input placeholder="https://example.com/iteration" /></label>
-        <label><StateLabel>Populated</StateLabel><input defaultValue="Checkout candidate" /></label>
-        <label><StateLabel>Focused</StateLabel><input className="is-focus" defaultValue="Checkout candidate" /></label>
-        <label><StateLabel>Disabled</StateLabel><input defaultValue="Unavailable" disabled /></label>
+        <label><StateLabel>Empty</StateLabel><Input placeholder="https://example.com/iteration" /></label>
+        <label><StateLabel>Populated</StateLabel><Input defaultValue="Checkout candidate" /></label>
+        <label><StateLabel>Focused</StateLabel><Input className="is-focus" defaultValue="Checkout candidate" /></label>
+        <label><StateLabel>Disabled</StateLabel><Input defaultValue="Unavailable" disabled /></label>
       </div>
       <div className="crit-new-frame-dialog ui-button-state-grid">
         <div><StateLabel>Default</StateLabel><ButtonState>Cancel</ButtonState></div>
@@ -985,25 +1038,27 @@ export default function UiLab() {
         data-greyscale={recipes.baseScale.greyscale || undefined}
         style={recipeStyle}
       >
-      <main className="ui-lab">
-        <ColorScale values={tokenValues} />
-        <ToolbarSpecimens />
-        <FramesSpecimens />
-        <NotesSpecimens />
-        <FeedbackSpecimens />
-        <MenuSpecimens />
-        <DialogSpecimens />
-        <CommentSpecimens />
-        <MessageSpecimens />
-      </main>
+        <CritOverlayProvider className="ui-lab-overlays">
+          <main className="ui-lab">
+            <ColorScale values={tokenValues} />
+            <ToolbarSpecimens />
+            <FramesSpecimens />
+            <NotesSpecimens />
+            <FeedbackSpecimens />
+            <MenuSpecimens />
+            <DialogSpecimens />
+            <CommentSpecimens />
+            <MessageSpecimens />
+          </main>
 
-      <aside aria-label="DialKit color controls" className="ui-lab-dials">
-        <DialRoot
-          mode="inline"
-          productionEnabled
-          theme="light"
-        />
-      </aside>
+          <aside aria-label="DialKit color controls" className="ui-lab-dials">
+            <DialRoot
+              mode="inline"
+              productionEnabled
+              theme="light"
+            />
+          </aside>
+        </CritOverlayProvider>
       </div>
     </CanvasActionRunnerProvider>
   )

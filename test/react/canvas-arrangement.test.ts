@@ -6,6 +6,8 @@ import {
   CanvasArrangementUnavailable,
   type CanvasArrangementItem
 } from "../../src/react/canvas-arrangement.js"
+import { canvasArrangementFootprint } from "../../src/react/canvas-arrangement-footprint.js"
+import { frameContentProjection } from "../../src/react/frame-card.js"
 
 const item = (
   id: string,
@@ -97,11 +99,52 @@ describe("CanvasArrangement", () => {
     }).moves
 
     expect(moves).toEqual([
-      { id: "a", x: -45, y: -45 },
-      { id: "b", x: 55, y: -45 },
-      { id: "c", x: -45, y: 55 },
-      { id: "d", x: 55, y: 55 }
+      { id: "a", x: -65, y: -65 },
+      { id: "b", x: 75, y: -65 },
+      { id: "c", x: -65, y: 75 },
+      { id: "d", x: 75, y: 75 }
     ])
+  })
+
+  it("keeps a visible gap between every grid row and column", () => {
+    const moves = plan({
+      operation: { _tag: "ArrangeGrid" },
+      items: [
+        item("a", 0, 0, 100, 100),
+        item("b", 10, 0, 100, 100),
+        item("c", 0, 10, 100, 100),
+        item("d", 10, 10, 100, 100)
+      ]
+    }).moves
+    const positions = new Map(moves.map((move) => [move.id, move]))
+
+    expect(positions.get("a")!.x + 100).toBeLessThan(positions.get("b")!.x)
+    expect(positions.get("a")!.y + 100).toBeLessThan(positions.get("c")!.y)
+  })
+
+  it("keeps the grid row gap outside visible Frame chrome", () => {
+    const zoom = .65
+    const geometry = { x: 0, y: 0, width: 100, height: 100 }
+    const items = [
+      { id: "a", geometry },
+      { id: "b", geometry: { ...geometry, x: 10 } },
+      { id: "c", geometry: { ...geometry, y: 10 } },
+      { id: "d", geometry: { ...geometry, x: 10, y: 10 } }
+    ].map(({ id, geometry }) => canvasArrangementFootprint({
+      id,
+      geometry,
+      kind: "frame",
+      zoom
+    }))
+    const moves = plan({
+      operation: { _tag: "ArrangeGrid" },
+      items
+    }).moves
+    const positions = new Map(moves.map((move) => [move.id, move]))
+    const shellHeight = frameContentProjection(100, 100, zoom).shellHeight
+
+    expect(positions.get("c")!.y - (positions.get("a")!.y + shellHeight))
+      .toBeGreaterThanOrEqual(40)
   })
 
   it("reports invalid requests through its typed interface", () => {

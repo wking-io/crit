@@ -61,6 +61,11 @@ export type CanvasCameraInput =
       readonly viewport: { readonly width: number; readonly height: number }
     }
   | {
+      readonly type: "zoom-to"
+      readonly zoom: number
+      readonly viewport: { readonly width: number; readonly height: number }
+    }
+  | {
       readonly type: "pan"
       readonly deltaX: number
       readonly deltaY: number
@@ -210,6 +215,26 @@ const updateZoomStepCamera = (
   }
 }
 
+const updateZoomToCamera = (
+  state: CanvasCameraState,
+  input: CameraInput<"zoom-to">,
+  options: CanvasCameraOptions
+): CanvasCameraState => {
+  if (
+    !Number.isFinite(input.zoom) ||
+    input.zoom <= 0 ||
+    input.viewport.width <= 0 ||
+    input.viewport.height <= 0
+  ) return state
+  return {
+    camera: cameraAtPoint(
+      state.camera,
+      clampZoom(input.zoom, options),
+      { x: input.viewport.width / 2, y: input.viewport.height / 2 }
+    )
+  }
+}
+
 const updatePinchCamera = (
   state: CanvasCameraState,
   input: CameraInput<"pinch">,
@@ -286,6 +311,8 @@ export const updateCanvasCamera = (
       }),
       "zoom-step": (zoomInput) =>
         updateZoomStepCamera(state, zoomInput, options),
+      "zoom-to": (zoomInput) =>
+        updateZoomToCamera(state, zoomInput, options),
       pinch: (pinchInput) => updatePinchCamera(state, pinchInput, options),
       wheel: (wheelInput) => updateWheelCamera(state, wheelInput, options)
     })

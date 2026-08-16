@@ -1,31 +1,25 @@
-import { useHotkey } from "@tanstack/react-hotkeys"
+import { Button } from "@base-ui/react/button"
+import { ContextMenu } from "@base-ui/react/context-menu"
+import { Menu } from "@base-ui/react/menu"
 import { Effect } from "effect"
 import {
-  useCallback,
-  useEffect,
   useRef,
-  useState,
+  type KeyboardEvent,
+  type ReactElement,
   type ReactNode
 } from "react"
-import { createPortal } from "react-dom"
-
-import { defaultRuntimeCapabilities } from "../runtime/runtime-capabilities.js"
 
 import {
   useCanvasActionRunner,
   useCanvasControls
 } from "./canvas-action-runner.js"
 import {
-  tanStackHotkeysForAction,
   type ResolvedCanvasAction
 } from "./canvas-controls.js"
 import { actionHelpTarget } from "./canvas-help.js"
+import { cssVariableStyle } from "./css-variable-style.js"
 import { Glyph } from "./glyph.js"
-
-export type ContextMenuPosition = {
-  readonly x: number
-  readonly y: number
-}
+import { useCritOverlayContainer } from "./overlay-container.js"
 
 export type ContextMenuActionItem =
   | {
@@ -40,261 +34,337 @@ export type ContextMenuActionItem =
       readonly href: string
     }
 
+export interface ContextMenuSwatchOption {
+  readonly label: string
+  readonly color: string
+  readonly selected: boolean
+  readonly execute: Effect.Effect<unknown, unknown>
+  readonly onFailure?: (cause: unknown) => void
+}
+
 export type ContextMenuItem =
   | ContextMenuActionItem
   | {
       readonly action: ResolvedCanvasAction
       readonly items: ReadonlyArray<ContextMenuActionItem>
     }
+  | {
+      readonly action: ResolvedCanvasAction
+      readonly swatches: ReadonlyArray<ContextMenuSwatchOption>
+    }
 
-function ContextMenuAction({
-  item,
-  onClose,
-  onPointerEnter
-}: {
-  readonly item: ContextMenuActionItem
-  readonly onClose: () => void
-  readonly onPointerEnter?: () => void
-}) {
-  const controls = useCanvasControls(["canvas", "menu"], true)
-  const runner = useCanvasActionRunner()
-  const { action } = item
-  if (action.availability === "hidden") return null
-  const content = (
+type ActionMenuKind = "context-menu" | "menu"
+const CONTEXT_MENU_KEY_SHORTCUTS = "Shift+F10 ContextMenu"
+const CONTEXT_MENU_ITEM_HEIGHT = 28
+const CONTEXT_MENU_VERTICAL_INSET = 8
+
+function openContextMenuFromKeyboard(event: KeyboardEvent<HTMLElement>) {
+  const isContextMenuShortcut = event.key === "ContextMenu" ||
+    (event.key === "F10" && event.shiftKey)
+  if (!isContextMenuShortcut || event.target !== event.currentTarget) return
+
+  event.preventDefault()
+  event.stopPropagation()
+  const view = event.currentTarget.ownerDocument.defaultView
+  if (view === null) return
+  const bounds = event.currentTarget.getBoundingClientRect()
+  event.currentTarget.dispatchEvent(new view.MouseEvent("contextmenu", {
+    bubbles: true,
+    cancelable: true,
+    clientX: bounds.left + bounds.width / 2,
+    clientY: bounds.top + bounds.height / 2,
+    view
+  }))
+}
+
+function ActionItemContent({ item }: { readonly item: ContextMenuActionItem }) {
+  return (
     <>
-      <span>{action.label}</span>
+      <span>{item.action.label}</span>
       {item.detail === undefined ? null : (
         <span className="crit-context-menu__detail">{item.detail}</span>
       )}
     </>
   )
-
-  return "href" in item ? (
-    <a
-      aria-keyshortcuts={action.ariaKeyShortcuts ?? undefined}
-      href={item.href}
-      {...actionHelpTarget(action)}
-      onClick={onClose}
-      onPointerEnter={onPointerEnter}
-      rel="noreferrer"
-      role="menuitem"
-      target="_blank"
-    >
-      {content}
-    </a>
-  ) : (
-    <button
-      aria-keyshortcuts={action.ariaKeyShortcuts ?? undefined}
-      data-tone={action.consequence === "destructive" ? "danger" : undefined}
-      disabled={action.availability !== "enabled"}
-      {...actionHelpTarget(action)}
-      onClick={() => {
-        onClose()
-        runner.run(controls, action, item.execute, item.onFailure)
-      }}
-      onPointerEnter={onPointerEnter}
-      role="menuitem"
-      type="button"
-    >
-      {content}
-    </button>
-  )
 }
 
-export function CritContextMenu({
-  ariaLabel,
-  inline = false,
-  items,
-  onClose,
-  position
+function BaseActionMenuItem({
+  item,
+  kind
 }: {
-  readonly ariaLabel: string
-  readonly inline?: boolean
-  readonly items: ReadonlyArray<ContextMenuItem>
-  readonly onClose: () => void
-  readonly position: ContextMenuPosition | null
+  readonly item: ContextMenuActionItem
+  readonly kind: ActionMenuKind
 }) {
   const controls = useCanvasControls(["canvas", "menu"], true)
   const runner = useCanvasActionRunner()
-  const menuRef = useRef<HTMLDivElement>(null)
-  const submenuRef = useRef<HTMLDivElement>(null)
-  const [submenu, setSubmenu] = useState<{
-    readonly action: ResolvedCanvasAction
-    readonly items: ReadonlyArray<ContextMenuActionItem>
-    readonly position: ContextMenuPosition
-  } | null>(null)
+  const { action } = item
+  if (action.availability === "hidden") return null
 
-  const close = useCallback(() => {
-    setSubmenu(null)
-    onClose()
-  }, [onClose])
-  const closeAction = controls.action({ id: "close-context-menu" })
-  const closeHotkey = tanStackHotkeysForAction(closeAction)[0]!
-
-  useHotkey(closeHotkey, () => {
-    runner.run(controls, closeAction, Effect.sync(close))
-  }, {
-    conflictBehavior: "allow",
-    enabled: position !== null,
-    ignoreInputs: false
-  })
-
-  const openSubmenu = (
-    item: Extract<ContextMenuItem, { readonly items: unknown }>,
-    trigger: HTMLButtonElement,
-    focusFirst = false
-  ) => {
-    const rect = trigger.getBoundingClientRect()
-    const menuWidth = 208
-    const submenuHeight = item.items.length * 34 + 8
-    const opensRight = rect.right + 4 + menuWidth <= window.innerWidth - 8
-    setSubmenu({
-      action: item.action,
-      items: item.items,
-      position: inline ? { x: 0, y: 0 } : {
-        x: opensRight ? rect.right + 4 : rect.left - menuWidth - 4,
-        y: Math.max(8, Math.min(rect.top, window.innerHeight - submenuHeight - 8))
-      }
-    })
-    if (focusFirst) {
-      window.requestAnimationFrame(() => {
-        submenuRef.current?.querySelector<HTMLElement>("[role=menuitem]")?.focus()
-      })
-    }
+  const sharedProps = {
+    "aria-keyshortcuts": action.ariaKeyShortcuts ?? undefined,
+    className: "crit-context-menu__item",
+    "data-tone": action.consequence === "destructive" ? "danger" : undefined,
+    label: action.label,
+    ...actionHelpTarget(action)
+  }
+  if ("href" in item && action.availability === "enabled") {
+    const link = (
+      <a href={item.href} rel="noreferrer" target="_blank">
+        <ActionItemContent item={item} />
+      </a>
+    )
+    return kind === "context-menu" ? (
+      <ContextMenu.LinkItem {...sharedProps} closeOnClick render={link} />
+    ) : (
+      <Menu.LinkItem {...sharedProps} closeOnClick render={link} />
+    )
   }
 
-  useEffect(() => {
-    if (position === null) return
-    const closeFromOutside = (event: PointerEvent) => {
-      if (
-        event.target instanceof Node &&
-        (menuRef.current?.contains(event.target) === true ||
-          submenuRef.current?.contains(event.target) === true)
-      ) return
-      close()
-    }
-    window.addEventListener("pointerdown", closeFromOutside, true)
-    window.addEventListener("blur", close)
-    window.addEventListener("resize", close)
-    return () => {
-      window.removeEventListener("pointerdown", closeFromOutside, true)
-      window.removeEventListener("blur", close)
-      window.removeEventListener("resize", close)
-    }
-  }, [close, position])
+  const itemProps = {
+    ...sharedProps,
+    disabled: action.availability !== "enabled",
+    nativeButton: true,
+    onClick: () => {
+      if (!("execute" in item)) return
+      runner.run(controls, action, item.execute, item.onFailure)
+    },
+    render: <Button type="button" />
+  }
+  return kind === "context-menu" ? (
+    <ContextMenu.Item {...itemProps}>
+      <ActionItemContent item={item} />
+    </ContextMenu.Item>
+  ) : (
+    <Menu.Item {...itemProps}>
+      <ActionItemContent item={item} />
+    </Menu.Item>
+  )
+}
 
-  useEffect(() => {
-    if (position !== null && !inline) {
-      menuRef.current?.querySelector<HTMLElement>("[role=menuitem]")?.focus()
-    }
-  }, [inline, position])
-
-  const document = defaultRuntimeCapabilities.document()
-  if (position === null || document === undefined) return null
-  const visibleItems = items.filter((item) => item.action.availability !== "hidden")
-  const menuWidth = 208
-  const menuHeight = visibleItems.length * 34 + 8
-  const left = Math.max(8, Math.min(position.x, window.innerWidth - menuWidth - 8))
-  const top = Math.max(8, Math.min(position.y, window.innerHeight - menuHeight - 8))
-
-  const content = (
-    <>
-      <div
-        aria-label={ariaLabel}
-        className="crit-context-menu"
-        data-inline={inline || undefined}
-        onContextMenu={(event) => {
-          event.preventDefault()
-          event.stopPropagation()
-        }}
-        onPointerDown={(event) => event.stopPropagation()}
-        ref={menuRef}
-        role="menu"
-        style={inline ? undefined : { left, top }}
-      >
-        {visibleItems.map((item) =>
-          "items" in item ? (
-            <button
-              aria-expanded={submenu?.action.key === item.action.key}
-              aria-haspopup="menu"
-              aria-keyshortcuts={item.action.ariaKeyShortcuts ?? undefined}
-              data-submenu-trigger=""
-              disabled={item.action.availability !== "enabled"}
-              {...actionHelpTarget(item.action)}
-              key={item.action.key}
-              onClick={(event) => {
-                const trigger = event.currentTarget
-                runner.run(
-                  controls,
-                  item.action,
-                  Effect.sync(() => {
-                    if (submenu?.action.key === item.action.key) setSubmenu(null)
-                    else openSubmenu(item, trigger, true)
-                  })
-                )
-              }}
-              onKeyDown={(event) => {
-                if (event.key === "ArrowRight") {
-                  event.preventDefault()
-                  openSubmenu(item, event.currentTarget, true)
-                }
-              }}
-              onPointerEnter={(event) => {
-                const trigger = event.currentTarget
-                runner.run(
-                  controls,
-                  item.action,
-                  Effect.sync(() => openSubmenu(item, trigger))
-                )
-              }}
-              role="menuitem"
-              type="button"
-            >
-              <span>{item.action.label}</span>
-              <span aria-hidden="true" className="crit-context-menu__arrow"><Glyph name="chevronRight" /></span>
-            </button>
-          ) : (
-            <ContextMenuAction
-              item={item}
-              key={`${item.action.key}:${item.action.label}`}
-              onPointerEnter={() => setSubmenu(null)}
-              onClose={close}
-            />
-          )
-        )}
-      </div>
-      {submenu === null ? null : (
+function BaseActionMenuItems({
+  items,
+  kind
+}: {
+  readonly items: ReadonlyArray<ContextMenuItem>
+  readonly kind: ActionMenuKind
+}) {
+  const controls = useCanvasControls(["canvas", "menu"], true)
+  const runner = useCanvasActionRunner()
+  const overlayContainer = useCritOverlayContainer()
+  return items.map((item) => {
+    if (item.action.availability === "hidden") return null
+    if ("swatches" in item) {
+      const swatchProps = (option: ContextMenuSwatchOption) => ({
+        "aria-label": `${option.label} note color${option.selected ? ", selected" : ""}`,
+        className: "crit-context-menu__swatch",
+        "data-selected": option.selected ? "" : undefined,
+        disabled: item.action.availability !== "enabled",
+        nativeButton: true,
+        onClick: () => runner.run(
+          controls,
+          item.action,
+          option.execute,
+          option.onFailure
+        ),
+        render: <Button type="button" />,
+        style: cssVariableStyle({ "--crit-swatch": option.color }),
+        title: option.label
+      })
+      return (
         <div
-          aria-label={submenu.action.label}
-          className="crit-context-menu crit-context-menu--submenu"
-          data-inline={inline || undefined}
-          onContextMenu={(event) => event.preventDefault()}
-          onKeyDown={(event) => {
-            if (event.key === "ArrowLeft") {
-              event.preventDefault()
-              menuRef.current
-                ?.querySelector<HTMLElement>("[data-submenu-trigger]")
-                ?.focus()
-              setSubmenu(null)
-            }
-          }}
-          onPointerDown={(event) => event.stopPropagation()}
-          ref={submenuRef}
-          role="menu"
-          style={inline ? undefined : { left: submenu.position.x, top: submenu.position.y }}
+          aria-label={item.action.label}
+          className="crit-context-menu__swatches"
+          key={`${item.action.key}:${item.action.label}`}
+          role="group"
         >
-          {submenu.items.map((item) => (
-            <ContextMenuAction
-              item={item}
-              key={`${item.action.key}:${item.action.label}`}
-              onClose={close}
-            />
+          {item.swatches.map((option) => kind === "context-menu" ? (
+            <ContextMenu.Item key={option.label} {...swatchProps(option)} />
+          ) : (
+            <Menu.Item key={option.label} {...swatchProps(option)} />
           ))}
         </div>
-      )}
-    </>
+      )
+    }
+    if (!("items" in item)) {
+      return (
+        <BaseActionMenuItem
+          item={item}
+          key={`${item.action.key}:${item.action.label}`}
+          kind={kind}
+        />
+      )
+    }
+
+    const triggerProps = {
+      "aria-keyshortcuts": item.action.ariaKeyShortcuts ?? undefined,
+      className: "crit-context-menu__item",
+      disabled: item.action.availability !== "enabled",
+      label: item.action.label,
+      nativeButton: true,
+      openOnHover: true,
+      render: <Button type="button" />,
+      ...actionHelpTarget(item.action)
+    }
+    const triggerContent = (
+      <>
+        <span>{item.action.label}</span>
+        <span aria-hidden="true" className="crit-context-menu__arrow">
+          <Glyph name="chevronRight" />
+        </span>
+      </>
+    )
+    const handleOpenChange = (open: boolean) => {
+      if (!open || item.action.availability !== "enabled") return
+      runner.run(controls, item.action, Effect.void)
+    }
+    return kind === "context-menu" ? (
+      <ContextMenu.SubmenuRoot
+        disabled={item.action.availability !== "enabled"}
+        key={`${item.action.key}:${item.action.label}`}
+        onOpenChange={handleOpenChange}
+      >
+        <ContextMenu.SubmenuTrigger {...triggerProps}>
+          {triggerContent}
+        </ContextMenu.SubmenuTrigger>
+        <ContextMenu.Portal container={overlayContainer}>
+          <ContextMenu.Positioner
+            align="start"
+            className="crit-context-menu__positioner crit-context-menu__positioner--submenu"
+            side="right"
+            sideOffset={4}
+          >
+            <ContextMenu.Popup
+              aria-label={item.action.label}
+              className="crit-context-menu crit-context-menu--submenu"
+            >
+              <BaseActionMenuItems items={item.items} kind={kind} />
+            </ContextMenu.Popup>
+          </ContextMenu.Positioner>
+        </ContextMenu.Portal>
+      </ContextMenu.SubmenuRoot>
+    ) : (
+      <Menu.SubmenuRoot
+        disabled={item.action.availability !== "enabled"}
+        key={`${item.action.key}:${item.action.label}`}
+        onOpenChange={handleOpenChange}
+      >
+        <Menu.SubmenuTrigger {...triggerProps}>
+          {triggerContent}
+        </Menu.SubmenuTrigger>
+        <Menu.Portal container={overlayContainer}>
+          <Menu.Positioner
+            align="start"
+            className="crit-context-menu__positioner crit-context-menu__positioner--submenu"
+            side="right"
+            sideOffset={4}
+          >
+            <Menu.Popup
+              aria-label={item.action.label}
+              className="crit-context-menu crit-context-menu--submenu"
+            >
+              <BaseActionMenuItems items={item.items} kind={kind} />
+            </Menu.Popup>
+          </Menu.Positioner>
+        </Menu.Portal>
+      </Menu.SubmenuRoot>
+    )
+  })
+}
+
+/**
+ * Enhances an existing canvas surface with Base UI's context menu without
+ * adding a DOM wrapper. The surface is focusable so Shift+F10 and the Menu key
+ * provide the same actions without a persistent visual trigger.
+ */
+export function CritContextActions({
+  ariaLabel,
+  children,
+  items,
+  onOpenChange
+}: {
+  readonly ariaLabel: string
+  readonly children: ReactElement
+  readonly items: ReadonlyArray<ContextMenuItem>
+  readonly onOpenChange?: (
+    open: boolean,
+    details: ContextMenu.Root.ChangeEventDetails
+  ) => void
+}) {
+  const overlayContainer = useCritOverlayContainer()
+  return (
+    // Nested Frame and Note triggers stop the originating context-menu and
+    // long-press events, so an outer Canvas trigger only handles bare canvas.
+    <ContextMenu.Root onOpenChange={(open, details) =>
+      onOpenChange?.(open, details)}>
+      <ContextMenu.Trigger
+        aria-haspopup="menu"
+        aria-keyshortcuts={CONTEXT_MENU_KEY_SHORTCUTS}
+        aria-label={ariaLabel}
+        onKeyDown={openContextMenuFromKeyboard}
+        render={children}
+        tabIndex={0}
+      />
+      <ContextMenu.Portal container={overlayContainer}>
+        <ContextMenu.Positioner className="crit-context-menu__positioner">
+          <ContextMenu.Popup aria-label={ariaLabel} className="crit-context-menu">
+            <BaseActionMenuItems items={items} kind="context-menu" />
+          </ContextMenu.Popup>
+        </ContextMenu.Positioner>
+      </ContextMenu.Portal>
+    </ContextMenu.Root>
   )
-  return inline
-    ? <div className="crit-context-menu-cluster">{content}</div>
-    : createPortal(content, document.body)
+}
+
+/** An always-visible Base UI menu used by the repository's component gallery. */
+export function CritMenuSpecimen({
+  ariaLabel,
+  items
+}: {
+  readonly ariaLabel: string
+  readonly items: ReadonlyArray<ContextMenuItem>
+}) {
+  const anchorRef = useRef<HTMLDivElement>(null)
+  const overlayContainer = useCritOverlayContainer()
+  const visibleItemCount = items.filter(
+    (item) => item.action.availability !== "hidden"
+  ).length
+  return (
+    <div
+      className="crit-context-menu-cluster"
+      data-crit-menu-specimen=""
+      style={{
+        minHeight: visibleItemCount * CONTEXT_MENU_ITEM_HEIGHT +
+          CONTEXT_MENU_VERTICAL_INSET
+      }}
+    >
+      <div
+        aria-hidden="true"
+        className="crit-context-menu-specimen__anchor"
+        ref={anchorRef}
+      />
+      <Menu.Root modal={false} open>
+        <Menu.Portal container={overlayContainer} keepMounted>
+          <Menu.Positioner
+            align="start"
+            anchor={anchorRef}
+            className="crit-context-menu__positioner"
+            collisionAvoidance={{
+              align: "none",
+              fallbackAxisSide: "none",
+              side: "none"
+            }}
+            side="bottom"
+          >
+            <Menu.Popup
+              aria-label={ariaLabel}
+              className="crit-context-menu"
+              finalFocus={false}
+            >
+              <BaseActionMenuItems items={items} kind="menu" />
+            </Menu.Popup>
+          </Menu.Positioner>
+        </Menu.Portal>
+      </Menu.Root>
+    </div>
+  )
 }

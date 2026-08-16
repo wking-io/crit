@@ -1,34 +1,37 @@
+import { Button } from "@base-ui/react/button"
+import { Dialog } from "@base-ui/react/dialog"
+import { Input } from "@base-ui/react/input"
 import { Effect } from "effect"
 import {
   useState,
   type FormEvent
 } from "react"
-import { createPortal } from "react-dom"
-
-import { causeMessage } from "../internal/cause-message.js"
-import { defaultRuntimeCapabilities } from "../runtime/runtime-capabilities.js"
 
 import {
   useCanvasActionRunner,
   useCanvasControls
 } from "./canvas-action-runner.js"
+import { causeMessage } from "../internal/cause-message.js"
 import {
   actionHelpTarget,
   informationalHelpTarget
 } from "./canvas-help.js"
+import { useCritOverlayContainer } from "./overlay-container.js"
 
 export interface NewFrameFormProps {
   readonly autoFocus?: boolean
   readonly onCancel: () => void
   readonly onCreate: (url: string, title: string) => Effect.Effect<unknown, unknown>
   readonly onError: (message: string) => void
+  readonly withinDialog?: boolean
 }
 
 export function NewFrameForm({
   autoFocus = false,
   onCancel,
   onCreate,
-  onError
+  onError,
+  withinDialog = false
 }: NewFrameFormProps) {
   const controls = useCanvasControls(["canvas", "new-frame-form"], true)
   const runner = useCanvasActionRunner()
@@ -61,11 +64,18 @@ export function NewFrameForm({
   }
 
   return (
-    <form className="crit-new-frame-dialog" onSubmit={submit}>
-      <h2 id="crit-new-frame-title">New frame</h2>
+    <form
+      className={withinDialog
+        ? "crit-new-frame-dialog__form"
+        : "crit-new-frame-dialog"}
+      onSubmit={submit}
+    >
+      {withinDialog
+        ? <Dialog.Title id="crit-new-frame-title">New frame</Dialog.Title>
+        : <h2 id="crit-new-frame-title">New frame</h2>}
       <label>
         URL
-        <input
+        <Input
           autoFocus={autoFocus}
           {...informationalHelpTarget({
             name: "Frame URL",
@@ -80,7 +90,7 @@ export function NewFrameForm({
       </label>
       <label>
         Title <span>(optional)</span>
-        <input
+        <Input
           {...informationalHelpTarget({
             name: "Frame title",
             description: "Name the frame. Optional, title is inferred when left blank."
@@ -92,19 +102,29 @@ export function NewFrameForm({
         />
       </label>
       <div className="crit-new-frame-dialog__actions">
-        <button
-          aria-keyshortcuts={cancel.ariaKeyShortcuts ?? undefined}
-          {...actionHelpTarget(cancel)}
-          onClick={() => runner.run(controls, cancel, Effect.sync(onCancel))}
-          type="button"
-        >{cancel.label}</button>
-        <button
+        {withinDialog
+          ? (
+            <Dialog.Close
+              aria-keyshortcuts={cancel.ariaKeyShortcuts ?? undefined}
+              {...actionHelpTarget(cancel)}
+              type="button"
+            >{cancel.label}</Dialog.Close>
+          )
+          : (
+            <Button
+              aria-keyshortcuts={cancel.ariaKeyShortcuts ?? undefined}
+              {...actionHelpTarget(cancel)}
+              onClick={() => runner.run(controls, cancel, Effect.sync(onCancel))}
+              type="button"
+            >{cancel.label}</Button>
+          )}
+        <Button
           aria-keyshortcuts={create.ariaKeyShortcuts ?? undefined}
           data-primary=""
           disabled={create.availability !== "enabled"}
           {...actionHelpTarget(create)}
           type="submit"
-        >{create.label}</button>
+        >{create.label}</Button>
       </div>
     </form>
   )
@@ -114,8 +134,10 @@ export function NewFrameDialog({
   onCancel,
   onCreate,
   onError,
+  finalFocus,
   open
 }: {
+  readonly finalFocus?: Dialog.Popup.Props["finalFocus"]
   readonly onCancel: () => void
   readonly onCreate: (url: string, title: string) => Effect.Effect<unknown, unknown>
   readonly onError: (message: string) => void
@@ -123,36 +145,33 @@ export function NewFrameDialog({
 }) {
   const controls = useCanvasControls(["canvas", "new-frame-form"], true)
   const runner = useCanvasActionRunner()
+  const overlayContainer = useCritOverlayContainer()
   const cancel = controls.action({ id: "cancel-new-frame" })
 
-  const document = defaultRuntimeCapabilities.document()
-  if (!open || document === undefined) return null
-
-  return createPortal(
-    <div
-      aria-labelledby="crit-new-frame-title"
-      aria-modal="true"
-      className="crit-dialog-backdrop"
-      onKeyDown={(event) => {
-        if (event.key !== "Escape") return
-        event.preventDefault()
-        event.stopPropagation()
+  return (
+    <Dialog.Root
+      modal
+      onOpenChange={(nextOpen) => {
+        if (nextOpen || !open) return
         runner.run(controls, cancel, Effect.sync(onCancel))
       }}
-      onPointerDown={(event) => {
-        if (event.target === event.currentTarget) {
-          runner.run(controls, cancel, Effect.sync(onCancel))
-        }
-      }}
-      role="dialog"
+      open={open}
     >
-      <NewFrameForm
-        autoFocus
-        onCancel={onCancel}
-        onCreate={onCreate}
-        onError={onError}
-      />
-    </div>,
-    document.body
+      <Dialog.Portal container={overlayContainer}>
+        <Dialog.Backdrop className="crit-dialog-backdrop" />
+        <Dialog.Popup
+          className="crit-new-frame-dialog crit-new-frame-dialog--popup"
+          finalFocus={finalFocus ?? true}
+        >
+          <NewFrameForm
+            autoFocus
+            onCancel={onCancel}
+            onCreate={onCreate}
+            onError={onError}
+            withinDialog
+          />
+        </Dialog.Popup>
+      </Dialog.Portal>
+    </Dialog.Root>
   )
 }

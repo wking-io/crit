@@ -1,5 +1,7 @@
 import { Effect, Match, Schema } from "effect"
 
+const GRID_GAP = 40
+
 export const CanvasArrangementItem = Schema.Struct({
   id: Schema.String,
   x: Schema.Number,
@@ -197,8 +199,14 @@ const arrangeGrid = (
   )
   const occupiedWidth = columnWidths.reduce((sum, width) => sum + width, 0)
   const occupiedHeight = rowHeights.reduce((sum, height) => sum + height, 0)
-  const layoutWidth = Math.max(bounds.width, occupiedWidth)
-  const layoutHeight = Math.max(bounds.height, occupiedHeight)
+  const layoutWidth = Math.max(
+    bounds.width,
+    occupiedWidth + GRID_GAP * (columns - 1)
+  )
+  const layoutHeight = Math.max(
+    bounds.height,
+    occupiedHeight + GRID_GAP * (rows - 1)
+  )
   const horizontalGap = columns === 1
     ? 0
     : (layoutWidth - occupiedWidth) / (columns - 1)

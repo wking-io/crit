@@ -4,6 +4,7 @@ import {
   CanvasCommandSchema,
   FrameDisplay,
   FrameProvenance,
+  NoteColorFamily,
   PositiveDimension,
   SnapshotArtifact,
   FrameStatus,
@@ -57,7 +58,10 @@ export const CanvasNote = Schema.Struct({
   author: Author,
   geometry: CanvasGeometry,
   attachedTo: Schema.NullOr(Schema.String),
-  zIndex: Schema.Finite.check(Schema.isInt())
+  zIndex: Schema.Finite.check(Schema.isInt()),
+  color: NoteColorFamily.pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed("blue" as const))
+  )
 })
 export type CanvasNote = typeof CanvasNote.Type
 
@@ -240,6 +244,7 @@ export const CanvasInternals = {
     target.comments = clone(source.comments)
   }
 } as const
+
 const create = (input: {
   readonly id: string
   readonly title: string
@@ -499,6 +504,7 @@ type FrameMutationCommand = CanvasCommand<
 
 type NoteMutationCommand = CanvasCommand<
   | "EditNote"
+  | "SetNoteColor"
   | "MoveNote"
   | "ResizeNote"
   | "BringNoteToFront"
@@ -529,6 +535,19 @@ const canvasItemExists = (context: CanvasMutationContext, id: string) =>
   context.draft.frames.some((frame) => frame.id === id) ||
   context.draft.notes.some((note) => note.id === id) ||
   context.draft.comments.some((thread) => thread.id === id)
+
+const applyRenameCanvas = (
+  context: CanvasMutationContext,
+  command: CanvasCommand<"RenameCanvas">
+) => {
+  if (command.title.trim().length === 0) {
+    throw new CanvasCommandFailed({
+      reason: "invalid-command",
+      detail: "A Canvas title cannot be empty"
+    })
+  }
+  context.draft.title = command.title
+}
 
 const applyAddFrame = (
   context: CanvasMutationContext,
@@ -643,7 +662,8 @@ const applyAddNote = (
       height: command.height
     },
     attachedTo: null,
-    zIndex: nextZIndex(context.draft)
+    zIndex: nextZIndex(context.draft),
+    color: command.color
   })
   context.markNote(command.id)
 }
@@ -909,6 +929,15 @@ const applyNoteMutation = (
       }
       context.draft.notes[index] = { ...note, text: edit.text }
     },
+    SetNoteColor: (color) => {
+      if (note.author.id !== color.actorId) {
+        throw new CanvasCommandFailed({
+          reason: "note-forbidden",
+          detail: "Only the Note Author may change its color"
+        })
+      }
+      context.draft.notes[index] = { ...note, color: color.color }
+    },
     MoveNote: (move) => {
       context.draft.notes[index] = {
         ...note,
@@ -964,6 +993,7 @@ const applyCanvasCommand = (
   context: CanvasMutationContext,
   command: CanvasCommandInput
 ) => Match.valueTags(command, {
+  RenameCanvas: (rename) => applyRenameCanvas(context, rename),
   AddFrame: (frame) => applyAddFrame(context, frame),
   AddSnapshotFrame: (snapshot) => applyAddSnapshotFrame(context, snapshot),
   SetFrameStatus: (frame) => applyFrameMutation(context, frame),
@@ -977,6 +1007,7 @@ const applyCanvasCommand = (
   RemoveFrame: (frame) => applyFrameMutation(context, frame),
   AddNote: (note) => applyAddNote(context, note),
   EditNote: (note) => applyNoteMutation(context, note),
+  SetNoteColor: (note) => applyNoteMutation(context, note),
   MoveNote: (note) => applyNoteMutation(context, note),
   ResizeNote: (note) => applyNoteMutation(context, note),
   BringNoteToFront: (note) => applyNoteMutation(context, note),

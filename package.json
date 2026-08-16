@@ -73,6 +73,7 @@
     "verify": "npm run lint && npm run typecheck && npm test && npm run check:package"
   },
   "dependencies": {
+    "@base-ui/react": "^1.7.0",
     "@effect/platform-node": "4.0.0-rc.109",
     "@tanstack/react-hotkeys": "^0.10.0",
     "dialkit": "^1.4.3",

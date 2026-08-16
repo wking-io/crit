@@ -1,3 +1,5 @@
+import { Popover } from "@base-ui/react/popover"
+import { spring } from "motion"
 import { renderToStaticMarkup } from "react-dom/server"
 import { describe, expect, it } from "vitest"
 
@@ -30,16 +32,32 @@ import {
   commentPopoverProjection
 } from "../../src/react/comment-popover.js"
 import { CanvasCommentPin } from "../../src/react/canvas-comment-pin.js"
+import {
+  CritContextActions,
+  type ContextMenuItem
+} from "../../src/react/canvas-context-menu.js"
 import { critStyles } from "../../src/react/crit-styles.js"
 import { CanvasSelection } from "../../src/react/canvas-selection.js"
 import {
   FRAME_STATUSES,
-  measureStatusPillWidth
+  STATUS_PILL_HEIGHT,
+  STATUS_PILL_MOTION,
+  STATUS_PILL_STEP,
+  calculateStatusFanLayout,
+  calculateStatusPillLayout,
+  frameStatusMenuOptions,
+  measureStatusPillWidth,
+  statusPillFrameGap,
+  statusPillMotionPath
 } from "../../src/react/frame-chrome.js"
-import { CanvasToolbar } from "../../src/react/canvas-toolbar.js"
+import {
+  arrangementMenuAnchorRect,
+  CanvasToolbar
+} from "../../src/react/canvas-toolbar.js"
 import { CanvasActionRunnerProvider } from "../../src/react/canvas-action-runner.js"
 import { CanvasControls } from "../../src/react/canvas-controls.js"
 import {
+  NoteCard,
   NOTE_MINIMUM_ROWS,
   noteContextMenuItems,
   noteHeightForContent
@@ -110,9 +128,15 @@ describe("Crit", () => {
     const html = renderToStaticMarkup(
       <CanvasActionRunnerProvider>
         <CanvasToolbar
+          canvasChoices={[
+            { id: "feature-lab", title: "Feature lab" },
+            { id: "checkout", title: "Checkout review" }
+          ]}
+          canvasId="feature-lab"
           commentAvailable
           noteAvailable
           onAction={() => {}}
+          onCanvasSelect={() => {}}
           selectedItemCount={3}
           title="Feature lab"
           tool="select"
@@ -121,25 +145,127 @@ describe("Crit", () => {
     )
 
     expect(html).toContain('role="toolbar"')
+    expect(html).toContain('aria-orientation="horizontal"')
+    expect(html.match(/role="group"/g)).toHaveLength(2)
     expect(html).toContain("Feature lab")
+    expect(html).toContain('data-crit-help-name="Change canvas"')
+    expect(html).toContain(
+      'data-crit-help-description="Choose a different canvas."'
+    )
+    expect(html).toContain('aria-label="Change canvas"')
+    expect(html).not.toContain('aria-label="More canvas actions"')
     expect(html).toContain('aria-label="Undo"')
     expect(html).toContain('aria-label="Redo"')
     expect(html).toContain('aria-label="Align and distribute"')
     expect(html).toContain('aria-haspopup="menu"')
     expect(html).toContain('aria-expanded="false"')
     expect(html).toContain('aria-pressed="true"')
+    const undoButton = html.match(
+      /<button[^>]*aria-label="Undo"[^>]*>/
+    )?.[0]
+    expect(undoButton).toContain('aria-disabled="true"')
+    expect(undoButton).not.toContain('disabled=""')
     expect(html).not.toContain("Layers")
+  })
+
+  it("anchors the arrangement menu below the whole toolbar", () => {
+    const anchor = arrangementMenuAnchorRect(
+      {
+        bottom: 32,
+        height: 24,
+        left: 208,
+        right: 232,
+        top: 8,
+        width: 24,
+        x: 208,
+        y: 8
+      },
+      {
+        bottom: 40,
+        height: 40,
+        left: 0,
+        right: 315,
+        top: 0,
+        width: 315,
+        x: 0,
+        y: 0
+      }
+    )
+
+    expect(anchor).toMatchObject({
+      bottom: 40,
+      height: 40,
+      left: 208,
+      right: 232,
+      top: 0,
+      width: 24,
+      x: 208,
+      y: 0
+    })
   })
 
   it("sizes the canvas toolbar from its title and controls", () => {
     const toolbar = cssRule(".crit-toolbar")
     const title = cssRule(".crit-toolbar__title")
+    const titleButton = cssRule("button.crit-toolbar__title")
+    const canvasMenu = cssRule(".crit-canvas-switcher")
+    const canvasMenuItem = cssRule(".crit-canvas-switcher__item")
+    const group = cssRule(".crit-toolbar__group")
+    const iconButton = cssRule(".crit-icon-button")
+    const hitExtension = cssRule(
+      ".crit-toolbar__group .crit-icon-button::before"
+    )
+    const arrangementPopover = cssRule(".crit-arrangement-popover")
 
     expect(toolbar).toContain("width: max-content")
-    expect(toolbar).toContain("max-width: calc(100% - 40px)")
+    expect(toolbar).toContain("max-width: 100%")
+    expect(toolbar).toContain("left: 0")
+    expect(toolbar).toContain("top: 0")
+    expect(toolbar).toContain("border-radius: 0 0 8px 0")
+    expect(toolbar).toContain(
+      "font-family: InterVariable, Inter, sans-serif"
+    )
+    expect(toolbar).toContain(
+      'font-feature-settings: "calt" 1, "case" 1, "ss02" 1, "tnum" 1, "ss03" 1'
+    )
+    expect(toolbar).toContain("font-optical-sizing: none")
+    expect(toolbar).toContain('font-variation-settings: "opsz" 14')
+    expect(toolbar).toContain("letter-spacing: 0")
     expect(toolbar).not.toContain("width: 395px")
     expect(title).toContain("flex: 0 1 auto")
     expect(title).not.toContain("142px")
+    expect(titleButton).toContain("font-size: 14px")
+    expect(titleButton).toContain("line-height: 16px")
+    expect(titleButton).toContain("letter-spacing: 0")
+    expect(canvasMenu).toContain(
+      "font-family: InterVariable, Inter, sans-serif"
+    )
+    expect(canvasMenu).toContain("letter-spacing: 0")
+    expect(canvasMenuItem).toContain(
+      "font: 500 12px/16px InterVariable, Inter, sans-serif"
+    )
+    expect(canvasMenuItem).toContain(
+      'font-feature-settings: "calt" 1, "case" 1, "ss02" 1, "tnum" 1, "ss03" 1'
+    )
+    expect(canvasMenuItem).toContain("font-optical-sizing: none")
+    expect(canvasMenuItem).toContain('font-variation-settings: "opsz" 14')
+    expect(canvasMenuItem).toContain("letter-spacing: 0")
+    expect(group).toContain("gap: 6px")
+    expect(iconButton).toContain("height: 24px")
+    expect(iconButton).toContain("width: 24px")
+    expect(hitExtension).toContain('content: ""')
+    expect(hitExtension).toContain("inset: 0 -3px")
+    expect(arrangementPopover).toContain(
+      "background: oklch(97% 0.001 106.4)"
+    )
+    expect(arrangementPopover).toContain("border-radius: 8px")
+    expect(arrangementPopover).toContain(
+      "oklch(14.7% 0.004 49.3 / 10%) 0 2px 4px"
+    )
+    expect(arrangementPopover).not.toContain("border-top")
+    expect(critStyles).not.toContain(
+      ".crit-arrangement-popover__grid--distribution {"
+    )
   })
 
   it("keeps the title until fewer than ten characters fit", () => {
@@ -170,6 +296,7 @@ describe("Crit", () => {
     expect(frameChromeMetrics(245, 1, 5, {
       titleMinimumCharacters: 11
     }).titleVisible).toBe(false)
+    expect(frameChromeLayout(250, 1, true).titleVisible).toBe(true)
   })
 
   it("keeps Frame chrome proportional and resize-driven across zoom", () => {
@@ -251,6 +378,89 @@ describe("Crit", () => {
     )
   })
 
+  it("keeps snapshot capture out of the live frame status menu", () => {
+    expect(frameStatusMenuOptions("approved").map(({ id }) => id)).toEqual([
+      "changes-requested",
+      "in-progress",
+      "ready-for-review"
+    ])
+  })
+
+  it("moves status options along the fan arc in both directions", () => {
+    const target = {
+      startY: 198,
+      finalX: -48,
+      finalY: -12,
+      finalRotate: -28
+    }
+    const path = statusPillMotionPath(target)
+
+    expect(path.enter.x[0]).toBe(0)
+    expect(path.enter.y[0]).toBe(target.startY)
+    expect(path.enter.rotate[0]).toBe(0)
+    expect(path.enter.x.at(-1)).toBe(target.finalX)
+    expect(path.enter.y.at(-1)).toBe(target.finalY)
+    expect(path.enter.rotate.at(-1)).toBe(target.finalRotate)
+    expect(path.enter.x[3]).not.toBeCloseTo(target.finalX * path.times[3]!)
+    expect(path.exit.x).toEqual([...path.enter.x].reverse())
+    expect(path.exit.y).toEqual([...path.enter.y].reverse())
+    expect(path.exit.rotate).toEqual([...path.enter.rotate].reverse())
+    expect(STATUS_PILL_MOTION.spring.type).toBe("spring")
+    expect(STATUS_PILL_MOTION.spring.visualDuration).toBeLessThan(0.2)
+  })
+
+  it("uses a monotonic spring that cannot overshoot the status arc", () => {
+    const generator = spring({
+      ...STATUS_PILL_MOTION.spring,
+      keyframes: [0, 1]
+    })
+    const progress = Array.from(
+      { length: 41 },
+      (_, index) => generator.next(index * 10).value
+    )
+
+    expect(progress[0]).toBe(0)
+    expect(progress.at(-1)).toBe(1)
+    expect(progress.every((value) => value >= 0 && value <= 1)).toBe(true)
+    expect(progress.every((value, index) =>
+      index === 0 || value >= progress[index - 1]!
+    )).toBe(true)
+  })
+
+  it("keeps every status coordinate monotonic from its header origin", () => {
+    const isMonotonic = (values: ReadonlyArray<number>) => {
+      const direction = Math.sign(values.at(-1)! - values[0]!)
+      return values.every((value, index) =>
+        index === 0 || direction * (value - values[index - 1]!) >= 0
+      )
+    }
+
+    for (const current of FRAME_STATUSES) {
+      const options = frameStatusMenuOptions(current.id)
+      const layout = calculateStatusPillLayout(
+        options.map((option) => measureStatusPillWidth(option.label))
+      )
+      for (const item of layout) {
+        const startY =
+          item.distanceFromFrame * STATUS_PILL_STEP +
+          STATUS_PILL_MOTION.originOffset
+        const path = statusPillMotionPath({
+          startY,
+          finalX: item.finalX,
+          finalY: item.finalY,
+          finalRotate: item.finalRotate
+        })
+
+        expect(isMonotonic(path.enter.x)).toBe(true)
+        expect(isMonotonic(path.enter.y)).toBe(true)
+        expect(isMonotonic(path.enter.rotate)).toBe(true)
+        expect(path.enter.x.at(-1)).toBeCloseTo(item.finalX)
+        expect(path.enter.y.at(-1)).toBeCloseTo(item.finalY)
+        expect(path.enter.rotate.at(-1)).toBeCloseTo(item.finalRotate)
+      }
+    }
+  })
+
   it("measures status pills with the same deterministic heuristic everywhere", () => {
     expect(measureStatusPillWidth("Approved")).toBe(92)
     expect(measureStatusPillWidth("Ready for review")).toBe(144)
@@ -293,12 +503,56 @@ describe("Crit", () => {
     expect(marquee).not.toContain("border:")
   })
 
-  it("keeps the original status fan geometry stable on screen across zoom", () => {
-    for (const zoom of [0.25, 0.5, 1, 2, 4]) {
-      const projection = statusFanProjection(zoom, 8)
+  it("keeps the shared-overlay status fan at header scale", () => {
+    expect(statusFanProjection(8)).toEqual({
+      scale: 1,
+      frameGap: 8
+    })
+  })
 
-      expect(projection.scale * zoom).toBeCloseTo(1)
-      expect(projection.frameGap * zoom).toBeCloseTo(8)
+  it("keeps every rotated status fan visually separated from its header", () => {
+    for (const current of FRAME_STATUSES) {
+      const options = frameStatusMenuOptions(current.id)
+      const layout = calculateStatusPillLayout(
+        options.map((option) => measureStatusPillWidth(option.label))
+      )
+      const bottom = layout.at(-1)
+      expect(bottom).toBeDefined()
+      const rotatedOverflow = Math.max(
+        0,
+        bottom!.verticalHalfExtent - STATUS_PILL_HEIGHT / 2
+      )
+      const projection = statusFanProjection(statusPillFrameGap(bottom))
+
+      expect(projection.frameGap - rotatedOverflow).toBeCloseTo(
+        STATUS_PILL_MOTION.gap
+      )
+    }
+  })
+
+  it("derives a complete, stable fan for changing item counts", () => {
+    for (let count = 1; count <= 8; count += 1) {
+      const options = Array.from({ length: count }, (_, index) => ({
+        label: `Status ${"wide ".repeat(index + 1)}`.trim()
+      }))
+      const fan = calculateStatusFanLayout(options)
+      const collapsedOrigins = fan.items.map((item, index) =>
+        index * STATUS_PILL_STEP + item.startY
+      )
+
+      expect(fan.items).toHaveLength(count)
+      expect(new Set(collapsedOrigins.map(Math.round))).toHaveLength(1)
+      expect(fan.frameGap).toBeGreaterThanOrEqual(STATUS_PILL_MOTION.gap)
+      for (const [index, item] of fan.items.entries()) {
+        expect(item.option).toBe(options[index])
+        expect(item.width).toBe(measureStatusPillWidth(options[index]!.label))
+        expect([
+          item.finalX,
+          item.finalY,
+          item.finalRotate,
+          item.startY
+        ].every(Number.isFinite)).toBe(true)
+      }
     }
   })
 
@@ -371,6 +625,32 @@ describe("Crit", () => {
     expect(html).toContain('data-active="true"')
   })
 
+  it("composes Canvas comment pins with the shared Popover root", () => {
+    const html = renderToStaticMarkup(
+      <CanvasActionRunnerProvider>
+        <Popover.Root
+          open
+          triggerId="crit-comment-trigger-thread-1"
+        >
+          <CanvasCommentPin
+            active
+            authorName="Wes"
+            color="rebeccapurple"
+            onOpen={() => Effect.void}
+            popoverTrigger
+            threadId="thread-1"
+            xRatio={0.5}
+            yRatio={0.5}
+          />
+        </Popover.Root>
+      </CanvasActionRunnerProvider>
+    )
+
+    expect(html).toContain('aria-haspopup="dialog"')
+    expect(html).toContain('id="crit-comment-trigger-thread-1"')
+    expect(html).toContain('aria-expanded="true"')
+  })
+
   it("matches the wking Frame shell, chrome, and viewport treatment", () => {
     const surface = cssRule(".crit-frame__surface")
     const chrome = cssRule(".crit-frame__chrome")
@@ -422,6 +702,12 @@ describe("Crit", () => {
 
     expect(html).not.toContain('aria-label="Control help"')
     expect(html).not.toContain("Arrange frames and notes on an infinite canvas")
+    expect(html).not.toContain('aria-label="More canvas actions"')
+    expect(html).toContain('aria-label="Canvas options"')
+    expect(html).toContain('data-crit-help-name="Canvas options"')
+    expect(html).toContain(
+      'data-crit-help-description="Rename this canvas."'
+    )
     expect(html).toContain('data-crit-help-name="Select"')
     expect(html).toContain('data-crit-help-shortcut="V"')
     expect(html).toContain(
@@ -440,7 +726,7 @@ describe("Crit", () => {
     )
   })
 
-  it("renders help without field labels and uses an inset-matched shortcut", () => {
+  it("renders help using the canvas-corner treatment and shared text styles", () => {
     const html = renderToStaticMarkup(
       <CanvasHelpPanel details={actionHelpDetails(CanvasControls.resolve({
           platform: "macos",
@@ -457,10 +743,53 @@ describe("Crit", () => {
     expect(html).not.toContain(">Hotkey<")
     expect(html).not.toContain(">Description<")
     expect(html).not.toContain("<kbd")
-    expect(cssRule(".crit-help__shortcut")).toContain(
-      "border-radius: calc(var(--crit-help-radius) - var(--crit-help-inset))"
+    const help = cssRule(".crit-help")
+    const title = cssRule(".crit-help__title")
+    const shortcut = cssRule(".crit-help__shortcut")
+    const description = cssRule(
+      ".crit-help__description, .crit-help__availability"
     )
-    expect(cssRule(".crit-help")).toContain("gap: 0")
+
+    expect(help).toContain("border-radius: 0 8px 0 0")
+    expect(help).toContain("bottom: 0")
+    expect(help).toContain("box-sizing: border-box")
+    expect(help).toContain("left: 0")
+    expect(help).toContain("align-content: start")
+    expect(help).toContain("min-height: 92px")
+    expect(help).toContain("padding: 10px 12px 14px 14px")
+    expect(help).toContain("width: 335px")
+    expect(help).toContain("font-family: InterVariable, Inter, sans-serif")
+    expect(help).toContain(
+      'font-feature-settings: "calt" 1, "case" 1, "ss02" 1, "tnum" 1, "ss03" 1'
+    )
+    expect(help).toContain("font-optical-sizing: none")
+    expect(help).toContain('font-variation-settings: "opsz" 14')
+    expect(help).toContain("letter-spacing: 0")
+    expect(title).toContain("font: 400 14px/20px InterVariable, Inter")
+    expect(title).toContain(
+      'font-feature-settings: "calt" 1, "case" 1, "ss02" 1, "tnum" 1, "ss03" 1'
+    )
+    expect(title).toContain("font-optical-sizing: none")
+    expect(title).toContain('font-variation-settings: "opsz" 14')
+    expect(title).toContain("letter-spacing: 0")
+    expect(title).toContain("var(--crit-color-t2, oklch(28% 0 0))")
+    expect(shortcut).toContain("border-radius: 2px")
+    expect(shortcut).toContain("box-sizing: border-box")
+    expect(shortcut).toContain('font: 400 12px/20px "Geist Mono"')
+    expect(shortcut).toContain("height: 20px")
+    expect(shortcut).not.toContain("min-width")
+    expect(shortcut).toContain("padding: 0 8px")
+    expect(shortcut).toContain("position: relative")
+    expect(shortcut).toContain("top: 1px")
+    expect(description).toContain("font: 400 14px/20px InterVariable, Inter")
+    expect(description).toContain(
+      'font-feature-settings: "calt" 1, "case" 1, "ss02" 1, "tnum" 1, "ss03" 1'
+    )
+    expect(description).toContain("font-optical-sizing: none")
+    expect(description).toContain('font-variation-settings: "opsz" 14')
+    expect(description).toContain("letter-spacing: 0")
+    expect(description).toContain("max-width: 307px")
+    expect(description).toContain("var(--crit-color-t1, oklch(52% 0 0))")
   })
 
   it("describes resize handles through contextual help", () => {
@@ -481,18 +810,6 @@ describe("Crit", () => {
     expect(html.match(/class="crit-selection__handle"/g)).toHaveLength(8)
     expect(html.match(/data-visible-handle="true"/g)).toHaveLength(4)
 
-    const noteHandles = renderToStaticMarkup(
-      <CanvasSelection
-        handles={["west", "east"]}
-        ink="#000"
-        label="note"
-        onResize={() => undefined}
-        zoom={1}
-      />
-    )
-    expect(noteHandles.match(/class="crit-selection__handle"/g)).toHaveLength(2)
-    expect(noteHandles).toContain('data-resize-handle="west"')
-    expect(noteHandles).toContain('data-resize-handle="east"')
   })
 
   it("keeps Note sizing content-driven and actions in its context menu", () => {
@@ -507,6 +824,9 @@ describe("Crit", () => {
       controls,
       target,
       currentAuthorIsTargetAuthor: true,
+      copyNodeId: Effect.void,
+      color: "blue",
+      onColor: () => Effect.void,
       onBringToFront: () => Effect.void,
       onRemove: () => Effect.void,
       onSendToBack: () => Effect.void
@@ -515,29 +835,214 @@ describe("Crit", () => {
     expect(NOTE_MINIMUM_ROWS).toBe(3)
     expect(noteHeightForContent(84)).toBe(86)
     expect(items.map((item) => item.action.label)).toEqual([
+      "Note color",
       "Bring to front",
       "Send to back",
-      "Remove note"
+      "Copy node ID",
+      "Delete"
     ])
+    const colorItem = items[0]
+    expect(colorItem !== undefined && "swatches" in colorItem
+      ? colorItem.swatches.map((swatch) => ({
+          label: swatch.label,
+          selected: swatch.selected
+        }))
+      : []).toEqual([
+      { label: "Neutral", selected: false },
+      { label: "Red", selected: false },
+      { label: "Orange", selected: false },
+      { label: "Green", selected: false },
+      { label: "Blue", selected: true },
+      { label: "Purple", selected: false }
+    ])
+    expect(cssRule(".crit-context-menu__swatches")).toContain("display: flex")
+    expect(cssRule(
+      ".crit-context-menu button.crit-context-menu__swatch"
+    )).toContain("border-radius: 2px")
     const forbiddenItems = noteContextMenuItems({
       controls,
       target,
       currentAuthorIsTargetAuthor: false,
+      copyNodeId: undefined,
+      color: "blue",
+      onColor: () => Effect.void,
       onBringToFront: () => Effect.void,
       onRemove: () => Effect.void,
       onSendToBack: () => Effect.void
     })
+    expect(forbiddenItems[0]?.action.availability).toBe("hidden")
+    expect(forbiddenItems.map((item) => item.action.label)).not.toContain(
+      "Copy node ID"
+    )
     expect(forbiddenItems.at(-1)?.action.availability).toBe("hidden")
     expect(cssRule(".crit-note textarea")).toContain("overflow: hidden")
     expect(cssRule(".crit-note textarea")).toContain("min-height:")
+    expect(cssRule(".crit-note textarea")).toContain("overflow-wrap: anywhere")
+    expect(cssRule(".crit-note textarea")).toContain("text-wrap: pretty")
     expect(cssRule(".crit-note textarea")).toContain(
       "font: 400 calc(14px * var(--crit-ui))/calc(20px * var(--crit-ui)) system-ui, -apple-system, sans-serif"
     )
     expect(cssRule(".crit-note::after")).toContain("box-shadow:")
+    expect(cssRule(".crit-note::after")).toContain("-webkit-mask:")
+    expect(cssRule(".crit-note::after")).toContain(
+      "var(--crit-note-corner-size)"
+    )
+    expect(cssRule(".crit-note__corner")).toContain("bottom: 0")
+    expect(cssRule(".crit-note__corner")).toContain("right: 0")
     expect(critStyles).not.toContain(".crit-note__chrome")
+    expect(critStyles).not.toContain(".crit-note__more-actions")
+    expect(critStyles).not.toContain(".crit-frame__more-actions")
   })
 
-  it("renders Frames and attached Notes without a canvas framework", async () => {
+  it("focuses a Note context surface without rendering an ellipsis menu", () => {
+    const note = {
+      id: "feedback",
+      text: "Tighten spacing",
+      author: { id: "author", name: "Test Author" },
+      geometry: { x: 20, y: 30, width: 240, height: 120 },
+      attachedTo: null,
+      zIndex: 1,
+      color: "blue" as const
+    }
+    const html = renderToStaticMarkup(
+      <CanvasActionRunnerProvider>
+        <NoteCard
+          author={note.author}
+          commit={() => {}}
+          execute={() => Effect.void}
+          geometry={note.geometry}
+          note={note}
+          onBringToFront={() => Effect.void}
+          onMove={() => {}}
+          onSelect={() => {}}
+          onSendToBack={() => Effect.void}
+          selected
+          zoom={1}
+        />
+      </CanvasActionRunnerProvider>
+    )
+
+    const noteSurface = html.match(/<article[^>]*class="crit-note"[^>]*>/)?.[0]
+    expect(noteSurface).toContain('data-mode="preview"')
+    expect(noteSurface).toContain("width:230px")
+    expect(noteSurface).toContain("--crit-ui:1")
+    expect(noteSurface).toContain('aria-label="Note actions"')
+    expect(noteSurface).toContain('aria-haspopup="menu"')
+    expect(noteSurface).toContain(
+      'aria-keyshortcuts="Shift+F10 ContextMenu"'
+    )
+    expect(noteSurface).not.toContain("data-crit-help-name")
+    expect(noteSurface).toContain('tabindex="0"')
+    expect(html).toContain('class="crit-note__corner"')
+    expect(html).toContain('viewBox="0 0 28.5 28.5"')
+    expect(html).not.toContain('class="crit-selection__handle"')
+    expect(html).not.toContain("More note actions")
+  })
+
+  it("elevates an expanded Note above the canvas without changing its saved layer", () => {
+    const note = {
+      id: "feedback",
+      text: "",
+      author: { id: "author", name: "Test Author" },
+      geometry: { x: 20, y: 30, width: 240, height: 120 },
+      attachedTo: null,
+      zIndex: 1,
+      color: "blue" as const
+    }
+    const html = renderToStaticMarkup(
+      <CanvasActionRunnerProvider>
+        <NoteCard
+          author={note.author}
+          commit={() => {}}
+          execute={() => Effect.void}
+          geometry={note.geometry}
+          note={note}
+          onBringToFront={() => Effect.void}
+          onMove={() => {}}
+          onSelect={() => {}}
+          onSendToBack={() => Effect.void}
+          selected
+          topZIndex={9}
+          zoom={.35}
+        />
+      </CanvasActionRunnerProvider>
+    )
+
+    const noteSurface = html.match(/<article[^>]*class="crit-note"[^>]*>/)?.[0]
+    expect(noteSurface).toContain('data-mode="expanded"')
+    expect(noteSurface).toContain("z-index:9")
+    expect(note.zIndex).toBe(1)
+  })
+
+  it("allows nested context triggers to preserve each item surface", () => {
+    const controls = CanvasControls.resolve({
+      platform: "macos",
+      activeScopes: ["canvas", "menu"],
+      globalFacts: { commentAuthorPresent: true },
+      pendingActions: []
+    })
+    const items: ReadonlyArray<ContextMenuItem> = [{
+      action: controls.action({ id: "zoom-to-fit" }),
+      execute: Effect.void
+    }]
+    const html = renderToStaticMarkup(
+      <CanvasActionRunnerProvider>
+        <CritContextActions ariaLabel="Canvas actions" items={items}>
+          <main data-context-surface="canvas">
+            <CritContextActions ariaLabel="Frame actions" items={items}>
+              <section data-context-surface="frame">Frame</section>
+            </CritContextActions>
+          </main>
+        </CritContextActions>
+      </CanvasActionRunnerProvider>
+    )
+
+    const canvasSurface = html.match(
+      /<main[^>]*data-context-surface="canvas"[^>]*>/
+    )?.[0]
+    const frameSurface = html.match(
+      /<section[^>]*data-context-surface="frame"[^>]*>/
+    )?.[0]
+    expect(canvasSurface).toContain('aria-label="Canvas actions"')
+    expect(frameSurface).toContain('aria-label="Frame actions"')
+    for (const surface of [canvasSurface, frameSurface]) {
+      expect(surface).toContain('aria-haspopup="menu"')
+      expect(surface).toContain(
+        'aria-keyshortcuts="Shift+F10 ContextMenu"'
+      )
+      expect(surface).not.toContain("data-crit-help-name")
+      expect(surface).toContain('tabindex="0"')
+    }
+    expect(html.match(/-webkit-touch-callout:none/g)).toHaveLength(2)
+    expect(html).not.toContain("•••")
+  })
+
+  it("uses compact context-menu spacing without changing its color rules", () => {
+    const popup = cssRule(".crit-context-menu")
+    const item = cssRule(
+      ".crit-context-menu button, .crit-context-menu a"
+    )
+
+    expect(popup).toContain(
+      "font: 500 12px/16px system-ui, -apple-system, sans-serif"
+    )
+    expect(popup).toContain("gap: 0")
+    expect(popup).toContain("padding: 4px")
+    expect(popup).toContain("width: 192px")
+    expect(item).toContain("height: 28px")
+    expect(item).toContain("padding: 0 8px")
+    expect(cssRule(".crit-context-menu__detail")).toContain("margin-left: 8px")
+  })
+
+  it("shows only the note glyph in collapsed mode", () => {
+    const collapsed = cssRule('.crit-note[data-mode="collapsed"]')
+
+    expect(collapsed).toContain("background: transparent")
+    expect(collapsed).toContain("box-shadow: none")
+    expect(collapsed).not.toContain("border-radius")
+  })
+
+  it("renders Frames and keeps attached Notes visible above the collapse zoom", async () => {
     const canvas = Canvas.create({ id: "review", title: "Review", owner: { id: "git:test", name: "Test Author" } })
     await Effect.runPromise(Canvas.apply(
       canvas,
@@ -586,13 +1091,16 @@ describe("Crit", () => {
     expect(html).toContain("Status: Approved. Change status")
     expect(html).toContain("A: Candidate")
     expect(html).toContain("Tighten spacing")
-    expect(html).toContain('rows="3"')
+    expect(html).toContain('data-mode="preview"')
+    expect(html).not.toContain('aria-label="Expand note"')
     expect(html).not.toContain("Attached to candidate")
-    expect(html).toContain('data-crit-help-name="Frame status"')
-    expect(html).not.toContain('data-crit-help-name="Edit frame title"')
+    expect(html).toContain('data-crit-help-name="Change frame status"')
+    expect(html).not.toContain('data-crit-help-name="Edit title"')
     expect(html).not.toContain('class="crit-frame__title-edit-icon"')
     expect(html).toContain("crit-frame__title-label")
     expect(html).toContain('data-crit-help-name="Edit note"')
+    expect(html).not.toContain("More note actions")
+    expect(html).not.toContain("More actions for Candidate")
     expect(html).not.toContain("Layer options for Candidate")
     const frameTag = html.match(/<section class="crit-frame"[^>]+>/)?.[0]
     expect(frameTag).toContain(
@@ -612,7 +1120,8 @@ describe("Crit", () => {
     expect(html.indexOf('aria-label="Select"')).toBeLessThan(
       html.indexOf('aria-label="Hand"')
     )
-    expect(html).toContain('aria-label="Select" aria-pressed="true"')
+    const selectButton = html.match(/<button[^>]*aria-label="Select"[^>]*>/)?.[0]
+    expect(selectButton).toContain('aria-pressed="true"')
 
     const collaboratorHtml = renderToStaticMarkup(
       <CanvasViewport
@@ -630,17 +1139,24 @@ describe("Crit", () => {
         document={Canvas.export(canvas)}
       />
     )
-    expect(unidentifiedHtml).toContain(
-      'aria-label="Add note" class="crit-icon-button" disabled=""'
-    )
-    expect(html).toContain('aria-label="Hand" aria-pressed="false"')
+    const unavailableAddNoteButton = unidentifiedHtml.match(
+      /<button[^>]*aria-label="Add note"[^>]*>/
+    )?.[0]
+    expect(unavailableAddNoteButton).toContain('class="crit-icon-button"')
+    expect(unavailableAddNoteButton).toContain('disabled=""')
+    const handButton = html.match(/<button[^>]*aria-label="Hand"[^>]*>/)?.[0]
+    expect(handButton).toContain('aria-pressed="false"')
     expect(html).toContain('aria-label="Add frame"')
     expect(html).toContain('aria-label="Add note"')
-    expect(html.indexOf('class="crit-status-menu"')).toBeLessThan(
-      html.indexOf('class="crit-frame__surface"')
-    )
-    expect(critStyles).toMatch(
-      /\.crit-status-menu \{[^}]*z-index: 0;/s
+    const statusTrigger = html.match(
+      /<button[^>]*aria-label="Status: Approved\. Change status"[^>]*>/
+    )?.[0]
+    expect(statusTrigger).toContain('aria-haspopup="menu"')
+    expect(statusTrigger).toContain('aria-expanded="false"')
+    expect(cssRule(".crit-status-positioner")).toContain("z-index: -1")
+    expect(cssRule(".crit-status-menu")).toContain("outline: 0")
+    expect(critStyles).toContain(
+      ".crit-status-option:hover, .crit-status-option[data-highlighted]"
     )
     expect(critStyles).toMatch(
       /\.crit-frame__surface \{[^}]*z-index: 1;/s
@@ -702,7 +1218,7 @@ describe("Crit", () => {
     expect(open).not.toContain("referrerPolicy")
     expect(open).toContain('rel="noreferrer"')
     expect(open).toContain('target="_blank"')
-    expect(html.match(/aria-label="Show all breakpoints"/g)).toHaveLength(1)
+    expect(html.match(/aria-label="Create breakpoints"/g)).toHaveLength(1)
   })
 
   it("uses a real relay navigation while preserving the canonical open URL", async () => {
@@ -800,7 +1316,7 @@ describe("Crit", () => {
     expect(html).toContain("Take snapshot")
   })
 
-  it("renders letter avatars and hover details for unified Canvas Presence", () => {
+  it("renders keyboard and pointer accessible presence popover triggers", () => {
     const html = renderToStaticMarkup(
       <CanvasPresenceIndicator
         presence={{
@@ -829,8 +1345,13 @@ describe("Crit", () => {
     expect(html).toContain("Current author: Willa King")
     expect(html).toContain(">W<")
     expect(html).toContain(">C<")
-    expect(html).toContain("GPT-5")
-    expect(html).toContain('href="codex://threads/thread-1"')
+    expect(html.match(/aria-haspopup="dialog"/g)).toHaveLength(2)
+    expect(html.match(/data-base-ui-click-trigger/g)).toHaveLength(2)
+    expect(html).not.toContain('role="tooltip"')
+    expect(critStyles).toContain(".crit-presence__positioner { z-index: 5000; }")
+    expect(critStyles).toContain(
+      '.crit-presence__card[data-starting-style], .crit-presence__card[data-ending-style]'
+    )
   })
 
   it("renders anonymous presence and a copy-ready Git identity remediation", () => {
@@ -850,7 +1371,7 @@ describe("Crit", () => {
       />
     )
 
-    expect(presence).toContain("Anonymous agent")
+    expect(presence).toContain('aria-label="Anonymous agent presence"')
     expect(identity).toContain("Git identity required")
     expect(identity).toContain("Copy fix prompt")
     expect(identity).toContain("crit-identity")

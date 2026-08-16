@@ -99,6 +99,24 @@ describe("canvas camera", () => {
     expect(bounded.camera.zoom).toBe(2)
   })
 
+  it("sets an exact debug zoom while keeping the viewport center anchored", () => {
+    const initial = initialCanvasCameraState({ x: 40, y: 50, zoom: .65 })
+    const viewport = { width: 1200, height: 800 }
+    const zoomed = updateCanvasCamera(initial, {
+      type: "zoom-to",
+      zoom: .4,
+      viewport
+    })
+
+    expect(zoomed.camera.zoom).toBe(.4)
+    expect((600 - zoomed.camera.x) / zoomed.camera.zoom).toBeCloseTo(
+      (600 - initial.camera.x) / initial.camera.zoom
+    )
+    expect((400 - zoomed.camera.y) / zoomed.camera.zoom).toBeCloseTo(
+      (400 - initial.camera.y) / initial.camera.zoom
+    )
+  })
+
   it("fits geometry and sanitizes invalid camera options", () => {
     const fitted = updateCanvasCamera(initialCanvasCameraState(), {
       type: "fit",

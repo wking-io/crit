@@ -44,11 +44,11 @@ describe("CanvasControls", () => {
 
     expect(action).toMatchObject({
       key: "remove-item:frame:candidate",
-      label: "Remove Candidate",
+      label: "Delete",
       description: "Remove this frame from the canvas.",
       consequence: "destructive",
       availability: "enabled",
-      shortcut: "⌫",
+      shortcut: "Del",
       ariaKeyShortcuts: "Backspace Delete"
     })
     expect(tanStackHotkeysForAction(action)).toEqual([
@@ -69,6 +69,20 @@ describe("CanvasControls", () => {
       { key: "=", mod: true, shift: false, alt: false },
       { key: "=", mod: true, shift: true, alt: false }
     ])
+  })
+
+  it("uses the concise status name in every action projection", () => {
+    const action = resolve().action({
+      id: "set-frame-status",
+      target: { kind: "frame", id: "candidate", label: "Candidate" },
+      status: "ready-for-review",
+      frameIsLive: true
+    })
+
+    expect(action).toMatchObject({
+      label: "Ready for review",
+      description: "Set this frame's workflow status to Ready for review."
+    })
   })
 
   it("projects bindings only while one of the action's scopes is active", () => {
@@ -177,6 +191,18 @@ describe("CanvasControls", () => {
 
     expect(() => makeCanvasControls(conflicting)).toThrow(
       /select-tool and hand-tool use :v/
+    )
+  })
+
+  it("rejects action titles that interpolate target data", () => {
+    const targetedTitle = CANVAS_ACTION_POLICIES.map((declaration) =>
+      declaration.id === "remove-item"
+        ? { ...declaration, label: "Delete {targetLabel}" }
+        : declaration
+    )
+
+    expect(() => makeCanvasControls(targetedTitle)).toThrow(
+      /remove-item title must not interpolate target data/
     )
   })
 

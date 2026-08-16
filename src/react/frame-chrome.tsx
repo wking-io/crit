@@ -1,4 +1,4 @@
-import type { FrameStatus } from "../core/index.js"
+import type { FrameReviewStatus, FrameStatus } from "../core/index.js"
 import type { GlyphName } from "../glyphs/index.js"
 
 export interface FrameStatusChrome {
@@ -10,20 +10,61 @@ export interface FrameStatusChrome {
   readonly glyph: GlyphName
 }
 
+interface FrameReviewStatusChrome extends FrameStatusChrome {
+  readonly id: FrameReviewStatus
+}
+
 export const STATUS_PILL_HEIGHT = 24
 export const STATUS_PILL_STEP = 40
 const STATUS_PILL_RADIUS = 8
 const STATUS_PILL_CHROME_WIDTH = 40
 const STATUS_PILL_CHARACTER_WIDTH = 6.5
 export const STATUS_PILL_MOTION = {
-  spring: { type: "spring", visualDuration: 0.25, bounce: 0.3 },
+  spring: { type: "spring", visualDuration: 0.18, bounce: 0 },
+  close: { duration: 0.2, ease: "easeOut" },
   curve: -55,
   curveExponent: 1.85,
   originOffset: 38,
   initialScale: 0.5,
-  gap: 6,
-  frameGap: 6
+  gap: 6
 } as const
+
+const STATUS_PILL_MOTION_TIMES = [0, 0.18, 0.36, 0.55, 0.75, 1]
+
+export interface StatusPillMotionTarget {
+  readonly startY: number
+  readonly finalX: number
+  readonly finalY: number
+  readonly finalRotate: number
+}
+
+export function statusPillMotionPath({
+  startY,
+  finalX,
+  finalY,
+  finalRotate
+}: StatusPillMotionTarget) {
+  const x = STATUS_PILL_MOTION_TIMES.map((progress) =>
+    progress === 0
+      ? 0
+      : finalX * Math.pow(progress, STATUS_PILL_MOTION.curveExponent)
+  )
+  const y = STATUS_PILL_MOTION_TIMES.map((progress) =>
+    startY + (finalY - startY) * progress
+  )
+  const rotate = STATUS_PILL_MOTION_TIMES.map((progress) =>
+    progress === 0 ? 0 : finalRotate * progress
+  )
+  return {
+    enter: { x, y, rotate },
+    exit: {
+      x: [...x].reverse(),
+      y: [...y].reverse(),
+      rotate: [...rotate].reverse()
+    },
+    times: [...STATUS_PILL_MOTION_TIMES]
+  }
+}
 
 export const measureStatusPillWidth = (label: string) =>
   STATUS_PILL_CHROME_WIDTH + label.length * STATUS_PILL_CHARACTER_WIDTH
@@ -61,6 +102,14 @@ export interface StatusPillLayoutItem {
   centerY: number
   finalY: number
 }
+
+export const statusPillFrameGap = (
+  bottomItem: Pick<StatusPillLayoutItem, "verticalHalfExtent"> | undefined
+) => STATUS_PILL_MOTION.gap + Math.max(
+  0,
+  (bottomItem?.verticalHalfExtent ?? STATUS_PILL_HEIGHT / 2) -
+    STATUS_PILL_HEIGHT / 2
+)
 
 export function calculateStatusPillLayout(
   widths: ReadonlyArray<number>
@@ -151,6 +200,40 @@ export function calculateStatusPillLayout(
   return layout
 }
 
+export interface StatusFanLayoutItem<Option> extends StatusPillLayoutItem {
+  readonly option: Option
+  readonly startY: number
+}
+
+export interface StatusFanLayout<Option> {
+  readonly frameGap: number
+  readonly items: ReadonlyArray<StatusFanLayoutItem<Option>>
+}
+
+/**
+ * Owns every item-count-dependent value for a status fan. Callers supply the
+ * options and consume one layout, so width, origin, spacing, and frame gap
+ * cannot drift when options are added or removed.
+ */
+export function calculateStatusFanLayout<Option extends { readonly label: string }>(
+  options: ReadonlyArray<Option>
+): StatusFanLayout<Option> {
+  const items = calculateStatusPillLayout(
+    options.map((option) => measureStatusPillWidth(option.label))
+  ).map((item, index) => ({
+    ...item,
+    option: options[index]!,
+    startY:
+      item.distanceFromFrame * STATUS_PILL_STEP +
+      STATUS_PILL_MOTION.originOffset
+  }))
+
+  return {
+    frameGap: statusPillFrameGap(items.at(-1)),
+    items
+  }
+}
+
 export const FRAME_STATUSES: ReadonlyArray<FrameStatusChrome> = [
   { id: "changes-requested", label: "Changes requested", ink: "oklch(52% 0.2 55)", shell: "oklch(95.25% 0.024 55)", stroke: "oklch(67% 0.18 55)", glyph: "statusChangesRequested" },
   { id: "in-progress", label: "In progress", ink: "oklch(52% 0.2 245.3)", shell: "oklch(95.25% 0.024 245.3)", stroke: "oklch(67% 0.18 245.3)", glyph: "statusInProgress" },
@@ -158,6 +241,15 @@ export const FRAME_STATUSES: ReadonlyArray<FrameStatusChrome> = [
   { id: "approved", label: "Approved", ink: "oklch(52% 0.2 156.3)", shell: "oklch(95.25% 0.024 156.3)", stroke: "oklch(67% 0.18 156.3)", glyph: "statusApproved" },
   { id: "ready-for-review", label: "Ready for review", ink: "oklch(52% 0.2 302)", shell: "oklch(95.25% 0.024 302)", stroke: "oklch(67% 0.18 302)", glyph: "statusReadyForReview" }
 ]
+
+const isFrameReviewStatus = (
+  status: FrameStatusChrome
+): status is FrameReviewStatusChrome => status.id !== "archived"
+
+export const frameStatusMenuOptions = (current: FrameStatus) =>
+  FRAME_STATUSES
+    .filter(isFrameReviewStatus)
+    .filter((status) => status.id !== current)
 
 export const frameStatus = (status: FrameStatus): FrameStatusChrome =>
   FRAME_STATUSES.find((candidate) => candidate.id === status) ?? FRAME_STATUSES[1]!
