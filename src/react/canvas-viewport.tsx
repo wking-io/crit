@@ -1,5 +1,6 @@
+import { Popover } from "@base-ui/react/popover"
 import { useHotkeys } from "@tanstack/react-hotkeys"
-import { Effect, Option, Schema } from "effect"
+import { Effect, Match, Option, Schema } from "effect"
 import {
   useCallback,
   useEffect,
@@ -24,18 +25,15 @@ import {
   CritClientErrorSchema,
   critClientErrorMessage
 } from "../runtime/canvas-failure.js"
-import {
-  defaultRuntimeCapabilities,
-  runtimeId
-} from "../runtime/runtime-capabilities.js"
+import { runtimeId } from "../runtime/runtime-capabilities.js"
 import {
   connectCanvasInput,
   type FrameInputIntent
 } from "../frame-bridge/index.js"
 import { cssVariableStyle } from "./css-variable-style.js"
 import {
-  CritContextMenu,
-  type ContextMenuPosition
+  CritContextActions,
+  type ContextMenuItem
 } from "./canvas-context-menu.js"
 import {
   CanvasActionRunnerProvider,
@@ -47,6 +45,7 @@ import {
   CanvasArrangement,
   type CanvasArrangementOperation
 } from "./canvas-arrangement.js"
+import { canvasArrangementFootprint } from "./canvas-arrangement-footprint.js"
 import { critStyles } from "./crit-styles.js"
 import {
   canvasCursor,
@@ -68,9 +67,13 @@ import {
   canvasEdgePanVelocity,
   captureCanvasInteractionPointer
 } from "./canvas-interaction.js"
-import { CanvasToolbar } from "./canvas-toolbar.js"
+import {
+  CanvasToolbar,
+  type CanvasChoice
+} from "./canvas-toolbar.js"
 import {
   FrameCard,
+  frameContentProjection,
   type FrameChromeSettings
 } from "./frame-card.js"
 import {
@@ -91,16 +94,32 @@ import {
   type CanvasCameraOptions
 } from "./canvas-camera.js"
 import { NewFrameDialog } from "./new-frame-dialog.js"
-import { NoteCard } from "./note-card.js"
+import {
+  NoteCard,
+  type NotePresentationSize
+} from "./note-card.js"
+import {
+  DEFAULT_NOTE_PRESENTATION_THRESHOLDS,
+  type NotePresentationThresholds
+} from "./note-presentation.js"
+import { NotePresentationControls } from "./note-presentation-controls.js"
 import {
   CommentPopover,
   type CommentDraftClear
 } from "./comment-popover.js"
+import { commentPopoverTriggerId } from "./canvas-comment-pin.js"
+import {
+  confirmedEffect,
+  ConfirmationProvider,
+  useConfirmation,
+  type ConfirmationDetails
+} from "./confirmation-dialog.js"
 import {
   makeCommentThreadReview,
   type CommentThreadReviewTarget,
   type CommentThreadReviewTransition
 } from "../session/comment-thread-review.js"
+import { CritUnderlayProvider } from "./overlay-container.js"
 
 export {
   DEFAULT_FRAME_CHROME_SETTINGS,
@@ -118,6 +137,7 @@ export {
 
 type Camera = CanvasCamera
 type Preview = Readonly<Record<string, CanvasGeometry>>
+type NotePresentationSizes = Readonly<Record<string, NotePresentationSize>>
 type WheelInput = Omit<
   Extract<FrameInputIntent, { readonly type: "wheel" }>,
   "type"
@@ -130,6 +150,7 @@ const EMPTY_FRAME_SELECTION: ReadonlySet<string> = new Set()
 
 export interface CanvasViewportProps {
   readonly document: CanvasDocument
+  readonly canvasChoices?: ReadonlyArray<CanvasChoice> | undefined
   readonly author?: Author | null
   readonly dispatch: (
     ...commands: ReadonlyArray<CanvasCommandValue>
@@ -138,11 +159,13 @@ export interface CanvasViewportProps {
   readonly iframeSandbox?: string | undefined
   readonly frameLoading?: FrameLoadingPolicy | undefined
   readonly onCommandError?: ((message: string) => void) | undefined
+  readonly onCanvasSelect?: ((canvasId: string) => void) | undefined
   readonly snapshotFrame?: (
     frameId: string
   ) => Effect.Effect<unknown, unknown>
   readonly frameChrome?: Partial<FrameChromeSettings> | undefined
   readonly cameraOptions?: Partial<CanvasCameraOptions> | undefined
+  readonly developerTools?: boolean | undefined
 }
 
 const CanvasActionFailure = Schema.Union([
@@ -163,6 +186,26 @@ const messageOf = (cause: unknown) => {
 
 const localId = (prefix: string) =>
   runtimeId(prefix)
+
+export const frameRemovalConfirmationDetails = (
+  frames: ReadonlyArray<Pick<CanvasFrame, "title">>
+): ConfirmationDetails => frames.length === 1
+  ? {
+      confirmLabel: "Delete frame",
+      description: "This frame will be removed from the canvas. This cannot be undone.",
+      title: `Delete “${frames[0]!.title}”?`
+    }
+  : {
+      confirmLabel: `Delete ${frames.length} frames`,
+      description: `The ${frames.length} selected frames will be removed from the canvas. This cannot be undone.`,
+      title: `Delete ${frames.length} frames?`
+    }
+
+export const noteRemovalConfirmationDetails: ConfirmationDetails = {
+  confirmLabel: "Delete note",
+  description: "This note will be removed from the canvas. This cannot be undone.",
+  title: "Delete note?"
+}
 
 const intersectsViewport = (
   geometry: CanvasGeometry,
@@ -185,29 +228,37 @@ const intersectsViewport = (
 
 export function CanvasViewport(props: CanvasViewportProps) {
   return (
-    <CanvasActionRunnerProvider
-      onError={(cause) => props.onCommandError?.(messageOf(cause))}
-    >
-      <CanvasViewportContent {...props} />
-    </CanvasActionRunnerProvider>
+    <ConfirmationProvider>
+      <CanvasActionRunnerProvider
+        onError={(cause) => props.onCommandError?.(messageOf(cause))}
+      >
+        <CanvasViewportContent {...props} />
+      </CanvasActionRunnerProvider>
+    </ConfirmationProvider>
   )
 }
 
 function CanvasViewportContent({
   document,
+  canvasChoices,
   author = null,
+  developerTools = false,
   dispatch,
   iframeAllow = "clipboard-read; clipboard-write; fullscreen",
   iframeSandbox,
   frameLoading,
   onCommandError,
+  onCanvasSelect,
   snapshotFrame,
   frameChrome,
   cameraOptions
 }: CanvasViewportProps) {
   const controls = useCanvasControls(["canvas"], author !== null)
   const actionRunner = useCanvasActionRunner()
+  const requestConfirmation = useConfirmation()
   const rootRef = useRef<HTMLDivElement>(null)
+  const panShieldRef = useRef<HTMLDivElement>(null)
+  const addFrameButtonRef = useRef<HTMLButtonElement>(null)
   const initialCameraState = useMemo(() => initialCanvasCameraState(), [])
   const [camera, setCamera] = useState<Camera>(initialCameraState.camera)
   const cameraStateRef = useRef(initialCameraState)
@@ -215,6 +266,10 @@ function CanvasViewportContent({
   cameraOptionsRef.current = cameraOptions
   const [viewport, setViewport] = useState({ width: 0, height: 0 })
   const [preview, setPreview] = useState<Preview>({})
+  const [notePresentationSizes, setNotePresentationSizes] =
+    useState<NotePresentationSizes>({})
+  const [notePresentationThresholds, setNotePresentationThresholds] =
+    useState<NotePresentationThresholds>(DEFAULT_NOTE_PRESENTATION_THRESHOLDS)
   const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(
     () => new Set()
   )
@@ -230,9 +285,10 @@ function CanvasViewportContent({
     useState<CanvasSelectionBox | null>(null)
   const [tool, setTool] = useState<CanvasTool>("select")
   const [panning, setPanning] = useState(false)
-  const [canvasMenu, setCanvasMenu] = useState<
-    (ContextMenuPosition & { readonly worldX: number; readonly worldY: number }) | null
-  >(null)
+  const canvasActionPointRef = useRef<{
+    readonly worldX: number
+    readonly worldY: number
+  } | null>(null)
   const [newFrameTarget, setNewFrameTarget] = useState<{
     readonly x: number
     readonly y: number
@@ -292,6 +348,45 @@ function CanvasViewportContent({
     })
   }, [document.frames, document.notes])
 
+  useEffect(() => {
+    const noteIds = new Set(document.notes.map((note) => note.id))
+    setNotePresentationSizes((current) => {
+      const next = Object.fromEntries(
+        Object.entries(current).filter(([id]) => noteIds.has(id))
+      )
+      return Object.keys(next).length === Object.keys(current).length
+        ? current
+        : next
+    })
+  }, [document.notes])
+
+  const reportNotePresentationSize = useCallback((
+    noteId: string,
+    size: NotePresentationSize
+  ) => {
+    setNotePresentationSizes((current) => {
+      const previous = current[noteId]
+      return previous?.width === size.width && previous.height === size.height
+        ? current
+        : { ...current, [noteId]: size }
+    })
+  }, [])
+
+  const frameClearanceGeometries = useMemo(
+    () => document.frames.map((frame) => {
+      const geometry = preview[frame.id] ?? frame.geometry
+      return {
+        ...geometry,
+        height: frameContentProjection(
+          geometry.width,
+          geometry.height,
+          camera.zoom
+        ).shellHeight
+      }
+    }),
+    [camera.zoom, document.frames, preview]
+  )
+
   const selectFrame = useCallback((frameId: string, additive: boolean) => {
     setSelectedIds((current) => selectCanvasFrame(current, frameId, additive))
   }, [])
@@ -314,63 +409,100 @@ function CanvasViewportContent({
   ) => {
     const adopt = (next: CommentThreadReviewTransition) => {
       setCommentReview(next.state)
-      if (next.type === "changed" && next.clearDraft !== undefined) {
-        commentDraftClearVersion.current += 1
-        setCommentDraftClear({
-          version: commentDraftClearVersion.current,
-          scope: next.clearDraft
+      Match.value(next).pipe(
+        Match.discriminatorsExhaustive("type")({
+          changed: (change) => {
+            if (change.clearDraft === undefined) return
+            commentDraftClearVersion.current += 1
+            setCommentDraftClear({
+              version: commentDraftClearVersion.current,
+              scope: change.clearDraft
+            })
+          },
+          blocked: () => undefined,
+          dispatch: () => undefined
         })
-      }
+      )
     }
 
     return Effect.sync(() => adopt(transition)).pipe(
-      Effect.flatMap(() => transition.type !== "dispatch"
-        ? Effect.void
-        : dispatch(...transition.commands).pipe(
+      Effect.flatMap(() => Match.value(transition).pipe(
+        Match.discriminatorsExhaustive("type")({
+          changed: () => Effect.void,
+          blocked: () => Effect.void,
+          dispatch: (pending) => dispatch(...pending.commands).pipe(
             Effect.tapError((cause) => Effect.sync(() => adopt(
-              commentReviewRef.current!.settle(transition.key, {
+              commentReviewRef.current!.settle(pending.key, {
                 type: "rejected",
                 cause
               })
             ))),
             Effect.tap(() => Effect.sync(() => adopt(
-              commentReviewRef.current!.settle(transition.key, {
+              commentReviewRef.current!.settle(pending.key, {
                 type: "accepted"
               })
             )))
-          ))
+          )
+        })
+      ))
     )
   }, [dispatch])
 
   const focusCommentReview = useCallback((
     target: CommentThreadReviewTarget | null
   ) => {
-    let transition = commentReviewRef.current!.focus(target, {
+    const transition = commentReviewRef.current!.focus(target, {
       draft: commentDraftDirty ? "dirty" : "clean"
     })
+
+    const presentOrReport = (next: CommentThreadReviewTransition) => {
+      return Match.value(next).pipe(
+        Match.discriminatorsExhaustive("type")({
+          changed: presentCommentReview,
+          dispatch: presentCommentReview,
+          blocked: (blocked) => {
+            if (blocked.reason === "dirty-draft") {
+              return presentCommentReview(blocked)
+            }
+            const detail = blocked.reason === "current-author-required"
+              ? "Configure Git user.name and user.email to leave comments"
+              : blocked.reason === "archived-frame"
+                ? "Archived Frames do not support comments"
+                : blocked.reason === "dispatch-pending"
+                  ? "Wait for the current Comment action to finish"
+                  : "The Comment target is no longer available"
+            return Effect.sync(() => onCommandError?.(detail))
+          }
+        })
+      )
+    }
+
     if (
       transition.type === "blocked" &&
-      transition.reason === "dirty-draft" &&
-      defaultRuntimeCapabilities.confirm("Discard the unfinished comment?") ===
-        true
+      transition.reason === "dirty-draft"
     ) {
-      transition = commentReviewRef.current!.focus(target, {
-        draft: "dirty",
-        discardDraft: true
-      })
+      return Effect.promise(() => requestConfirmation({
+        confirmLabel: "Discard",
+        description: "Your unfinished comment or edit will be lost.",
+        title: "Discard unfinished comment?"
+      })).pipe(
+        Effect.flatMap((discardDraft) => presentOrReport(
+          discardDraft
+            ? commentReviewRef.current!.focus(target, {
+                draft: "dirty",
+                discardDraft: true
+              })
+            : transition
+        ))
+      )
     }
-    if (transition.type !== "blocked" || transition.reason === "dirty-draft") {
-      return presentCommentReview(transition)
-    }
-    const detail = transition.reason === "current-author-required"
-      ? "Configure Git user.name and user.email to leave comments"
-      : transition.reason === "archived-frame"
-        ? "Archived Frames do not support comments"
-        : transition.reason === "dispatch-pending"
-          ? "Wait for the current Comment action to finish"
-          : "The Comment target is no longer available"
-    return Effect.sync(() => onCommandError?.(detail))
-  }, [commentDraftDirty, onCommandError, presentCommentReview])
+    return presentOrReport(transition)
+  }, [
+    commentDraftDirty,
+    onCommandError,
+    presentCommentReview,
+    requestConfirmation
+  ])
 
   useEffect(() => {
     Effect.runFork(presentCommentReview(
@@ -379,8 +511,13 @@ function CanvasViewportContent({
   }, [author, document, presentCommentReview])
 
   const geometryOf = useCallback(
-    (item: CanvasFrame | CanvasNote) => preview[item.id] ?? item.geometry,
-    [preview]
+    (item: CanvasFrame | CanvasNote) => {
+      const geometry = preview[item.id] ?? item.geometry
+      if ("url" in item) return geometry
+      const size = notePresentationSizes[item.id]
+      return size === undefined ? geometry : { ...geometry, ...size }
+    },
+    [notePresentationSizes, preview]
   )
 
   const selectedItems = useMemo(
@@ -393,9 +530,11 @@ function CanvasViewportContent({
   const arrangeSelection = useCallback((operation: CanvasArrangementOperation) =>
     CanvasArrangement.plan({
       operation,
-      items: selectedItems.map((item) => ({
+      items: selectedItems.map((item) => canvasArrangementFootprint({
         id: item.id,
-        ...item.geometry
+        geometry: item.geometry,
+        kind: "url" in item ? "frame" : "note",
+        zoom: camera.zoom
       }))
     }).pipe(
       Effect.flatMap((plan) => {
@@ -424,7 +563,7 @@ function CanvasViewportContent({
         const commands = [...frameCommands, ...noteCommands]
         return commands.length === 0 ? Effect.void : dispatch(...commands)
       })
-    ), [dispatch, selectedItems])
+    ), [camera.zoom, dispatch, selectedItems])
 
   const addNoteAt = useCallback((x: number, y: number) => {
     if (author === null) {
@@ -469,6 +608,45 @@ function CanvasViewportContent({
         })
     return commands.length > 0 ? dispatch(...commands) : Effect.void
   }, [dispatch, document])
+
+  const removeFrames = useCallback((
+    frames: ReadonlyArray<CanvasFrame>,
+    clearSelection: boolean
+  ) => confirmedEffect(
+    requestConfirmation,
+    frameRemovalConfirmationDetails(frames),
+    () => {
+      const removal = dispatch(...frames.map((frame) =>
+        CanvasCommand.removeFrame({ id: frame.id })
+      ))
+      return clearSelection
+        ? removal.pipe(Effect.tap(() => Effect.sync(() =>
+            setSelectedIds(new Set())
+          )))
+        : removal
+    }
+  ), [dispatch, requestConfirmation])
+
+  const removeNote = useCallback((
+    note: CanvasNote,
+    clearSelection: boolean
+  ) => author === null
+    ? Effect.void
+    : confirmedEffect(
+        requestConfirmation,
+        noteRemovalConfirmationDetails,
+        () => {
+          const removal = dispatch(CanvasCommand.removeNote({
+            id: note.id,
+            actorId: author.id
+          }))
+          return clearSelection
+            ? removal.pipe(Effect.tap(() => Effect.sync(() =>
+                setSelectedIds(new Set())
+              )))
+            : removal
+        }
+      ), [author, dispatch, requestConfirmation])
 
   const startSelectionMarquee = (
     event: ReactPointerEvent<HTMLDivElement>
@@ -628,27 +806,22 @@ function CanvasViewportContent({
       })
   const deleteSelection = useCallback(() => {
     const effect = selectedFramesForRemoval.length > 0
-      ? dispatch(...selectedFramesForRemoval.map((frame) =>
-          CanvasCommand.removeFrame({ id: frame.id })
-        ))
-      : selectedNoteForRemoval !== undefined && author !== null
-        ? dispatch(CanvasCommand.removeNote({
-            id: selectedNoteForRemoval.id,
-            actorId: author.id
-          }))
+      ? removeFrames(selectedFramesForRemoval, true)
+      : selectedNoteForRemoval !== undefined
+        ? removeNote(selectedNoteForRemoval, true)
         : Effect.void
     actionRunner.run(
       controls,
       removeSelectionAction,
-      effect.pipe(Effect.tap(() => Effect.sync(() => setSelectedIds(new Set())))),
+      effect,
       (cause) => onCommandError?.(messageOf(cause))
     )
   }, [
     actionRunner,
-    author,
     controls,
-    dispatch,
     onCommandError,
+    removeFrames,
+    removeNote,
     removeSelectionAction,
     selectedFramesForRemoval,
     selectedNoteForRemoval
@@ -750,7 +923,8 @@ function CanvasViewportContent({
   const startMove = (
     event: ReactPointerEvent,
     item: CanvasFrame | CanvasNote,
-    selectedFrameIds: ReadonlySet<string> = EMPTY_FRAME_SELECTION
+    selectedFrameIds: ReadonlySet<string> = EMPTY_FRAME_SELECTION,
+    onTap?: () => void
   ) => {
     event.preventDefault()
     event.stopPropagation()
@@ -823,6 +997,13 @@ function CanvasViewportContent({
       pointer.x = next.clientX
       pointer.y = next.clientY
       cleanUp()
+      if (
+        onTap !== undefined &&
+        Math.hypot(pointer.x - start.pointer.x, pointer.y - start.pointer.y) < 6
+      ) {
+        onTap()
+        return
+      }
       run(...interaction.finish(deltaAt()))
     }
     const cancel = () => cleanUp()
@@ -877,7 +1058,7 @@ function CanvasViewportContent({
     const items = [...document.frames, ...document.notes]
     applyCameraInput({
       type: "fit",
-      geometries: items.map((item) => item.geometry),
+      geometries: items.map(geometryOf),
       viewport
     })
   }
@@ -889,6 +1070,10 @@ function CanvasViewportContent({
       ),
     [document]
   )
+  const topCanvasZIndex = sortedItems.reduce(
+    (highest, item) => Math.max(highest, item.zIndex),
+    0
+  ) + 1
   const activeComments = useMemo(() => document.comments.filter((thread) => thread.resolvedAt === null), [document.comments])
   const commentThread = commentReview.kind === "thread"
     ? commentReview.thread
@@ -898,25 +1083,111 @@ function CanvasViewportContent({
     : document.frames.find((frame) => frame.id === commentReview.frameId)
   const commentGeometry = commentFrame === undefined ? undefined : geometryOf(commentFrame)
   const commentStatusColor = frameStatus(commentFrame?.status ?? "archived").ink
+  const commentPopoverOpen =
+    commentReview.kind !== "idle" &&
+    commentFrame?.snapshot === undefined &&
+    commentGeometry !== undefined &&
+    (commentReview.kind === "composing" || commentThread !== undefined)
+  const commentPopoverAnchor = useMemo(() => {
+    if (commentGeometry === undefined) return null
+    return {
+      getBoundingClientRect: () => {
+        const canvasRect = rootRef.current?.getBoundingClientRect()
+        return new DOMRect(
+          (canvasRect?.left ?? 0) + camera.x + commentGeometry.x * camera.zoom,
+          (canvasRect?.top ?? 0) + camera.y + commentGeometry.y * camera.zoom,
+          commentGeometry.width * camera.zoom,
+          commentGeometry.height * camera.zoom
+        )
+      }
+    }
+  }, [camera, commentGeometry])
+  const commentPopoverClosePending = useRef(false)
+  const requestCommentPopoverClose = useCallback(() => {
+    if (commentPopoverClosePending.current) return
+    commentPopoverClosePending.current = true
+    Effect.runFork(
+      focusCommentReview(null).pipe(
+        Effect.catch((cause) =>
+          Effect.sync(() => onCommandError?.(messageOf(cause)))
+        ),
+        Effect.ensuring(Effect.sync(() => {
+          commentPopoverClosePending.current = false
+        }))
+      )
+    )
+  }, [focusCommentReview, onCommandError])
 
+  const rememberCanvasActionPoint = useCallback((
+    clientX: number,
+    clientY: number
+  ) => {
+    const rect = rootRef.current?.getBoundingClientRect()
+    if (rect === undefined) return
+    canvasActionPointRef.current = {
+      worldX: (clientX - rect.left - camera.x) / camera.zoom,
+      worldY: (clientY - rect.top - camera.y) / camera.zoom
+    }
+  }, [camera])
+
+  const canvasContextItems: ReadonlyArray<ContextMenuItem> = [
+    {
+      action: controls.action({ id: "open-new-frame" }),
+      execute: Effect.sync(() => {
+        const point = canvasActionPointRef.current
+        if (point === null) openNewFrameAtCenter()
+        else setNewFrameTarget({ x: point.worldX, y: point.worldY })
+      })
+    },
+    {
+      action: controls.action({ id: "create-note" }),
+      execute: Effect.suspend(() => {
+        const point = canvasActionPointRef.current
+        return point === null
+          ? addNoteAtCenter()
+          : addNoteAt(point.worldX, point.worldY)
+      }),
+      onFailure: (cause: unknown) => onCommandError?.(messageOf(cause))
+    },
+    {
+      action: controls.action({ id: "zoom-to-fit" }),
+      execute: Effect.sync(fit)
+    }
+  ]
   return (
+    <Popover.Root
+      onOpenChange={(open, details) => {
+        if (open || details.reason === "trigger-press") return
+        details.cancel()
+        requestCommentPopoverClose()
+      }}
+      open={commentPopoverOpen}
+      triggerId={commentReview.kind === "thread"
+        ? commentPopoverTriggerId(commentReview.threadId)
+        : null}
+    >
+    <CritContextActions
+      ariaLabel="Canvas actions"
+      items={canvasContextItems}
+      onOpenChange={(open, details) => {
+        if (!open) return
+        const target = details.event.target
+        if (target !== rootRef.current && target !== panShieldRef.current) {
+          details.cancel()
+        }
+      }}
+    >
     <div
       className="crit-canvas"
       ref={rootRef}
       onContextMenu={(event) => {
         if (event.target !== event.currentTarget) return
-        event.preventDefault()
-        const rect = event.currentTarget.getBoundingClientRect()
-        setCanvasMenu({
-          x: event.clientX,
-          y: event.clientY,
-          worldX: (event.clientX - rect.left - camera.x) / camera.zoom,
-          worldY: (event.clientY - rect.top - camera.y) / camera.zoom
-        })
+        rememberCanvasActionPoint(event.clientX, event.clientY)
       }}
       data-canvas-tool={tool}
       onPointerDown={(event) => {
         if (event.target !== event.currentTarget) return
+        rememberCanvasActionPoint(event.clientX, event.clientY)
         if (tool === "select") startSelectionMarquee(event)
         else if (!isAdditiveFrameSelection(event)) setSelectedIds(new Set())
       }}
@@ -933,6 +1204,7 @@ function CanvasViewportContent({
       })}
     >
       <style data-crit-styles="">{critStyles}</style>
+      <CritUnderlayProvider>
       <div
         className="crit-canvas__plane"
         style={{
@@ -975,60 +1247,69 @@ function CanvasViewportContent({
               onSelect={(additive = false) =>
                 selectFrame(item.id, additive)}
               onInputIntent={(intent) => {
-                if (intent.type === "select") {
-                  selectFrame(item.id, intent.additive)
-                } else if (intent.type === "delete") {
-                  const ids = selectedFrameIds.has(item.id)
-                    ? document.frames.filter((frame) =>
-                        selectedFrameIds.has(frame.id)
+                Match.value(intent).pipe(
+                  Match.discriminatorsExhaustive("type")({
+                    select: (selection) =>
+                      selectFrame(item.id, selection.additive),
+                    delete: () => {
+                      const ids = selectedFrameIds.has(item.id)
+                        ? document.frames.filter((frame) =>
+                            selectedFrameIds.has(frame.id)
+                          )
+                        : [item]
+                      const action = controls.action({
+                        id: "remove-item",
+                        target: {
+                          kind: "frame",
+                          id: ids.map((frame) => frame.id).sort().join(","),
+                          label: ids.length === 1
+                            ? ids[0]!.title
+                            : `${ids.length} frames`
+                        }
+                      })
+                      actionRunner.run(
+                        controls,
+                        action,
+                        removeFrames(ids, true),
+                        (cause) => onCommandError?.(messageOf(cause))
                       )
-                    : [item]
-                  const action = controls.action({
-                    id: "remove-item",
-                    target: {
-                      kind: "frame",
-                      id: ids.map((frame) => frame.id).sort().join(","),
-                      label: ids.length === 1 ? ids[0]!.title : `${ids.length} frames`
+                    },
+                    tool: (toolIntent) => {
+                      const action = controls.action({
+                        id: toolIntent.tool === "select"
+                          ? "select-tool"
+                          : "hand-tool"
+                      })
+                      actionRunner.run(
+                        controls,
+                        action,
+                        Effect.sync(() => setTool(toolIntent.tool))
+                      )
+                    },
+                    "zoom-step": (zoomIntent) => {
+                      const action = controls.action({
+                        id: zoomIntent.direction > 0 ? "zoom-in" : "zoom-out"
+                      })
+                      actionRunner.run(
+                        controls,
+                        action,
+                        Effect.sync(() => applyZoomStep(zoomIntent.direction))
+                      )
+                    },
+                    pinch: (pinchIntent) =>
+                      applyPinchScale(
+                        pinchIntent.scaleFactor,
+                        pinchIntent.clientX,
+                        pinchIntent.clientY,
+                        pinchIntent.deltaX,
+                        pinchIntent.deltaY
+                      ),
+                    wheel: (wheelIntent) => {
+                      const { type: _type, ...wheel } = wheelIntent
+                      applyWheel(wheel)
                     }
                   })
-                  actionRunner.run(
-                    controls,
-                    action,
-                    dispatch(...ids.map((frame) =>
-                      CanvasCommand.removeFrame({ id: frame.id })
-                    )).pipe(Effect.tap(() => Effect.sync(() => setSelectedIds(new Set())))),
-                    (cause) => onCommandError?.(messageOf(cause))
-                  )
-                } else if (intent.type === "tool") {
-                  const action = controls.action({
-                    id: intent.tool === "select" ? "select-tool" : "hand-tool"
-                  })
-                  actionRunner.run(
-                    controls,
-                    action,
-                    Effect.sync(() => setTool(intent.tool))
-                  )
-                } else if (intent.type === "zoom-step") {
-                  const action = controls.action({
-                    id: intent.direction > 0 ? "zoom-in" : "zoom-out"
-                  })
-                  actionRunner.run(
-                    controls,
-                    action,
-                    Effect.sync(() => applyZoomStep(intent.direction))
-                  )
-                } else if (intent.type === "pinch") {
-                  applyPinchScale(
-                    intent.scaleFactor,
-                    intent.clientX,
-                    intent.clientY,
-                    intent.deltaX,
-                    intent.deltaY
-                  )
-                } else if (intent.type === "wheel") {
-                  const { type: _type, ...wheel } = intent
-                  applyWheel(wheel)
-                }
+                )
               }}
               onMove={(event, frame) => {
                 const selection = selectCanvasFrameForMove(
@@ -1046,7 +1327,7 @@ function CanvasViewportContent({
               onBringToFront={() =>
                 dispatch(CanvasCommand.bringFrameToFront({ id: item.id }))
               }
-              onRemove={() => dispatch(CanvasCommand.removeFrame({ id: item.id }))}
+              onRemove={() => removeFrames([item], false)}
               onFitContent={(height) =>
                 dispatch(
                   CanvasCommand.setFrameDisplay({
@@ -1092,27 +1373,36 @@ function CanvasViewportContent({
               key={item.id}
               note={item}
               geometry={geometryOf(item)}
+              clearanceAnchor={preview[item.id] ?? item.geometry}
+              developerTools={developerTools}
+              frameGeometries={frameClearanceGeometries}
+              cameraOffset={camera}
+              selectMode={tool === "select"}
               selected={selectedIds.has(item.id)}
+              viewport={viewport}
               zoom={camera.zoom}
+              thresholds={notePresentationThresholds}
+              topZIndex={topCanvasZIndex}
               onSelect={(additive = false) => setSelectedIds((current) =>
                 selectCanvasFrame(current, item.id, additive)
               )}
               onBringToFront={() =>
                 dispatch(CanvasCommand.bringNoteToFront({ id: item.id }))
               }
-              onMove={startMove}
-              onResize={startResize}
+              onMove={(event, note, onTap) =>
+                startMove(event, note, EMPTY_FRAME_SELECTION, onTap)
+              }
+              onPresentationSize={reportNotePresentationSize}
+              onRemove={() => removeNote(item, false)}
               onSendToBack={() =>
                 dispatch(CanvasCommand.sendNoteToBack({ id: item.id }))
               }
             />
           )
         )}
-        {commentReview.kind !== "idle" &&
-        commentFrame?.snapshot === undefined &&
-        commentGeometry !== undefined &&
-        (commentReview.kind === "composing" || commentThread !== undefined) ? (
+        {commentPopoverOpen ? (
           <CommentPopover
+            anchor={commentPopoverAnchor}
             key={commentReview.kind === "thread"
               ? commentReview.threadId
               : "new-comment"}
@@ -1175,14 +1465,34 @@ function CanvasViewportContent({
           aria-hidden="true"
           className="crit-canvas__pan-shield"
           data-panning={panning ? "true" : "false"}
-          onContextMenu={(event) => event.preventDefault()}
-          onPointerDown={startPan}
+          onContextMenu={(event) =>
+            rememberCanvasActionPoint(event.clientX, event.clientY)}
+          onPointerDown={(event) => {
+            rememberCanvasActionPoint(event.clientX, event.clientY)
+            startPan(event)
+          }}
+          ref={panShieldRef}
         />
       ) : null}
+      <NotePresentationControls
+        onChange={setNotePresentationThresholds}
+        onZoomChange={(zoom) => applyCameraInput({
+          type: "zoom-to",
+          zoom,
+          viewport
+        })}
+        thresholds={notePresentationThresholds}
+        zoom={camera.zoom}
+      />
       <CanvasToolbar
+        addFrameButtonRef={addFrameButtonRef}
+        canvasId={document.id}
+        canvasChoices={canvasChoices}
         commentAvailable={author !== null}
         noteAvailable={author !== null}
         onArrange={arrangeSelection}
+        onTitleChange={(title) =>
+          dispatch(CanvasCommand.renameCanvas({ title }))}
         onAction={(action) => {
           if (action === "select") setTool("select")
           else if (action === "pan") setTool("pan")
@@ -1190,37 +1500,13 @@ function CanvasViewportContent({
           else if (action === "add-note") addNoteAtCenter()
           else if (action === "comment") setTool("comment")
         }}
+        onCanvasSelect={onCanvasSelect}
         title={document.title}
         tool={tool}
         selectedItemCount={selectedItems.length}
       />
-      <CritContextMenu
-        ariaLabel="Canvas actions"
-        items={canvasMenu === null ? [] : [
-          {
-            action: controls.action({ id: "open-new-frame" }),
-            execute: Effect.sync(() => setNewFrameTarget({
-              x: canvasMenu.worldX,
-              y: canvasMenu.worldY
-            }))
-          },
-          {
-            action: controls.action({ id: "create-note" }),
-            execute: addNoteAt(
-              canvasMenu.worldX,
-              canvasMenu.worldY
-            ),
-            onFailure: (cause: unknown) => onCommandError?.(messageOf(cause))
-          },
-          {
-            action: controls.action({ id: "zoom-to-fit" }),
-            execute: Effect.sync(fit)
-          }
-        ]}
-        onClose={() => setCanvasMenu(null)}
-        position={canvasMenu}
-      />
       <NewFrameDialog
+        finalFocus={addFrameButtonRef}
         onCancel={() => setNewFrameTarget(null)}
         onCreate={(url, title) => {
           if (newFrameTarget === null) return Effect.void
@@ -1234,6 +1520,9 @@ function CanvasViewportContent({
         onError={(message) => onCommandError?.(message)}
         open={newFrameTarget !== null}
       />
+      </CritUnderlayProvider>
     </div>
+    </CritContextActions>
+    </Popover.Root>
   )
 }

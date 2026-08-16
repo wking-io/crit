@@ -1,3 +1,5 @@
+import { Button } from "@base-ui/react/button"
+import { Popover } from "@base-ui/react/popover"
 import {
   useCallback,
   useEffect,
@@ -21,6 +23,7 @@ import {
   informationalHelpTarget
 } from "./canvas-help.js"
 import { Glyph } from "./glyph.js"
+import { useCritOverlayContainer } from "./overlay-container.js"
 
 export const COMMENT_POPOVER_WIDTH = 332
 export const COMMENT_POPOVER_GAP = 12
@@ -138,7 +141,7 @@ const Message = ({
             value={body}
           />
           <div className="crit-comment__actions">
-            <button
+            <Button
               disabled={pending || cancelEdit.availability !== "enabled"}
               {...actionHelpTarget(cancelEdit)}
               onClick={() => runner.run(
@@ -150,22 +153,22 @@ const Message = ({
                 })
               )}
               type="button"
-            >{cancelEdit.label}</button>
-            <button
+            >{cancelEdit.label}</Button>
+            <Button
               aria-keyshortcuts={saveEdit.ariaKeyShortcuts ?? undefined}
               disabled={pending || saveEdit.availability !== "enabled"}
               {...actionHelpTarget(saveEdit)}
               type="submit"
             >
               {saveEdit.label}
-            </button>
+            </Button>
           </div>
         </form>
       ) : (
         <>
           <p>{message.body}</p>
           {beginEdit.availability === "hidden" ? null : (
-            <button
+            <Button
               className="crit-comment__text-action"
               disabled={pending || beginEdit.availability !== "enabled"}
               {...actionHelpTarget(beginEdit)}
@@ -177,7 +180,7 @@ const Message = ({
               type="button"
             >
               Edit
-            </button>
+            </Button>
           )}
         </>
       )}
@@ -192,6 +195,7 @@ export function CommentPopover(props: {
   readonly currentAuthorId: string | null
   readonly frameGeometry?: CanvasGeometry
   readonly inline?: boolean
+  readonly anchor?: Popover.Positioner.Props["anchor"]
   readonly pending: boolean
   readonly threadManageable: boolean
   readonly statusColor: string
@@ -206,7 +210,9 @@ export function CommentPopover(props: {
 }) {
   const controls = useCanvasControls(["canvas", "comment-compose"], true)
   const runner = useCanvasActionRunner()
+  const overlayContainer = useCritOverlayContainer()
   const [body, setBody] = useState("")
+  const composerRef = useRef<HTMLTextAreaElement>(null)
   const composerDirty = useRef(false)
   const editingDirty = useRef(new Set<string>())
   const reportDraftStatus = useCallback(() => {
@@ -278,18 +284,37 @@ export function CommentPopover(props: {
           target: { kind: "comment-thread", id: props.thread.id, label: "comment" },
           manageable: props.threadManageable
         })
-  const placement = props.inline || props.frameGeometry === undefined || props.zoom === undefined
-    ? undefined
-    : commentPopoverProjection(props.frameGeometry, props.zoom)
-  return <aside aria-label={props.thread === undefined ? "New comment" : "Comment thread"} className="crit-comment-popover" data-inline={props.inline || undefined} onPointerDown={(event) => event.stopPropagation()} style={{
-    color: props.statusColor,
-    left: placement?.left,
-    top: placement?.top,
-    transform: placement === undefined
-      ? undefined
-      : `scale(${placement.scale})`
-  }}>
-    <header className="crit-comment-popover__header"><span><Glyph name="commentPin" />{props.thread === undefined ? "New comment" : "Comment"}</span><button aria-label={close.label} disabled={close.availability !== "enabled"} {...actionHelpTarget(close)} onClick={() => runner.run(controls, close, props.onClose(), props.onActionError)} type="button"><Glyph name="close" /></button></header>
+  const title = props.thread === undefined ? "New comment" : "Comment"
+  const contents = <>
+    <header className="crit-comment-popover__header">
+      {props.inline ? (
+        <span><Glyph name="commentPin" />{title}</span>
+      ) : (
+        <Popover.Title render={<span />}>
+          <Glyph name="commentPin" />{title}
+        </Popover.Title>
+      )}
+      {props.inline ? (
+        <Button
+          aria-label={close.label}
+          disabled={close.availability !== "enabled"}
+          {...actionHelpTarget(close)}
+          onClick={() => runner.run(
+            controls,
+            close,
+            props.onClose(),
+            props.onActionError
+          )}
+          type="button"
+        ><Glyph name="close" /></Button>
+      ) : (
+        <Popover.Close
+          aria-label={close.label}
+          disabled={close.availability !== "enabled"}
+          {...actionHelpTarget(close)}
+        ><Glyph name="close" /></Popover.Close>
+      )}
+    </header>
     {props.thread === undefined ? null : (
       <div className="crit-comment__messages">
         {[props.thread.opening, ...props.thread.replies].map((message) => (
@@ -314,6 +339,7 @@ export function CommentPopover(props: {
           aria-label={props.thread === undefined ? "Comment" : "Reply"}
           autoFocus={!props.inline}
           disabled={props.pending}
+          ref={composerRef}
           {...informationalHelpTarget({
             name: props.thread === undefined ? "Comment text" : "Reply text",
             description: props.thread === undefined
@@ -337,7 +363,7 @@ export function CommentPopover(props: {
         />
         <div className="crit-comment__actions">
           {resolutionAction !== null && props.thread ? (
-            <button
+            <Button
               disabled={props.pending || resolutionAction.availability !== "enabled"}
               {...actionHelpTarget(resolutionAction)}
               onClick={() => runner.run(
@@ -349,18 +375,62 @@ export function CommentPopover(props: {
               type="button"
             >
               {resolutionAction.label}
-            </button>
+            </Button>
           ) : <span />}
-          <button
+          <Button
             aria-keyshortcuts={submitAction.ariaKeyShortcuts ?? undefined}
             disabled={props.pending || submitAction.availability !== "enabled"}
             {...actionHelpTarget(submitAction)}
             type="submit"
           >
             {submitAction.label}
-          </button>
+          </Button>
         </div>
       </form>
     ) : null}
-  </aside>
+  </>
+
+  const label = props.thread === undefined ? "New comment" : "Comment thread"
+  if (props.inline) {
+    return (
+      <aside
+        aria-label={label}
+        className="crit-comment-popover"
+        data-inline="true"
+        onPointerDown={(event) => event.stopPropagation()}
+        style={{ color: props.statusColor }}
+      >
+        {contents}
+      </aside>
+    )
+  }
+
+  return (
+    <Popover.Portal container={overlayContainer}>
+      <Popover.Positioner
+        align="start"
+        anchor={props.anchor}
+        className="crit-comment-popover-positioner"
+        collisionAvoidance={{
+          align: "none",
+          fallbackAxisSide: "none",
+          side: "none"
+        }}
+        positionMethod="fixed"
+        side="left"
+        sideOffset={COMMENT_POPOVER_GAP}
+      >
+        <Popover.Popup
+          aria-label={label}
+          className="crit-comment-popover"
+          initialFocus={props.canSubmit ? composerRef : true}
+          onPointerDown={(event) => event.stopPropagation()}
+          render={<aside />}
+          style={{ color: props.statusColor }}
+        >
+          {contents}
+        </Popover.Popup>
+      </Popover.Positioner>
+    </Popover.Portal>
+  )
 }

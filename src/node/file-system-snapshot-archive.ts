@@ -13,6 +13,7 @@ import { Effect, Layer } from "effect"
 import { NodeType, parse, type Node as HtmlNode } from "node-html-parser"
 
 import type { SnapshotArtifact } from "../core/index.js"
+import { causeMessage } from "../internal/cause-message.js"
 
 import {
   SnapshotArchive,
@@ -164,14 +165,14 @@ export const FileSystemSnapshotArchive = { make, layer } as const
 const captureFailure = (sourceUrl: string, cause: unknown) =>
   new SnapshotCaptureFailed({
     sourceUrl,
-    detail: cause instanceof Error ? cause.message : String(cause)
+    detail: causeMessage(cause)
   })
 
 const storageFailure = (operation: string, artifactId: string, cause: unknown) =>
   new SnapshotStorageFailed({
     operation,
     artifactId,
-    detail: cause instanceof Error ? cause.message : String(cause)
+    detail: causeMessage(cause)
   })
 
 const createResourceFetcher = (

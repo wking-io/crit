@@ -6,10 +6,11 @@ import { Readable } from "node:stream"
 import { fileURLToPath } from "node:url"
 
 import { build } from "esbuild"
-import { Effect, Layer, ManagedRuntime, Schema } from "effect"
+import { Effect, Layer, ManagedRuntime, Match, Schema } from "effect"
 import type { Plugin, ResolvedConfig, ViteDevServer } from "vite"
 
 import type { CanvasLiveRefreshEndpoint } from "../browser/canvas-live-refresh.js"
+import { causeMessage } from "../internal/cause-message.js"
 import {
   CRIT_MANIFEST_FILE,
   CRIT_MANIFEST_PATH,
@@ -132,7 +133,7 @@ const sendUnexpectedFailure = (response: ServerResponse, cause: unknown) => {
     JSON.stringify({
       error: {
         code: "unavailable",
-        message: cause instanceof Error ? cause.message : "Crit middleware failed"
+        message: causeMessage(cause, "Crit middleware failed")
       }
     })
   )
@@ -326,10 +327,17 @@ const escapeHtml = (value: string) =>
 const editorHtml = (
   canvasId: string,
   editorAssetPath: string,
-  liveRefresh: CanvasLiveRefreshEndpoint
+  liveRefresh: CanvasLiveRefreshEndpoint,
+  editorPath: string,
+  canvasChoices: ReadonlyArray<{
+    readonly id: string
+    readonly title: string
+  }>
 ) => {
   const escapedCanvasId = escapeHtml(canvasId)
   const escapedLiveRefresh = escapeHtml(JSON.stringify(liveRefresh))
+  const escapedEditorPath = escapeHtml(editorPath)
+  const escapedCanvasChoices = escapeHtml(JSON.stringify(canvasChoices))
   return `<!doctype html>
 <html lang="en">
   <head>
@@ -338,7 +346,7 @@ const editorHtml = (
     <title>Crit · ${escapedCanvasId}</title>
     <style>html,body,#crit-root{height:100%;margin:0;overflow:hidden;overscroll-behavior:none;overscroll-behavior-x:none}</style>
   </head>
-  <body data-crit-canvas-id="${escapedCanvasId}" data-crit-live-refresh="${escapedLiveRefresh}">
+  <body data-crit-canvas-id="${escapedCanvasId}" data-crit-canvas-choices="${escapedCanvasChoices}" data-crit-editor-path="${escapedEditorPath}" data-crit-live-refresh="${escapedLiveRefresh}">
     <div id="crit-root"></div>
     <script type="module" src="${editorAssetPath}"></script>
   </body>
@@ -413,6 +421,21 @@ const editorModuleSource = (
   } from ${JSON.stringify(reactEntry)}
 
   const canvasId = document.body.dataset.critCanvasId || "default"
+  const canvasChoices = (() => {
+    try {
+      const parsed = JSON.parse(document.body.dataset.critCanvasChoices || "[]")
+      return Array.isArray(parsed) ? parsed : []
+    } catch {
+      return []
+    }
+  })()
+  const editorPath = document.body.dataset.critEditorPath || "/crit"
+  const selectCanvas = (nextCanvasId) => {
+    if (nextCanvasId === canvasId) return
+    window.location.assign(
+      editorPath + "/" + encodeURIComponent(nextCanvasId)
+    )
+  }
 
   const liveRefreshEndpoint = (() => {
     try {
@@ -434,7 +457,10 @@ const editorModuleSource = (
   function CritEditor() {
     return createElement(Crit, {
       canvasId,
+      canvasChoices,
+      developerTools: ${delivery === "vite"},
       frameLoading: ${JSON.stringify(frameLoadingPolicy)},
+      onCanvasSelect: selectCanvas,
       onSession: attachLiveRefresh,
       frameChrome: DEFAULT_FRAME_CHROME_SETTINGS,
       cameraOptions: DEFAULT_CANVAS_CAMERA_OPTIONS
@@ -690,19 +716,21 @@ export const crit = (options: CritVitePluginOptions = {}): Plugin => {
             response.end(html)
           })
           .catch((cause: unknown) => {
-            if (cause instanceof CritClientNotFound) {
-              sendJson(response, 404, {
-                error: { code: "not-found", message: "Frame not found" }
-              })
-              return
-            }
-            if (cause instanceof FrameRelayFailure) {
-              sendJson(response, cause.status, {
-                error: { code: "frame-relay-failed", message: cause.message }
-              })
-              return
-            }
-            sendUnexpectedFailure(response, cause)
+            Match.value(cause).pipe(
+              Match.when(Match.instanceOf(CritClientNotFound), () =>
+                sendJson(response, 404, {
+                  error: { code: "not-found", message: "Frame not found" }
+                })),
+              Match.when(Match.instanceOf(FrameRelayFailure), (failure) =>
+                sendJson(response, failure.status, {
+                  error: {
+                    code: "frame-relay-failed",
+                    message: failure.message
+                  }
+                })),
+              Match.orElse((failure) =>
+                sendUnexpectedFailure(response, failure))
+            )
           })
         return
       }
@@ -732,11 +760,22 @@ export const crit = (options: CritVitePluginOptions = {}): Plugin => {
           })
           return
         }
-        response.statusCode = 200
-        response.setHeader("Cache-Control", "no-store")
-        response.setHeader("Content-Type", "text/html; charset=utf-8")
-        response.setHeader("X-Content-Type-Options", "nosniff")
-        response.end(editorHtml(editorCanvasId, editorAssetPath!, liveRefresh))
+        void services
+          .then(({ documents }) => runtime.runPromise(documents.list()))
+          .then((documents) => {
+            response.statusCode = 200
+            response.setHeader("Cache-Control", "no-store")
+            response.setHeader("Content-Type", "text/html; charset=utf-8")
+            response.setHeader("X-Content-Type-Options", "nosniff")
+            response.end(editorHtml(
+              editorCanvasId,
+              editorAssetPath!,
+              liveRefresh,
+              editorBase!,
+              documents.map(({ id, title }) => ({ id, title }))
+            ))
+          })
+          .catch((cause: unknown) => sendUnexpectedFailure(response, cause))
         return
       }
       const snapshotId = requestedSnapshotId(request)

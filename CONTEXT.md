@@ -20,7 +20,7 @@ Crit is a local-first tool for arranging and assessing live web iterations.
 
 **Snapshot Archive**: The storage and capture boundary for immutable Snapshot Artifacts.
 
-**Note**: Author-owned plain-text review feedback with Canvas geometry. Only the Note's Author may change its text or remove it; collaborators may arrange its width, position, stacking, and Frame attachment, while its content owns its height so every line remains visible. Removing its attached Frame detaches and preserves the Note.
+**Note**: Author-owned plain-text review feedback with Canvas geometry. Only the Note's Author may change its text or remove it; collaborators may arrange its position, stacking, and Frame attachment. Its content owns an automatic 28–42-character line measure and the height required to keep every line visible. Its presented geometry never overlaps a Frame and preserves 20 screen pixels of clearance by growing away from a nearby Frame as zoom changes. Removing its attached Frame detaches and preserves the Note.
 
 **Comment Thread**: A Canvas-owned feedback conversation pinned to a live Frame or to an element within that Frame. A Comment Thread contains one opening Comment and zero or more flat Replies, and may be active or resolved.
 

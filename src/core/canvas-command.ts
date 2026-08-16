@@ -40,6 +40,21 @@ export const FrameDisplay = Schema.Struct({
 })
 export type FrameDisplay = typeof FrameDisplay.Type
 
+export const NoteColorFamily = Schema.Literals([
+  "neutral",
+  "red",
+  "orange",
+  "green",
+  "blue",
+  "purple"
+])
+export type NoteColorFamily = typeof NoteColorFamily.Type
+
+export const RenameCanvasCommand = Schema.TaggedStruct("RenameCanvas", {
+  title: Schema.String
+})
+export type RenameCanvasCommand = typeof RenameCanvasCommand.Type
+
 export const AddFrameCommand = Schema.TaggedStruct("AddFrame", {
   id: Schema.String,
   url: Schema.String,
@@ -139,7 +154,8 @@ export const AddNoteCommand = Schema.TaggedStruct("AddNote", {
   x: Schema.Finite,
   y: Schema.Finite,
   width: PositiveDimension,
-  height: PositiveDimension
+  height: PositiveDimension,
+  color: NoteColorFamily
 })
 export type AddNoteCommand = typeof AddNoteCommand.Type
 
@@ -150,6 +166,13 @@ export const EditNoteCommand = Schema.TaggedStruct("EditNote", {
   text: Schema.String
 })
 export type EditNoteCommand = typeof EditNoteCommand.Type
+
+export const SetNoteColorCommand = Schema.TaggedStruct("SetNoteColor", {
+  id: Schema.String,
+  actorId: Schema.String,
+  color: NoteColorFamily
+})
+export type SetNoteColorCommand = typeof SetNoteColorCommand.Type
 
 export const MoveNoteCommand = Schema.TaggedStruct("MoveNote", {
   id: Schema.String,
@@ -250,6 +273,15 @@ export type AddFrameInput = {
   readonly status?: FrameReviewStatus
   readonly provenance: FrameProvenance
 }
+
+export type RenameCanvasInput = {
+  readonly title: string
+}
+
+const renameCanvas = (input: RenameCanvasInput): RenameCanvasCommand => ({
+  _tag: "RenameCanvas",
+  ...input
+})
 
 const addFrame = (input: AddFrameInput): AddFrameCommand => ({
   _tag: "AddFrame",
@@ -367,6 +399,7 @@ export type AddNoteInput = {
   readonly y: number
   readonly width?: number
   readonly height?: number
+  readonly color?: NoteColorFamily
 }
 
 const addNote = (input: AddNoteInput): AddNoteCommand => ({
@@ -377,7 +410,8 @@ const addNote = (input: AddNoteInput): AddNoteCommand => ({
   x: input.x,
   y: input.y,
   width: input.width ?? 280,
-  height: input.height ?? 160
+  height: input.height ?? 160,
+  color: input.color ?? "blue"
 })
 
 export type EditNoteInput = {
@@ -389,6 +423,17 @@ export type EditNoteInput = {
 
 const editNote = (input: EditNoteInput): EditNoteCommand => ({
   _tag: "EditNote",
+  ...input
+})
+
+export type SetNoteColorInput = {
+  readonly id: string
+  readonly actorId: string
+  readonly color: NoteColorFamily
+}
+
+const setNoteColor = (input: SetNoteColorInput): SetNoteColorCommand => ({
+  _tag: "SetNoteColor",
   ...input
 })
 
@@ -513,6 +558,7 @@ const updateCommentAnchor = (
 })
 
 export const CanvasCommandSchema = Schema.Union([
+  RenameCanvasCommand,
   AddFrameCommand,
   AddSnapshotFrameCommand,
   SetFrameStatusCommand,
@@ -526,6 +572,7 @@ export const CanvasCommandSchema = Schema.Union([
   SendFrameToBackCommand,
   AddNoteCommand,
   EditNoteCommand,
+  SetNoteColorCommand,
   MoveNoteCommand,
   ResizeNoteCommand,
   BringNoteToFrontCommand,
@@ -542,6 +589,7 @@ export const CanvasCommandSchema = Schema.Union([
 export type CanvasCommand = typeof CanvasCommandSchema.Type
 
 export const CanvasCommand = {
+  RenameCanvas: RenameCanvasCommand,
   AddFrame: AddFrameCommand,
   AddSnapshotFrame: AddSnapshotFrameCommand,
   SetFrameStatus: SetFrameStatusCommand,
@@ -555,6 +603,7 @@ export const CanvasCommand = {
   SendFrameToBack: SendFrameToBackCommand,
   AddNote: AddNoteCommand,
   EditNote: EditNoteCommand,
+  SetNoteColor: SetNoteColorCommand,
   MoveNote: MoveNoteCommand,
   ResizeNote: ResizeNoteCommand,
   BringNoteToFront: BringNoteToFrontCommand,
@@ -567,6 +616,7 @@ export const CanvasCommand = {
   EditComment: EditCommentCommand,
   SetCommentThreadResolved: SetCommentThreadResolvedCommand,
   UpdateCommentAnchor: UpdateCommentAnchorCommand,
+  renameCanvas,
   addFrame,
   addSnapshotFrame,
   setFrameStatus,
@@ -580,6 +630,7 @@ export const CanvasCommand = {
   sendFrameToBack,
   addNote,
   editNote,
+  setNoteColor,
   moveNote,
   resizeNote,
   bringNoteToFront,

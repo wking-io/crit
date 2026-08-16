@@ -3,6 +3,7 @@ import {
   Effect,
   Exit,
   Option,
+  Predicate,
   Schema,
   Scope,
   Stream,
@@ -52,6 +53,7 @@ import {
   type FrameChromeSettings
 } from "./canvas-viewport.js"
 import type { CanvasCameraOptions } from "./canvas-camera.js"
+import type { CanvasChoice } from "./canvas-toolbar.js"
 import type { FrameLoadingPolicy } from "./frame-loading.js"
 import {
   CanvasHelpPanel,
@@ -64,6 +66,7 @@ import {
   CritBoundaryMessage,
   GitIdentityBoundary
 } from "./canvas-feedback.js"
+import { CritOverlayProvider } from "./overlay-container.js"
 
 type CritHotModule = {
   readonly on: (
@@ -96,7 +99,7 @@ const rootStyle: CSSProperties = {
 }
 
 const classes = (...values: ReadonlyArray<string | undefined>) =>
-  values.filter((value): value is string => value !== undefined).join(" ")
+  values.filter(Predicate.isNotUndefined).join(" ")
 
 type CritSessionConfig = {
   readonly sessionId: string
@@ -155,6 +158,7 @@ export const sessionIdForCanvas = (
 
 export interface CritProps {
   readonly canvasId: string
+  readonly canvasChoices?: ReadonlyArray<CanvasChoice>
   readonly services?: CritClientServices
   readonly apiPath?: string
   readonly autosaveDelay?: Duration.Input
@@ -169,7 +173,9 @@ export interface CritProps {
   readonly frameLoading?: FrameLoadingPolicy
   readonly frameChrome?: Partial<FrameChromeSettings>
   readonly cameraOptions?: Partial<CanvasCameraOptions>
+  readonly developerTools?: boolean
   readonly onSession?: (session: CanvasSessionHandle) => void
+  readonly onCanvasSelect?: (canvasId: string) => void
   readonly onCommandError?: (message: string) => void
   readonly loadingFallback?: ReactNode
   readonly errorFallback?: (message: string) => ReactNode
@@ -177,6 +183,7 @@ export interface CritProps {
 
 export function Crit({
   canvasId,
+  canvasChoices,
   services,
   apiPath,
   autosaveDelay,
@@ -191,7 +198,9 @@ export function Crit({
   frameLoading,
   frameChrome,
   cameraOptions,
+  developerTools = false,
   onSession,
+  onCanvasSelect,
   onCommandError,
   loadingFallback,
   errorFallback
@@ -361,40 +370,45 @@ export function Crit({
         className={classes("crit-root", className)}
         style={{ ...rootStyle, ...style }}
       >
-        <CanvasViewport
-          author={sessionState?.presence.currentAuthor ?? null}
-          dispatch={session.dispatch}
-          document={document}
-          snapshotFrame={session.snapshotFrame}
-          frameChrome={frameChrome}
-          cameraOptions={cameraOptions}
-          iframeAllow={iframeAllow}
-          iframeSandbox={iframeSandbox}
-          frameLoading={frameLoading}
-          onCommandError={onCommandError}
-        />
-        <CanvasHelpPanel />
-        {sessionState === null ? null : (
-          <CanvasPresenceIndicator presence={sessionState.presence} />
-        )}
-        {sessionState === null ? null : (
-          <CanvasSaveIndicator
-            onDiscardLocalChanges={() => {
-              Effect.runFork(
-                session.discardLocalChanges().pipe(
-                  Effect.catch((cause) =>
-                    Effect.sync(() => setError({
-                      kind: "client",
-                      failure: cause
-                    }))
+        <CritOverlayProvider>
+          <CanvasViewport
+            author={sessionState?.presence.currentAuthor ?? null}
+            dispatch={session.dispatch}
+            document={document}
+            developerTools={developerTools}
+            snapshotFrame={session.snapshotFrame}
+            canvasChoices={canvasChoices}
+            frameChrome={frameChrome}
+            cameraOptions={cameraOptions}
+            iframeAllow={iframeAllow}
+            iframeSandbox={iframeSandbox}
+            frameLoading={frameLoading}
+            onCommandError={onCommandError}
+            onCanvasSelect={onCanvasSelect}
+          />
+          <CanvasHelpPanel />
+          {sessionState === null ? null : (
+            <CanvasPresenceIndicator presence={sessionState.presence} />
+          )}
+          {sessionState === null ? null : (
+            <CanvasSaveIndicator
+              onDiscardLocalChanges={() => {
+                Effect.runFork(
+                  session.discardLocalChanges().pipe(
+                    Effect.catch((cause) =>
+                      Effect.sync(() => setError({
+                        kind: "client",
+                        failure: cause
+                      }))
+                    )
                   )
                 )
-              )
-            }}
-            recoveryStatus={sessionState.recoveryStatus}
-            saveStatus={sessionState.saveStatus}
-          />
-        )}
+              }}
+              recoveryStatus={sessionState.recoveryStatus}
+              saveStatus={sessionState.saveStatus}
+            />
+          )}
+        </CritOverlayProvider>
       </CanvasHelpSurface>
     </GlyphProvider>
   )

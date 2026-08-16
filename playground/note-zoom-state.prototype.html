@@ -1,0 +1,833 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PROTOTYPE — Note zoom state</title>
+  <style>
+    :root {
+      color: #242321;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, sans-serif;
+      font-synthesis: none;
+    }
+
+    * { box-sizing: border-box; }
+    body { background: #f5f4f0; margin: 0; min-width: 900px; }
+    button, input { font: inherit; }
+    button { color: inherit; }
+
+    .page {
+      display: grid;
+      gap: 18px;
+      grid-template-columns: minmax(0, 1fr) 340px;
+      margin: 0 auto;
+      max-width: 1440px;
+      min-height: 100vh;
+      padding: 24px;
+    }
+
+    .intro { grid-column: 1 / -1; }
+    .eyebrow { color: #9f3e30; font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+    h1 { font-size: 26px; letter-spacing: -.03em; margin: 6px 0; }
+    .intro p { color: #65615a; line-height: 1.5; margin: 0; max-width: 850px; }
+
+    .panel {
+      background: #fff;
+      border: 1px solid #d8d5cc;
+      border-radius: 10px;
+      box-shadow: 0 8px 28px rgba(36, 35, 33, .06);
+    }
+
+    .stage-panel { display: grid; grid-template-rows: auto minmax(480px, 1fr) auto; min-width: 0; overflow: hidden; }
+    .stage-header { align-items: center; border-bottom: 1px solid #e7e4dc; display: flex; justify-content: space-between; padding: 12px 14px; }
+    .stage-header strong { font-size: 13px; }
+    .stage-header span { color: #77736b; font: 11px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; }
+
+    .canvas {
+      --grid: 32px;
+      background-color: #fbfaf7;
+      background-image:
+        linear-gradient(#d8d5cc66 1px, transparent 1px),
+        linear-gradient(90deg, #d8d5cc66 1px, transparent 1px);
+      background-position: center;
+      background-size: calc(var(--grid) * var(--zoom)) calc(var(--grid) * var(--zoom));
+      min-height: 520px;
+      overflow: hidden;
+      position: relative;
+      touch-action: none;
+    }
+
+    .canvas::before {
+      color: #8b877f;
+      content: "Click empty canvas to dismiss";
+      font-size: 11px;
+      left: 14px;
+      position: absolute;
+      top: 12px;
+    }
+
+    .anchor {
+      background: #9f3e30;
+      border-radius: 50%;
+      height: 5px;
+      pointer-events: none;
+      position: absolute;
+      transform: translate(-2.5px, -2.5px);
+      width: 5px;
+    }
+
+    .note {
+      appearance: none;
+      background: #f6efca;
+      border: 1px solid #c8bf90;
+      border-radius: 8px;
+      box-shadow: 0 4px 14px rgba(63, 55, 20, .13), inset 0 1px #fff9;
+      color: #28261f;
+      cursor: grab;
+      margin: 0;
+      padding: 12px;
+      position: absolute;
+      text-align: left;
+      user-select: none;
+    }
+
+    .note:active { cursor: grabbing; }
+    .note p {
+      font-size: 14px;
+      hyphens: auto;
+      line-height: 20px;
+      margin: 0;
+      overflow-wrap: anywhere;
+      text-wrap: pretty;
+      user-select: text;
+      white-space: pre-wrap;
+    }
+    .note small { color: #77705a; display: block; font-size: 10px; margin-top: 9px; }
+
+    .note--collapsed {
+      align-items: center;
+      background: transparent;
+      border: 0;
+      border-radius: 0;
+      box-shadow: none;
+      display: grid;
+      height: 30px;
+      padding: 0;
+      place-items: center;
+      width: 30px;
+    }
+
+    .note--collapsed svg { color: #7a6a23; height: 16px; width: 16px; }
+    .note--collapsed:focus-visible svg { filter: drop-shadow(0 0 3px rgb(159 62 48 / 30%)); outline: 0; }
+    .note--expanded { cursor: default; max-height: min(380px, calc(100% - 32px)); overflow: auto; z-index: 10; }
+    .note--expanded .close {
+      align-items: center;
+      appearance: none;
+      background: transparent;
+      border: 0;
+      cursor: pointer;
+      display: flex;
+      float: right;
+      font-size: 18px;
+      height: 24px;
+      justify-content: center;
+      margin: -5px -5px 4px 8px;
+      padding: 0;
+      width: 24px;
+    }
+    .note--expanded .close:focus-visible { outline: 2px solid #9f3e30; outline-offset: 1px; }
+
+    .stage-footer { border-top: 1px solid #e7e4dc; color: #65615a; font-size: 11px; line-height: 1.45; padding: 10px 14px; }
+
+    .state-panel { align-self: start; overflow: hidden; }
+    .state-panel h2 { border-bottom: 1px solid #e7e4dc; font-size: 13px; margin: 0; padding: 13px 14px; }
+    .state-grid { display: grid; grid-template-columns: 1fr 1fr; margin: 0; }
+    .state-grid div { border-bottom: 1px solid #eeeae2; min-width: 0; padding: 10px 14px; }
+    .state-grid dt { color: #77736b; font-size: 10px; letter-spacing: .06em; margin-bottom: 3px; text-transform: uppercase; }
+    .state-grid dd { font: 12px/1.35 ui-monospace, SFMono-Regular, Menlo, monospace; margin: 0; overflow-wrap: anywhere; }
+    .state-grid .wide { grid-column: 1 / -1; }
+    .last-change { background: #f8f2e4; border-bottom: 1px solid #e2d9bf; color: #594f31; font-size: 12px; line-height: 1.45; margin: 0; padding: 11px 14px; }
+    details { border-top: 1px solid #e7e4dc; }
+    summary { color: #65615a; cursor: pointer; font-size: 11px; padding: 10px 14px; }
+    pre { background: #262522; color: #edeae2; font: 10px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; margin: 0; max-height: 260px; overflow: auto; padding: 12px 14px; }
+
+    .lab { grid-column: 1 / -1; overflow: hidden; }
+    .tabs { border-bottom: 1px solid #d8d5cc; display: flex; overflow-x: auto; padding: 0 12px; }
+    .tab {
+      appearance: none;
+      background: transparent;
+      border: 0;
+      border-bottom: 2px solid transparent;
+      cursor: pointer;
+      font-size: 12px;
+      padding: 12px 10px 10px;
+      white-space: nowrap;
+    }
+    .tab[aria-selected="true"] { border-bottom-color: #9f3e30; color: #9f3e30; font-weight: 700; }
+    .tab:focus-visible { outline: 2px solid #9f3e30; outline-offset: -3px; }
+    .tab-panel { display: none; padding: 16px; }
+    .tab-panel[data-active] { display: block; }
+    .tab-panel h2 { font-size: 15px; margin: 0 0 5px; }
+    .tab-panel > p { color: #65615a; font-size: 12px; line-height: 1.5; margin: 0 0 14px; max-width: 850px; }
+
+    .controls { display: grid; gap: 14px; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .control-group { border: 1px solid #e4e0d7; border-radius: 8px; display: grid; gap: 8px; padding: 12px; }
+    .control-group strong { font-size: 11px; letter-spacing: .05em; text-transform: uppercase; }
+    .control-group label { color: #65615a; display: grid; font-size: 11px; gap: 5px; }
+    .control-group output { color: #262522; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .control-hint { color: #817c73; font-size: 10px; line-height: 1.4; }
+    input[type="range"] { accent-color: #9f3e30; width: 100%; }
+    .button-row { display: flex; flex-wrap: wrap; gap: 6px; }
+    .action {
+      appearance: none;
+      background: #fff;
+      border: 1px solid #cfcac0;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 11px;
+      line-height: 1.2;
+      padding: 7px 9px;
+    }
+    .action:hover { background: #f5f2eb; }
+    .action:focus-visible { outline: 2px solid #9f3e30; outline-offset: 1px; }
+    .action[data-active] { background: #9f3e30; border-color: #9f3e30; color: #fff; }
+
+    .walkthrough { align-items: start; display: grid; gap: 14px; grid-template-columns: 190px minmax(0, 1fr); }
+    .restart { width: 100%; }
+    .steps { counter-reset: step; display: grid; gap: 7px; }
+    .step {
+      align-items: start;
+      appearance: none;
+      background: #fff;
+      border: 1px solid #ddd8ce;
+      border-radius: 7px;
+      cursor: pointer;
+      display: grid;
+      gap: 3px 9px;
+      grid-template-columns: 24px 1fr;
+      padding: 9px;
+      text-align: left;
+    }
+    .step::before {
+      align-items: center;
+      background: #eeeae2;
+      border-radius: 999px;
+      content: counter(step);
+      counter-increment: step;
+      display: flex;
+      font-size: 10px;
+      height: 22px;
+      justify-content: center;
+      width: 22px;
+    }
+    .step strong { font-size: 12px; }
+    .step span { color: #6f6a62; font-size: 11px; grid-column: 2; line-height: 1.4; }
+    .step[data-current] { border-color: #9f3e30; box-shadow: 0 0 0 1px #9f3e30; }
+    .step[data-complete] { opacity: .55; }
+    .step:disabled { cursor: default; }
+
+    @media (max-width: 1040px) {
+      body { min-width: 720px; }
+      .page { grid-template-columns: 1fr; }
+      .intro, .lab { grid-column: 1; }
+      .state-panel { align-self: auto; }
+      .controls { grid-template-columns: repeat(2, 1fr); }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header class="intro">
+      <div class="eyebrow">Throwaway logic prototype</div>
+      <h1>Does the note zoom state feel right?</h1>
+      <p>This demo tests whether a world-anchored note can derive its width and height from content, wrap at a readable line length, collapse below a readable size, and temporarily expand into a fixed screen-space reader without mutating the saved canvas document.</p>
+    </header>
+
+    <section class="panel stage-panel" aria-label="Interactive note canvas">
+      <header class="stage-header">
+        <strong>Canvas simulation</strong>
+        <span id="stage-summary"></span>
+      </header>
+      <div class="canvas" id="canvas">
+        <div class="anchor" id="anchor" aria-hidden="true"></div>
+        <article class="note" id="note" role="button" tabindex="0"></article>
+      </div>
+      <footer class="stage-footer">The red point is the persisted world anchor. The rendered card is transient presentation. In Select, only a collapsed note expands on click; a readable preview simply remains selected. Drag to move, and use empty-canvas click or Escape to dismiss an expanded reader.</footer>
+    </section>
+
+    <aside class="panel state-panel" aria-label="Current state">
+      <h2>Current state</h2>
+      <p class="last-change" id="last-change"></p>
+      <dl class="state-grid" id="state-grid"></dl>
+      <details>
+        <summary>Full state</summary>
+        <pre id="raw-state"></pre>
+      </details>
+    </aside>
+
+    <section class="panel lab">
+      <nav class="tabs" id="tabs" aria-label="Prototype modes" role="tablist"></nav>
+      <div id="tab-panels"></div>
+    </section>
+  </main>
+
+  <script>
+    // Portable logic module. It deliberately knows nothing about the DOM.
+    const NoteZoomModel = (() => {
+      const defaultRules = Object.freeze({
+        collapseBelow: 180,
+        revealAbove: 200,
+        maximumPreviewWidth: 360,
+        expandedWidth: 420,
+        collapsedTargetSize: 30,
+        dragThreshold: 6,
+        fontSize: 14,
+        averageCharacterEm: 0.52,
+        minimumLineCharacters: 28,
+        idealLineCharacters: 42,
+        horizontalChrome: 26
+      })
+
+      const clamp = (value, minimum, maximum) =>
+        Math.max(minimum, Math.min(maximum, value))
+
+      const initial = () => settle({
+        tool: "select",
+        camera: { zoom: 1 },
+        note: {
+          anchor: { x: -170, y: -90 },
+          text: "The hierarchy is working. Tighten the spacing between the title and supporting copy before the next review."
+        },
+        rules: { ...defaultRules },
+        automaticMode: "preview",
+        expanded: false,
+        pointer: { phase: "idle", start: null, last: null },
+        lastChange: "Prototype reset to a readable preview."
+      })
+
+      const automaticMode = (state, projectedWidth) => {
+        if (state.automaticMode === "collapsed") {
+          return projectedWidth > state.rules.revealAbove ? "preview" : "collapsed"
+        }
+        return projectedWidth < state.rules.collapseBelow ? "collapsed" : "preview"
+      }
+
+      const contentWidth = (text, rules) => {
+        const longestLineCharacters = Math.max(
+          0,
+          ...text.split("\n").map((line) => line.trim().length)
+        )
+        const lineCharacters = clamp(
+          longestLineCharacters,
+          rules.minimumLineCharacters,
+          rules.idealLineCharacters
+        )
+        const width = Math.round(
+          lineCharacters * rules.fontSize * rules.averageCharacterEm + rules.horizontalChrome
+        )
+        return { lineCharacters, longestLineCharacters, width }
+      }
+
+      function settle(state) {
+        const rules = state.rules
+        const intrinsic = contentWidth(state.note.text, rules)
+        const projectedWidth = intrinsic.width * state.camera.zoom
+        const nextAutomaticMode = automaticMode(state, projectedWidth)
+        const expanded = state.expanded && nextAutomaticMode === "collapsed"
+        const mode = expanded ? "expanded" : nextAutomaticMode
+        const displayedWidth = mode === "expanded"
+          ? rules.expandedWidth
+          : mode === "collapsed"
+            ? rules.collapsedTargetSize
+            : Math.min(projectedWidth, rules.maximumPreviewWidth)
+        return {
+          ...state,
+          automaticMode: nextAutomaticMode,
+          expanded,
+          presentation: {
+            mode,
+            intrinsicWidth: intrinsic.width,
+            lineCharacters: intrinsic.lineCharacters,
+            longestLineCharacters: intrinsic.longestLineCharacters,
+            projectedWidth,
+            displayedWidth,
+            maximumClamped:
+              mode === "preview" && projectedWidth > rules.maximumPreviewWidth,
+            textVisible: mode !== "collapsed"
+          },
+          rules
+        }
+      }
+
+      const changed = (state, patch, lastChange) => settle({
+        ...state,
+        ...patch,
+        lastChange
+      })
+
+      const reduce = (state, action) => {
+        switch (action.type) {
+          case "reset":
+            return initial()
+          case "set-zoom":
+            return changed(state, {
+              camera: { zoom: clamp(action.zoom, 0.1, 4) }
+            }, `Zoom changed to ${clamp(action.zoom, 0.1, 4).toFixed(2)}×.`)
+          case "set-collapse-threshold": {
+            const collapseBelow = clamp(action.width, 48, 200)
+            const revealAbove = collapseBelow + 20
+            return changed(state, {
+              rules: { ...state.rules, collapseBelow, revealAbove }
+            }, `Collapse threshold changed to ${collapseBelow}px; reveal threshold is ${revealAbove}px.`)
+          }
+          case "set-tool":
+            return changed(state, {
+              tool: action.tool,
+              expanded: action.tool === "select" ? state.expanded : false,
+              pointer: { phase: "idle", start: null, last: null }
+            }, action.tool === "select"
+              ? "Select tool activated. Collapsed notes can expand; notes can move."
+              : `${action.tool[0].toUpperCase()}${action.tool.slice(1)} tool activated. Note activation is unavailable.`)
+          case "activate":
+            if (state.tool !== "select") {
+              return changed(state, {}, `Activation ignored because ${state.tool} is active.`)
+            }
+            if (state.automaticMode !== "collapsed") {
+              return changed(state, {}, "Activation ignored because the note is already a readable preview.")
+            }
+            return changed(state, { expanded: true }, "Note expanded into its fixed screen-space reader.")
+          case "dismiss":
+            return changed(state, { expanded: false }, `Expanded note dismissed by ${action.reason}.`)
+          case "set-content":
+            return changed(state, {
+              note: { ...state.note, text: action.text }
+            }, action.label)
+          case "pointer-down":
+            if (state.tool !== "select") {
+              return changed(state, {}, `Pointer passed through because ${state.tool} is active.`)
+            }
+            return changed(state, {
+              pointer: {
+                phase: "pressed",
+                start: { x: action.x, y: action.y },
+                last: { x: action.x, y: action.y }
+              }
+            }, "Pointer pressed. Movement below 6px still counts as a click.")
+          case "pointer-move": {
+            if (state.pointer.phase === "idle" || state.pointer.last === null || state.pointer.start === null) return state
+            const totalX = action.x - state.pointer.start.x
+            const totalY = action.y - state.pointer.start.y
+            const distance = Math.hypot(totalX, totalY)
+            const phase = state.pointer.phase === "dragging" || distance >= state.rules.dragThreshold
+              ? "dragging"
+              : "pressed"
+            if (phase !== "dragging") {
+              return changed(state, {
+                pointer: { ...state.pointer, last: { x: action.x, y: action.y } }
+              }, `Pointer moved ${distance.toFixed(1)}px; still treated as a click.`)
+            }
+            const deltaX = action.x - state.pointer.last.x
+            const deltaY = action.y - state.pointer.last.y
+            return changed(state, {
+              expanded: false,
+              note: {
+                ...state.note,
+                anchor: {
+                  x: state.note.anchor.x + deltaX / state.camera.zoom,
+                  y: state.note.anchor.y + deltaY / state.camera.zoom
+                }
+              },
+              pointer: {
+                ...state.pointer,
+                phase,
+                last: { x: action.x, y: action.y }
+              }
+            }, "Drag threshold crossed. World anchor moved; expansion was suppressed.")
+          }
+          case "pointer-up":
+            if (state.pointer.phase === "pressed") {
+              const canExpand = state.automaticMode === "collapsed"
+              return changed(state, {
+                expanded: canExpand,
+                pointer: { phase: "idle", start: null, last: null }
+              }, canExpand
+                ? "Pointer released without a drag. Collapsed note expanded."
+                : "Pointer released without a drag. The readable preview did not expand.")
+            }
+            if (state.pointer.phase === "dragging") {
+              return changed(state, {
+                pointer: { phase: "idle", start: null, last: null }
+              }, "Drag ended. Note stayed in automatic presentation mode.")
+            }
+            return state
+          default:
+            return state
+        }
+      }
+
+      const apply = (state, actions) => actions.reduce(reduce, state)
+      return { apply, initial, reduce }
+    })()
+
+    const tinyText = "Align this title."
+    const shortText = "Tighten the spacing below this title."
+    const longText = "The hierarchy is working. Tighten the spacing between the title and supporting copy before the next review.\n\nAlso verify the narrow layout: the secondary action currently wraps below the price, which makes the card look disconnected from the selected plan."
+
+    const scenarios = [
+      {
+        id: "free",
+        label: "Free play",
+        title: "Drive the model freely",
+        description: "Change zoom, tools, content, and transient expansion in any order. Width and height follow the content automatically; only a collapsed note expands when clicked."
+      },
+      {
+        id: "sizing",
+        label: "Content sizing",
+        title: "Let content determine both dimensions",
+        description: "Short notes shrink to their content down to a useful minimum. Longer notes stop widening at a 42-character measure, then gain height through pretty line wrapping.",
+        setup: [
+          { type: "set-zoom", zoom: 1 },
+          { type: "set-content", text: tinyText, label: "Tiny note content loaded." }
+        ],
+        steps: [
+          [{ type: "set-content", text: shortText, label: "Short note content loaded." }, "Load a short sentence", "The auto width grows from its 230px minimum to about 295px."],
+          [{ type: "set-content", text: longText, label: "Long note content loaded." }, "Load a long note", "Width stops around 332px at the 42-character measure; wrapping adds height instead."],
+          [{ type: "set-content", text: tinyText, label: "Tiny note content loaded." }, "Return to a tiny note", "Both dimensions shrink to the content without exposing resize controls."]
+        ]
+      },
+      {
+        id: "hysteresis",
+        label: "Collapse threshold",
+        title: "Cross the collapse threshold in both directions",
+        description: "The note collapses below 180px, but it must grow beyond 200px before returning. Watch for the absence of flicker in the middle band.",
+        setup: [
+          { type: "set-zoom", zoom: 0.62 }
+        ],
+        steps: [
+          [{ type: "set-zoom", zoom: 0.57 }, "Approach the threshold", "Projected width becomes 189.2px and remains a preview."],
+          [{ type: "set-zoom", zoom: 0.54 }, "Cross below 180px", "Projected width becomes 179.3px and collapses."],
+          [{ type: "set-zoom", zoom: 0.57 }, "Return to the middle band", "At 189.2px it stays collapsed because of hysteresis."],
+          [{ type: "set-zoom", zoom: 0.61 }, "Cross above 200px", "At 202.5px the readable preview returns."]
+        ]
+      },
+      {
+        id: "maximum",
+        label: "Maximum clamp",
+        title: "Zoom in without creating a giant card",
+        description: "The projected world width continues to grow, while the visible preview stops at 360px and typography remains 14/20px.",
+        setup: [
+          { type: "set-zoom", zoom: 1 }
+        ],
+        steps: [
+          [{ type: "set-zoom", zoom: 1.05 }, "Grow near the maximum", "The auto-sized card reaches 348.6px and still follows world projection."],
+          [{ type: "set-zoom", zoom: 1.2 }, "Cross the maximum", "Projected width is 398.4px; displayed width clamps to 360px."],
+          [{ type: "set-zoom", zoom: 2 }, "Zoom much farther in", "Projected width grows to 664px, but the card stays 360px."]
+        ]
+      },
+      {
+        id: "expanded",
+        label: "Expansion lifecycle",
+        title: "Read a collapsed note without changing its saved size",
+        description: "Expansion is legal only while the automatic presentation is collapsed. A readable preview ignores activation, and zooming an expanded reader above the reveal threshold closes it automatically.",
+        setup: [
+          { type: "set-zoom", zoom: 1 }
+        ],
+        steps: [
+          [{ type: "activate" }, "Click the readable preview", "Nothing expands because its text is already readable."],
+          [{ type: "set-zoom", zoom: 0.4 }, "Zoom below the minimum", "The note collapses to its marker."],
+          [{ type: "activate" }, "Activate the collapsed note", "It expands to 420px without changing zoom or its content-derived width."],
+          [{ type: "dismiss", reason: "Escape" }, "Press Escape", "The reader closes and the note returns to its collapsed marker."],
+          [{ type: "activate" }, "Open it again", "Only transient view state changes."],
+          [{ type: "set-zoom", zoom: 0.7 }, "Zoom back above the reveal point", "The automatic mode becomes preview, so the expanded state ends immediately."]
+        ]
+      },
+      {
+        id: "gesture",
+        label: "Click vs drag",
+        title: "Separate activation from movement",
+        description: "When a note is collapsed, a release below the 6px movement threshold expands it. Crossing the threshold updates the world anchor and suppresses expansion.",
+        setup: [
+          { type: "set-zoom", zoom: 0.5 }
+        ],
+        steps: [
+          [[
+            { type: "pointer-down", x: 100, y: 100 },
+            { type: "pointer-move", x: 103, y: 102 },
+            { type: "pointer-up" }
+          ], "Move less than 6px", "The gesture is treated as a click and expands the note."],
+          [{ type: "dismiss", reason: "close control" }, "Close the reader", "The collapsed marker returns before testing a drag."],
+          [[
+            { type: "pointer-down", x: 100, y: 100 },
+            { type: "pointer-move", x: 130, y: 118 },
+            { type: "pointer-up" }
+          ], "Drag by 30px", "The world anchor changes and the note does not expand."]
+        ]
+      },
+      {
+        id: "tools",
+        label: "Tool gating",
+        title: "Only Select activates collapsed notes",
+        description: "The collapsed note remains visible in every tool, but activation and movement belong to Select. Other tools receive the pointer interaction.",
+        setup: [{ type: "set-zoom", zoom: 0.5 }],
+        steps: [
+          [[{ type: "set-tool", tool: "comment" }, { type: "activate" }], "Try with Comment", "Activation is ignored so comment placement can win."],
+          [[{ type: "set-tool", tool: "hand" }, { type: "activate" }], "Try with Hand", "Activation is ignored so panning can win."],
+          [[{ type: "set-tool", tool: "select" }, { type: "activate" }], "Return to Select", "The same note now expands."]
+        ]
+      }
+    ]
+
+    let state = NoteZoomModel.initial()
+    let activeTab = "free"
+    const scenarioProgress = new Map()
+
+    const canvas = document.querySelector("#canvas")
+    const note = document.querySelector("#note")
+    const anchor = document.querySelector("#anchor")
+    const stateGrid = document.querySelector("#state-grid")
+    const lastChange = document.querySelector("#last-change")
+    const rawState = document.querySelector("#raw-state")
+    const stageSummary = document.querySelector("#stage-summary")
+    const tabs = document.querySelector("#tabs")
+    const tabPanels = document.querySelector("#tab-panels")
+
+    const dispatch = (action) => {
+      state = Array.isArray(action)
+        ? NoteZoomModel.apply(state, action)
+        : NoteZoomModel.reduce(state, action)
+      render()
+    }
+
+    const dispatchLive = (action) => {
+      state = NoteZoomModel.reduce(state, action)
+      renderStage()
+      renderState()
+    }
+
+    const resetScenario = (scenario) => {
+      state = NoteZoomModel.initial()
+      if (scenario.setup) state = NoteZoomModel.apply(state, scenario.setup)
+      scenarioProgress.set(scenario.id, 0)
+      state = { ...state, lastChange: `${scenario.title} walkthrough reset.` }
+      render()
+    }
+
+    const screenAnchor = () => ({
+      x: canvas.clientWidth / 2 + state.note.anchor.x * state.camera.zoom,
+      y: canvas.clientHeight / 2 + state.note.anchor.y * state.camera.zoom
+    })
+
+    const renderStage = () => {
+      const point = screenAnchor()
+      canvas.style.setProperty("--zoom", state.camera.zoom)
+      anchor.style.left = `${point.x}px`
+      anchor.style.top = `${point.y}px`
+      note.className = `note note--${state.presentation.mode}`
+      note.setAttribute("aria-label", state.presentation.mode === "collapsed" ? "Expand note" : "Note")
+      note.setAttribute("role", state.presentation.mode === "expanded" ? "dialog" : "button")
+      note.tabIndex = state.tool === "select" ? 0 : -1
+      note.style.pointerEvents = state.tool === "select" || state.expanded ? "auto" : "none"
+
+      const width = state.presentation.displayedWidth
+      const left = state.presentation.mode === "expanded"
+        ? Math.max(16, Math.min(canvas.clientWidth - width - 16, point.x))
+        : point.x
+      const top = state.presentation.mode === "expanded"
+        ? Math.max(16, Math.min(canvas.clientHeight - 260, point.y))
+        : point.y
+      note.style.left = `${left}px`
+      note.style.top = `${top}px`
+      note.style.width = `${width}px`
+
+      if (state.presentation.mode === "collapsed") {
+        note.style.transform = "translate(-15px, -15px)"
+        note.innerHTML = `<svg aria-hidden="true" viewBox="0 0 16 16"><path fill="currentColor" d="M3 1.5h7.7L14.5 5v9.5H3z"/><path fill="#f6efca" d="M10.5 1.5V5h4"/><path stroke="#f6efca" stroke-width="1" d="M5.5 8h6M5.5 10.5h4.5"/></svg>`
+      } else {
+        note.style.transform = "none"
+        const close = state.presentation.mode === "expanded"
+          ? `<button class="close" data-close type="button" aria-label="Close expanded note">×</button>`
+          : ""
+        note.innerHTML = `${close}<p>${state.note.text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll("\n", "<br>")}</p><small>${state.presentation.mode === "expanded" ? "Expanded reader · fixed 420px" : state.presentation.maximumClamped ? "Preview · maximum clamped" : "Preview · content sized"}</small>`
+      }
+      stageSummary.textContent = `${state.presentation.mode} · ${state.camera.zoom.toFixed(2)}× · ${Math.round(state.presentation.displayedWidth)}px`
+    }
+
+    const field = (label, value, wide = false) =>
+      `<div${wide ? ' class="wide"' : ""}><dt>${label}</dt><dd>${value}</dd></div>`
+
+    const renderState = () => {
+      lastChange.textContent = state.lastChange
+      stateGrid.innerHTML = [
+        field("Mode", state.presentation.mode),
+        field("Automatic mode", state.automaticMode),
+        field("Tool", state.tool),
+        field("Zoom", `${state.camera.zoom.toFixed(2)}×`),
+        field("Auto width", `${state.presentation.intrinsicWidth}px at 1×`),
+        field("Line measure", `${state.presentation.lineCharacters} chars`),
+        field("Projected width", `${state.presentation.projectedWidth.toFixed(1)}px`),
+        field("Collapse / reveal", `${state.rules.collapseBelow}px / ${state.rules.revealAbove}px`),
+        field("Displayed width", `${state.presentation.displayedWidth.toFixed(1)}px`),
+        field("Rendered height", `${Math.round(note.getBoundingClientRect().height)}px · automatic`),
+        field("Maximum clamp", state.presentation.maximumClamped ? "active" : "inactive"),
+        field("Text", state.presentation.textVisible ? "visible · 14/20px" : "hidden"),
+        field("Expanded override", state.expanded ? "active" : "inactive"),
+        field("World anchor", `${state.note.anchor.x.toFixed(1)}, ${state.note.anchor.y.toFixed(1)}`, true),
+        field("Pointer", state.pointer.phase, true)
+      ].join("")
+      rawState.textContent = JSON.stringify(state, null, 2)
+    }
+
+    const freePlayMarkup = () => `
+      <div class="controls">
+        <section class="control-group">
+          <strong>Zoom</strong>
+          <label>Camera zoom <output id="zoom-output">${state.camera.zoom.toFixed(2)}×</output>
+            <input id="zoom-control" type="range" min="0.1" max="4" step="0.01" value="${state.camera.zoom}">
+          </label>
+          <label>Collapse below <output id="collapse-output">${state.rules.collapseBelow}px</output>
+            <input id="collapse-control" type="range" min="48" max="200" step="4" value="${state.rules.collapseBelow}">
+          </label>
+          <span class="control-hint">Reveals again above <output id="reveal-output">${state.rules.revealAbove}px</output> to preserve a 20px hysteresis band.</span>
+          <div class="button-row"><button class="action" data-action="zoom-out">Zoom out</button><button class="action" data-action="zoom-in">Zoom in</button></div>
+        </section>
+        <section class="control-group">
+          <strong>Automatic size</strong>
+          <span class="control-hint">Width is ${state.presentation.intrinsicWidth}px at 1×, using ${state.presentation.lineCharacters} of at most ${state.rules.idealLineCharacters} characters per line. Height follows wrapping.</span>
+          <div class="button-row"><button class="action" data-action="tiny-content">Tiny text</button><button class="action" data-action="short-content">Short text</button><button class="action" data-action="long-content">Long text</button></div>
+        </section>
+        <section class="control-group">
+          <strong>Tool</strong>
+          <div class="button-row">
+            ${["select", "comment", "hand"].map((tool) => `<button class="action" data-tool="${tool}" ${state.tool === tool ? "data-active" : ""}>${tool[0].toUpperCase()}${tool.slice(1)}</button>`).join("")}
+          </div>
+          <div class="button-row"><button class="action" data-action="activate">Activate note</button><button class="action" data-action="simulate-drag">Simulate drag</button></div>
+        </section>
+        <section class="control-group">
+          <strong>Dismiss</strong>
+          <div class="button-row"><button class="action" data-action="escape">Escape</button><button class="action" data-action="outside">Outside click</button><button class="action" data-action="close">Close</button></div>
+          <div class="button-row"><button class="action" data-action="reset">Reset</button></div>
+        </section>
+      </div>`
+
+    const renderTabs = () => {
+      tabs.innerHTML = scenarios.map((scenario) => `<button class="tab" id="tab-${scenario.id}" role="tab" aria-controls="panel-${scenario.id}" aria-selected="${activeTab === scenario.id}">${scenario.label}</button>`).join("")
+      tabPanels.innerHTML = scenarios.map((scenario) => {
+        if (scenario.id === "free") {
+          return `<section class="tab-panel" id="panel-free" role="tabpanel" aria-labelledby="tab-free" ${activeTab === "free" ? "data-active" : ""}><h2>${scenario.title}</h2><p>${scenario.description}</p>${freePlayMarkup()}</section>`
+        }
+        const progress = scenarioProgress.get(scenario.id) ?? 0
+        const steps = scenario.steps.map((step, index) => `<button class="step" ${index === progress ? "data-current" : ""} ${index < progress ? "data-complete" : ""} ${index !== progress ? "disabled" : ""} data-scenario-step="${scenario.id}:${index}"><strong>${step[1]}</strong><span>${step[2]}</span></button>`).join("")
+        return `<section class="tab-panel" id="panel-${scenario.id}" role="tabpanel" aria-labelledby="tab-${scenario.id}" ${activeTab === scenario.id ? "data-active" : ""}><h2>${scenario.title}</h2><p>${scenario.description}</p><div class="walkthrough"><button class="action restart" data-restart="${scenario.id}">Restart walkthrough</button><div class="steps">${steps}</div></div></section>`
+      }).join("")
+    }
+
+    const render = () => {
+      renderStage()
+      renderState()
+      renderTabs()
+    }
+
+    tabs.addEventListener("click", (event) => {
+      const button = event.target.closest("[role=tab]")
+      if (!button) return
+      activeTab = button.id.replace("tab-", "")
+      const scenario = scenarios.find((candidate) => candidate.id === activeTab)
+      if (scenario && scenario.id !== "free") resetScenario(scenario)
+      else render()
+    })
+
+    tabPanels.addEventListener("input", (event) => {
+      if (event.target.id === "zoom-control") {
+        const zoom = Number(event.target.value)
+        dispatchLive({ type: "set-zoom", zoom })
+        document.querySelector("#zoom-output").textContent = `${zoom.toFixed(2)}×`
+      }
+      if (event.target.id === "collapse-control") {
+        const collapseBelow = Number(event.target.value)
+        dispatchLive({ type: "set-collapse-threshold", width: collapseBelow })
+        document.querySelector("#collapse-output").textContent = `${collapseBelow}px`
+        document.querySelector("#reveal-output").textContent = `${collapseBelow + 20}px`
+      }
+    })
+
+    tabPanels.addEventListener("change", (event) => {
+      if (event.target.id === "zoom-control") dispatch({ type: "set-zoom", zoom: Number(event.target.value) })
+      if (event.target.id === "collapse-control") dispatch({ type: "set-collapse-threshold", width: Number(event.target.value) })
+    })
+
+    tabPanels.addEventListener("click", (event) => {
+      const tool = event.target.closest("[data-tool]")?.dataset.tool
+      if (tool) return dispatch({ type: "set-tool", tool })
+      const restartId = event.target.closest("[data-restart]")?.dataset.restart
+      if (restartId) {
+        const scenario = scenarios.find((candidate) => candidate.id === restartId)
+        if (scenario) resetScenario(scenario)
+        return
+      }
+      const stepKey = event.target.closest("[data-scenario-step]")?.dataset.scenarioStep
+      if (stepKey) {
+        const [scenarioId, rawIndex] = stepKey.split(":")
+        const scenario = scenarios.find((candidate) => candidate.id === scenarioId)
+        const index = Number(rawIndex)
+        if (!scenario || index !== (scenarioProgress.get(scenarioId) ?? 0)) return
+        dispatch(scenario.steps[index][0])
+        scenarioProgress.set(scenarioId, index + 1)
+        render()
+        return
+      }
+      const action = event.target.closest("[data-action]")?.dataset.action
+      if (!action) return
+      if (action === "zoom-out") dispatch({ type: "set-zoom", zoom: state.camera.zoom / 1.25 })
+      if (action === "zoom-in") dispatch({ type: "set-zoom", zoom: state.camera.zoom * 1.25 })
+      if (action === "activate") dispatch({ type: "activate" })
+      if (action === "simulate-drag") dispatch([
+        { type: "pointer-down", x: 100, y: 100 },
+        { type: "pointer-move", x: 138, y: 122 },
+        { type: "pointer-up" }
+      ])
+      if (action === "escape") dispatch({ type: "dismiss", reason: "Escape" })
+      if (action === "outside") dispatch({ type: "dismiss", reason: "outside click" })
+      if (action === "close") dispatch({ type: "dismiss", reason: "close control" })
+      if (action === "tiny-content") dispatch({ type: "set-content", text: tinyText, label: "Tiny note content loaded." })
+      if (action === "short-content") dispatch({ type: "set-content", text: shortText, label: "Short note content loaded." })
+      if (action === "long-content") dispatch({ type: "set-content", text: longText, label: "Long note content loaded." })
+      if (action === "reset") dispatch({ type: "reset" })
+    })
+
+    note.addEventListener("pointerdown", (event) => {
+      if (event.target.closest("[data-close]")) return
+      if (state.expanded) return
+      note.setPointerCapture(event.pointerId)
+      dispatch({ type: "pointer-down", x: event.clientX, y: event.clientY })
+    })
+    note.addEventListener("pointermove", (event) => {
+      if (!note.hasPointerCapture(event.pointerId)) return
+      dispatch({ type: "pointer-move", x: event.clientX, y: event.clientY })
+    })
+    note.addEventListener("pointerup", (event) => {
+      if (!note.hasPointerCapture(event.pointerId)) return
+      note.releasePointerCapture(event.pointerId)
+      dispatch({ type: "pointer-up" })
+    })
+    note.addEventListener("click", (event) => {
+      event.stopPropagation()
+      if (event.target.closest("[data-close]")) dispatch({ type: "dismiss", reason: "close control" })
+    })
+    note.addEventListener("keydown", (event) => {
+      if (state.tool !== "select" || state.expanded) return
+      if (event.key !== "Enter" && event.key !== " ") return
+      event.preventDefault()
+      dispatch({ type: "activate" })
+    })
+    canvas.addEventListener("click", (event) => {
+      if (event.target === canvas) dispatch({ type: "dismiss", reason: "outside click" })
+    })
+    window.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") dispatch({ type: "dismiss", reason: "Escape" })
+    })
+    window.addEventListener("resize", renderStage)
+
+    render()
+  </script>
+</body>
+</html>

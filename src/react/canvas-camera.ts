@@ -1,3 +1,5 @@
+import { Match } from "effect"
+
 import type { CanvasGeometry } from "../core/index.js"
 
 export type CanvasCamera = {
@@ -59,6 +61,11 @@ export type CanvasCameraInput =
       readonly viewport: { readonly width: number; readonly height: number }
     }
   | {
+      readonly type: "zoom-to"
+      readonly zoom: number
+      readonly viewport: { readonly width: number; readonly height: number }
+    }
+  | {
       readonly type: "pan"
       readonly deltaX: number
       readonly deltaY: number
@@ -98,12 +105,10 @@ const resolveOptions = (
     DEFAULT_CANVAS_CAMERA_OPTIONS.zoomSpeed
   ),
   zoomSteps: validZoomSteps(options?.zoomSteps),
-  wheelBehavior:
-    options?.wheelBehavior === "none" ||
-    options?.wheelBehavior === "pan" ||
-    options?.wheelBehavior === "zoom"
-      ? options.wheelBehavior
-      : DEFAULT_CANVAS_CAMERA_OPTIONS.wheelBehavior
+  wheelBehavior: Match.value(options?.wheelBehavior).pipe(
+    Match.when(Match.is("none", "pan", "zoom"), (behavior) => behavior),
+    Match.orElse(() => DEFAULT_CANVAS_CAMERA_OPTIONS.wheelBehavior)
+  )
 })
 
 const clampZoom = (zoom: number, options: CanvasCameraOptions) =>
@@ -186,57 +191,76 @@ const fitCamera = (
   }
 }
 
-export const updateCanvasCamera = (
-  state: CanvasCameraState,
-  input: CanvasCameraInput,
-  overrides?: Partial<CanvasCameraOptions>
-): CanvasCameraState => {
-  const options = resolveOptions(overrides)
-  if (input.type === "pan") {
-    return {
-      camera: {
-        ...state.camera,
-        x: state.camera.x + input.deltaX,
-        y: state.camera.y + input.deltaY
-      }
-    }
-  }
-  if (input.type === "fit") {
-    return { camera: fitCamera(input.geometries, input.viewport, options) }
-  }
-  if (input.type === "zoom-step") {
-    if (
-      input.direction === 0 ||
-      input.viewport.width <= 0 ||
-      input.viewport.height <= 0
-    ) return state
-    return {
-      camera: cameraAtPoint(
-        state.camera,
-        zoomStep(state.camera.zoom, input.direction, options.zoomSteps),
-        { x: input.viewport.width / 2, y: input.viewport.height / 2 }
-      )
-    }
-  }
-  if (input.type === "pinch") {
-    if (!Number.isFinite(input.scaleFactor) || input.scaleFactor <= 0) {
-      return state
-    }
-    const nextZoom = clampZoom(
-      state.camera.zoom * input.scaleFactor ** options.zoomSpeed,
-      options
-    )
-    const anchored = cameraAtPoint(state.camera, nextZoom, input.point)
-    const zoomRatio = nextZoom / state.camera.zoom
-    return {
-      camera: {
-        ...anchored,
-        x: anchored.x + input.deltaX * options.panSpeed * zoomRatio,
-        y: anchored.y + input.deltaY * options.panSpeed * zoomRatio
-      }
-    }
-  }
+type CameraInput<Type extends CanvasCameraInput["type"]> = Extract<
+  CanvasCameraInput,
+  { readonly type: Type }
+>
 
+const updateZoomStepCamera = (
+  state: CanvasCameraState,
+  input: CameraInput<"zoom-step">,
+  options: CanvasCameraOptions
+): CanvasCameraState => {
+  if (
+    input.direction === 0 ||
+    input.viewport.width <= 0 ||
+    input.viewport.height <= 0
+  ) return state
+  return {
+    camera: cameraAtPoint(
+      state.camera,
+      zoomStep(state.camera.zoom, input.direction, options.zoomSteps),
+      { x: input.viewport.width / 2, y: input.viewport.height / 2 }
+    )
+  }
+}
+
+const updateZoomToCamera = (
+  state: CanvasCameraState,
+  input: CameraInput<"zoom-to">,
+  options: CanvasCameraOptions
+): CanvasCameraState => {
+  if (
+    !Number.isFinite(input.zoom) ||
+    input.zoom <= 0 ||
+    input.viewport.width <= 0 ||
+    input.viewport.height <= 0
+  ) return state
+  return {
+    camera: cameraAtPoint(
+      state.camera,
+      clampZoom(input.zoom, options),
+      { x: input.viewport.width / 2, y: input.viewport.height / 2 }
+    )
+  }
+}
+
+const updatePinchCamera = (
+  state: CanvasCameraState,
+  input: CameraInput<"pinch">,
+  options: CanvasCameraOptions
+): CanvasCameraState => {
+  if (!Number.isFinite(input.scaleFactor) || input.scaleFactor <= 0) return state
+  const nextZoom = clampZoom(
+    state.camera.zoom * input.scaleFactor ** options.zoomSpeed,
+    options
+  )
+  const anchored = cameraAtPoint(state.camera, nextZoom, input.point)
+  const zoomRatio = nextZoom / state.camera.zoom
+  return {
+    camera: {
+      ...anchored,
+      x: anchored.x + input.deltaX * options.panSpeed * zoomRatio,
+      y: anchored.y + input.deltaY * options.panSpeed * zoomRatio
+    }
+  }
+}
+
+const updateWheelCamera = (
+  state: CanvasCameraState,
+  input: CameraInput<"wheel">,
+  options: CanvasCameraOptions
+): CanvasCameraState => {
   const behavior = wheelBehavior(
     options.wheelBehavior,
     input.ctrlKey || input.metaKey
@@ -265,6 +289,34 @@ export const updateCanvasCamera = (
       y: input.clientY - input.origin.top
     })
   }
+}
+
+export const updateCanvasCamera = (
+  state: CanvasCameraState,
+  input: CanvasCameraInput,
+  overrides?: Partial<CanvasCameraOptions>
+): CanvasCameraState => {
+  const options = resolveOptions(overrides)
+  return Match.value(input).pipe(
+    Match.discriminatorsExhaustive("type")({
+      pan: (panInput) => ({
+        camera: {
+          ...state.camera,
+          x: state.camera.x + panInput.deltaX,
+          y: state.camera.y + panInput.deltaY
+        }
+      }),
+      fit: (fitInput) => ({
+        camera: fitCamera(fitInput.geometries, fitInput.viewport, options)
+      }),
+      "zoom-step": (zoomInput) =>
+        updateZoomStepCamera(state, zoomInput, options),
+      "zoom-to": (zoomInput) =>
+        updateZoomToCamera(state, zoomInput, options),
+      pinch: (pinchInput) => updatePinchCamera(state, pinchInput, options),
+      wheel: (wheelInput) => updateWheelCamera(state, wheelInput, options)
+    })
+  )
 }
 
 export const canvasUiScale = (zoom: number) =>

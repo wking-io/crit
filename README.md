@@ -68,6 +68,8 @@ internal route managed by the plugin, not a separately configurable asset URL.
 | Prop | Purpose |
 | --- | --- |
 | `canvasId` | Canvas to open. Required. |
+| `canvasChoices` | Optional `{ id, title }` choices shown by the Canvas title switcher. |
+| `onCanvasSelect` | Called with the selected Canvas ID. Supply with `canvasChoices` to enable the switcher. |
 | `services` | Explicit `{ client, snapshots, activity }` service bundle; use `null` for unsupported optional capabilities. Overrides `apiPath`. |
 | `apiPath` | Base path used by the default HTTP client; defaults to `/__crit/api`. |
 | `autosaveDelay` | Effect `Duration.Input` debounce before saving; defaults to 100 ms. |
@@ -84,7 +86,7 @@ internal route managed by the plugin, not a separately configurable asset URL.
 | `loadingFallback` | React content shown while the Canvas opens. |
 | `errorFallback` | Renders React content from a Canvas-open failure message. |
 
-The main entry point exports `CritProps`, `FrameChromeSettings`,
+The main entry point exports `CritProps`, `CanvasChoice`, `FrameChromeSettings`,
 `CanvasCameraOptions`, `CanvasWheelBehavior`, and the default frame-chrome and
 camera option values for typed configuration.
 

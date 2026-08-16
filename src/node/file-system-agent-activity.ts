@@ -15,6 +15,7 @@ import {
   type AgentActivityCollection,
   type SignalAgentActivityInput
 } from "../runtime/agent-activity.js"
+import { causeMessage } from "../internal/cause-message.js"
 import { hasNodeErrorCode } from "./internal/node-error.js"
 
 const ACTIVITY_DIRECTORY = ".crit/activity"
@@ -25,7 +26,7 @@ export interface FileSystemAgentActivityOptions {
 }
 
 const failureDetail = (cause: unknown) =>
-  cause instanceof Error ? cause.message : String(cause)
+  causeMessage(cause)
 
 const required = (value: string, label: string) => {
   const trimmed = value.trim()

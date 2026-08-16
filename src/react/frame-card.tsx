@@ -1,11 +1,22 @@
-import { Effect } from "effect"
-import { AnimatePresence, motion } from "motion/react"
+import { Button } from "@base-ui/react/button"
+import { Input } from "@base-ui/react/input"
+import { Menu } from "@base-ui/react/menu"
+import { Effect, Match } from "effect"
+import {
+  AnimatePresence,
+  animate,
+  motion,
+  useMotionValue,
+  usePresence,
+  useTransform
+} from "motion/react"
 import {
   useCallback,
   useEffect,
+  useId,
+  useMemo,
   useRef,
   useState,
-  type ComponentProps,
   type PointerEvent as ReactPointerEvent
 } from "react"
 
@@ -14,8 +25,7 @@ import type {
   CanvasFrame,
   CanvasGeometry,
   CommentAnchor,
-  FrameReviewStatus,
-  FrameStatus
+  FrameReviewStatus
 } from "../core/index.js"
 import {
   connectBridgedFrameComments,
@@ -29,8 +39,8 @@ import {
 } from "./css-variable-style.js"
 import { canvasUiScale } from "./canvas-camera.js"
 import {
-  CritContextMenu,
-  type ContextMenuPosition
+  CritContextActions,
+  type ContextMenuItem
 } from "./canvas-context-menu.js"
 import {
   useCanvasActionRunner,
@@ -48,19 +58,19 @@ import {
   informationalHelpTarget
 } from "./canvas-help.js"
 import {
-  FRAME_STATUSES,
-  STATUS_PILL_HEIGHT,
   STATUS_PILL_MOTION,
-  STATUS_PILL_STEP,
-  calculateStatusPillLayout,
+  calculateStatusFanLayout,
   frameStatus,
-  measureStatusPillWidth
+  frameStatusMenuOptions,
+  statusPillMotionPath,
+  type FrameStatusChrome
 } from "./frame-chrome.js"
 import {
   FRAME_SIZE_PRESETS,
   type FrameSizePreset
 } from "./frame-breakpoints.js"
 import { Glyph } from "./glyph.js"
+import { useCritUnderlayContainer } from "./overlay-container.js"
 
 export type FrameToolbarMode = "full" | "compact" | "minimal"
 export type FrameChromeAction =
@@ -92,6 +102,110 @@ const FRAME_CHROME_HEIGHT = 28
 const FRAME_ACTION_SIZE = 16
 const FRAME_ACTION_GAP = 6
 const FRAME_TITLE_CHARACTER_WIDTH = 7
+
+function StatusPillOption({
+  disabled,
+  finalRotate,
+  finalX,
+  finalY,
+  helpTarget,
+  label,
+  onSelect,
+  option,
+  startY,
+  width
+}: {
+  readonly disabled: boolean
+  readonly finalRotate: number
+  readonly finalX: number
+  readonly finalY: number
+  readonly helpTarget: ReturnType<typeof actionHelpTarget>
+  readonly label: string
+  readonly onSelect: () => void
+  readonly option: FrameStatusChrome
+  readonly startY: number
+  readonly width: number
+}) {
+  const motionPath = useMemo(() => statusPillMotionPath({
+    startY,
+    finalX,
+    finalY,
+    finalRotate
+  }), [finalRotate, finalX, finalY, startY])
+  const progress = useMotionValue(0)
+  const x = useTransform(
+    progress,
+    motionPath.times,
+    motionPath.enter.x,
+    { clamp: true }
+  )
+  const y = useTransform(
+    progress,
+    motionPath.times,
+    motionPath.enter.y,
+    { clamp: true }
+  )
+  const rotate = useTransform(
+    progress,
+    motionPath.times,
+    motionPath.enter.rotate,
+    { clamp: true }
+  )
+  const opacity = useTransform(progress, [0, 0.45, 1], [0, 1, 1])
+  const scale = useTransform(
+    progress,
+    [0, 1],
+    [STATUS_PILL_MOTION.initialScale, 1]
+  )
+  const [isPresent, safeToRemove] = usePresence()
+
+  useEffect(() => {
+    const playback = animate(
+      progress,
+      isPresent ? 1 : 0,
+      isPresent
+        ? STATUS_PILL_MOTION.spring
+        : STATUS_PILL_MOTION.close
+    )
+    if (!isPresent) playback.then(() => safeToRemove?.())
+    return () => playback.stop()
+  }, [isPresent, progress, safeToRemove])
+
+  return (
+    <Menu.Item
+      className="crit-status-option"
+      disabled={disabled}
+      {...helpTarget}
+      label={label}
+      nativeButton
+      onClick={(event) => {
+        if (event.detail === 0) onSelect()
+      }}
+      onPointerDown={(event) => {
+        event.currentTarget.setPointerCapture(event.pointerId)
+      }}
+      onPointerUp={(event) => {
+        if (!event.isPrimary || event.button !== 0) return
+        onSelect()
+      }}
+      render={
+        <motion.button
+          style={{ opacity, rotate, scale, x, y }}
+          type="button"
+        />
+      }
+      style={cssVariableStyle({
+        "--status-ink": option.ink,
+        "--status-shell": option.shell,
+        "--status-stroke": option.stroke,
+        width: `${width}px`
+      })}
+    >
+      <Glyph name={option.glyph} />
+      <span>{label}</span>
+    </Menu.Item>
+  )
+}
 
 const frameChromeFixedWidth = (actionCount: number) => {
   const actionsWidth =
@@ -129,16 +243,10 @@ export const frameContentProjection = (
   shellWidth: Math.max(0, width)
 })
 
-export const statusFanProjection = (
-  zoom: number,
-  screenFrameGap: number
-) => {
-  const scale = frameUiScale(zoom)
-  return {
-    scale,
-    frameGap: screenFrameGap * scale
-  }
-}
+export const statusFanProjection = (screenFrameGap: number) => ({
+  scale: 1,
+  frameGap: screenFrameGap
+})
 
 export interface FrameChromeMetrics {
   readonly screenHeight: number
@@ -272,13 +380,19 @@ export function FrameCard({
 }) {
   const frameRef = useRef<HTMLElement>(null)
   const iframeRef = useRef<HTMLIFrameElement>(null)
-  const [contextMenu, setContextMenu] = useState<ContextMenuPosition | null>(null)
+  const underlayContainer = useCritUnderlayContainer()
+  const statusMenuActionsRef = useRef<Menu.Root.Actions | null>(null)
+  const statusMenuTriggerRef = useRef<HTMLButtonElement>(null)
+  const restoreStatusTriggerFocusRef = useRef(false)
+  const statusMenuTriggerId = useId()
+  const [statusMenuHandle] = useState(() => Menu.createHandle())
+  const [contextMenuOpen, setContextMenuOpen] = useState(false)
   const [fullscreen, setFullscreen] = useState(false)
   const [statusMenuOpen, setStatusMenuOpen] = useState(defaultStatusMenuOpen)
   const [titleDraft, setTitleDraft] = useState(frame.title)
   const [titleEditing, setTitleEditing] = useState(false)
   const [commentBridgeReady, setCommentBridgeReady] = useState(false)
-  const actionScopes = contextMenu !== null
+  const actionScopes = contextMenuOpen
     ? ["canvas", "menu"] as const
     : titleEditing
       ? ["canvas", "frame-title-edit"] as const
@@ -315,27 +429,15 @@ export function FrameCard({
     frame.snapshot === undefined
   )
   const status = frameStatus(frame.status)
-  const availableStatuses = FRAME_STATUSES.filter(
-    (option) => option.id !== status.id
-  )
-  const statusPillLayout = calculateStatusPillLayout(
-    availableStatuses.map((option) => measureStatusPillWidth(option.label))
-  ).map((layout, index) => ({
-    ...layout,
-    option: availableStatuses[index]!
-  }))
-  const rotatedBottomHalfHeight =
-    statusPillLayout.at(-1)?.verticalHalfExtent ?? STATUS_PILL_HEIGHT / 2
-  const statusFrameGap =
-    STATUS_PILL_MOTION.frameGap +
-    Math.max(0, rotatedBottomHalfHeight - STATUS_PILL_HEIGHT / 2)
+  const availableStatuses = frameStatusMenuOptions(status.id)
+  const statusPillLayout = calculateStatusFanLayout(availableStatuses)
   const uiScale = frameUiScale(zoom)
   const contentProjection = frameContentProjection(
     geometry.width,
     geometry.height,
     zoom
   )
-  const statusFan = statusFanProjection(zoom, statusFrameGap)
+  const statusFan = statusFanProjection(statusPillLayout.frameGap)
   const frameStyle = {
     ...canvasItemStyle(geometry, frame.zIndex),
     height: contentProjection.shellHeight,
@@ -395,11 +497,15 @@ export function FrameCard({
           event.preventDefault()
           event.stopPropagation()
           const rect = iframe.getBoundingClientRect()
-          setContextMenu({
-            x: rect.left + event.clientX,
-            y: rect.top + event.clientY
-          })
-          onSelect()
+          frameRef.current?.dispatchEvent(new MouseEvent("contextmenu", {
+            bubbles: true,
+            button: 2,
+            buttons: 2,
+            cancelable: true,
+            clientX: rect.left + event.clientX,
+            clientY: rect.top + event.clientY,
+            view: window
+          }))
         }
         iframeWindow.addEventListener("contextmenu", openContextMenu, true)
         const resizeObserver = frame.display.heightMode === "fit-page"
@@ -461,26 +567,33 @@ export function FrameCard({
       target: window,
       frameElement: iframe,
       onEvent: (event) => {
-        if (event.type === "ready") setCommentBridgeReady(true)
-        else if (event.type === "select") {
-          runner.run(
-            controls,
-            placeCommentAction,
-            onCommentAnchorRef.current(event.anchor),
-            onSnapshotError
-          )
-        } else {
-          const action = controls.action({
-            id: "open-comment",
-            target: { kind: "comment-thread", id: event.id, label: "comment" }
+        Match.value(event).pipe(
+          Match.discriminatorsExhaustive("type")({
+            ready: () => setCommentBridgeReady(true),
+            select: (selection) => runner.run(
+              controls,
+              placeCommentAction,
+              onCommentAnchorRef.current(selection.anchor),
+              onSnapshotError
+            ),
+            open: (opening) => {
+              const action = controls.action({
+                id: "open-comment",
+                target: {
+                  kind: "comment-thread",
+                  id: opening.id,
+                  label: "comment"
+                }
+              })
+              runner.run(
+                controls,
+                action,
+                onOpenCommentRef.current(opening.id),
+                onSnapshotError
+              )
+            }
           })
-          runner.run(
-            controls,
-            action,
-            onOpenCommentRef.current(event.id),
-            onSnapshotError
-          )
-        }
+        )
       }
     })
     commentBridgeRef.current = bridge
@@ -556,6 +669,11 @@ export function FrameCard({
     target,
     frameIsLive: frame.snapshot === undefined
   })
+  const openStatusAction = controls.action({
+    id: "open-frame-status",
+    target,
+    frameIsLive: frame.snapshot === undefined
+  })
   const commitTitle = () => {
     const title = titleDraft.trim()
     const effect = title.length > 0 && title !== frame.title
@@ -575,137 +693,195 @@ export function FrameCard({
       return frameRef.current?.requestFullscreen() ?? Promise.resolve()
     }
   }
+  const menuItems: ReadonlyArray<ContextMenuItem> = [
+    {
+      action: removeAction,
+      execute: onRemove(),
+      onFailure: onSnapshotError
+    },
+    {
+      action: fullscreenAction,
+      execute: Effect.promise(toggleFullscreen),
+      onFailure: onSnapshotError
+    },
+    {
+      action: openAction,
+      href: frame.url
+    },
+    {
+      action: controls.action({
+        id: "bring-item-to-front",
+        target
+      }),
+      execute: onBringToFront()
+    },
+    {
+      action: controls.action({
+        id: "send-item-to-back",
+        target
+      }),
+      execute: onSendToBack()
+    },
+    {
+      action: controls.action({
+        id: "open-frame-size-menu",
+        target
+      }),
+      items: FRAME_SIZE_PRESETS.map((preset) => ({
+        action: controls.action({
+          id: "resize-frame-to-preset",
+          target,
+          preset: preset.id
+        }),
+        detail: `${preset.width} × ${preset.height}`,
+        execute: onSetSize(preset.width, preset.height)
+      }))
+    },
+    ...(frame.snapshot === undefined ? [{
+      action: controls.action({
+        id: "open-frame-duplicate-menu" as const,
+        target,
+        frameIsLive: true
+      }),
+      items: FRAME_SIZE_PRESETS.map((preset) => ({
+        action: controls.action({
+          id: "duplicate-frame-at-preset" as const,
+          target,
+          preset: preset.id,
+          frameIsLive: true
+        }),
+        detail: `${preset.width} × ${preset.height}`,
+        execute: onDuplicateAt(preset)
+      }))
+    }] : []),
+    {
+      action: controls.action({ id: "fit-frame-content", target }),
+      execute: measureContentHeight(true),
+      onFailure: onSnapshotError
+    }
+  ]
 
   return (
-    <section
-      className="crit-frame"
-      data-frame-status={frame.status}
-      data-selected={selected || undefined}
-      onContextMenu={(event) => {
-        event.preventDefault()
-        event.stopPropagation()
-        setContextMenu({ x: event.clientX, y: event.clientY })
-        onSelect()
+    <CritContextActions
+      ariaLabel={`Actions for ${frame.title}`}
+      items={menuItems}
+      onOpenChange={(open) => {
+        setContextMenuOpen(open)
+        if (open) onSelect()
       }}
-      onPointerDown={(event) => onSelect(
-        event.metaKey || event.ctrlKey || event.shiftKey
-      )}
-      ref={frameRef}
-      style={frameStyle}
     >
+      <section
+        className="crit-frame"
+        data-frame-status={frame.status}
+        data-selected={selected || undefined}
+        onPointerDown={(event) => onSelect(
+          event.metaKey || event.ctrlKey || event.shiftKey
+        )}
+        ref={frameRef}
+        style={frameStyle}
+      >
       {frame.snapshot === undefined ? (
-        <div
-          aria-label={`Set status for ${frame.title}`}
-          className="crit-status-menu"
-          onPointerDown={(event) => event.stopPropagation()}
-          role="menu"
-          style={cssVariableStyle({
-            "--crit-status-ui": statusFan.scale,
-            bottom: `calc(100% + ${statusFan.frameGap}px)`,
-            pointerEvents: statusMenuOpen ? "all" : "none"
-          })}
+        <Menu.Root
+          actionsRef={statusMenuActionsRef}
+          handle={statusMenuHandle}
+          modal={false}
+          onOpenChange={(open, eventDetails) => {
+            if (!open) {
+              restoreStatusTriggerFocusRef.current =
+                eventDetails.reason === "escape-key" ||
+                eventDetails.reason === "item-press"
+              eventDetails.preventUnmountOnClose()
+              setStatusMenuOpen(false)
+              return
+            }
+            runner.run(
+              controls,
+              openStatusAction,
+              Effect.sync(() => setStatusMenuOpen(true)),
+              onSnapshotError
+            )
+          }}
+          open={statusMenuOpen}
+          triggerId={statusMenuTriggerId}
         >
-          <AnimatePresence>
-            {statusMenuOpen
-              ? statusPillLayout.map(({
-                  option,
-                  distanceFromFrame,
-                  finalX,
-                  finalY,
-                  finalRotate
-                }) => {
-                  const startY =
-                    distanceFromFrame * STATUS_PILL_STEP +
-                    STATUS_PILL_MOTION.originOffset
-                  const selectStatus = () => {
-                    if (option.id === "archived") takeSnapshot()
-                    else {
-                      const action = controls.action({
-                        id: "set-frame-status",
-                        target,
-                        status: option.id,
-                        frameIsLive: frame.snapshot === undefined
-                      })
-                      const reviewStatus = option.id
-                      runner.run(
-                        controls,
-                        action,
-                        onStatus(reviewStatus),
-                        onSnapshotError
-                      )
+          <Menu.Portal container={underlayContainer}>
+            <Menu.Positioner
+              align="start"
+              anchor={frameRef}
+              className="crit-status-positioner"
+              collisionAvoidance={{
+                align: "none",
+                fallbackAxisSide: "none",
+                side: "none"
+              }}
+              side="top"
+              sideOffset={statusFan.frameGap}
+            >
+              <Menu.Popup
+                aria-label={`Set status for ${frame.title}`}
+                className="crit-status-menu"
+                onPointerDown={(event) => event.stopPropagation()}
+                style={cssVariableStyle({
+                  "--crit-status-ui": statusFan.scale
+                })}
+              >
+                <AnimatePresence
+                  onExitComplete={() => {
+                    if (!statusMenuOpen) {
+                      statusMenuActionsRef.current?.unmount()
+                      if (restoreStatusTriggerFocusRef.current) {
+                        statusMenuTriggerRef.current?.focus()
+                      }
+                      restoreStatusTriggerFocusRef.current = false
                     }
-                    setStatusMenuOpen(false)
-                  }
-                  const statusAction = option.id === "archived"
-                    ? snapshotAction
-                    : controls.action({
-                        id: "set-frame-status",
-                        target,
-                        status: option.id,
-                        frameIsLive: frame.snapshot === undefined
+                  }}
+                >
+                  {statusMenuOpen
+                    ? statusPillLayout.items.map(({
+                         option,
+                         finalX,
+                         finalY,
+                         finalRotate,
+                         startY,
+                         width
+                       }) => {
+                        const statusAction = controls.action({
+                          id: "set-frame-status",
+                          target,
+                          status: option.id,
+                          frameIsLive: frame.snapshot === undefined
+                        })
+                        const selectStatus = () => {
+                          if (statusAction.availability !== "enabled") return
+                          runner.run(
+                            controls,
+                            statusAction,
+                            onStatus(option.id),
+                            onSnapshotError
+                          )
+                        }
+                        return (
+                          <StatusPillOption
+                            disabled={statusAction.availability !== "enabled"}
+                            finalRotate={finalRotate}
+                            finalX={finalX}
+                            finalY={finalY}
+                            helpTarget={actionHelpTarget(statusAction)}
+                            key={option.id}
+                            label={statusAction.label}
+                            onSelect={selectStatus}
+                             option={option}
+                             startY={startY}
+                             width={width}
+                          />
+                        )
                       })
-                  const optionStyle = cssVariableStyle({
-                    "--status-ink": option.ink,
-                    "--status-shell": option.shell,
-                    "--status-stroke": option.stroke
-                  })
-                  // SAFETY: Motion forwards CSS custom properties to the DOM,
-                  // but its style type conflicts with React's optional SVG x property.
-                  const motionOptionStyle = optionStyle as ComponentProps<
-                    typeof motion.button
-                  >["style"] & {}
-                  return (
-                    <motion.button
-                      aria-checked={false}
-                      className="crit-status-option"
-                      disabled={statusAction.availability !== "enabled"}
-                      {...actionHelpTarget(statusAction)}
-                      key={option.id}
-                      onClick={(event) => {
-                        if (event.detail === 0) selectStatus()
-                      }}
-                      onPointerDown={(event) => {
-                        event.currentTarget.setPointerCapture(event.pointerId)
-                      }}
-                      onPointerUp={(event) => {
-                        if (!event.isPrimary || event.button !== 0) return
-                        selectStatus()
-                      }}
-                      role="menuitemradio"
-                      style={motionOptionStyle}
-                      initial={{
-                        opacity: 0,
-                        scale: STATUS_PILL_MOTION.initialScale,
-                        y: startY,
-                        rotate: 0
-                      }}
-                      animate={{
-                        opacity: 1,
-                        scale: 1,
-                        x: finalX,
-                        y: finalY,
-                        rotate: [0, finalRotate]
-                      }}
-                      exit={{
-                        opacity: 0,
-                        scale: STATUS_PILL_MOTION.initialScale,
-                        y: startY,
-                        rotate: 0
-                      }}
-                      transition={{
-                        ...STATUS_PILL_MOTION.spring,
-                        opacity: { duration: 0.12 }
-                      }}
-                      type="button"
-                    >
-                      <Glyph name={option.glyph} />
-                      <span>{statusAction.label}</span>
-                    </motion.button>
-                  )
-                })
-              : null}
-          </AnimatePresence>
-        </div>
+                    : null}
+                </AnimatePresence>
+              </Menu.Popup>
+            </Menu.Positioner>
+          </Menu.Portal>
+        </Menu.Root>
       ) : null}
       <div className="crit-frame__surface">
         <header
@@ -718,38 +894,19 @@ export function FrameCard({
         onPointerDown={(event) => onMove(event, frame)}
       >
         <div className="crit-frame__identity">
-          <button
+          <Menu.Trigger
             aria-expanded={statusMenuOpen}
-            aria-haspopup="menu"
             aria-label={`Status: ${status.label}. Change status`}
             className="crit-frame__mark"
-            disabled={controls.action({
-              id: "open-frame-status",
-              target,
-              frameIsLive: frame.snapshot === undefined
-            }).availability !== "enabled"}
-            {...actionHelpTarget(controls.action({
-              id: "open-frame-status",
-              target,
-              frameIsLive: frame.snapshot === undefined
-            }))}
-            onClick={() => {
-              const action = controls.action({
-                id: "open-frame-status",
-                target,
-                frameIsLive: frame.snapshot === undefined
-              })
-              runner.run(
-                controls,
-                action,
-                Effect.sync(() => setStatusMenuOpen((open) => !open))
-              )
-            }}
+            disabled={openStatusAction.availability !== "enabled"}
+            handle={statusMenuHandle}
+            id={statusMenuTriggerId}
+            ref={statusMenuTriggerRef}
+            {...actionHelpTarget(openStatusAction)}
             onPointerDown={(event) => event.stopPropagation()}
-            type="button"
           >
             <Glyph name={status.glyph} />
-          </button>
+          </Menu.Trigger>
           {titleVisible ? (
             <span
               className="crit-frame__title-mask"
@@ -767,14 +924,16 @@ export function FrameCard({
                     ) return
                     commitTitle()
                   }}
+                  onContextMenu={(event) => event.stopPropagation()}
                   onPointerDown={(event) => event.stopPropagation()}
+                  onTouchStart={(event) => event.stopPropagation()}
                 >
                   <span className="crit-frame__title-prefix">{shortId}:</span>
                   <span
                     className="crit-frame__title-input-sizer"
                     data-value={titleDraft || " "}
                   >
-                    <input
+                    <Input
                       aria-label="Frame title"
                       autoComplete="off"
                       autoFocus
@@ -803,7 +962,7 @@ export function FrameCard({
                       value={titleDraft}
                     />
                   </span>
-                  <button
+                  <Button
                     aria-keyshortcuts={saveTitleAction.ariaKeyShortcuts ?? undefined}
                     aria-label={saveTitleAction.label}
                     className="crit-frame__title-save"
@@ -813,10 +972,10 @@ export function FrameCard({
                     type="button"
                   >
                     <Glyph name="save" />
-                  </button>
+                  </Button>
                 </div>
               ) : selected ? (
-                <button
+                <Button
                   aria-label={`Edit frame title: ${frame.title}`}
                   className="crit-frame__title-button"
                   disabled={beginTitleEditAction.availability !== "enabled"}
@@ -834,7 +993,7 @@ export function FrameCard({
                     <strong>{status.label}</strong>
                   </span>
                   <Glyph className="crit-frame__title-edit-icon" name="edit" />
-                </button>
+                </Button>
               ) : (
                 <span className="crit-frame__title-label">
                   <span className="crit-frame__title-track">
@@ -848,7 +1007,7 @@ export function FrameCard({
         </div>
         <div className="crit-frame__actions" onPointerDown={(event) => event.stopPropagation()}>
             {frame.snapshot === undefined && actions.breakpoints ? (
-              <button
+              <Button
                 aria-label={breakpointAction.label}
                 className="crit-frame__action"
                 disabled={breakpointAction.availability !== "enabled"}
@@ -862,10 +1021,10 @@ export function FrameCard({
                 type="button"
               >
                 <Glyph name="responsiveBreakpoints" />
-              </button>
+              </Button>
             ) : null}
             {frame.snapshot === undefined && onSnapshot !== undefined && actions.snapshot ? (
-              <button
+              <Button
                 aria-label={snapshotPending ? "Taking snapshot" : snapshotAction.label}
                 className="crit-frame__action"
                 data-snapshotting={snapshotPending || undefined}
@@ -875,7 +1034,7 @@ export function FrameCard({
                 type="button"
               >
                 <Glyph name="snapshot" />
-              </button>
+              </Button>
             ) : null}
             {actions.open ? <a
               aria-label={openAction.label}
@@ -887,7 +1046,7 @@ export function FrameCard({
             >
               <Glyph name="openExternal" />
             </a> : null}
-            {actions.fullscreen ? <button
+            {actions.fullscreen ? <Button
               aria-label={fullscreenAction.label}
               className="crit-frame__action"
               aria-keyshortcuts={fullscreenAction.ariaKeyShortcuts ?? undefined}
@@ -902,8 +1061,8 @@ export function FrameCard({
               type="button"
             >
               <Glyph name={fullscreen ? "minimize" : "fullscreen"} />
-            </button> : null}
-            {actions.delete ? <button
+            </Button> : null}
+            {actions.delete ? <Button
               aria-keyshortcuts={removeAction.ariaKeyShortcuts ?? undefined}
               aria-label={removeAction.label}
               className="crit-frame__action"
@@ -916,7 +1075,7 @@ export function FrameCard({
                 onSnapshotError
               )}
               type="button"
-            ><Glyph name="trash" /></button> : null}
+            ><Glyph name="trash" /></Button> : null}
         </div>
         </header>
         <div className="crit-frame__viewport">
@@ -954,13 +1113,14 @@ export function FrameCard({
               color={status.ink}
               key={thread.id}
               onOpen={() => onOpenComment(thread.id)}
+              popoverTrigger
               threadId={thread.id}
               xRatio={thread.anchor.xRatio}
               yRatio={thread.anchor.yRatio}
             />
           }) : null}
         {commentMode && frame.snapshot === undefined && !commentBridgeReady ? (
-          <button
+          <Button
             aria-label={`Place a comment on ${frame.title}`}
             className="crit-frame__comment-fallback"
             disabled={placeCommentAction.availability !== "enabled"}
@@ -995,78 +1155,7 @@ export function FrameCard({
         />
       ) : null}
       {fullscreen ? <CanvasHelpPanel /> : null}
-      <CritContextMenu
-        ariaLabel={`Actions for ${frame.title}`}
-        items={[
-          {
-            action: removeAction,
-            execute: onRemove(),
-            onFailure: onSnapshotError
-          },
-          {
-            action: fullscreenAction,
-            execute: Effect.promise(toggleFullscreen),
-            onFailure: onSnapshotError
-          },
-          {
-            action: openAction,
-            href: frame.url,
-          },
-          {
-            action: controls.action({
-              id: "bring-item-to-front",
-              target
-            }),
-            execute: onBringToFront()
-          },
-          {
-            action: controls.action({
-              id: "send-item-to-back",
-              target
-            }),
-            execute: onSendToBack()
-          },
-          {
-            action: controls.action({
-              id: "open-frame-size-menu",
-              target
-            }),
-            items: FRAME_SIZE_PRESETS.map((preset) => ({
-              action: controls.action({
-                id: "resize-frame-to-preset",
-                target,
-                preset: preset.id
-              }),
-              detail: `${preset.width} × ${preset.height}`,
-              execute: onSetSize(preset.width, preset.height)
-            }))
-          },
-          ...(frame.snapshot === undefined ? [{
-            action: controls.action({
-              id: "open-frame-duplicate-menu" as const,
-              target,
-              frameIsLive: true
-            }),
-            items: FRAME_SIZE_PRESETS.map((preset) => ({
-              action: controls.action({
-                id: "duplicate-frame-at-preset",
-                target,
-                preset: preset.id,
-                frameIsLive: true
-              }),
-              detail: `${preset.width} × ${preset.height}`,
-              execute: onDuplicateAt(preset)
-            }))
-          }] : []),
-          {
-            action: controls.action({ id: "fit-frame-content", target }),
-            execute: measureContentHeight(true),
-            onFailure: onSnapshotError
-          }
-        ]}
-        onClose={() => setContextMenu(null)}
-        position={contextMenu}
-      />
-    </section>
+      </section>
+    </CritContextActions>
   )
 }

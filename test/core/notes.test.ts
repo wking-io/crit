@@ -7,6 +7,50 @@ const author = { id: "author", name: "Test Author" } as const
 const collaborator = { id: "collaborator", name: "Collaborator" } as const
 
 describe("Canvas Notes", () => {
+  it.effect("defaults legacy Notes to blue and lets only the Author recolor them", () =>
+    Effect.gen(function*() {
+      const canvas = Canvas.create({ id: "review", title: "Review", owner: author })
+      yield* Canvas.apply(
+        canvas,
+        CanvasCommand.addNote({
+          id: "feedback",
+          text: "Original",
+          author,
+          x: 40,
+          y: 60
+        })
+      )
+      expect(Canvas.listNotes(canvas)[0]?.color).toBe("blue")
+
+      const forbidden = yield* Effect.flip(Canvas.apply(
+        canvas,
+        CanvasCommand.setNoteColor({
+          id: "feedback",
+          actorId: collaborator.id,
+          color: "red"
+        })
+      ))
+      expect(forbidden).toMatchObject({ reason: "note-forbidden" })
+
+      yield* Canvas.apply(
+        canvas,
+        CanvasCommand.setNoteColor({
+          id: "feedback",
+          actorId: author.id,
+          color: "green"
+        })
+      )
+      expect(Canvas.listNotes(canvas)[0]?.color).toBe("green")
+
+      const saved = Canvas.export(canvas)
+      const legacy = {
+        ...saved,
+        notes: saved.notes.map(({ color: _color, ...note }) => note)
+      }
+      const reopened = yield* Canvas.open(JSON.parse(JSON.stringify(legacy)))
+      expect(Canvas.listNotes(reopened)[0]?.color).toBe("blue")
+    }))
+
   it.effect("moves an attached Note with its Frame until it is detached", () =>
     Effect.gen(function*() {
       const canvas = Canvas.create({ id: "review", title: "Review", owner: { id: "git:test", name: "Test Author" } })

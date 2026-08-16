@@ -13,15 +13,14 @@ const note: CanvasNote = {
   author: { id: "author", name: "Test Author" },
   geometry: { x: 40, y: 60, width: 280, height: 160 },
   attachedTo: null,
-  zIndex: 1
+  zIndex: 1,
+  color: "blue"
 }
 
 describe("Note editing", () => {
-  it("composes an Author edit and measured height as one command batch", () => {
+  it("commits Author text without persisting presentation dimensions", () => {
     expect(noteEditingCommands(note, "author", {
-      text: "Edited",
-      width: 320,
-      height: 202
+      text: "Edited"
     })).toEqual([
       {
         _tag: "EditNote",
@@ -29,27 +28,14 @@ describe("Note editing", () => {
         actorId: "author",
         expectedText: "Original",
         text: "Edited"
-      },
-      {
-        _tag: "ResizeNote",
-        id: "feedback",
-        width: 320,
-        height: 202
       }
     ])
   })
 
-  it("allows height correction without granting text ownership", () => {
+  it("does not grant text ownership to collaborators", () => {
     expect(noteEditingCommands(note, "collaborator", {
-      text: "Unauthorized edit",
-      width: 280,
-      height: 190
-    })).toEqual([{
-      _tag: "ResizeNote",
-      id: "feedback",
-      width: 280,
-      height: 190
-    }])
+      text: "Unauthorized edit"
+    })).toEqual([])
   })
 
   it("commits once after the fixed idle and flushes immediately on blur", () => {
@@ -71,27 +57,24 @@ describe("Note editing", () => {
       }
     })
 
-    session.schedule({ text: "First", width: 280, height: 180 })
-    session.schedule({ text: "Latest", width: 280, height: 200 })
+    session.schedule({ text: "First" })
+    session.schedule({ text: "Latest" })
     expect(delay).toBe(NOTE_EDIT_IDLE_MS)
     expect(batches).toEqual([])
 
     scheduled?.()
     expect(batches).toHaveLength(1)
-    expect(batches[0]?.map((command) => command._tag)).toEqual([
-      "EditNote",
-      "ResizeNote"
-    ])
+    expect(batches[0]?.map((command) => command._tag)).toEqual(["EditNote"])
     expect(batches[0]?.[0]).toMatchObject({ text: "Latest" })
 
-    session.flush({ text: "Latest", width: 280, height: 200 })
+    session.flush({ text: "Latest" })
     expect(batches).toHaveLength(1)
 
-    session.flush({ text: "Blurred", width: 280, height: 220 })
+    session.flush({ text: "Blurred" })
     expect(batches).toHaveLength(2)
     expect(batches[1]?.[0]).toMatchObject({ text: "Blurred" })
 
-    session.schedule({ text: "Blurred", width: 280, height: 220 })
+    session.schedule({ text: "Blurred" })
     expect(scheduled).toBeUndefined()
     expect(batches).toHaveLength(2)
   })
@@ -105,7 +88,7 @@ describe("Note editing", () => {
     })
 
     session.synchronize({ ...note, text: "Remote edit" }, "Local draft")
-    session.flush({ text: "Local draft", width: 280, height: 180 })
+    session.flush({ text: "Local draft" })
 
     expect(batches[0]?.[0]).toMatchObject({
       _tag: "EditNote",
@@ -114,7 +97,7 @@ describe("Note editing", () => {
     })
   })
 
-  it("does not schedule unchanged content or subpixel height noise", () => {
+  it("does not schedule unchanged content", () => {
     let scheduled = false
     const session = createNoteEditingSession({
       actorId: "author",
@@ -126,7 +109,7 @@ describe("Note editing", () => {
       }
     })
 
-    session.schedule({ text: "Original", width: 280, height: 160.5 })
+    session.schedule({ text: "Original" })
     expect(scheduled).toBe(false)
   })
 })

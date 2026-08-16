@@ -1,3 +1,5 @@
+import { Button } from "@base-ui/react/button"
+import { Popover } from "@base-ui/react/popover"
 import { Effect } from "effect"
 
 import {
@@ -11,6 +13,7 @@ export function CanvasCommentPin({
   authorName,
   active,
   color,
+  popoverTrigger = false,
   threadId,
   onOpen,
   xRatio,
@@ -19,6 +22,7 @@ export function CanvasCommentPin({
   readonly authorName: string
   readonly active: boolean
   readonly color: string
+  readonly popoverTrigger?: boolean
   readonly threadId: string
   readonly onOpen: () => Effect.Effect<unknown, unknown>
   readonly xRatio: number
@@ -34,8 +38,8 @@ export function CanvasCommentPin({
       label: `comment by ${authorName}`
     }
   })
-  return (
-    <button
+  const pin = (
+    <Button
       aria-label={action.label}
       aria-expanded={active}
       className="crit-comment-pin"
@@ -54,6 +58,12 @@ export function CanvasCommentPin({
         top: `${yRatio * 100}%`
       }}
       type="button"
-    ><Glyph name="commentPin" /></button>
+    ><Glyph name="commentPin" /></Button>
   )
+  return popoverTrigger
+    ? <Popover.Trigger id={commentPopoverTriggerId(threadId)} render={pin} />
+    : pin
 }
+
+export const commentPopoverTriggerId = (threadId: string) =>
+  `crit-comment-trigger-${threadId}`

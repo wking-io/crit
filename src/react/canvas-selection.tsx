@@ -1,3 +1,4 @@
+import { Button } from "@base-ui/react/button"
 import type { PointerEvent as ReactPointerEvent } from "react"
 
 import type { CanvasGeometry } from "../core/index.js"
@@ -133,7 +134,7 @@ export function CanvasSelection({
         const visible = resolvedHandleStyle === "corners"
           ? artwork.kind === "corner"
           : artwork.kind === "side"
-        return <button
+        return <Button
           aria-label={`Resize ${label} from ${handle}`}
           className="crit-selection__handle"
           {...informationalHelpTarget({
@@ -170,7 +171,7 @@ export function CanvasSelection({
               </g>
             </svg>
           ) : null}
-        </button>
+        </Button>
       })}
     </div>
   )

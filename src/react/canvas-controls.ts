@@ -1,4 +1,4 @@
-import { Effect, Schema } from "effect"
+import { Effect, Match, Predicate, Schema } from "effect"
 
 import { defaultRuntimeCapabilities } from "../runtime/runtime-capabilities.js"
 
@@ -19,9 +19,14 @@ const actionIds = [
   "distribute-selection",
   "arrange-selection-grid",
   "close-arrangement-menu",
+  "begin-canvas-title-edit",
+  "save-canvas-title-edit",
+  "cancel-canvas-title-edit",
   "remove-item",
   "bring-item-to-front",
   "send-item-to-back",
+  "set-note-color",
+  "copy-node-id",
   "open-frame-status",
   "set-frame-status",
   "begin-frame-title-edit",
@@ -62,6 +67,7 @@ export type CanvasControlPlatform = typeof CanvasControlPlatform.Type
 
 export const CanvasControlScope = Schema.Literals([
   "canvas",
+  "canvas-title-edit",
   "new-frame-form",
   "frame-title-edit",
   "comment-compose",
@@ -88,6 +94,7 @@ export type CanvasActionConsequence = typeof CanvasActionConsequence.Type
 export const CanvasActionUnavailableReason = Schema.Literals([
   "missing-comment-author",
   "item-removal-forbidden",
+  "note-edit-forbidden",
   "frame-not-live",
   "frame-not-editable",
   "snapshot-unavailable",
@@ -127,6 +134,11 @@ export type CanvasActionTarget = typeof CanvasActionTarget.Type
 
 const FrameTarget = Schema.Struct({
   kind: Schema.Literal("frame"),
+  id: Schema.String,
+  label: Schema.String
+})
+const NoteTarget = Schema.Struct({
+  kind: Schema.Literal("note"),
   id: Schema.String,
   label: Schema.String
 })
@@ -201,6 +213,9 @@ export const CanvasActionRequest = Schema.Union([
     selectionHasMultipleItems: Schema.Boolean
   }),
   noTargetRequest("close-arrangement-menu"),
+  noTargetRequest("begin-canvas-title-edit"),
+  noTargetRequest("save-canvas-title-edit"),
+  noTargetRequest("cancel-canvas-title-edit"),
   noTargetRequest("close-context-menu"),
   noTargetRequest("create-note"),
   noTargetRequest("activate-comment-tool"),
@@ -210,12 +225,17 @@ export const CanvasActionRequest = Schema.Union([
   }),
   Schema.Struct({
     id: Schema.Literal("remove-item"),
-    target: Schema.Struct({
-      kind: Schema.Literal("note"),
-      id: Schema.String,
-      label: Schema.String
-    }),
+    target: NoteTarget,
     currentAuthorIsTargetAuthor: Schema.Boolean
+  }),
+  Schema.Struct({
+    id: Schema.Literal("set-note-color"),
+    target: NoteTarget,
+    currentAuthorIsTargetAuthor: Schema.Boolean
+  }),
+  Schema.Struct({
+    id: Schema.Literal("copy-node-id"),
+    target: NoteTarget
   }),
   targetedRequest("bring-item-to-front"),
   targetedRequest("send-item-to-back"),
@@ -500,6 +520,20 @@ const noteAuthorRequired: Guard = {
   }
 }
 
+const noteColorAuthorRequired: Guard = {
+  requirement: {
+    source: "target",
+    fact: "currentAuthorIsTargetAuthor",
+    equals: true
+  },
+  targetKinds: ["note"],
+  onFailure: {
+    state: "hidden",
+    reason: "note-edit-forbidden",
+    message: "Only the Note Author may change its color."
+  }
+}
+
 const selectionRequired = (
   fact: "selectionHasMultipleItems" | "selectionHasThreeItems",
   reason: "multiple-selection-required" | "three-item-selection-required",
@@ -523,7 +557,7 @@ const canvasPolicies: ReadonlyArray<CanvasActionPolicy> = [
   policy({ id: "hand-tool", scopes: ["canvas"], bindings: [primary("H")], consequence: "standard", label: "Hand", description: "Drag the canvas to pan without selecting an item." }),
   policy({ id: "open-new-frame", scopes: ["canvas", "menu"], bindings: [primary("F")], consequence: "standard", label: "Add frame", description: "Add a live web page to the current canvas." }),
   policy({ id: "create-note", scopes: ["canvas", "menu"], bindings: [primary("N")], guards: [failedGuard("global", "commentAuthorPresent", "missing-comment-author", "Configure Git user.name and user.email to add notes.")], consequence: "standard", label: "Add note", description: "Add an editable note to the current canvas." }),
-  policy({ id: "activate-comment-tool", scopes: ["canvas"], bindings: [], guards: [failedGuard("global", "commentAuthorPresent", "missing-comment-author", "Configure Git user.name and user.email to leave comments.")], consequence: "standard", label: "Comment", description: "Pin feedback to an element or location inside a live frame." }),
+  policy({ id: "activate-comment-tool", scopes: ["canvas"], bindings: [], guards: [failedGuard("global", "commentAuthorPresent", "missing-comment-author", "Configure Git user.name and user.email to leave comments.")], consequence: "standard", label: "Add comment", description: "Pin feedback to an element or location inside a live frame." }),
   policy({ id: "zoom-in", scopes: ["canvas"], bindings: [primary("=", ["mod"]), alias("=", ["mod", "shift"])], consequence: "standard", label: "Zoom in", description: "Increase the canvas zoom level." }),
   policy({ id: "zoom-out", scopes: ["canvas"], bindings: [primary("-", ["mod"]), alias("-", ["mod", "shift"])], consequence: "standard", label: "Zoom out", description: "Decrease the canvas zoom level." }),
   policy({ id: "zoom-to-fit", scopes: ["canvas", "menu"], bindings: [], consequence: "standard", label: "Zoom to fit", description: "Adjust the view so every frame and note is visible." }),
@@ -534,49 +568,57 @@ const arrangementPolicies: ReadonlyArray<CanvasActionPolicy> = [
   policy({ id: "align-selection", scopes: ["arrangement-menu"], bindings: [], guards: [selectionRequired("selectionHasMultipleItems", "multiple-selection-required", "Select at least two Frames or Notes to align them.")], consequence: "standard", label: "Align {alignmentLabel}", description: "Align the selected items to the {alignmentDescription} of their collective bounds." }),
   policy({ id: "distribute-selection", scopes: ["arrangement-menu"], bindings: [], guards: [selectionRequired("selectionHasThreeItems", "three-item-selection-required", "Select at least three Frames or Notes to distribute them.")], consequence: "standard", label: "Distribute {distributionAxisLabel}", description: "Preserve the outer selected items and equalize the {distributionGapLabel} gaps between them." }),
   policy({ id: "arrange-selection-grid", scopes: ["arrangement-menu"], bindings: [], guards: [selectionRequired("selectionHasMultipleItems", "multiple-selection-required", "Select at least two Frames or Notes to arrange them.")], consequence: "standard", label: "Arrange in grid", description: "Organize the selected items into a balanced, non-overlapping grid." }),
-  policy({ id: "close-arrangement-menu", scopes: ["arrangement-menu"], bindings: [primary("Escape", [], "native")], consequence: "standard", label: "Close alignment menu", description: "Close the alignment and distribution menu." })
+  policy({ id: "close-arrangement-menu", scopes: ["arrangement-menu"], bindings: [primary("Escape", [], "native")], consequence: "standard", label: "Close align and distribute", description: "Close the alignment and distribution menu." })
 ]
 
 const newFrameFormPolicies: ReadonlyArray<CanvasActionPolicy> = [
   policy({ id: "create-frame", scopes: ["new-frame-form"], bindings: [primary("Enter", [], "native")], consequence: "standard", label: "Add frame", description: "Create a live frame using the entered URL and title." }),
-  policy({ id: "cancel-new-frame", scopes: ["new-frame-form"], bindings: [primary("Escape", [], "native")], consequence: "standard", label: "Cancel", description: "Close the dialog without adding a frame." })
+  policy({ id: "cancel-new-frame", scopes: ["new-frame-form"], bindings: [primary("Escape", [], "native")], consequence: "standard", label: "Cancel adding frame", description: "Close the dialog without adding a frame." })
+]
+
+const canvasTitlePolicies: ReadonlyArray<CanvasActionPolicy> = [
+  policy({ id: "begin-canvas-title-edit", scopes: ["canvas"], bindings: [], consequence: "standard", label: "Rename canvas", description: "Change the current canvas title while preserving its stable canvas ID." }),
+  policy({ id: "save-canvas-title-edit", scopes: ["canvas-title-edit"], bindings: [primary("Enter", [], "native")], consequence: "standard", label: "Save title", description: "Save the edited canvas title." }),
+  policy({ id: "cancel-canvas-title-edit", scopes: ["canvas-title-edit"], bindings: [primary("Escape", [], "native")], consequence: "standard", label: "Cancel", description: "Discard the edited canvas title." })
 ]
 
 const itemPolicies: ReadonlyArray<CanvasActionPolicy> = [
-  policy({ id: "remove-item", scopes: ["canvas", "menu"], bindings: [primary("Backspace"), alias("Delete")], guards: [noteAuthorRequired], consequence: "destructive", label: "Remove {targetLabel}", description: "Remove this {targetKind} from the canvas." }),
+  policy({ id: "remove-item", scopes: ["canvas", "menu"], bindings: [primary("Backspace"), alias("Delete")], guards: [noteAuthorRequired], consequence: "destructive", label: "Delete", description: "Remove this {targetKind} from the canvas." }),
   policy({ id: "bring-item-to-front", scopes: ["menu"], bindings: [], consequence: "standard", label: "Bring to front", description: "Place this {targetKind} above every other canvas item." }),
-  policy({ id: "send-item-to-back", scopes: ["menu"], bindings: [], consequence: "standard", label: "Send to back", description: "Place this {targetKind} behind every other canvas item." })
+  policy({ id: "send-item-to-back", scopes: ["menu"], bindings: [], consequence: "standard", label: "Send to back", description: "Place this {targetKind} behind every other canvas item." }),
+  policy({ id: "set-note-color", scopes: ["menu"], bindings: [], guards: [noteColorAuthorRequired], consequence: "standard", label: "Note color", description: "Change this Note's color family." }),
+  policy({ id: "copy-node-id", scopes: ["menu"], bindings: [], consequence: "standard", label: "Copy node ID", description: "Copy this Note's stable node ID for sharing with development agents." })
 ]
 
 const framePolicies: ReadonlyArray<CanvasActionPolicy> = [
-  policy({ id: "open-frame-status", scopes: ["canvas"], bindings: [], guards: [failedGuard("target", "frameIsLive", "frame-not-live", "Snapshot frames remain archived and cannot change status.")], consequence: "standard", label: "Frame status", description: "Review or change this frame's current workflow status." }),
+  policy({ id: "open-frame-status", scopes: ["canvas"], bindings: [], guards: [failedGuard("target", "frameIsLive", "frame-not-live", "Snapshot frames remain archived and cannot change status.")], consequence: "standard", label: "Change frame status", description: "Review or change this frame's current workflow status." }),
   policy({ id: "set-frame-status", scopes: ["canvas"], bindings: [], guards: [failedGuard("target", "frameIsLive", "frame-not-live", "Snapshot frames remain archived and cannot change status.")], consequence: "standard", label: "{statusLabel}", description: "Set this frame's workflow status to {statusLabel}." }),
-  policy({ id: "begin-frame-title-edit", scopes: ["canvas"], bindings: [], guards: [failedGuard("target", "editable", "frame-not-editable", "Snapshot frame titles cannot be changed.")], consequence: "standard", label: "Edit frame title", description: "Rename this frame while preserving its stable frame ID." }),
-  policy({ id: "save-frame-title-edit", scopes: ["frame-title-edit"], bindings: [primary("Enter", [], "native")], guards: [failedGuard("target", "editable", "frame-not-editable", "Snapshot frame titles cannot be changed.")], consequence: "standard", label: "Save frame title", description: "Save the edited frame title." }),
+  policy({ id: "begin-frame-title-edit", scopes: ["canvas"], bindings: [], guards: [failedGuard("target", "editable", "frame-not-editable", "Snapshot frame titles cannot be changed.")], consequence: "standard", label: "Edit title", description: "Rename this frame while preserving its stable frame ID." }),
+  policy({ id: "save-frame-title-edit", scopes: ["frame-title-edit"], bindings: [primary("Enter", [], "native")], guards: [failedGuard("target", "editable", "frame-not-editable", "Snapshot frame titles cannot be changed.")], consequence: "standard", label: "Save title", description: "Save the edited frame title." }),
   policy({ id: "cancel-frame-title-edit", scopes: ["frame-title-edit"], bindings: [primary("Escape", [], "native")], guards: [failedGuard("target", "editable", "frame-not-editable", "Snapshot frame titles cannot be changed.")], consequence: "standard", label: "Cancel title edit", description: "Discard the edited frame title." }),
-  policy({ id: "show-frame-breakpoints", scopes: ["canvas"], bindings: [], guards: [failedGuard("target", "frameIsLive", "frame-not-live", "Snapshot frames cannot be duplicated as live breakpoints.")], consequence: "standard", label: "Show all breakpoints", description: "Duplicate this live page at every missing standard viewport size." }),
+  policy({ id: "show-frame-breakpoints", scopes: ["canvas"], bindings: [], guards: [failedGuard("target", "frameIsLive", "frame-not-live", "Snapshot frames cannot be duplicated as live breakpoints.")], consequence: "standard", label: "Create breakpoints", description: "Duplicate this live page at every missing standard viewport size." }),
   policy({ id: "take-frame-snapshot", scopes: ["canvas"], bindings: [], guards: [failedGuard("target", "snapshotAvailable", "snapshot-unavailable", "Snapshot capture is not available for this frame.")], consequence: "standard", label: "Take snapshot", description: "Preserve the live page as a separate immutable snapshot frame." }),
   policy({ id: "open-frame-new-tab", scopes: ["canvas", "menu"], bindings: [], consequence: "standard", label: "Open in new tab", description: "Open this frame's page in a separate browser tab." }),
   policy({ id: "enter-frame-fullscreen", scopes: ["canvas", "menu"], bindings: [], consequence: "standard", label: "Enter fullscreen", description: "Expand this frame to fill the screen for focused review." }),
-  policy({ id: "exit-frame-fullscreen", scopes: ["fullscreen", "menu"], bindings: [primary("Escape", [], "native")], consequence: "standard", label: "Collapse to canvas", description: "Return this frame to its position on the canvas." }),
-  policy({ id: "open-frame-size-menu", scopes: ["menu"], bindings: [], consequence: "standard", label: "Set size to…", description: "Choose a standard viewport size for this frame." }),
-  policy({ id: "resize-frame-to-preset", scopes: ["menu"], bindings: [], consequence: "standard", label: "{presetLabel}", description: "Resize this frame to the {presetLabelLower} preset at {width} by {height} pixels." }),
-  policy({ id: "open-frame-duplicate-menu", scopes: ["menu"], bindings: [], guards: [failedGuard("target", "frameIsLive", "frame-not-live", "Snapshot frames cannot be duplicated as live frames.", "hidden")], consequence: "standard", label: "Duplicate at…", description: "Create another live Frame at a standard viewport size." }),
-  policy({ id: "duplicate-frame-at-preset", scopes: ["menu"], bindings: [], guards: [failedGuard("target", "frameIsLive", "frame-not-live", "Snapshot frames cannot be duplicated as live frames.", "hidden")], consequence: "standard", label: "{presetLabel}", description: "Duplicate this frame at the {presetLabelLower} preset." }),
-  policy({ id: "fit-frame-content", scopes: ["menu"], bindings: [], consequence: "standard", label: "Fit content", description: "Resize the frame height to fit its same-origin page content." })
+  policy({ id: "exit-frame-fullscreen", scopes: ["fullscreen", "menu"], bindings: [primary("Escape", [], "native")], consequence: "standard", label: "Exit fullscreen", description: "Return this frame to its position on the canvas." }),
+  policy({ id: "open-frame-size-menu", scopes: ["menu"], bindings: [], consequence: "standard", label: "Choose size", description: "Choose a standard viewport size for this frame." }),
+  policy({ id: "resize-frame-to-preset", scopes: ["menu"], bindings: [], consequence: "standard", label: "Resize to {presetLabel}", description: "Resize this frame to the {presetLabelLower} preset at {width} by {height} pixels." }),
+  policy({ id: "open-frame-duplicate-menu", scopes: ["menu"], bindings: [], guards: [failedGuard("target", "frameIsLive", "frame-not-live", "Snapshot frames cannot be duplicated as live frames.", "hidden")], consequence: "standard", label: "Choose duplicate size", description: "Create another live Frame at a standard viewport size." }),
+  policy({ id: "duplicate-frame-at-preset", scopes: ["menu"], bindings: [], guards: [failedGuard("target", "frameIsLive", "frame-not-live", "Snapshot frames cannot be duplicated as live frames.", "hidden")], consequence: "standard", label: "Duplicate at {presetLabel}", description: "Duplicate this frame at the {presetLabelLower} preset." }),
+  policy({ id: "fit-frame-content", scopes: ["menu"], bindings: [], consequence: "standard", label: "Fit frame content", description: "Resize the frame height to fit its same-origin page content." })
 ]
 
 const commentThreadPolicies: ReadonlyArray<CanvasActionPolicy> = [
   policy({ id: "place-comment", scopes: ["canvas"], bindings: [], guards: [failedGuard("target", "frameIsLive", "frame-not-live", "Archived Frames do not support comments.", "hidden")], consequence: "standard", label: "Place comment", description: "Place a comment at this location in the live frame." }),
-  policy({ id: "open-comment", scopes: ["canvas"], bindings: [], consequence: "standard", label: "Open {targetLabel}", description: "Open this comment thread for review." }),
+  policy({ id: "open-comment", scopes: ["canvas"], bindings: [], consequence: "standard", label: "Open comment", description: "Open this comment thread for review." }),
   policy({ id: "close-comment", scopes: ["comment-compose", "comment-edit"], bindings: [], consequence: "standard", label: "Close comment", description: "Close this comment without changing it." }),
   policy({ id: "begin-comment-edit", scopes: ["comment-edit"], bindings: [], guards: [failedGuard("target", "editable", "comment-not-editable", "Only the Comment Author may edit it.", "hidden")], consequence: "standard", label: "Edit comment", description: "Edit this comment message." }),
   policy({ id: "cancel-comment-edit", scopes: ["comment-edit"], bindings: [], guards: [failedGuard("target", "editable", "comment-not-editable", "Only the Comment Author may edit it.", "hidden")], consequence: "standard", label: "Cancel", description: "Discard the edited comment text." }),
-  policy({ id: "save-comment-edit", scopes: ["comment-edit"], bindings: [primary("Enter", ["mod"], "native")], guards: [failedGuard("target", "editable", "comment-not-editable", "Only the Comment Author may edit it.", "hidden"), failedGuard("target", "bodyPresent", "empty-comment", "Enter comment text before saving.")], consequence: "standard", label: "Save", description: "Save the edited comment text." }),
-  policy({ id: "submit-comment", scopes: ["comment-compose"], bindings: [primary("Enter", ["mod"], "native")], guards: [failedGuard("target", "bodyPresent", "empty-comment", "Enter comment text before submitting.")], consequence: "standard", label: "Comment", description: "Submit this feedback on the frame." }),
-  policy({ id: "submit-reply", scopes: ["comment-compose"], bindings: [primary("Enter", ["mod"], "native")], guards: [failedGuard("target", "bodyPresent", "empty-comment", "Enter reply text before submitting.")], consequence: "standard", label: "Reply", description: "Add this reply to the comment thread." }),
-  policy({ id: "resolve-comment-thread", scopes: ["comment-compose"], bindings: [], guards: [failedGuard("target", "manageable", "comment-thread-not-manageable", "Only the Canvas Owner or Thread Author may resolve it.", "hidden")], consequence: "standard", label: "Resolve", description: "Mark this comment thread as resolved." }),
-  policy({ id: "reopen-comment-thread", scopes: ["comment-compose"], bindings: [], guards: [failedGuard("target", "manageable", "comment-thread-not-manageable", "Only the Canvas Owner or Thread Author may reopen it.", "hidden")], consequence: "standard", label: "Reopen", description: "Reopen this resolved comment thread." })
+  policy({ id: "save-comment-edit", scopes: ["comment-edit"], bindings: [primary("Enter", ["mod"], "native")], guards: [failedGuard("target", "editable", "comment-not-editable", "Only the Comment Author may edit it.", "hidden"), failedGuard("target", "bodyPresent", "empty-comment", "Enter comment text before saving.")], consequence: "standard", label: "Save comment", description: "Save the edited comment text." }),
+  policy({ id: "submit-comment", scopes: ["comment-compose"], bindings: [primary("Enter", ["mod"], "native")], guards: [failedGuard("target", "bodyPresent", "empty-comment", "Enter comment text before submitting.")], consequence: "standard", label: "Submit comment", description: "Submit this feedback on the frame." }),
+  policy({ id: "submit-reply", scopes: ["comment-compose"], bindings: [primary("Enter", ["mod"], "native")], guards: [failedGuard("target", "bodyPresent", "empty-comment", "Enter reply text before submitting.")], consequence: "standard", label: "Submit reply", description: "Add this reply to the comment thread." }),
+  policy({ id: "resolve-comment-thread", scopes: ["comment-compose"], bindings: [], guards: [failedGuard("target", "manageable", "comment-thread-not-manageable", "Only the Canvas Owner or Thread Author may resolve it.", "hidden")], consequence: "standard", label: "Resolve comment thread", description: "Mark this comment thread as resolved." }),
+  policy({ id: "reopen-comment-thread", scopes: ["comment-compose"], bindings: [], guards: [failedGuard("target", "manageable", "comment-thread-not-manageable", "Only the Canvas Owner or Thread Author may reopen it.", "hidden")], consequence: "standard", label: "Reopen comment thread", description: "Reopen this resolved comment thread." })
 ]
 
 const menuPolicies: ReadonlyArray<CanvasActionPolicy> = [
@@ -586,6 +628,7 @@ const menuPolicies: ReadonlyArray<CanvasActionPolicy> = [
 export const CANVAS_ACTION_POLICIES: ReadonlyArray<CanvasActionPolicy> = [
   ...canvasPolicies,
   ...arrangementPolicies,
+  ...canvasTitlePolicies,
   ...newFrameFormPolicies,
   ...itemPolicies,
   ...framePolicies,
@@ -622,6 +665,7 @@ export const ALLOWED_CANVAS_CONTROL_SCOPE_SETS: ReadonlyArray<ReadonlyArray<Canv
   ["canvas"],
   ["canvas", "menu"],
   ["canvas", "arrangement-menu"],
+  ["canvas", "canvas-title-edit"],
   ["canvas", "new-frame-form"],
   ["canvas", "frame-title-edit"],
   ["canvas", "comment-compose"],
@@ -639,6 +683,33 @@ const bindingKey = (binding: CanvasActionBinding) =>
 
 const actionTargetOf = (request: CanvasActionRequest) =>
   "target" in request ? request.target : null
+
+type CanvasPropertySource =
+  | CanvasActionRequest
+  | ReturnType<typeof templateValues>
+
+const propertyValue = <Key extends PropertyKey>(
+  value: CanvasPropertySource,
+  key: Key
+): boolean | string | undefined => {
+  if (!Predicate.hasProperty(value, key)) return undefined
+  const candidate = value[key]
+  return Predicate.isBoolean(candidate) || Predicate.isString(candidate)
+    ? candidate
+    : undefined
+}
+
+const booleanFact = (
+  request: CanvasActionRequest,
+  fact: string,
+  source: "request" | "target"
+) => {
+  const value = propertyValue(request, fact)
+  if (Predicate.isBoolean(value)) return value
+  throw new TypeError(
+    `Action ${request.id} does not supply ${source} fact ${fact}`
+  )
+}
 
 export const canvasActionKey = (request: CanvasActionRequest) => {
   const target = actionTargetOf(request)
@@ -659,38 +730,19 @@ const factValue = (
     guard.targetKinds !== undefined &&
     (target === null || !guard.targetKinds.includes(target.kind))
   ) return requirement.equals
-  if (requirement.source === "global") {
-    return state.globalFacts.commentAuthorPresent
-  }
-  if (requirement.source === "execution") {
-    return state.pendingActions.includes(canvasActionKey(request))
-  }
-  if (requirement.source === "request") {
-    if (
-      requirement.fact === "selectionHasMultipleItems" &&
-      "selectionHasMultipleItems" in request
-    ) return request.selectionHasMultipleItems
-    if (
-      requirement.fact === "selectionHasThreeItems" &&
-      "selectionHasThreeItems" in request
-    ) return request.selectionHasThreeItems
-    throw new TypeError(`Action ${request.id} does not supply request fact ${requirement.fact}`)
-  }
-  const fact = requirement.fact
-  if (
-    fact === "currentAuthorIsTargetAuthor" &&
-    "currentAuthorIsTargetAuthor" in request
-  ) return request.currentAuthorIsTargetAuthor
-  if (fact === "frameIsLive" && "frameIsLive" in request) return request.frameIsLive
-  if (fact === "editable" && "editable" in request) return request.editable
-  if (fact === "snapshotAvailable" && "snapshotAvailable" in request) return request.snapshotAvailable
-  if (fact === "bodyPresent" && "bodyPresent" in request) return request.bodyPresent
-  if (fact === "manageable" && "manageable" in request) return request.manageable
-  throw new TypeError(`Action ${request.id} does not supply target fact ${fact}`)
+  return Match.value(requirement).pipe(
+    Match.discriminatorsExhaustive("source")({
+      global: () => state.globalFacts.commentAuthorPresent,
+      execution: () => state.pendingActions.includes(canvasActionKey(request)),
+      request: (requestRequirement) =>
+        booleanFact(request, requestRequirement.fact, "request"),
+      target: (targetRequirement) =>
+        booleanFact(request, targetRequirement.fact, "target")
+    })
+  )
 }
 
 const templateValues = (request: CanvasActionRequest) => {
-  const target = actionTargetOf(request)
   const preset = "preset" in request ? presetDetails[request.preset] : undefined
   const status = "status" in request ? statusLabels[request.status] : undefined
   const alignment = "alignment" in request
@@ -698,10 +750,9 @@ const templateValues = (request: CanvasActionRequest) => {
     : undefined
   const distributionAxis = "axis" in request ? request.axis : undefined
   return {
-    targetLabel: target?.label ?? "",
-    targetKind: target?.kind === "comment-thread"
+    targetKind: actionTargetOf(request)?.kind === "comment-thread"
       ? "comment thread"
-      : target?.kind ?? "",
+      : actionTargetOf(request)?.kind ?? "",
     statusLabel: status ?? "",
     presetLabel: preset?.label ?? "",
     presetLabelLower: preset?.label.toLowerCase() ?? "",
@@ -719,7 +770,6 @@ const templateValues = (request: CanvasActionRequest) => {
 }
 
 const emptyTemplateValues: ReturnType<typeof templateValues> = {
-  targetLabel: "",
   targetKind: "",
   statusLabel: "",
   presetLabel: "",
@@ -736,17 +786,8 @@ const interpolate = (
   template: string,
   values: ReturnType<typeof templateValues>
 ) => template.replace(/\{([A-Za-z]+)\}/g, (_, key: string) => {
-  if (key === "targetLabel") return values.targetLabel
-  if (key === "targetKind") return values.targetKind
-  if (key === "statusLabel") return values.statusLabel
-  if (key === "presetLabel") return values.presetLabel
-  if (key === "presetLabelLower") return values.presetLabelLower
-  if (key === "width") return values.width
-  if (key === "height") return values.height
-  if (key === "alignmentLabel") return values.alignmentLabel
-  if (key === "alignmentDescription") return values.alignmentDescription
-  if (key === "distributionAxisLabel") return values.distributionAxisLabel
-  if (key === "distributionGapLabel") return values.distributionGapLabel
+  const value = propertyValue(values, key)
+  if (Predicate.isString(value)) return value
   throw new TypeError(`Unknown Canvas action template value: ${key}`)
 })
 
@@ -771,8 +812,8 @@ const displayBinding = (
       : modifier === "shift" ? actualPlatform === "macos" ? "⇧" : "Shift"
         : actualPlatform === "macos" ? "⌥" : "Alt"
   )
-  const key = actualPlatform === "macos" && binding.key === "Backspace"
-    ? "⌫"
+  const key = binding.key === "Backspace"
+    ? "Del"
     : binding.key === "Escape" ? "Esc" : binding.key
   return actualPlatform === "macos"
     ? `${modifiers.join("")}${key}`
@@ -791,6 +832,11 @@ const validatePolicies = (policies: ReadonlyArray<CanvasActionPolicy>) => {
   const counts = new Map<CanvasActionId, number>()
   for (const declaration of policies) {
     counts.set(declaration.id, (counts.get(declaration.id) ?? 0) + 1)
+    if (/\{target(?:Label|Kind)\}/.test(declaration.label)) {
+      throw new TypeError(
+        `Canvas action ${declaration.id} title must not interpolate target data`
+      )
+    }
     interpolate(declaration.label, emptyTemplateValues)
     interpolate(declaration.description, emptyTemplateValues)
   }

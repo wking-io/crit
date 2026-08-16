@@ -1,3 +1,4 @@
+import { Button } from "@base-ui/react/button"
 import { Effect } from "effect"
 
 import {
@@ -27,7 +28,7 @@ export function OrderControls({
   const bringToFront = controls.action({ id: "bring-item-to-front", target })
   return (
     <span style={{ display: "flex", flex: "0 0 auto", gap: 4 }}>
-      <button
+      <Button
         aria-label={`Send ${label} to back`}
         disabled={sendToBack.availability !== "enabled"}
         {...actionHelpTarget(sendToBack)}
@@ -40,8 +41,8 @@ export function OrderControls({
         type="button"
       >
         <Glyph name="layerBack" />
-      </button>
-      <button
+      </Button>
+      <Button
         aria-label={`Bring ${label} to front`}
         disabled={bringToFront.availability !== "enabled"}
         {...actionHelpTarget(bringToFront)}
@@ -54,7 +55,7 @@ export function OrderControls({
         type="button"
       >
         <Glyph name="layerFront" />
-      </button>
+      </Button>
     </span>
   )
 }

@@ -1,4 +1,6 @@
-import { Effect, Schema } from "effect"
+import { Effect, Match, Schema } from "effect"
+
+const GRID_GAP = 40
 
 export const CanvasArrangementItem = Schema.Struct({
   id: Schema.String,
@@ -197,8 +199,14 @@ const arrangeGrid = (
   )
   const occupiedWidth = columnWidths.reduce((sum, width) => sum + width, 0)
   const occupiedHeight = rowHeights.reduce((sum, height) => sum + height, 0)
-  const layoutWidth = Math.max(bounds.width, occupiedWidth)
-  const layoutHeight = Math.max(bounds.height, occupiedHeight)
+  const layoutWidth = Math.max(
+    bounds.width,
+    occupiedWidth + GRID_GAP * (columns - 1)
+  )
+  const layoutHeight = Math.max(
+    bounds.height,
+    occupiedHeight + GRID_GAP * (rows - 1)
+  )
   const horizontalGap = columns === 1
     ? 0
     : (layoutWidth - occupiedWidth) / (columns - 1)
@@ -249,11 +257,13 @@ const makePlan = (
       detail: "Arrangement items must have unique IDs."
     }))
   }
-  const moves = request.operation._tag === "Align"
-    ? align(request.operation.alignment, request.items)
-    : request.operation._tag === "Distribute"
-      ? distribute(request.operation.axis, request.items)
-      : arrangeGrid(request.items)
+  const moves = Match.value(request.operation).pipe(
+    Match.tagsExhaustive({
+      Align: (operation) => align(operation.alignment, request.items),
+      Distribute: (operation) => distribute(operation.axis, request.items),
+      ArrangeGrid: () => arrangeGrid(request.items)
+    })
+  )
   return Effect.succeed(Schema.decodeUnknownSync(CanvasArrangementPlan)({ moves }))
 }
 

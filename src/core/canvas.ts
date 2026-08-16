@@ -1,9 +1,10 @@
-import { Effect, Schema } from "effect"
+import { Effect, Match, Schema } from "effect"
 
 import {
   CanvasCommandSchema,
   FrameDisplay,
   FrameProvenance,
+  NoteColorFamily,
   PositiveDimension,
   SnapshotArtifact,
   FrameStatus,
@@ -16,6 +17,7 @@ import {
   canManageCommentThread,
   commentMessageById
 } from "./comment.js"
+import { causeMessage } from "../internal/cause-message.js"
 
 const CanvasTypeId: unique symbol = Symbol.for("@riff-refine/crit/Canvas")
 const NonNegativeInteger = Schema.Finite.check(
@@ -56,7 +58,10 @@ export const CanvasNote = Schema.Struct({
   author: Author,
   geometry: CanvasGeometry,
   attachedTo: Schema.NullOr(Schema.String),
-  zIndex: Schema.Finite.check(Schema.isInt())
+  zIndex: Schema.Finite.check(Schema.isInt()),
+  color: NoteColorFamily.pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed("blue" as const))
+  )
 })
 export type CanvasNote = typeof CanvasNote.Type
 
@@ -357,7 +362,7 @@ const open = (
       catch: (cause) =>
         new CanvasOpenFailed({
           reason: "invalid-envelope",
-          detail: cause instanceof Error ? cause.message : String(cause)
+          detail: causeMessage(cause)
         })
     })
     if (actualBytes > MAX_CANVAS_DOCUMENT_BYTES) {
@@ -378,7 +383,7 @@ const open = (
       catch: (cause) =>
         new CanvasOpenFailed({
           reason: "invalid-document",
-          detail: cause instanceof Error ? cause.message : String(cause)
+          detail: causeMessage(cause)
         })
     })
   })
@@ -480,6 +485,544 @@ const previousZIndex = (state: CanvasState) =>
     ...state.notes.map((note) => note.zIndex)
   ) - 1
 
+type CanvasCommand<Tag extends CanvasCommandInput["_tag"]> = Extract<
+  CanvasCommandInput,
+  { readonly _tag: Tag }
+>
+
+type FrameMutationCommand = CanvasCommand<
+  | "SetFrameStatus"
+  | "SetFrameSource"
+  | "SetFrameTitle"
+  | "SetFrameDisplay"
+  | "MoveFrame"
+  | "ResizeFrame"
+  | "BringFrameToFront"
+  | "SendFrameToBack"
+  | "RemoveFrame"
+>
+
+type NoteMutationCommand = CanvasCommand<
+  | "EditNote"
+  | "SetNoteColor"
+  | "MoveNote"
+  | "ResizeNote"
+  | "BringNoteToFront"
+  | "SendNoteToBack"
+  | "AttachNote"
+  | "DetachNote"
+  | "RemoveNote"
+>
+
+type CommentMutationCommand = CanvasCommand<
+  | "ReplyToCommentThread"
+  | "EditComment"
+  | "SetCommentThreadResolved"
+  | "UpdateCommentAnchor"
+>
+
+type CanvasMutationContext = {
+  readonly draft: CanvasState
+  readonly markFrame: (id: string) => void
+  readonly markNote: (id: string) => void
+  readonly markCommentThread: (id: string) => void
+  readonly frameAt: (id: string) => number
+  readonly noteAt: (id: string) => number
+  readonly commentThreadAt: (id: string) => number
+}
+
+const canvasItemExists = (context: CanvasMutationContext, id: string) =>
+  context.draft.frames.some((frame) => frame.id === id) ||
+  context.draft.notes.some((note) => note.id === id) ||
+  context.draft.comments.some((thread) => thread.id === id)
+
+const applyRenameCanvas = (
+  context: CanvasMutationContext,
+  command: CanvasCommand<"RenameCanvas">
+) => {
+  if (command.title.trim().length === 0) {
+    throw new CanvasCommandFailed({
+      reason: "invalid-command",
+      detail: "A Canvas title cannot be empty"
+    })
+  }
+  context.draft.title = command.title
+}
+
+const applyAddFrame = (
+  context: CanvasMutationContext,
+  command: CanvasCommand<"AddFrame">
+) => {
+  if (canvasItemExists(context, command.id)) {
+    throw new CanvasCommandFailed({
+      reason: "duplicate-frame",
+      detail: `Canvas item already exists: ${command.id}`
+    })
+  }
+  if (command.provenance.kind === "snapshot") {
+    throw new CanvasCommandFailed({
+      reason: "snapshot-source-invalid",
+      detail: "Snapshot Frames must be created by AddSnapshotFrame"
+    })
+  }
+  const frameNumber = context.draft.frames.length
+  context.draft.frames.push({
+    id: command.id,
+    url: command.url,
+    title: command.title,
+    status: command.status,
+    provenance: command.provenance,
+    display: { heightMode: "viewport" },
+    geometry: {
+      x: (frameNumber % 3) * 1240,
+      y: Math.floor(frameNumber / 3) * 840,
+      width: 1200,
+      height: 800
+    },
+    zIndex: nextZIndex(context.draft)
+  })
+  context.markFrame(command.id)
+}
+
+const applyAddSnapshotFrame = (
+  context: CanvasMutationContext,
+  command: CanvasCommand<"AddSnapshotFrame">
+) => {
+  if (canvasItemExists(context, command.id)) {
+    throw new CanvasCommandFailed({
+      reason: "duplicate-frame",
+      detail: `Canvas item already exists: ${command.id}`
+    })
+  }
+  const source = context.draft.frames.find(
+    (frame) => frame.id === command.sourceFrameId
+  )
+  if (source === undefined || source.snapshot !== undefined) {
+    throw new CanvasCommandFailed({
+      reason: "snapshot-source-invalid",
+      detail: `Snapshot source must be a live Frame: ${command.sourceFrameId}`
+    })
+  }
+  if (source.url !== command.expectedSourceUrl) {
+    throw new CanvasCommandFailed({
+      reason: "snapshot-source-changed",
+      detail: `Frame ${command.sourceFrameId} changed URL while its snapshot was captured`
+    })
+  }
+  if (command.artifact.sourceUrl !== command.expectedSourceUrl) {
+    throw new CanvasCommandFailed({
+      reason: "snapshot-source-invalid",
+      detail: "Snapshot artifact source URL does not match the captured Frame URL"
+    })
+  }
+  context.draft.frames.push({
+    id: command.id,
+    url: command.url,
+    title: `${source.title} · Snapshot`,
+    status: "archived",
+    provenance: { kind: "snapshot", sourceId: source.id },
+    display: source.display,
+    geometry: {
+      ...source.geometry,
+      x: source.geometry.x + source.geometry.width + 40
+    },
+    zIndex: nextZIndex(context.draft),
+    snapshot: command.artifact
+  })
+  context.markFrame(command.id)
+}
+
+const applyAddNote = (
+  context: CanvasMutationContext,
+  command: CanvasCommand<"AddNote">
+) => {
+  if (canvasItemExists(context, command.id)) {
+    throw new CanvasCommandFailed({
+      reason: "duplicate-note",
+      detail: `Canvas item already exists: ${command.id}`
+    })
+  }
+  if (
+    command.author.id.trim().length === 0 ||
+    command.author.name.trim().length === 0
+  ) {
+    throw new CanvasCommandFailed({
+      reason: "invalid-command",
+      detail: "A Note Author requires a non-empty ID and name"
+    })
+  }
+  context.draft.notes.push({
+    id: command.id,
+    text: command.text,
+    author: command.author,
+    geometry: {
+      x: command.x,
+      y: command.y,
+      width: command.width,
+      height: command.height
+    },
+    attachedTo: null,
+    zIndex: nextZIndex(context.draft),
+    color: command.color
+  })
+  context.markNote(command.id)
+}
+
+const applyFrameMutation = (
+  context: CanvasMutationContext,
+  command: FrameMutationCommand
+) => {
+  const index = context.frameAt(command.id)
+  const frame = context.draft.frames[index]!
+  Match.valueTags(command, {
+    SetFrameStatus: (status) => {
+      if (frame.snapshot !== undefined) {
+        throw new CanvasCommandFailed({
+          reason: "snapshot-frame-immutable",
+          detail: `Snapshot Frame content is immutable: ${frame.id}`
+        })
+      }
+      context.draft.frames[index] = { ...frame, status: status.status }
+    },
+    SetFrameSource: (source) => {
+      if (frame.snapshot !== undefined) {
+        throw new CanvasCommandFailed({
+          reason: "snapshot-frame-immutable",
+          detail: `Snapshot Frame content is immutable: ${frame.id}`
+        })
+      }
+      if (source.provenance.kind === "snapshot") {
+        throw new CanvasCommandFailed({
+          reason: "snapshot-source-invalid",
+          detail: "Live Frames cannot use snapshot provenance"
+        })
+      }
+      context.draft.frames[index] = {
+        ...frame,
+        url: source.url,
+        provenance: source.provenance
+      }
+    },
+    SetFrameTitle: (title) => {
+      context.draft.frames[index] = { ...frame, title: title.title }
+    },
+    SetFrameDisplay: (display) => {
+      context.draft.frames[index] = { ...frame, display: display.display }
+    },
+    MoveFrame: (move) => {
+      const deltaX = move.x - frame.geometry.x
+      const deltaY = move.y - frame.geometry.y
+      context.draft.frames[index] = {
+        ...frame,
+        geometry: { ...frame.geometry, x: move.x, y: move.y }
+      }
+      context.draft.notes = context.draft.notes.map((note) => {
+        if (note.attachedTo !== move.id) return note
+        context.markNote(note.id)
+        return {
+          ...note,
+          geometry: {
+            ...note.geometry,
+            x: note.geometry.x + deltaX,
+            y: note.geometry.y + deltaY
+          }
+        }
+      })
+    },
+    ResizeFrame: (resize) => {
+      context.draft.frames[index] = {
+        ...frame,
+        geometry: {
+          ...frame.geometry,
+          width: resize.width,
+          height: resize.height
+        }
+      }
+    },
+    BringFrameToFront: () => {
+      context.draft.frames[index] = {
+        ...frame,
+        zIndex: nextZIndex(context.draft)
+      }
+    },
+    SendFrameToBack: () => {
+      context.draft.frames[index] = {
+        ...frame,
+        zIndex: previousZIndex(context.draft)
+      }
+    },
+    RemoveFrame: (removal) => {
+      context.draft.frames.splice(index, 1)
+      context.draft.notes = context.draft.notes.map((note) => {
+        if (note.attachedTo !== removal.id) return note
+        context.markNote(note.id)
+        return { ...note, attachedTo: null }
+      })
+      const removedThreads = context.draft.comments.filter(
+        (thread) => thread.frameId === removal.id
+      )
+      context.draft.comments = context.draft.comments.filter(
+        (thread) => thread.frameId !== removal.id
+      )
+      for (const thread of removedThreads) context.markCommentThread(thread.id)
+    }
+  })
+  context.markFrame(command.id)
+}
+
+const applyAddCommentThread = (
+  context: CanvasMutationContext,
+  command: CanvasCommand<"AddCommentThread">
+) => {
+  if (canvasItemExists(context, command.id)) {
+    throw new CanvasCommandFailed({
+      reason: "duplicate-comment-thread",
+      detail: `Canvas item already exists: ${command.id}`
+    })
+  }
+  const frame = context.draft.frames[context.frameAt(command.frameId)]!
+  if (frame.snapshot !== undefined) {
+    throw new CanvasCommandFailed({
+      reason: "archived-frame-comments-unsupported",
+      detail: `Archived Frame ${frame.id} does not support comments`
+    })
+  }
+  if (command.opening.body.trim().length === 0) {
+    throw new CanvasCommandFailed({
+      reason: "invalid-command",
+      detail: "The opening Comment cannot be empty"
+    })
+  }
+  context.draft.comments.push({
+    id: command.id,
+    frameId: command.frameId,
+    anchor: command.anchor,
+    opening: command.opening,
+    replies: [],
+    resolvedAt: null,
+    resolvedBy: null
+  })
+  context.markCommentThread(command.id)
+}
+
+const applyCommentMutation = (
+  context: CanvasMutationContext,
+  command: CommentMutationCommand
+) => {
+  const index = context.commentThreadAt(command.id)
+  const thread = context.draft.comments[index]!
+  Match.valueTags(command, {
+    ReplyToCommentThread: (reply) => {
+      if (reply.reply.body.trim().length === 0) {
+        throw new CanvasCommandFailed({
+          reason: "invalid-command",
+          detail: "A Reply cannot be empty"
+        })
+      }
+      if (
+        context.draft.comments.some((candidate) =>
+          candidate.opening.id === reply.reply.id ||
+          candidate.replies.some((message) => message.id === reply.reply.id)
+        )
+      ) {
+        throw new CanvasCommandFailed({
+          reason: "invalid-command",
+          detail: `Comment already exists: ${reply.reply.id}`
+        })
+      }
+      context.draft.comments[index] = {
+        ...thread,
+        replies: [...thread.replies, reply.reply]
+      }
+    },
+    EditComment: (edit) => {
+      const message = commentMessageById(thread, edit.commentId)
+      if (message === undefined) {
+        throw new CanvasCommandFailed({
+          reason: "comment-not-found",
+          detail: `Comment not found: ${edit.commentId}`
+        })
+      }
+      if (!canEditComment(message, edit.actorId)) {
+        throw new CanvasCommandFailed({
+          reason: "comment-forbidden",
+          detail: "Only the Comment Author may edit it"
+        })
+      }
+      if (message.body !== edit.expectedBody) {
+        throw new CanvasCommandFailed({
+          reason: "comment-conflict",
+          detail: `Comment ${edit.commentId} changed before this edit`
+        })
+      }
+      if (edit.body.trim().length === 0) {
+        throw new CanvasCommandFailed({
+          reason: "invalid-command",
+          detail: "A Comment cannot be empty"
+        })
+      }
+      const edited = { ...message, body: edit.body, editedAt: edit.editedAt }
+      context.draft.comments[index] = thread.opening.id === edit.commentId
+        ? { ...thread, opening: edited }
+        : {
+            ...thread,
+            replies: thread.replies.map((reply) =>
+              reply.id === edit.commentId ? edited : reply
+            )
+          }
+    },
+    SetCommentThreadResolved: (resolution) => {
+      if (
+        !canManageCommentThread(
+          context.draft.owner,
+          thread,
+          resolution.actor.id
+        )
+      ) {
+        throw new CanvasCommandFailed({
+          reason: "comment-forbidden",
+          detail:
+            "Only the Canvas Owner or opening Comment Author may change resolution"
+        })
+      }
+      context.draft.comments[index] = {
+        ...thread,
+        resolvedAt: resolution.resolved ? resolution.at : null,
+        resolvedBy: resolution.resolved ? resolution.actor : null
+      }
+    },
+    UpdateCommentAnchor: (update) => {
+      if (
+        !canManageCommentThread(context.draft.owner, thread, update.actorId)
+      ) {
+        throw new CanvasCommandFailed({
+          reason: "comment-forbidden",
+          detail:
+            "Only the Canvas Owner or opening Comment Author may re-anchor a thread"
+        })
+      }
+      context.draft.comments[index] = { ...thread, anchor: update.anchor }
+    }
+  })
+  context.markCommentThread(command.id)
+}
+
+const applyNoteMutation = (
+  context: CanvasMutationContext,
+  command: NoteMutationCommand
+) => {
+  const index = context.noteAt(command.id)
+  const note = context.draft.notes[index]!
+  Match.valueTags(command, {
+    EditNote: (edit) => {
+      if (note.author.id !== edit.actorId) {
+        throw new CanvasCommandFailed({
+          reason: "note-forbidden",
+          detail: "Only the Note Author may edit it"
+        })
+      }
+      if (note.text !== edit.expectedText) {
+        throw new CanvasCommandFailed({
+          reason: "note-conflict",
+          detail: `Note ${edit.id} changed before this edit`
+        })
+      }
+      context.draft.notes[index] = { ...note, text: edit.text }
+    },
+    SetNoteColor: (color) => {
+      if (note.author.id !== color.actorId) {
+        throw new CanvasCommandFailed({
+          reason: "note-forbidden",
+          detail: "Only the Note Author may change its color"
+        })
+      }
+      context.draft.notes[index] = { ...note, color: color.color }
+    },
+    MoveNote: (move) => {
+      context.draft.notes[index] = {
+        ...note,
+        geometry: { ...note.geometry, x: move.x, y: move.y }
+      }
+    },
+    ResizeNote: (resize) => {
+      context.draft.notes[index] = {
+        ...note,
+        geometry: {
+          ...note.geometry,
+          width: resize.width,
+          height: resize.height
+        }
+      }
+    },
+    BringNoteToFront: () => {
+      context.draft.notes[index] = {
+        ...note,
+        zIndex: nextZIndex(context.draft)
+      }
+    },
+    SendNoteToBack: () => {
+      context.draft.notes[index] = {
+        ...note,
+        zIndex: previousZIndex(context.draft)
+      }
+    },
+    AttachNote: (attachment) => {
+      context.frameAt(attachment.frameId)
+      context.draft.notes[index] = {
+        ...note,
+        attachedTo: attachment.frameId
+      }
+    },
+    DetachNote: () => {
+      context.draft.notes[index] = { ...note, attachedTo: null }
+    },
+    RemoveNote: (removal) => {
+      if (note.author.id !== removal.actorId) {
+        throw new CanvasCommandFailed({
+          reason: "note-forbidden",
+          detail: "Only the Note Author may remove it"
+        })
+      }
+      context.draft.notes.splice(index, 1)
+    }
+  })
+  context.markNote(command.id)
+}
+
+const applyCanvasCommand = (
+  context: CanvasMutationContext,
+  command: CanvasCommandInput
+) => Match.valueTags(command, {
+  RenameCanvas: (rename) => applyRenameCanvas(context, rename),
+  AddFrame: (frame) => applyAddFrame(context, frame),
+  AddSnapshotFrame: (snapshot) => applyAddSnapshotFrame(context, snapshot),
+  SetFrameStatus: (frame) => applyFrameMutation(context, frame),
+  SetFrameSource: (frame) => applyFrameMutation(context, frame),
+  SetFrameTitle: (frame) => applyFrameMutation(context, frame),
+  SetFrameDisplay: (frame) => applyFrameMutation(context, frame),
+  MoveFrame: (frame) => applyFrameMutation(context, frame),
+  ResizeFrame: (frame) => applyFrameMutation(context, frame),
+  BringFrameToFront: (frame) => applyFrameMutation(context, frame),
+  SendFrameToBack: (frame) => applyFrameMutation(context, frame),
+  RemoveFrame: (frame) => applyFrameMutation(context, frame),
+  AddNote: (note) => applyAddNote(context, note),
+  EditNote: (note) => applyNoteMutation(context, note),
+  SetNoteColor: (note) => applyNoteMutation(context, note),
+  MoveNote: (note) => applyNoteMutation(context, note),
+  ResizeNote: (note) => applyNoteMutation(context, note),
+  BringNoteToFront: (note) => applyNoteMutation(context, note),
+  SendNoteToBack: (note) => applyNoteMutation(context, note),
+  AttachNote: (note) => applyNoteMutation(context, note),
+  DetachNote: (note) => applyNoteMutation(context, note),
+  RemoveNote: (note) => applyNoteMutation(context, note),
+  AddCommentThread: (thread) => applyAddCommentThread(context, thread),
+  ReplyToCommentThread: (thread) => applyCommentMutation(context, thread),
+  EditComment: (thread) => applyCommentMutation(context, thread),
+  SetCommentThreadResolved: (thread) =>
+    applyCommentMutation(context, thread),
+  UpdateCommentAnchor: (thread) => applyCommentMutation(context, thread)
+})
+
 const apply = (
   canvas: Canvas,
   ...commands: ReadonlyArray<CanvasCommandInput>
@@ -551,413 +1094,17 @@ const apply = (
             return index
           }
 
-          for (const command of decoded) {
-            if (command._tag === "AddFrame") {
-              if (
-                draft.frames.some((frame) => frame.id === command.id) ||
-                draft.notes.some((note) => note.id === command.id) ||
-                draft.comments.some((thread) => thread.id === command.id)
-              ) {
-                throw new CanvasCommandFailed({
-                  reason: "duplicate-frame",
-                  detail: `Canvas item already exists: ${command.id}`
-                })
-              }
-              if (command.provenance.kind === "snapshot") {
-                throw new CanvasCommandFailed({
-                  reason: "snapshot-source-invalid",
-                  detail: "Snapshot Frames must be created by AddSnapshotFrame"
-                })
-              }
-              const frameNumber = draft.frames.length
-              draft.frames.push({
-                id: command.id,
-                url: command.url,
-                title: command.title,
-                status: command.status,
-                provenance: command.provenance,
-                display: { heightMode: "viewport" },
-                geometry: {
-                  x: (frameNumber % 3) * 1240,
-                  y: Math.floor(frameNumber / 3) * 840,
-                  width: 1200,
-                  height: 800
-                },
-                zIndex: nextZIndex(draft)
-              })
-              markFrame(command.id)
-              continue
-            }
-
-            if (command._tag === "AddSnapshotFrame") {
-              if (
-                draft.frames.some((frame) => frame.id === command.id) ||
-                draft.notes.some((note) => note.id === command.id) ||
-                draft.comments.some((thread) => thread.id === command.id)
-              ) {
-                throw new CanvasCommandFailed({
-                  reason: "duplicate-frame",
-                  detail: `Canvas item already exists: ${command.id}`
-                })
-              }
-              const source = draft.frames.find(
-                (frame) => frame.id === command.sourceFrameId
-              )
-              if (source === undefined || source.snapshot !== undefined) {
-                throw new CanvasCommandFailed({
-                  reason: "snapshot-source-invalid",
-                  detail: `Snapshot source must be a live Frame: ${command.sourceFrameId}`
-                })
-              }
-              if (source.url !== command.expectedSourceUrl) {
-                throw new CanvasCommandFailed({
-                  reason: "snapshot-source-changed",
-                  detail: `Frame ${command.sourceFrameId} changed URL while its snapshot was captured`
-                })
-              }
-              if (command.artifact.sourceUrl !== command.expectedSourceUrl) {
-                throw new CanvasCommandFailed({
-                  reason: "snapshot-source-invalid",
-                  detail: "Snapshot artifact source URL does not match the captured Frame URL"
-                })
-              }
-              draft.frames.push({
-                id: command.id,
-                url: command.url,
-                title: `${source.title} · Snapshot`,
-                status: "archived",
-                provenance: {
-                  kind: "snapshot",
-                  sourceId: source.id
-                },
-                display: source.display,
-                geometry: {
-                  ...source.geometry,
-                  x: source.geometry.x + source.geometry.width + 40
-                },
-                zIndex: nextZIndex(draft),
-                snapshot: command.artifact
-              })
-              markFrame(command.id)
-              continue
-            }
-
-            if (command._tag === "AddNote") {
-              if (
-                draft.frames.some((frame) => frame.id === command.id) ||
-                draft.notes.some((note) => note.id === command.id) ||
-                draft.comments.some((thread) => thread.id === command.id)
-              ) {
-                throw new CanvasCommandFailed({
-                  reason: "duplicate-note",
-                  detail: `Canvas item already exists: ${command.id}`
-                })
-              }
-              if (
-                command.author.id.trim().length === 0 ||
-                command.author.name.trim().length === 0
-              ) {
-                throw new CanvasCommandFailed({
-                  reason: "invalid-command",
-                  detail: "A Note Author requires a non-empty ID and name"
-                })
-              }
-              draft.notes.push({
-                id: command.id,
-                text: command.text,
-                author: command.author,
-                geometry: {
-                  x: command.x,
-                  y: command.y,
-                  width: command.width,
-                  height: command.height
-                },
-                attachedTo: null,
-                zIndex: nextZIndex(draft)
-              })
-              markNote(command.id)
-              continue
-            }
-
-            if (
-              command._tag === "SetFrameStatus" ||
-              command._tag === "SetFrameSource" ||
-              command._tag === "SetFrameTitle" ||
-              command._tag === "SetFrameDisplay" ||
-              command._tag === "MoveFrame" ||
-              command._tag === "ResizeFrame" ||
-              command._tag === "BringFrameToFront" ||
-              command._tag === "SendFrameToBack" ||
-              command._tag === "RemoveFrame"
-            ) {
-              const index = frameAt(command.id)
-              const frame = draft.frames[index]!
-
-              if (
-                frame.snapshot !== undefined &&
-                (command._tag === "SetFrameStatus" ||
-                  command._tag === "SetFrameSource")
-              ) {
-                throw new CanvasCommandFailed({
-                  reason: "snapshot-frame-immutable",
-                  detail: `Snapshot Frame content is immutable: ${frame.id}`
-                })
-              }
-
-              if (
-                command._tag === "SetFrameSource" &&
-                command.provenance.kind === "snapshot"
-              ) {
-                throw new CanvasCommandFailed({
-                  reason: "snapshot-source-invalid",
-                  detail: "Live Frames cannot use snapshot provenance"
-                })
-              }
-              if (command._tag === "RemoveFrame") {
-                draft.frames.splice(index, 1)
-                draft.notes = draft.notes.map((note) => {
-                  if (note.attachedTo !== command.id) return note
-                  markNote(note.id)
-                  return { ...note, attachedTo: null }
-                })
-                const removedThreads = draft.comments.filter(
-                  (thread) => thread.frameId === command.id
-                )
-                draft.comments = draft.comments.filter(
-                  (thread) => thread.frameId !== command.id
-                )
-                for (const thread of removedThreads) markCommentThread(thread.id)
-              } else if (command._tag === "SetFrameStatus") {
-                draft.frames[index] = { ...frame, status: command.status }
-              } else if (command._tag === "SetFrameSource") {
-                draft.frames[index] = {
-                  ...frame,
-                  url: command.url,
-                  provenance: command.provenance
-                }
-              } else if (command._tag === "SetFrameTitle") {
-                draft.frames[index] = { ...frame, title: command.title }
-              } else if (command._tag === "SetFrameDisplay") {
-                draft.frames[index] = { ...frame, display: command.display }
-              } else if (command._tag === "MoveFrame") {
-                const deltaX = command.x - frame.geometry.x
-                const deltaY = command.y - frame.geometry.y
-                draft.frames[index] = {
-                  ...frame,
-                  geometry: { ...frame.geometry, x: command.x, y: command.y }
-                }
-                draft.notes = draft.notes.map((note) => {
-                  if (note.attachedTo !== command.id) return note
-                  markNote(note.id)
-                  return {
-                    ...note,
-                    geometry: {
-                      ...note.geometry,
-                      x: note.geometry.x + deltaX,
-                      y: note.geometry.y + deltaY
-                    }
-                  }
-                })
-              } else if (command._tag === "ResizeFrame") {
-                draft.frames[index] = {
-                  ...frame,
-                  geometry: {
-                    ...frame.geometry,
-                    width: command.width,
-                    height: command.height
-                  }
-                }
-              } else {
-                draft.frames[index] = {
-                  ...frame,
-                  zIndex:
-                    command._tag === "BringFrameToFront"
-                      ? nextZIndex(draft)
-                      : previousZIndex(draft)
-                }
-              }
-              markFrame(command.id)
-              continue
-            }
-
-            if (command._tag === "AddCommentThread") {
-              if (
-                draft.frames.some((frame) => frame.id === command.id) ||
-                draft.notes.some((note) => note.id === command.id) ||
-                draft.comments.some((thread) => thread.id === command.id)
-              ) {
-                throw new CanvasCommandFailed({
-                  reason: "duplicate-comment-thread",
-                  detail: `Canvas item already exists: ${command.id}`
-                })
-              }
-              const frame = draft.frames[frameAt(command.frameId)]!
-              if (frame.snapshot !== undefined) {
-                throw new CanvasCommandFailed({
-                  reason: "archived-frame-comments-unsupported",
-                  detail: `Archived Frame ${frame.id} does not support comments`
-                })
-              }
-              if (command.opening.body.trim().length === 0) {
-                throw new CanvasCommandFailed({
-                  reason: "invalid-command",
-                  detail: "The opening Comment cannot be empty"
-                })
-              }
-              draft.comments.push({
-                id: command.id,
-                frameId: command.frameId,
-                anchor: command.anchor,
-                opening: command.opening,
-                replies: [],
-                resolvedAt: null,
-                resolvedBy: null
-              })
-              markCommentThread(command.id)
-              continue
-            }
-
-            if (
-              command._tag === "ReplyToCommentThread" ||
-              command._tag === "EditComment" ||
-              command._tag === "SetCommentThreadResolved" ||
-              command._tag === "UpdateCommentAnchor"
-            ) {
-              const index = commentThreadAt(command.id)
-              const thread = draft.comments[index]!
-              if (command._tag === "ReplyToCommentThread") {
-                if (command.reply.body.trim().length === 0) {
-                  throw new CanvasCommandFailed({
-                    reason: "invalid-command",
-                    detail: "A Reply cannot be empty"
-                  })
-                }
-                if (
-                  draft.comments.some((candidate) =>
-                    candidate.opening.id === command.reply.id ||
-                    candidate.replies.some((reply) => reply.id === command.reply.id)
-                  )
-                ) {
-                  throw new CanvasCommandFailed({
-                    reason: "invalid-command",
-                    detail: `Comment already exists: ${command.reply.id}`
-                  })
-                }
-                draft.comments[index] = {
-                  ...thread,
-                  replies: [...thread.replies, command.reply]
-                }
-              } else if (command._tag === "EditComment") {
-                const message = commentMessageById(thread, command.commentId)
-                if (message === undefined) {
-                  throw new CanvasCommandFailed({
-                    reason: "comment-not-found",
-                    detail: `Comment not found: ${command.commentId}`
-                  })
-                }
-                if (!canEditComment(message, command.actorId)) {
-                  throw new CanvasCommandFailed({
-                    reason: "comment-forbidden",
-                    detail: "Only the Comment Author may edit it"
-                  })
-                }
-                if (message.body !== command.expectedBody) {
-                  throw new CanvasCommandFailed({
-                    reason: "comment-conflict",
-                    detail: `Comment ${command.commentId} changed before this edit`
-                  })
-                }
-                if (command.body.trim().length === 0) {
-                  throw new CanvasCommandFailed({
-                    reason: "invalid-command",
-                    detail: "A Comment cannot be empty"
-                  })
-                }
-                const edited = { ...message, body: command.body, editedAt: command.editedAt }
-                draft.comments[index] = thread.opening.id === command.commentId
-                  ? { ...thread, opening: edited }
-                  : {
-                      ...thread,
-                      replies: thread.replies.map((reply) =>
-                        reply.id === command.commentId ? edited : reply
-                      )
-                    }
-              } else if (command._tag === "SetCommentThreadResolved") {
-                if (!canManageCommentThread(draft.owner, thread, command.actor.id)) {
-                  throw new CanvasCommandFailed({
-                    reason: "comment-forbidden",
-                    detail: "Only the Canvas Owner or opening Comment Author may change resolution"
-                  })
-                }
-                draft.comments[index] = {
-                  ...thread,
-                  resolvedAt: command.resolved ? command.at : null,
-                  resolvedBy: command.resolved ? command.actor : null
-                }
-              } else {
-                if (!canManageCommentThread(draft.owner, thread, command.actorId)) {
-                  throw new CanvasCommandFailed({
-                    reason: "comment-forbidden",
-                    detail: "Only the Canvas Owner or opening Comment Author may re-anchor a thread"
-                  })
-                }
-                draft.comments[index] = { ...thread, anchor: command.anchor }
-              }
-              markCommentThread(command.id)
-              continue
-            }
-
-            const index = noteAt(command.id)
-            const note = draft.notes[index]!
-            if (command._tag === "EditNote") {
-              if (note.author.id !== command.actorId) {
-                throw new CanvasCommandFailed({
-                  reason: "note-forbidden",
-                  detail: "Only the Note Author may edit it"
-                })
-              }
-              if (note.text !== command.expectedText) {
-                throw new CanvasCommandFailed({
-                  reason: "note-conflict",
-                  detail: `Note ${command.id} changed before this edit`
-                })
-              }
-              draft.notes[index] = { ...note, text: command.text }
-            } else if (command._tag === "MoveNote") {
-              draft.notes[index] = {
-                ...note,
-                geometry: { ...note.geometry, x: command.x, y: command.y }
-              }
-            } else if (command._tag === "ResizeNote") {
-              draft.notes[index] = {
-                ...note,
-                geometry: {
-                  ...note.geometry,
-                  width: command.width,
-                  height: command.height
-                }
-              }
-            } else if (command._tag === "BringNoteToFront") {
-              draft.notes[index] = { ...note, zIndex: nextZIndex(draft) }
-            } else if (command._tag === "SendNoteToBack") {
-              draft.notes[index] = { ...note, zIndex: previousZIndex(draft) }
-            } else if (command._tag === "AttachNote") {
-              frameAt(command.frameId)
-              draft.notes[index] = { ...note, attachedTo: command.frameId }
-            } else if (command._tag === "DetachNote") {
-              draft.notes[index] = { ...note, attachedTo: null }
-            } else if (command._tag === "RemoveNote") {
-              if (note.author.id !== command.actorId) {
-                throw new CanvasCommandFailed({
-                  reason: "note-forbidden",
-                  detail: "Only the Note Author may remove it"
-                })
-              }
-              draft.notes.splice(index, 1)
-            }
-            markNote(command.id)
+          const context: CanvasMutationContext = {
+            draft,
+            markFrame,
+            markNote,
+            markCommentThread,
+            frameAt,
+            noteAt,
+            commentThreadAt
           }
-
+          for (const command of decoded) applyCanvasCommand(context, command)
+          current.title = draft.title
           current.frames = draft.frames
           current.notes = draft.notes
           current.owner = draft.owner
@@ -974,7 +1121,7 @@ const apply = (
             ? cause
             : new CanvasCommandFailed({
                 reason: "apply-failed",
-                detail: cause instanceof Error ? cause.message : String(cause)
+                detail: causeMessage(cause)
               })
       })
     )

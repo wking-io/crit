@@ -49,6 +49,7 @@ export {
   type CanvasDraft
 } from "../session/draft-journal.js"
 export { Crit, type CritProps } from "./crit.js"
+export type { CanvasChoice } from "./canvas-toolbar.js"
 export {
   Glyph,
   GlyphProvider,
