@@ -1321,6 +1321,17 @@
   justify-self: start;
 }
 
+.ui-presence-popovers {
+  display: grid;
+  gap: 8px;
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(auto-fit, minmax(188px, 1fr));
+  width: 100%;
+}
+
+.ui-presence-popovers > .ui-state-label { grid-column: 1 / -1; }
+.ui-presence-popovers .crit-presence__card--specimen { max-width: none; min-width: 0; padding: 6px 10px; }
+
 .ui-dialog-stage .crit-new-frame-dialog { margin: auto; }
 
 .ui-form-state-grid.crit-new-frame-dialog,

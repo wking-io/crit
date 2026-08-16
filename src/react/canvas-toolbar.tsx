@@ -62,6 +62,7 @@ export interface CanvasToolbarProps {
   readonly onArrange?: (
     operation: CanvasArrangementOperation
   ) => Effect.Effect<unknown, unknown>
+  readonly trailingControls?: ReactNode
 }
 
 function ActionButton({
@@ -260,7 +261,8 @@ export function CanvasToolbar({
   undoAvailable = false,
   redoAvailable = false,
   selectedItemCount = 0,
-  onArrange = () => Effect.void
+  onArrange = () => Effect.void,
+  trailingControls
 }: CanvasToolbarProps) {
   const [arrangementOpen, setArrangementOpen] = useState(false)
   const [titleEditing, setTitleEditing] = useState(false)
@@ -606,6 +608,12 @@ export function CanvasToolbar({
           <Glyph name="comment" />
         </ActionButton>
       </Toolbar.Group>
+      {trailingControls === undefined ? null : (
+        <>
+          <Toolbar.Separator className="crit-toolbar__divider" />
+          {trailingControls}
+        </>
+      )}
     </Toolbar.Root>
   )
 }

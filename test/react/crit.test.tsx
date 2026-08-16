@@ -144,6 +144,15 @@ describe("Crit", () => {
           onCanvasSelect={() => {}}
           selectedItemCount={3}
           title="Feature lab"
+          trailingControls={(
+            <CanvasPresenceIndicator
+              presence={{
+                currentAuthor: { id: "git:willa", name: "Willa King" },
+                availability: "available",
+                activities: []
+              }}
+            />
+          )}
           tool="select"
         />
       </CanvasActionRunnerProvider>
@@ -165,6 +174,11 @@ describe("Crit", () => {
     expect(html).toContain('aria-haspopup="menu"')
     expect(html).toContain('aria-expanded="false"')
     expect(html).toContain('aria-pressed="true"')
+    expect(html.match(/role="separator"/g)).toHaveLength(3)
+    expect(html).toContain('aria-label="Canvas presence: 1"')
+    expect(html.indexOf('aria-label="Canvas presence: 1"')).toBeGreaterThan(
+      html.indexOf('aria-label="Add comment"')
+    )
     const undoButton = html.match(
       /<button[^>]*aria-label="Undo"[^>]*>/
     )?.[0]
@@ -1443,14 +1457,76 @@ describe("Crit", () => {
     )
 
     expect(html).toContain("Current author: Willa King")
+    expect(html).toContain("Codex agent: codex-1")
     expect(html).toContain(">W<")
     expect(html).toContain(">C<")
     expect(html.match(/aria-haspopup="dialog"/g)).toHaveLength(2)
     expect(html.match(/data-base-ui-click-trigger/g)).toHaveLength(2)
     expect(html).not.toContain('role="tooltip"')
-    expect(critStyles).toContain(".crit-presence__positioner { z-index: 5000; }")
+    expect(html).toContain("--crit-presence-collapsed-width:27px")
+    expect(html).toContain("--crit-presence-expanded-width:47px")
+    expect(critStyles).toContain(".crit-presence__positioner { height: var(--positioner-height)")
+    expect(critStyles).toContain("z-index: 5000")
+    expect(critStyles).toContain(".crit-presence__viewport {")
+    expect(critStyles).toContain('data-activation-direction~="right"')
     expect(critStyles).toContain(
       '.crit-presence__card[data-starting-style], .crit-presence__card[data-ending-style]'
+    )
+    expect(critStyles).toContain(".crit-presence__glyph {")
+    expect(critStyles).toContain("font-size: 14px")
+    expect(critStyles).toContain("font-weight: 400")
+    expect(critStyles).toContain(
+      "transform: scale(var(--crit-presence-glyph-scale))"
+    )
+    expect(critStyles).toContain(
+      ".crit-presence__name { color: var(--crit-color-t2"
+    )
+    expect(critStyles).toContain(
+      ".crit-presence__secondary { color: var(--crit-color-t1"
+    )
+  })
+
+  it("collapses presence overflow and preserves every avatar for expansion", () => {
+    const html = renderToStaticMarkup(
+      <CanvasPresenceIndicator
+        presence={{
+          currentAuthor: { id: "git:willa", name: "Willa King" },
+          availability: "available",
+          activities: ["Ava", "Jules", "Rin", "June"].map((harness, index) => ({
+            schemaVersion: 1 as const,
+            canvasId: "review",
+            activityId: `agent-${index}`,
+            harness,
+            model: null,
+            detail: null,
+            reference: null,
+            createdAt: "2026-08-11T12:00:00.000Z",
+            updatedAt: "2026-08-11T12:00:20.000Z",
+            activeUntil: "2026-08-11T12:01:20.000Z"
+          }))
+        }}
+      />
+    )
+
+    expect(html).toContain('aria-label="Canvas presence: 5"')
+    expect(html).toContain("--crit-presence-collapsed-width:52px")
+    expect(html).toContain("--crit-presence-expanded-width:116px")
+    expect(html).toContain(">+2<")
+    expect(html.match(/class="crit-presence__item"/g)).toHaveLength(5)
+    expect(html.match(/data-collapsed-hidden="true"/g)).toHaveLength(2)
+    expect(html).toContain("--crit-presence-collapsed-x:11px")
+    expect(html).toContain("--crit-presence-expanded-x:93px")
+    expect(critStyles).toContain(
+      ".crit-presence:hover, .crit-presence:focus-within"
+    )
+    expect(critStyles).toContain(
+      "width: var(--crit-presence-expanded-width)"
+    )
+    expect(critStyles).toContain(
+      ".crit-presence__item[data-collapsed-hidden] { opacity: 0; }"
+    )
+    expect(critStyles).toContain(
+      ".crit-presence:hover .crit-presence__overflow"
     )
   })
 

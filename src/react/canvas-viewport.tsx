@@ -25,12 +25,14 @@ import {
   CritClientErrorSchema,
   critClientErrorMessage
 } from "../runtime/canvas-failure.js"
+import type { CanvasPresence } from "../session/canvas-session.js"
 import { runtimeId } from "../runtime/runtime-capabilities.js"
 import {
   connectCanvasInput,
   type FrameInputIntent
 } from "../frame-bridge/index.js"
 import { cssVariableStyle } from "./css-variable-style.js"
+import { CanvasPresenceIndicator } from "./canvas-feedback.js"
 import {
   CritContextActions,
   CritContextMenuDismissalScope,
@@ -166,6 +168,7 @@ export interface CanvasViewportProps {
   readonly frameChrome?: Partial<FrameChromeSettings> | undefined
   readonly cameraOptions?: Partial<CanvasCameraOptions> | undefined
   readonly developerTools?: boolean | undefined
+  readonly presence?: CanvasPresence | undefined
 }
 
 const CanvasActionFailure = Schema.Union([
@@ -249,6 +252,7 @@ function CanvasViewportContent({
   frameLoading,
   onCommandError,
   onCanvasSelect,
+  presence,
   snapshotFrame,
   frameChrome,
   cameraOptions
@@ -1503,6 +1507,9 @@ function CanvasViewportContent({
         }}
         onCanvasSelect={onCanvasSelect}
         title={document.title}
+        trailingControls={presence === undefined
+          ? undefined
+          : <CanvasPresenceIndicator presence={presence} />}
         tool={tool}
         selectedItemCount={selectedItems.length}
       />

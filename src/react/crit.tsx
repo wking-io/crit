@@ -61,7 +61,6 @@ import {
 } from "./canvas-help.js"
 import { GlyphProvider } from "./glyph.js"
 import {
-  CanvasPresenceIndicator,
   CanvasSaveIndicator,
   CritBoundaryMessage,
   GitIdentityBoundary
@@ -385,11 +384,9 @@ export function Crit({
             frameLoading={frameLoading}
             onCommandError={onCommandError}
             onCanvasSelect={onCanvasSelect}
+            presence={sessionState?.presence}
           />
           <CanvasHelpPanel />
-          {sessionState === null ? null : (
-            <CanvasPresenceIndicator presence={sessionState.presence} />
-          )}
           {sessionState === null ? null : (
             <CanvasSaveIndicator
               onDiscardLocalChanges={() => {

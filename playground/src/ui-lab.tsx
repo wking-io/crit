@@ -219,7 +219,7 @@ const RECIPE_CONFIG = {
   },
   presence: {
     _collapsed: true,
-    surface: tokenSelect("--crit-color-t2"),
+    surface: tokenSelect("--crit-color-c3"),
     text: tokenSelect("--crit-color-s1"),
     dot: tokenSelect("--crit-color-c1"),
     saveSurface: tokenSelect("--crit-color-t1"),
@@ -594,6 +594,28 @@ const TOOLBAR_BUTTON_STATES: ReadonlyArray<{
   { icon: "undo", label: "Unavailable", state: "disabled", toggle: false }
 ]
 
+const LAB_AGENT_IDENTITIES = [
+  { name: "Atlas", harness: "Codex" },
+  { name: "Beacon", harness: "Claude Code" },
+  { name: "Copywriter", harness: "Cursor" },
+  { name: "Diff checker", harness: "Terminal" }
+] as const
+
+const LAB_PRESENCE_ACTIVITIES = LAB_AGENT_IDENTITIES.map(
+  ({ harness, name }) => ({
+    schemaVersion: 1 as const,
+    canvasId: "feature-lab",
+    activityId: name,
+    harness,
+    model: null,
+    detail: null,
+    reference: null,
+    createdAt: "2026-08-11T12:00:00.000Z",
+    updatedAt: "2026-08-11T12:00:20.000Z",
+    activeUntil: "2026-08-11T12:01:20.000Z"
+  })
+)
+
 function ToolbarSpecimens() {
   return (
     <SpecimenSection id="02" title="Canvas toolbar">
@@ -603,6 +625,15 @@ function ToolbarSpecimens() {
           noteAvailable
           onAction={() => {}}
           title="Feature lab"
+          trailingControls={(
+            <CanvasPresenceIndicator
+              presence={{
+                currentAuthor: { id: "git:ui-lab", name: "Willa King" },
+                availability: "available",
+                activities: LAB_PRESENCE_ACTIVITIES
+              }}
+            />
+          )}
           tool="select"
         />
       </div>
@@ -805,32 +836,34 @@ function FeedbackSpecimens() {
         <div><StateLabel>Help · hotkey</StateLabel><CanvasHelpPanel details={actionHelpDetails(LAB_CONTROLS.action({ id: "open-new-frame" }))} /></div>
         <div><StateLabel>Help · no hotkey / long copy</StateLabel><CanvasHelpPanel details={{ _tag: "informational", name: "Resize Checkout candidate", description: "Drag this handle to resize the frame while preserving its opposite edge and minimum dimensions." }} /></div>
         <div className="ui-feedback-badges">
-          <StateLabel>Agent presence</StateLabel>
+          <StateLabel>Presence · single</StateLabel>
           <CanvasPresenceIndicator
             presence={{
               currentAuthor: { id: "git:ui-lab", name: "Willa King" },
               availability: "available",
-              activities: [{
-                schemaVersion: 1,
-                canvasId: "feature-lab",
-                activityId: "codex-thread",
-                harness: "Codex",
-                model: "GPT-5",
-                detail: "arranging frames",
-                reference: null,
-                createdAt: "2026-08-11T12:00:00.000Z",
-                updatedAt: "2026-08-11T12:00:20.000Z",
-                activeUntil: "2026-08-11T12:01:20.000Z"
-              }]
-            }}
-          />
-          <CanvasPresenceIndicator
-            presence={{
-              currentAuthor: { id: "git:ui-lab", name: "Willa King" },
-              availability: "unavailable",
               activities: []
             }}
           />
+          <StateLabel>Presence · overflow / hover</StateLabel>
+          <CanvasPresenceIndicator
+            presence={{
+              currentAuthor: { id: "git:ui-lab", name: "Willa King" },
+              availability: "available",
+              activities: LAB_PRESENCE_ACTIVITIES
+            }}
+          />
+        </div>
+        <div className="ui-presence-popovers">
+          <StateLabel>Agent popovers</StateLabel>
+          {LAB_AGENT_IDENTITIES.map(({ harness, name }) => (
+            <div
+              className="crit-presence__card crit-presence__card--specimen"
+              key={name}
+            >
+              <strong className="crit-presence__name">{name}</strong>
+              <span className="crit-presence__secondary">{harness}</span>
+            </div>
+          ))}
         </div>
         <div className="ui-feedback-badges">
           <StateLabel>Save lifecycle</StateLabel>
