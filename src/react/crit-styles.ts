@@ -598,17 +598,14 @@ button.crit-toolbar__title:focus-visible { border-radius: 2px; outline: 2px soli
 .crit-frame__viewport iframe { background: var(--crit-frame-viewport-surface, oklch(99% 0 none)); border: 0; height: 100%; inset: 0; position: absolute; width: 100%; }
 .crit-frame__paused { color: var(--crit-muted); font: calc(10px * var(--crit-ui))/1.5 system-ui, sans-serif; padding: calc(24px * var(--crit-ui)); }
 .crit-frame__comment-fallback { background: transparent; border: 0; cursor: crosshair; inset: 0; padding: 0; position: absolute; z-index: 3; }
-.crit-comment-pin { align-items: center; background: #fff; border: 1px solid currentColor; border-radius: 999px; box-shadow: 0 2px 6px oklch(14.7% 0.004 49.3 / 18%); cursor: pointer; display: grid; height: calc(24px * var(--crit-ui)); justify-content: center; padding: calc(3px * var(--crit-ui)); position: absolute; transform: translate(-50%, -100%); transition: background 80ms ease, border-color 80ms ease, box-shadow 80ms ease; width: calc(24px * var(--crit-ui)); z-index: 4; }
-.crit-comment-pin::after { background: currentColor; border-radius: 999px; content: ""; height: calc(7px * var(--crit-ui)); left: 50%; opacity: 0; position: absolute; top: 50%; transform: translate(-50%, -50%) scale(.35); transition: opacity 80ms ease, transform 80ms cubic-bezier(.22, 1, .36, 1); width: calc(7px * var(--crit-ui)); }
-.crit-comment-pin svg { height: calc(16px * var(--crit-ui)); transform-origin: center; transition: opacity 80ms ease, transform 80ms cubic-bezier(.22, 1, .36, 1); width: calc(16px * var(--crit-ui)); }
-.crit-comment-pin[data-active] { background: transparent; border-color: transparent; box-shadow: none; }
-.crit-comment-pin[data-active]::after { opacity: 1; transform: translate(-50%, -50%) scale(1); }
-.crit-comment-pin[data-active] svg { opacity: 0; transform: scale(.35); }
+.crit-comment-pin { appearance: none; align-items: center; background: transparent; border: 0; box-shadow: none; cursor: pointer; display: grid; height: calc(24px * var(--crit-ui)); justify-content: center; padding: calc(3px * var(--crit-ui)); position: absolute; transform: translate(-50%, -100%); width: calc(24px * var(--crit-ui)); z-index: 4; }
+.crit-comment-pin:focus-visible { outline: calc(2px * var(--crit-ui)) solid currentColor; outline-offset: calc(2px * var(--crit-ui)); }
+.crit-comment-pin svg { display: block; height: calc(18px * var(--crit-ui)); width: calc(18px * var(--crit-ui)); }
 .crit-comment-popover-positioner { z-index: 5000; }
 .crit-comment-popover { animation: crit-comment-popover-in 90ms cubic-bezier(.22, 1, .36, 1) both; background: oklch(97% 0.001 106.4); border: 1px solid currentColor; border-radius: 10px; box-shadow: oklch(14.7% 0.004 49.3 / 24%) 0 12px 36px; box-sizing: border-box; font-family: system-ui, -apple-system, sans-serif; max-height: min(440px, calc(100vh - 24px)); outline: 0; overflow: auto; padding: 12px; position: relative; transform-origin: var(--transform-origin, top left); width: 332px; z-index: 5000; }
 .crit-comment-popover[data-inline] { inset: auto; max-height: none; overflow: visible; position: relative; transform: none !important; width: 100%; }
 @keyframes crit-comment-popover-in { from { opacity: 0; translate: 0 4px; } to { opacity: 1; translate: 0 0; } }
-@media (prefers-reduced-motion: reduce) { .crit-comment-pin, .crit-comment-pin::after, .crit-comment-pin svg { transition: none; } .crit-comment-popover { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .crit-comment-popover { animation: none; } }
 .crit-comment-popover__header { align-items: center; display: flex; justify-content: space-between; margin-bottom: 10px; }
 .crit-comment-popover__header > span { align-items: center; display: flex; font-size: 12px; font-weight: 700; gap: 6px; }
 .crit-comment-popover__header button, .crit-comment__actions button, .crit-comment__text-action { background: transparent; border: 0; border-radius: 4px; color: inherit; cursor: pointer; font: 600 11px/1.2 system-ui, sans-serif; padding: 5px 7px; }

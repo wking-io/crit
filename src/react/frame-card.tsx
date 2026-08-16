@@ -1117,6 +1117,7 @@ export function FrameCard({
               threadId={thread.id}
               xRatio={thread.anchor.xRatio}
               yRatio={thread.anchor.yRatio}
+              zoom={zoom}
             />
           }) : null}
         {commentMode && frame.snapshot === undefined && !commentBridgeReady ? (

@@ -6,7 +6,9 @@ import {
   useCanvasActionRunner,
   useCanvasControls
 } from "./canvas-action-runner.js"
+import { canvasUiScale } from "./canvas-camera.js"
 import { actionHelpTarget } from "./canvas-help.js"
+import { cssVariableStyle } from "./css-variable-style.js"
 import { Glyph } from "./glyph.js"
 
 export function CanvasCommentPin({
@@ -17,7 +19,8 @@ export function CanvasCommentPin({
   threadId,
   onOpen,
   xRatio,
-  yRatio
+  yRatio,
+  zoom
 }: {
   readonly authorName: string
   readonly active: boolean
@@ -27,6 +30,7 @@ export function CanvasCommentPin({
   readonly onOpen: () => Effect.Effect<unknown, unknown>
   readonly xRatio: number
   readonly yRatio: number
+  readonly zoom: number
 }) {
   const controls = useCanvasControls(["canvas"], true)
   const runner = useCanvasActionRunner()
@@ -52,11 +56,12 @@ export function CanvasCommentPin({
         runner.run(controls, action, onOpen())
       }}
       onPointerDown={(event) => event.stopPropagation()}
-      style={{
+      style={cssVariableStyle({
+        "--crit-ui": canvasUiScale(zoom),
         color,
         left: `${xRatio * 100}%`,
         top: `${yRatio * 100}%`
-      }}
+      })}
       type="button"
     ><Glyph name="commentPin" /></Button>
   )

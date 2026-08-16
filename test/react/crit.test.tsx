@@ -608,7 +608,7 @@ describe("Crit", () => {
     expect(html).not.toContain(">Edit</button>")
   })
 
-  it("exposes an open comment pin as the reduced dot state", () => {
+  it("keeps the bare comment pin stable through canvas zoom", () => {
     const html = renderToStaticMarkup(
       <CanvasActionRunnerProvider><CanvasCommentPin
         active
@@ -618,11 +618,20 @@ describe("Crit", () => {
         threadId="thread-1"
         xRatio={0.5}
         yRatio={0.5}
+        zoom={0.5}
       /></CanvasActionRunnerProvider>
     )
 
     expect(html).toContain('aria-expanded="true"')
     expect(html).toContain('data-active="true"')
+    expect(html).toContain('--crit-ui:2')
+    expect(cssRule(".crit-comment-pin")).toContain("background: transparent")
+    expect(cssRule(".crit-comment-pin")).toContain("border: 0")
+    expect(cssRule(".crit-comment-pin")).toContain("box-shadow: none")
+    expect(cssRule(".crit-comment-pin svg")).toContain(
+      "height: calc(18px * var(--crit-ui))"
+    )
+    expect(critStyles).not.toContain(".crit-comment-pin::after")
   })
 
   it("composes Canvas comment pins with the shared Popover root", () => {
@@ -641,6 +650,7 @@ describe("Crit", () => {
             threadId="thread-1"
             xRatio={0.5}
             yRatio={0.5}
+            zoom={1}
           />
         </Popover.Root>
       </CanvasActionRunnerProvider>

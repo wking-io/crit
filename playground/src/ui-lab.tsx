@@ -947,7 +947,7 @@ function DialogSpecimens() {
 
 function CommentPinSpecimen({ active = false, label, color }: { readonly active?: boolean; readonly label: string; readonly color: string }) {
   return <span aria-label={label} className="ui-comment-pin-stage">
-    <CanvasCommentPin active={active} authorName={label} color={color} onOpen={() => Effect.void} threadId="lab-thread" xRatio={0.5} yRatio={0.8} />
+    <CanvasCommentPin active={active} authorName={label} color={color} onOpen={() => Effect.void} threadId="lab-thread" xRatio={0.5} yRatio={0.8} zoom={1} />
   </span>
 }
 
