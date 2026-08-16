@@ -1,4 +1,4 @@
-import { Effect, Schema } from "effect"
+import { Effect, Match, Predicate, Schema } from "effect"
 
 import { defaultRuntimeCapabilities } from "../runtime/runtime-capabilities.js"
 
@@ -640,6 +640,33 @@ const bindingKey = (binding: CanvasActionBinding) =>
 const actionTargetOf = (request: CanvasActionRequest) =>
   "target" in request ? request.target : null
 
+type CanvasPropertySource =
+  | CanvasActionRequest
+  | ReturnType<typeof templateValues>
+
+const propertyValue = <Key extends PropertyKey>(
+  value: CanvasPropertySource,
+  key: Key
+): boolean | string | undefined => {
+  if (!Predicate.hasProperty(value, key)) return undefined
+  const candidate = value[key]
+  return Predicate.isBoolean(candidate) || Predicate.isString(candidate)
+    ? candidate
+    : undefined
+}
+
+const booleanFact = (
+  request: CanvasActionRequest,
+  fact: string,
+  source: "request" | "target"
+) => {
+  const value = propertyValue(request, fact)
+  if (Predicate.isBoolean(value)) return value
+  throw new TypeError(
+    `Action ${request.id} does not supply ${source} fact ${fact}`
+  )
+}
+
 export const canvasActionKey = (request: CanvasActionRequest) => {
   const target = actionTargetOf(request)
   if (target !== null) return `${request.id}:${target.kind}:${target.id}`
@@ -659,34 +686,16 @@ const factValue = (
     guard.targetKinds !== undefined &&
     (target === null || !guard.targetKinds.includes(target.kind))
   ) return requirement.equals
-  if (requirement.source === "global") {
-    return state.globalFacts.commentAuthorPresent
-  }
-  if (requirement.source === "execution") {
-    return state.pendingActions.includes(canvasActionKey(request))
-  }
-  if (requirement.source === "request") {
-    if (
-      requirement.fact === "selectionHasMultipleItems" &&
-      "selectionHasMultipleItems" in request
-    ) return request.selectionHasMultipleItems
-    if (
-      requirement.fact === "selectionHasThreeItems" &&
-      "selectionHasThreeItems" in request
-    ) return request.selectionHasThreeItems
-    throw new TypeError(`Action ${request.id} does not supply request fact ${requirement.fact}`)
-  }
-  const fact = requirement.fact
-  if (
-    fact === "currentAuthorIsTargetAuthor" &&
-    "currentAuthorIsTargetAuthor" in request
-  ) return request.currentAuthorIsTargetAuthor
-  if (fact === "frameIsLive" && "frameIsLive" in request) return request.frameIsLive
-  if (fact === "editable" && "editable" in request) return request.editable
-  if (fact === "snapshotAvailable" && "snapshotAvailable" in request) return request.snapshotAvailable
-  if (fact === "bodyPresent" && "bodyPresent" in request) return request.bodyPresent
-  if (fact === "manageable" && "manageable" in request) return request.manageable
-  throw new TypeError(`Action ${request.id} does not supply target fact ${fact}`)
+  return Match.value(requirement).pipe(
+    Match.discriminatorsExhaustive("source")({
+      global: () => state.globalFacts.commentAuthorPresent,
+      execution: () => state.pendingActions.includes(canvasActionKey(request)),
+      request: (requestRequirement) =>
+        booleanFact(request, requestRequirement.fact, "request"),
+      target: (targetRequirement) =>
+        booleanFact(request, targetRequirement.fact, "target")
+    })
+  )
 }
 
 const templateValues = (request: CanvasActionRequest) => {
@@ -736,17 +745,8 @@ const interpolate = (
   template: string,
   values: ReturnType<typeof templateValues>
 ) => template.replace(/\{([A-Za-z]+)\}/g, (_, key: string) => {
-  if (key === "targetLabel") return values.targetLabel
-  if (key === "targetKind") return values.targetKind
-  if (key === "statusLabel") return values.statusLabel
-  if (key === "presetLabel") return values.presetLabel
-  if (key === "presetLabelLower") return values.presetLabelLower
-  if (key === "width") return values.width
-  if (key === "height") return values.height
-  if (key === "alignmentLabel") return values.alignmentLabel
-  if (key === "alignmentDescription") return values.alignmentDescription
-  if (key === "distributionAxisLabel") return values.distributionAxisLabel
-  if (key === "distributionGapLabel") return values.distributionGapLabel
+  const value = propertyValue(values, key)
+  if (Predicate.isString(value)) return value
   throw new TypeError(`Unknown Canvas action template value: ${key}`)
 })
 

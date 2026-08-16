@@ -1,4 +1,5 @@
 import { Effect, Layer, Option, Schema } from "effect"
+import { causeMessage } from "../internal/cause-message.js"
 
 import {
   CanvasDraft,
@@ -192,7 +193,7 @@ const make = (options: IndexedDbDraftJournalOptions = {}): DraftJournal["Service
         new DraftJournalFailed({
           operation,
           canvasId,
-          detail: cause instanceof Error ? cause.message : String(cause)
+          detail: causeMessage(cause)
         })
     })
 

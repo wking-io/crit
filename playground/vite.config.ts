@@ -7,6 +7,7 @@ import type { Plugin } from "vite"
 import { crit, type CritVitePluginOptions } from "../src/vite/index.js"
 import { critFrameInputBridgeScript } from "../src/frame-bridge/index.js"
 import { critFrameCommentBridgeScript } from "../src/frame-bridge/comment-bridge.js"
+import { causeMessage } from "../src/internal/cause-message.js"
 
 const framePattern = /^\/synth\/?$/
 const escapeInline = (value: string, element: "script" | "style") =>
@@ -60,7 +61,9 @@ export const orbFramePlugin = (): Plugin => {
           response.end(html)
         }).catch((cause: unknown) => {
           bundlePromise = undefined
-          server.config.logger.error(`Unable to build the inline frame application: ${cause instanceof Error ? cause.message : "unknown build error"}`)
+          server.config.logger.error(
+            `Unable to build the inline frame application: ${causeMessage(cause, "unknown build error")}`
+          )
           response.statusCode = 500
           response.setHeader("Content-Type", "text/plain; charset=utf-8")
           response.end("Unable to build the inline frame application.")

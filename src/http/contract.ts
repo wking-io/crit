@@ -1,4 +1,5 @@
-import { Effect, Schema } from "effect"
+import { Effect, Match, Schema } from "effect"
+import { causeMessage } from "../internal/cause-message.js"
 
 import {
   Author,
@@ -7,10 +8,8 @@ import {
   MAX_CANVAS_DOCUMENT_BYTES
 } from "../core/index.js"
 import {
-  CritClientCommandFailed,
   CritClientErrorSchema,
   CritClientInvalidDocument,
-  CritClientNotFound,
   CritClientUnavailable,
   type CritClientServices,
   type CritClientError
@@ -203,16 +202,14 @@ const crossOriginRejection = (request: Request, id: string) => {
 }
 
 const clientErrorResponse = (cause: CritClientError) => {
-  if (cause instanceof CritClientNotFound) {
-    return json(404, { error: encodeClientError(cause) })
-  }
-  if (cause instanceof CritClientInvalidDocument) {
-    return json(422, { error: encodeClientError(cause) })
-  }
-  if (cause instanceof CritClientCommandFailed) {
-    return json(409, { error: encodeClientError(cause) })
-  }
-  return json(503, { error: encodeClientError(cause) })
+  const response = (status: number) =>
+    json(status, { error: encodeClientError(cause) })
+  return Match.valueTags(cause, {
+    CritClientNotFound: () => response(404),
+    CritClientInvalidDocument: () => response(422),
+    CritClientCommandFailed: () => response(409),
+    CritClientUnavailable: () => response(503)
+  })
 }
 
 class ApplyRequestBodyTooLarge extends Schema.TaggedError<ApplyRequestBodyTooLarge>()(
@@ -231,7 +228,7 @@ const readApplyRequest = (request: Request, maxBodyBytes: number) =>
     catch: (cause) =>
       new InvalidApplyRequest({
         detail:
-          cause instanceof Error ? cause.message : "Could not read request body"
+          causeMessage(cause, "Could not read request body")
       })
   }).pipe(
     Effect.flatMap((body) =>
@@ -265,79 +262,79 @@ export const makeCritHttpHandler = (
   const maxBodyBytes = options.maxBodyBytes ?? MAX_CRIT_HTTP_BODY_BYTES
   const { activity, client, snapshots } = services
 
-  return (request, parsedRoute) => {
-    const route = parsedRoute ?? parseCritHttpRoute(request.url, apiPath)
-    if (route === undefined) return Effect.succeed(null)
-    if (route._tag === "Invalid") {
+  const handleCurrentAuthor = (request: Request) => {
+    if (request.method !== "GET") {
+      return Effect.succeed(methodNotAllowed("current-author", ["GET"]))
+    }
+    return client.currentAuthor().pipe(
+      Effect.map((author) => json(200, author)),
+      Effect.catch((cause) => Effect.succeed(clientErrorResponse(cause)))
+    )
+  }
+
+  const handleActivity = (
+    request: Request,
+    route: Extract<CritHttpRoute, { readonly _tag: "CanvasActivity" }>
+  ) => {
+    if (request.method !== "GET") {
+      return Effect.succeed(methodNotAllowed(route.id, ["GET"]))
+    }
+    if (activity === null) {
       return Effect.succeed(
-        json(400, errorBody("invalid-request", "A Canvas ID is required"))
-      )
-    }
-
-    if (route._tag === "CurrentAuthor") {
-      if (request.method !== "GET") {
-        return Effect.succeed(methodNotAllowed("current-author", ["GET"]))
-      }
-      return client.currentAuthor().pipe(
-        Effect.map((author) => json(200, author)),
-        Effect.catch((cause) => Effect.succeed(clientErrorResponse(cause)))
-      )
-    }
-    const id = route.id
-
-    if (route._tag === "CanvasActivity") {
-      if (request.method !== "GET") {
-        return Effect.succeed(methodNotAllowed(id, ["GET"]))
-      }
-      if (activity === null) {
-        return Effect.succeed(
-          clientErrorResponse(
-            new CritClientUnavailable({
-              operation: "activity",
-              id,
-              detail: "Agent activity is unavailable"
-            })
-          )
+        clientErrorResponse(
+          new CritClientUnavailable({
+            operation: "activity",
+            id: route.id,
+            detail: "Agent activity is unavailable"
+          })
         )
-      }
-      return activity.activities(id).pipe(
-        Effect.map((activities) => json(200, activities)),
-        Effect.catch((cause) => Effect.succeed(clientErrorResponse(cause)))
       )
     }
+    return activity.activities(route.id).pipe(
+      Effect.map((activities) => json(200, activities)),
+      Effect.catch((cause) => Effect.succeed(clientErrorResponse(cause)))
+    )
+  }
 
-    if (route._tag === "FrameSnapshot") {
-      if (request.method !== "POST") {
-        return Effect.succeed(methodNotAllowed(id, ["POST"]))
-      }
-      const rejected = crossOriginRejection(request, id)
-      if (rejected !== undefined) return Effect.succeed(rejected)
-      if (snapshots === null) {
-        return Effect.succeed(
-          clientErrorResponse(
-            new CritClientUnavailable({
-              operation: "snapshot",
-              id,
-              detail: "Snapshot capture is unavailable"
-            })
-          )
+  const handleSnapshot = (
+    request: Request,
+    route: Extract<CritHttpRoute, { readonly _tag: "FrameSnapshot" }>
+  ) => {
+    if (request.method !== "POST") {
+      return Effect.succeed(methodNotAllowed(route.id, ["POST"]))
+    }
+    const rejected = crossOriginRejection(request, route.id)
+    if (rejected !== undefined) return Effect.succeed(rejected)
+    if (snapshots === null) {
+      return Effect.succeed(
+        clientErrorResponse(
+          new CritClientUnavailable({
+            operation: "snapshot",
+            id: route.id,
+            detail: "Snapshot capture is unavailable"
+          })
         )
-      }
-      return snapshots.snapshot(id, route.frameId).pipe(
-        Effect.map((document) => json(200, document)),
-        Effect.catch((cause) => Effect.succeed(clientErrorResponse(cause)))
       )
     }
+    return snapshots.snapshot(route.id, route.frameId).pipe(
+      Effect.map((document) => json(200, document)),
+      Effect.catch((cause) => Effect.succeed(clientErrorResponse(cause)))
+    )
+  }
 
+  const handleCanvas = (
+    request: Request,
+    route: Extract<CritHttpRoute, { readonly _tag: "Canvas" }>
+  ) => {
     if (request.method === "GET") {
-      return client.load(id).pipe(
+      return client.load(route.id).pipe(
         Effect.map((document) => json(200, document)),
         Effect.catch((cause) => Effect.succeed(clientErrorResponse(cause)))
       )
     }
 
     if (request.method === "PATCH") {
-      const rejected = crossOriginRejection(request, id)
+      const rejected = crossOriginRejection(request, route.id)
       if (rejected !== undefined) return Effect.succeed(rejected)
       return Effect.gen(function*() {
         const input = yield* readApplyRequest(request, maxBodyBytes)
@@ -354,39 +351,47 @@ export const makeCritHttpHandler = (
               "AddSnapshotFrame is reserved for snapshot capture; POST to the Frame snapshot route to archive an existing live Frame"
           })
         }
-        return yield* client.apply(id, input.commands)
+        return yield* client.apply(route.id, input.commands)
       }).pipe(
         Effect.map((document) => json(200, document)),
-        Effect.catch((cause) =>
-          Effect.succeed(
-            cause instanceof CritClientNotFound ||
-              cause instanceof CritClientCommandFailed ||
-              cause instanceof CritClientInvalidDocument ||
-              cause instanceof CritClientUnavailable
-              ? clientErrorResponse(cause)
-              : cause instanceof ApplyRequestBodyTooLarge
-                ? json(
-                    413,
-                    errorBody(
-                      "invalid-request",
-                      `Request body exceeds ${cause.maxBytes} bytes`,
-                      { id }
-                    )
-                  )
-                : json(
-                    400,
-                    errorBody(
-                      "invalid-request",
-                      cause.detail,
-                      { id }
-                    )
-                  )
+        Effect.catch((cause) => Effect.succeed(Match.valueTags(cause, {
+          CritClientNotFound: clientErrorResponse,
+          CritClientCommandFailed: clientErrorResponse,
+          CritClientInvalidDocument: clientErrorResponse,
+          CritClientUnavailable: clientErrorResponse,
+          ApplyRequestBodyTooLarge: (failure) => json(
+            413,
+            errorBody(
+              "invalid-request",
+              `Request body exceeds ${failure.maxBytes} bytes`,
+              { id: route.id }
+            )
+          ),
+          InvalidApplyRequest: (failure) => json(
+            400,
+            errorBody("invalid-request", failure.detail, { id: route.id })
           )
-        )
+        })))
       )
     }
 
-    return Effect.succeed(methodNotAllowed(id, ["GET", "PATCH"]))
+    return Effect.succeed(methodNotAllowed(route.id, ["GET", "PATCH"]))
+  }
+
+  return (request, parsedRoute) => {
+    const route = parsedRoute ?? parseCritHttpRoute(request.url, apiPath)
+    if (route === undefined) return Effect.succeed(null)
+    return Match.valueTags(route, {
+      Invalid: () => Effect.succeed(
+        json(400, errorBody("invalid-request", "A Canvas ID is required"))
+      ),
+      CurrentAuthor: () => handleCurrentAuthor(request),
+      CanvasActivity: (activityRoute) =>
+        handleActivity(request, activityRoute),
+      FrameSnapshot: (snapshotRoute) =>
+        handleSnapshot(request, snapshotRoute),
+      Canvas: (canvasRoute) => handleCanvas(request, canvasRoute)
+    })
   }
 }
 

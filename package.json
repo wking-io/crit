@@ -73,10 +73,10 @@
     "verify": "npm run lint && npm run typecheck && npm test && npm run check:package"
   },
   "dependencies": {
-    "@effect/platform-node": "4.0.0-beta.105",
+    "@effect/platform-node": "4.0.0-rc.109",
     "@tanstack/react-hotkeys": "^0.10.0",
     "dialkit": "^1.4.3",
-    "effect": "4.0.0-beta.105",
+    "effect": "4.0.0-rc.109",
     "esbuild": "0.28.1",
     "motion": "^13.0.0",
     "node-html-parser": "6.1.13"
@@ -92,7 +92,7 @@
     }
   },
   "devDependencies": {
-    "@effect/vitest": "4.0.0-beta.105",
+    "@effect/vitest": "4.0.0-rc.109",
     "@oxlint/plugins": "^1.78.0",
     "@types/node": "24.10.0",
     "@types/react": "19.2.14",

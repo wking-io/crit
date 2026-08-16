@@ -1,4 +1,4 @@
-import { Effect } from "effect"
+import { Effect, Match } from "effect"
 import { AnimatePresence, motion } from "motion/react"
 import {
   useCallback,
@@ -461,26 +461,33 @@ export function FrameCard({
       target: window,
       frameElement: iframe,
       onEvent: (event) => {
-        if (event.type === "ready") setCommentBridgeReady(true)
-        else if (event.type === "select") {
-          runner.run(
-            controls,
-            placeCommentAction,
-            onCommentAnchorRef.current(event.anchor),
-            onSnapshotError
-          )
-        } else {
-          const action = controls.action({
-            id: "open-comment",
-            target: { kind: "comment-thread", id: event.id, label: "comment" }
+        Match.value(event).pipe(
+          Match.discriminatorsExhaustive("type")({
+            ready: () => setCommentBridgeReady(true),
+            select: (selection) => runner.run(
+              controls,
+              placeCommentAction,
+              onCommentAnchorRef.current(selection.anchor),
+              onSnapshotError
+            ),
+            open: (opening) => {
+              const action = controls.action({
+                id: "open-comment",
+                target: {
+                  kind: "comment-thread",
+                  id: opening.id,
+                  label: "comment"
+                }
+              })
+              runner.run(
+                controls,
+                action,
+                onOpenCommentRef.current(opening.id),
+                onSnapshotError
+              )
+            }
           })
-          runner.run(
-            controls,
-            action,
-            onOpenCommentRef.current(event.id),
-            onSnapshotError
-          )
-        }
+        )
       }
     })
     commentBridgeRef.current = bridge

@@ -1,4 +1,4 @@
-import { Brand } from "effect"
+import { Brand, Match } from "effect"
 
 import {
   CanvasCommand,
@@ -283,75 +283,85 @@ export const makeCommentThreadReview = (
     }, options.discardDraft ? "all" : undefined)
   }
 
-  const perform: CommentThreadReview["perform"] = (action) => {
-    if (currentState.kind === "idle") return blocked("review-idle")
-    if (currentState.pending !== null) return blocked("dispatch-pending")
-    if (currentAuthor === null) return blocked("current-author-required")
-    if (action.type === "edit") {
-      if (currentState.kind !== "thread") return blocked("comment-forbidden")
-      const comment = commentMessageById(currentState.thread, action.commentId)
-      if (comment === undefined) return blocked("comment-not-found")
-      if (!canEditComment(comment, currentAuthor.id)) {
-        return blocked("comment-forbidden")
-      }
-      const body = action.body.trim()
-      if (body.length === 0) return blocked("empty-comment")
-      const key = commentThreadReviewDispatchKey(nextDispatchKey++)
-      const state: CommentThreadReviewState = {
-        ...currentState,
-        pending: { kind: "edit", commentId: action.commentId, key },
-        failure: null
-      }
-      currentState = state
-      return {
-        type: "dispatch",
-        state,
-        key,
-        commands: [CanvasCommand.editComment({
-          id: state.threadId,
-          commentId: action.commentId,
-          actorId: currentAuthor.id,
-          expectedBody: action.expectedBody,
-          body,
-          editedAt: input.clock.now()
-        })]
-      }
+  const performEdit = (
+    action: Extract<CommentThreadReviewAction, { readonly type: "edit" }>,
+    author: Author
+  ): CommentThreadReviewTransition => {
+    if (currentState.kind !== "thread") return blocked("comment-forbidden")
+    const comment = commentMessageById(currentState.thread, action.commentId)
+    if (comment === undefined) return blocked("comment-not-found")
+    if (!canEditComment(comment, author.id)) {
+      return blocked("comment-forbidden")
     }
-    if (action.type === "set-resolved") {
-      if (
-        currentState.kind !== "thread" ||
-        !canManageCommentThread(
-          currentDocument.owner,
-          currentState.thread,
-          currentAuthor.id
-        )
-      ) {
-        return blocked("comment-forbidden")
-      }
-      const key = commentThreadReviewDispatchKey(nextDispatchKey++)
-      const state: CommentThreadReviewState = {
-        ...currentState,
-        pending: {
-          kind: action.resolved ? "resolve" : "reopen",
-          key
-        },
-        failure: null
-      }
-      currentState = state
-      return {
-        type: "dispatch",
-        state,
-        key,
-        commands: [CanvasCommand.setCommentThreadResolved({
-          id: state.threadId,
-          actor: currentAuthor,
-          resolved: action.resolved,
-          at: input.clock.now()
-        })]
-      }
+    const body = action.body.trim()
+    if (body.length === 0) return blocked("empty-comment")
+    const key = commentThreadReviewDispatchKey(nextDispatchKey++)
+    const state: CommentThreadReviewState = {
+      ...currentState,
+      pending: { kind: "edit", commentId: action.commentId, key },
+      failure: null
     }
-    if (action.type !== "submit") return blocked("comment-forbidden")
+    currentState = state
+    return {
+      type: "dispatch",
+      state,
+      key,
+      commands: [CanvasCommand.editComment({
+        id: state.threadId,
+        commentId: action.commentId,
+        actorId: author.id,
+        expectedBody: action.expectedBody,
+        body,
+        editedAt: input.clock.now()
+      })]
+    }
+  }
 
+  const performResolution = (
+    action: Extract<
+      CommentThreadReviewAction,
+      { readonly type: "set-resolved" }
+    >,
+    author: Author
+  ): CommentThreadReviewTransition => {
+    if (
+      currentState.kind !== "thread" ||
+      !canManageCommentThread(
+        currentDocument.owner,
+        currentState.thread,
+        author.id
+      )
+    ) {
+      return blocked("comment-forbidden")
+    }
+    const key = commentThreadReviewDispatchKey(nextDispatchKey++)
+    const state: CommentThreadReviewState = {
+      ...currentState,
+      pending: {
+        kind: action.resolved ? "resolve" : "reopen",
+        key
+      },
+      failure: null
+    }
+    currentState = state
+    return {
+      type: "dispatch",
+      state,
+      key,
+      commands: [CanvasCommand.setCommentThreadResolved({
+        id: state.threadId,
+        actor: author,
+        resolved: action.resolved,
+        at: input.clock.now()
+      })]
+    }
+  }
+
+  const performSubmit = (
+    action: Extract<CommentThreadReviewAction, { readonly type: "submit" }>,
+    author: Author
+  ): CommentThreadReviewTransition => {
+    if (currentState.kind === "idle") return blocked("review-idle")
     const body = action.body.trim()
     if (body.length === 0) return blocked("empty-comment")
 
@@ -359,7 +369,7 @@ export const makeCommentThreadReview = (
     const message = {
       id: input.ids.commentId(),
       body,
-      author: currentAuthor,
+      author,
       createdAt: input.clock.now(),
       editedAt: null
     }
@@ -400,27 +410,61 @@ export const makeCommentThreadReview = (
     }
   }
 
+  const perform: CommentThreadReview["perform"] = (action) => {
+    if (currentState.kind === "idle") return blocked("review-idle")
+    if (currentState.pending !== null) return blocked("dispatch-pending")
+    if (currentAuthor === null) return blocked("current-author-required")
+    const author = currentAuthor
+    return Match.value(action).pipe(
+      Match.discriminatorsExhaustive("type")({
+        edit: (edit) => performEdit(edit, author),
+        "set-resolved": (resolution) =>
+          performResolution(resolution, author),
+        submit: (submission) => performSubmit(submission, author)
+      })
+    )
+  }
+
   const settle: CommentThreadReview["settle"] = (key, outcome) => {
     if (currentState.kind === "idle" || currentState.pending?.key !== key) {
       return changed(currentState)
     }
-    const pending = currentState.pending
-    if (outcome.type === "rejected") {
-      return changed({
-        ...currentState,
-        pending: null,
-        failure: {
-          reason: outcome.cause.reason,
-          detail: outcome.cause.detail
-        }
+    const state = currentState
+    const pending = state.pending
+    return Match.value(outcome).pipe(
+      Match.discriminatorsExhaustive("type")({
+        rejected: (rejection) => changed({
+          ...state,
+          pending: null,
+          failure: {
+            reason: rejection.cause.reason,
+            detail: rejection.cause.detail
+          }
+        }),
+        accepted: () => Match.value(pending).pipe(
+          Match.discriminatorsExhaustive("kind")({
+            create: () => changed(idle(), "composer"),
+            reply: () => changed(
+              { ...state, pending: null, failure: null },
+              "composer"
+            ),
+            edit: () => changed(
+              { ...state, pending: null, failure: null },
+              "editing"
+            ),
+            resolve: () => changed({
+              ...state,
+              pending: null,
+              failure: null
+            }),
+            reopen: () => changed({
+              ...state,
+              pending: null,
+              failure: null
+            })
+          })
+        )
       })
-    }
-    if (pending.kind === "create") return changed(idle(), "composer")
-    return changed(
-      { ...currentState, pending: null, failure: null },
-      pending.kind === "reply"
-        ? "composer"
-        : pending.kind === "edit" ? "editing" : undefined
     )
   }
 

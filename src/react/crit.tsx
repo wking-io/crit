@@ -3,6 +3,7 @@ import {
   Effect,
   Exit,
   Option,
+  Predicate,
   Schema,
   Scope,
   Stream,
@@ -96,7 +97,7 @@ const rootStyle: CSSProperties = {
 }
 
 const classes = (...values: ReadonlyArray<string | undefined>) =>
-  values.filter((value): value is string => value !== undefined).join(" ")
+  values.filter(Predicate.isNotUndefined).join(" ")
 
 type CritSessionConfig = {
   readonly sessionId: string

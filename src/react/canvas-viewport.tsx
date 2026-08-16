@@ -1,5 +1,5 @@
 import { useHotkeys } from "@tanstack/react-hotkeys"
-import { Effect, Option, Schema } from "effect"
+import { Effect, Match, Option, Schema } from "effect"
 import {
   useCallback,
   useEffect,
@@ -314,31 +314,42 @@ function CanvasViewportContent({
   ) => {
     const adopt = (next: CommentThreadReviewTransition) => {
       setCommentReview(next.state)
-      if (next.type === "changed" && next.clearDraft !== undefined) {
-        commentDraftClearVersion.current += 1
-        setCommentDraftClear({
-          version: commentDraftClearVersion.current,
-          scope: next.clearDraft
+      Match.value(next).pipe(
+        Match.discriminatorsExhaustive("type")({
+          changed: (change) => {
+            if (change.clearDraft === undefined) return
+            commentDraftClearVersion.current += 1
+            setCommentDraftClear({
+              version: commentDraftClearVersion.current,
+              scope: change.clearDraft
+            })
+          },
+          blocked: () => undefined,
+          dispatch: () => undefined
         })
-      }
+      )
     }
 
     return Effect.sync(() => adopt(transition)).pipe(
-      Effect.flatMap(() => transition.type !== "dispatch"
-        ? Effect.void
-        : dispatch(...transition.commands).pipe(
+      Effect.flatMap(() => Match.value(transition).pipe(
+        Match.discriminatorsExhaustive("type")({
+          changed: () => Effect.void,
+          blocked: () => Effect.void,
+          dispatch: (pending) => dispatch(...pending.commands).pipe(
             Effect.tapError((cause) => Effect.sync(() => adopt(
-              commentReviewRef.current!.settle(transition.key, {
+              commentReviewRef.current!.settle(pending.key, {
                 type: "rejected",
                 cause
               })
             ))),
             Effect.tap(() => Effect.sync(() => adopt(
-              commentReviewRef.current!.settle(transition.key, {
+              commentReviewRef.current!.settle(pending.key, {
                 type: "accepted"
               })
             )))
-          ))
+          )
+        })
+      ))
     )
   }, [dispatch])
 
@@ -359,17 +370,25 @@ function CanvasViewportContent({
         discardDraft: true
       })
     }
-    if (transition.type !== "blocked" || transition.reason === "dirty-draft") {
-      return presentCommentReview(transition)
-    }
-    const detail = transition.reason === "current-author-required"
-      ? "Configure Git user.name and user.email to leave comments"
-      : transition.reason === "archived-frame"
-        ? "Archived Frames do not support comments"
-        : transition.reason === "dispatch-pending"
-          ? "Wait for the current Comment action to finish"
-          : "The Comment target is no longer available"
-    return Effect.sync(() => onCommandError?.(detail))
+    return Match.value(transition).pipe(
+      Match.discriminatorsExhaustive("type")({
+        changed: presentCommentReview,
+        dispatch: presentCommentReview,
+        blocked: (blocked) => {
+          if (blocked.reason === "dirty-draft") {
+            return presentCommentReview(blocked)
+          }
+          const detail = blocked.reason === "current-author-required"
+            ? "Configure Git user.name and user.email to leave comments"
+            : blocked.reason === "archived-frame"
+              ? "Archived Frames do not support comments"
+              : blocked.reason === "dispatch-pending"
+                ? "Wait for the current Comment action to finish"
+                : "The Comment target is no longer available"
+          return Effect.sync(() => onCommandError?.(detail))
+        }
+      })
+    )
   }, [commentDraftDirty, onCommandError, presentCommentReview])
 
   useEffect(() => {
@@ -975,60 +994,71 @@ function CanvasViewportContent({
               onSelect={(additive = false) =>
                 selectFrame(item.id, additive)}
               onInputIntent={(intent) => {
-                if (intent.type === "select") {
-                  selectFrame(item.id, intent.additive)
-                } else if (intent.type === "delete") {
-                  const ids = selectedFrameIds.has(item.id)
-                    ? document.frames.filter((frame) =>
-                        selectedFrameIds.has(frame.id)
+                Match.value(intent).pipe(
+                  Match.discriminatorsExhaustive("type")({
+                    select: (selection) =>
+                      selectFrame(item.id, selection.additive),
+                    delete: () => {
+                      const ids = selectedFrameIds.has(item.id)
+                        ? document.frames.filter((frame) =>
+                            selectedFrameIds.has(frame.id)
+                          )
+                        : [item]
+                      const action = controls.action({
+                        id: "remove-item",
+                        target: {
+                          kind: "frame",
+                          id: ids.map((frame) => frame.id).sort().join(","),
+                          label: ids.length === 1
+                            ? ids[0]!.title
+                            : `${ids.length} frames`
+                        }
+                      })
+                      actionRunner.run(
+                        controls,
+                        action,
+                        dispatch(...ids.map((frame) =>
+                          CanvasCommand.removeFrame({ id: frame.id })
+                        )).pipe(Effect.tap(() =>
+                          Effect.sync(() => setSelectedIds(new Set())))),
+                        (cause) => onCommandError?.(messageOf(cause))
                       )
-                    : [item]
-                  const action = controls.action({
-                    id: "remove-item",
-                    target: {
-                      kind: "frame",
-                      id: ids.map((frame) => frame.id).sort().join(","),
-                      label: ids.length === 1 ? ids[0]!.title : `${ids.length} frames`
+                    },
+                    tool: (toolIntent) => {
+                      const action = controls.action({
+                        id: toolIntent.tool === "select"
+                          ? "select-tool"
+                          : "hand-tool"
+                      })
+                      actionRunner.run(
+                        controls,
+                        action,
+                        Effect.sync(() => setTool(toolIntent.tool))
+                      )
+                    },
+                    "zoom-step": (zoomIntent) => {
+                      const action = controls.action({
+                        id: zoomIntent.direction > 0 ? "zoom-in" : "zoom-out"
+                      })
+                      actionRunner.run(
+                        controls,
+                        action,
+                        Effect.sync(() => applyZoomStep(zoomIntent.direction))
+                      )
+                    },
+                    pinch: (pinchIntent) => applyPinchScale(
+                      pinchIntent.scaleFactor,
+                      pinchIntent.clientX,
+                      pinchIntent.clientY,
+                      pinchIntent.deltaX,
+                      pinchIntent.deltaY
+                    ),
+                    wheel: (wheelIntent) => {
+                      const { type: _type, ...wheel } = wheelIntent
+                      applyWheel(wheel)
                     }
                   })
-                  actionRunner.run(
-                    controls,
-                    action,
-                    dispatch(...ids.map((frame) =>
-                      CanvasCommand.removeFrame({ id: frame.id })
-                    )).pipe(Effect.tap(() => Effect.sync(() => setSelectedIds(new Set())))),
-                    (cause) => onCommandError?.(messageOf(cause))
-                  )
-                } else if (intent.type === "tool") {
-                  const action = controls.action({
-                    id: intent.tool === "select" ? "select-tool" : "hand-tool"
-                  })
-                  actionRunner.run(
-                    controls,
-                    action,
-                    Effect.sync(() => setTool(intent.tool))
-                  )
-                } else if (intent.type === "zoom-step") {
-                  const action = controls.action({
-                    id: intent.direction > 0 ? "zoom-in" : "zoom-out"
-                  })
-                  actionRunner.run(
-                    controls,
-                    action,
-                    Effect.sync(() => applyZoomStep(intent.direction))
-                  )
-                } else if (intent.type === "pinch") {
-                  applyPinchScale(
-                    intent.scaleFactor,
-                    intent.clientX,
-                    intent.clientY,
-                    intent.deltaX,
-                    intent.deltaY
-                  )
-                } else if (intent.type === "wheel") {
-                  const { type: _type, ...wheel } = intent
-                  applyWheel(wheel)
-                }
+                )
               }}
               onMove={(event, frame) => {
                 const selection = selectCanvasFrameForMove(
