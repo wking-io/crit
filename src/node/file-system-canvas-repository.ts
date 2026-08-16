@@ -1,13 +1,13 @@
 import * as NodeServices from "@effect/platform-node/NodeServices"
 import { open as openFile, readFile, stat, unlink } from "node:fs/promises"
-import { Effect, FileSystem, Layer, Path, Schema } from "effect"
+import { Effect, FileSystem, Layer, Path, Predicate, Schema } from "effect"
 
 import {
   Canvas,
   CanvasDocumentTooLarge,
-  CanvasInternals,
-  type CanvasDocument
+  CanvasInternals
 } from "../core/canvas.js"
+import { causeMessage } from "../internal/cause-message.js"
 import {
   DocumentAlreadyExists,
   CanvasRepository
@@ -103,7 +103,7 @@ const make = (root: string) =>
           catch: (cause) =>
             new CritClientInvalidDocument({
               id,
-              detail: cause instanceof Error ? cause.message : String(cause)
+              detail: causeMessage(cause)
             })
         })
         return yield* canonicalizeDocument(id, input)
@@ -163,7 +163,7 @@ const make = (root: string) =>
               catch: (cause) =>
                 new CritClientInvalidDocument({
                   id: entry,
-                  detail: cause instanceof Error ? cause.message : String(cause)
+                  detail: causeMessage(cause)
                 })
             })
         )
@@ -173,7 +173,7 @@ const make = (root: string) =>
           )
         )
         return documents
-          .filter((document): document is CanvasDocument => document !== undefined)
+          .filter(Predicate.isNotUndefined)
           .sort((left, right) => left.id.localeCompare(right.id))
       })
 

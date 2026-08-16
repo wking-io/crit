@@ -16,6 +16,7 @@ import {
   CritClientUnavailable
 } from "../runtime/canvas-failure.js"
 import { CanvasRepository } from "../runtime/canvas-repository.js"
+import { causeMessage } from "../internal/cause-message.js"
 
 export const CRIT_MANIFEST_PATH = "/.well-known/crit.json"
 export const CRIT_MANIFEST_FILE = "crit.manifest.json"
@@ -189,7 +190,7 @@ const validate = (manifest: CritManifestDocument, source: string) =>
     catch: (cause) =>
       cause instanceof CritManifestInvalid
         ? cause
-        : invalid(source, cause instanceof Error ? cause.message : String(cause))
+        : invalid(source, causeMessage(cause))
   })
 
 const decode = (input: CritManifestInput, source = "manifest") =>
@@ -210,7 +211,7 @@ const absoluteHttpUrl = (value: string, baseUrl: string, source: string) =>
       return url.toString()
     },
     catch: (cause) =>
-      invalid(source, cause instanceof Error ? cause.message : String(cause))
+      invalid(source, causeMessage(cause))
   })
 
 const resolve = (

@@ -1,4 +1,4 @@
-import { Effect, Schema } from "effect"
+import { Effect, Match, Schema } from "effect"
 
 export const CanvasArrangementItem = Schema.Struct({
   id: Schema.String,
@@ -249,11 +249,13 @@ const makePlan = (
       detail: "Arrangement items must have unique IDs."
     }))
   }
-  const moves = request.operation._tag === "Align"
-    ? align(request.operation.alignment, request.items)
-    : request.operation._tag === "Distribute"
-      ? distribute(request.operation.axis, request.items)
-      : arrangeGrid(request.items)
+  const moves = Match.value(request.operation).pipe(
+    Match.tagsExhaustive({
+      Align: (operation) => align(operation.alignment, request.items),
+      Distribute: (operation) => distribute(operation.axis, request.items),
+      ArrangeGrid: () => arrangeGrid(request.items)
+    })
+  )
   return Effect.succeed(Schema.decodeUnknownSync(CanvasArrangementPlan)({ moves }))
 }
 

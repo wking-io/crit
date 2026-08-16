@@ -5,6 +5,7 @@ import {
 } from "react"
 import { createPortal } from "react-dom"
 
+import { causeMessage } from "../internal/cause-message.js"
 import { defaultRuntimeCapabilities } from "../runtime/runtime-capabilities.js"
 
 import {
@@ -52,10 +53,10 @@ export function NewFrameForm({
           parsed.href,
           title.trim() || inferredTitle || "Untitled frame"
         ),
-        (cause) => onError(cause instanceof Error ? cause.message : String(cause))
+        (cause) => onError(causeMessage(cause))
       )
     } catch (cause) {
-      onError(cause instanceof Error ? cause.message : "Enter a valid frame URL")
+      onError(causeMessage(cause, "Enter a valid frame URL"))
     }
   }
 

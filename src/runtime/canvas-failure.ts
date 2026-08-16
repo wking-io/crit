@@ -1,10 +1,11 @@
-import { Schema } from "effect"
+import { Match, Schema } from "effect"
 
 import type {
   CanvasCommandFailed,
   CanvasDocumentTooLarge,
   CanvasOpenFailed
 } from "../core/index.js"
+import { causeMessage } from "../internal/cause-message.js"
 
 export class CritClientNotFound extends Schema.TaggedError<CritClientNotFound>()(
   "CritClientNotFound",
@@ -46,35 +47,19 @@ export const CritClientErrorSchema = Schema.Union([
 
 export type CritClientError = typeof CritClientErrorSchema.Type
 
-const unreachableCritClientError = (failure: never): never => {
-  throw new TypeError(`Unreachable CritClientError variant: ${String(failure)}`)
-}
+export const critClientErrorMessage = Match.typeTags<CritClientError, string>()({
+  CritClientNotFound: (failure) => `Canvas not found: ${failure.id}`,
+  CritClientCommandFailed: (failure) => failure.detail,
+  CritClientInvalidDocument: (failure) => failure.detail,
+  CritClientUnavailable: (failure) => failure.detail
+})
 
-export const critClientErrorMessage = (failure: CritClientError): string => {
-  switch (failure._tag) {
-    case "CritClientNotFound":
-      return `Canvas not found: ${failure.id}`
-    case "CritClientCommandFailed":
-    case "CritClientInvalidDocument":
-    case "CritClientUnavailable":
-      return failure.detail
-    default:
-      return unreachableCritClientError(failure)
-  }
-}
-
-export const isCurrentAuthorError = (failure: CritClientError): boolean => {
-  switch (failure._tag) {
-    case "CritClientNotFound":
-    case "CritClientCommandFailed":
-    case "CritClientInvalidDocument":
-      return false
-    case "CritClientUnavailable":
-      return failure.operation === "current-author"
-    default:
-      return unreachableCritClientError(failure)
-  }
-}
+export const isCurrentAuthorError = Match.typeTags<CritClientError, boolean>()({
+  CritClientNotFound: () => false,
+  CritClientCommandFailed: () => false,
+  CritClientInvalidDocument: () => false,
+  CritClientUnavailable: (failure) => failure.operation === "current-author"
+})
 
 export const invalidCanvasDocument = (
   id: string,
@@ -99,5 +84,5 @@ export const unavailableCanvas = (
   new CritClientUnavailable({
     operation,
     id,
-    detail: cause instanceof Error ? cause.message : String(cause)
+    detail: causeMessage(cause)
   })

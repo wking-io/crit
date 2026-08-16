@@ -16,6 +16,7 @@ import {
   CritManifestInvalid
 } from "../discovery/index.js"
 import { CritInitFailed, CritInitializer } from "../init/project-initializer.js"
+import { causeMessage } from "../internal/cause-message.js"
 import { AuthorIdentity } from "../runtime/author-identity.js"
 import {
   AgentActivityStore,
@@ -62,7 +63,7 @@ const parseJson = (source: string, contents: string) =>
     catch: (cause) =>
       new CritManifestInvalid({
         source,
-        detail: cause instanceof Error ? cause.message : String(cause)
+        detail: causeMessage(cause)
       })
   })
 
@@ -98,7 +99,7 @@ const loadManifest = (
         catch: (cause) =>
           new CritManifestInvalid({
             source: requested.toString(),
-            detail: cause instanceof Error ? cause.message : String(cause)
+            detail: causeMessage(cause)
           })
       })
       if (!response.ok) {
@@ -113,7 +114,7 @@ const loadManifest = (
         catch: (cause) =>
           new CritManifestInvalid({
             source: requested.toString(),
-            detail: cause instanceof Error ? cause.message : String(cause)
+            detail: causeMessage(cause)
           })
       })
       return yield* CritManifest.resolve(input, {
@@ -264,7 +265,7 @@ const decodeCanvasCommands = (input: string) =>
     try: () => JSON.parse(input),
     catch: (cause) =>
       new InvalidCliInput({
-        detail: `Commands must be valid JSON: ${cause instanceof Error ? cause.message : String(cause)}`
+        detail: `Commands must be valid JSON: ${causeMessage(cause)}`
       })
   }).pipe(
     Effect.flatMap(Schema.decodeUnknownEffect(Schema.Array(CanvasCommandSchema))),
@@ -365,7 +366,7 @@ const normalizeUrl = (input: string) =>
     },
     catch: (cause) =>
       new InvalidCliInput({
-        detail: cause instanceof Error ? cause.message : String(cause)
+        detail: causeMessage(cause)
       })
   })
 

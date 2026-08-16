@@ -6,10 +6,11 @@ import { Readable } from "node:stream"
 import { fileURLToPath } from "node:url"
 
 import { build } from "esbuild"
-import { Effect, Layer, ManagedRuntime, Schema } from "effect"
+import { Effect, Layer, ManagedRuntime, Match, Schema } from "effect"
 import type { Plugin, ResolvedConfig, ViteDevServer } from "vite"
 
 import type { CanvasLiveRefreshEndpoint } from "../browser/canvas-live-refresh.js"
+import { causeMessage } from "../internal/cause-message.js"
 import {
   CRIT_MANIFEST_FILE,
   CRIT_MANIFEST_PATH,
@@ -132,7 +133,7 @@ const sendUnexpectedFailure = (response: ServerResponse, cause: unknown) => {
     JSON.stringify({
       error: {
         code: "unavailable",
-        message: cause instanceof Error ? cause.message : "Crit middleware failed"
+        message: causeMessage(cause, "Crit middleware failed")
       }
     })
   )
@@ -690,19 +691,21 @@ export const crit = (options: CritVitePluginOptions = {}): Plugin => {
             response.end(html)
           })
           .catch((cause: unknown) => {
-            if (cause instanceof CritClientNotFound) {
-              sendJson(response, 404, {
-                error: { code: "not-found", message: "Frame not found" }
-              })
-              return
-            }
-            if (cause instanceof FrameRelayFailure) {
-              sendJson(response, cause.status, {
-                error: { code: "frame-relay-failed", message: cause.message }
-              })
-              return
-            }
-            sendUnexpectedFailure(response, cause)
+            Match.value(cause).pipe(
+              Match.when(Match.instanceOf(CritClientNotFound), () =>
+                sendJson(response, 404, {
+                  error: { code: "not-found", message: "Frame not found" }
+                })),
+              Match.when(Match.instanceOf(FrameRelayFailure), (failure) =>
+                sendJson(response, failure.status, {
+                  error: {
+                    code: "frame-relay-failed",
+                    message: failure.message
+                  }
+                })),
+              Match.orElse((failure) =>
+                sendUnexpectedFailure(response, failure))
+            )
           })
         return
       }

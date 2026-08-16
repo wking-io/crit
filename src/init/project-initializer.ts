@@ -4,6 +4,7 @@ import { Effect, FileSystem, Path, Schema } from "effect"
 
 import type { Author } from "../core/index.js"
 import { CRIT_MANIFEST_FILE } from "../discovery/index.js"
+import { causeMessage } from "../internal/cause-message.js"
 import { AuthorIdentity } from "../runtime/author-identity.js"
 import { PACKAGE_VERSION } from "../version.js"
 
@@ -66,7 +67,7 @@ const failure = (
   new CritInitFailed({
     operation,
     path: target,
-    detail: cause instanceof Error ? cause.message : String(cause)
+    detail: causeMessage(cause)
   })
 
 const quoteFor = (source: string) =>

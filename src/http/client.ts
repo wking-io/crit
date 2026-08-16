@@ -1,4 +1,5 @@
 import { Effect, Schema } from "effect"
+import { causeMessage } from "../internal/cause-message.js"
 
 import {
   CritActivityClient,
@@ -39,7 +40,7 @@ const parseJson = (response: Response) =>
     try: async () =>
       Schema.decodeUnknownSync(Schema.Json)(await response.json()),
     catch: (cause) =>
-      new Error(cause instanceof Error ? cause.message : "Invalid JSON response")
+      new Error(causeMessage(cause, "Invalid JSON response"))
   })
 
 const responseError = (
@@ -91,7 +92,7 @@ const make = (
         new CritClientUnavailable({
           operation,
           id,
-          detail: cause instanceof Error ? cause.message : String(cause)
+          detail: causeMessage(cause)
         })
     }).pipe(
       Effect.flatMap((response) =>
@@ -121,7 +122,7 @@ const make = (
           new CritClientUnavailable({
             operation: "current-author",
             id: "current-author",
-            detail: cause instanceof Error ? cause.message : String(cause)
+            detail: causeMessage(cause)
           })
       }).pipe(
         Effect.flatMap((response) =>
@@ -171,7 +172,7 @@ const make = (
           new CritClientUnavailable({
             operation: "activity",
             id: canvasId,
-            detail: cause instanceof Error ? cause.message : String(cause)
+            detail: causeMessage(cause)
           })
       }).pipe(
         Effect.flatMap((response) =>
