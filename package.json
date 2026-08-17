@@ -67,6 +67,7 @@
     "prepack": "npm run build",
     "prepublishOnly": "npm run verify",
     "generate:glyphs": "node scripts/generate-glyphs.mjs",
+    "import:glyph": "node scripts/import-nucleo-glyph.mjs",
     "lint": "oxlint",
     "test": "vitest run",
     "typecheck": "npm run check:glyphs && tsc -p tsconfig.json --noEmit",

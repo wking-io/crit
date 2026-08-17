@@ -19,6 +19,7 @@ const GlyphPrefixContext = createContext<string | null>(null)
 
 const reactAttributeName = (name: string) => {
   if (name === "class") return "className"
+  if (name.startsWith("aria-") || name.startsWith("data-")) return name
   return name.replace(/-([a-z])/g, (_, character: string) => character.toUpperCase())
 }
 

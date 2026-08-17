@@ -25,6 +25,8 @@ const graphicAttributes = new Set([
   "clip-rule",
   "cx",
   "cy",
+  "data-color",
+  "data-stroke",
   "d",
   "fill",
   "fill-opacity",

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Crit Icons"
+  short_description: "Add approved Nucleo icons to Crit"
+  default_prompt: "Use $crit-icons to add the requested icon to Crit."
