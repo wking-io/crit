@@ -254,22 +254,42 @@ describe("Crit feature lab", () => {
     expect(canvas.frames.map((frame) => frame.id)).toEqual([
       "synth-workbench",
       "synth-performance",
-      "synth-rack"
+      "synth-rack",
+      "prototype-eyes-randomized",
+      "prototype-eyes-art-directed",
+      "prototype-pattern-directions",
+      "prototype-pattern-color-mixing",
+      "prototype-pattern-family-review"
     ])
     expect(canvas.frames.map((frame) => frame.url)).toEqual([
       "/synth?variant=A&preview=1",
       "/synth?variant=B&preview=1",
-      "/synth?variant=C&preview=1"
+      "/synth?variant=C&preview=1",
+      "/ui/prototypes/eyes-randomized",
+      "/ui/prototypes/eyes-art-directed",
+      "/ui/prototypes/pattern-directions",
+      "/ui/prototypes/pattern-color-mixing",
+      "/pattern-review-prototype.html"
     ])
     expect(canvas.frames.map((frame) => frame.title)).toEqual([
       "Polyphonic Workbench",
       "Performance Deck",
-      "Signal Rack"
+      "Signal Rack",
+      "Randomized Eye Systems",
+      "Art-directed Eye Systems",
+      "Three Pattern Directions",
+      "Mixed-color Pattern Study",
+      "Woven Pattern Family Review"
     ])
     expect(canvas.frames.map((frame) => frame.status)).toEqual([
       "approved",
       "changes-requested",
-      "in-progress"
+      "in-progress",
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined
     ])
     expect(canvas.frames.every((frame) => frame.geometry !== undefined)).toBe(true)
 

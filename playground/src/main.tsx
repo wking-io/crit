@@ -5,10 +5,14 @@ import { FramePage, frameRouteUrl, frameVariantFromUrl } from "./frame-page.js"
 import "./styles.css"
 
 const UiLab = lazy(() => import("./ui-lab.js"))
+const PrototypeArchivePage = lazy(() => import("./prototype-archive-page.js"))
 
 function App() {
   const routeUrl = frameRouteUrl()
   const pathname = new URL(routeUrl, window.location.href).pathname
+  if (pathname.replace(/\/+$/, "").startsWith("/ui/prototypes")) {
+    return <Suspense fallback={<main className="ui-lab-loading">Opening prototype archive…</main>}><PrototypeArchivePage /></Suspense>
+  }
   if (pathname.replace(/\/+$/, "") === "/ui") {
     return <Suspense fallback={<main className="ui-lab-loading">Opening UI lab…</main>}><UiLab /></Suspense>
   }

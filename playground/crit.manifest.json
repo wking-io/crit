@@ -26,6 +26,36 @@
           "title": "Signal Rack",
           "status": "in-progress",
           "geometry": { "x": 2800, "y": 100, "width": 1280, "height": 760 }
+        },
+        {
+          "id": "prototype-eyes-randomized",
+          "url": "/ui/prototypes/eyes-randomized",
+          "title": "Randomized Eye Systems",
+          "geometry": { "x": 80, "y": 980, "width": 1280, "height": 900 }
+        },
+        {
+          "id": "prototype-eyes-art-directed",
+          "url": "/ui/prototypes/eyes-art-directed",
+          "title": "Art-directed Eye Systems",
+          "geometry": { "x": 1440, "y": 980, "width": 1280, "height": 900 }
+        },
+        {
+          "id": "prototype-pattern-directions",
+          "url": "/ui/prototypes/pattern-directions",
+          "title": "Three Pattern Directions",
+          "geometry": { "x": 2800, "y": 980, "width": 1280, "height": 900 }
+        },
+        {
+          "id": "prototype-pattern-color-mixing",
+          "url": "/ui/prototypes/pattern-color-mixing",
+          "title": "Mixed-color Pattern Study",
+          "geometry": { "x": 4160, "y": 980, "width": 1280, "height": 900 }
+        },
+        {
+          "id": "prototype-pattern-family-review",
+          "url": "/pattern-review-prototype.html",
+          "title": "Woven Pattern Family Review",
+          "geometry": { "x": 5520, "y": 980, "width": 1440, "height": 1000 }
         }
       ]
     }

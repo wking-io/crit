@@ -22,8 +22,7 @@ import type {
   CanvasCommentThread,
   CanvasFrame,
   CanvasNote,
-  Author,
-  FrameReviewStatus
+  Author
 } from "../../src/core/index.js"
 import {
   CritMenuSpecimen,
@@ -47,6 +46,7 @@ import {
   CritOverlayProvider,
   useCritOverlayContainer
 } from "../../src/react/overlay-container.js"
+import { PatternAvatarPrototype } from "./pattern-avatar-prototype.js"
 
 import "dialkit/styles.css"
 import "./base-tokens.css"
@@ -880,6 +880,14 @@ function FeedbackSpecimens() {
   )
 }
 
+function PatternAvatarPrototypeSpecimen() {
+  return (
+    <SpecimenSection id="05-pattern-avatar-prototype" title="Generative pattern avatar prototype">
+      <PatternAvatarPrototype />
+    </SpecimenSection>
+  )
+}
+
 const LAB_CONTROLS = CanvasControls.resolve({
   platform: "macos",
   activeScopes: ["canvas", "menu"],
@@ -1077,6 +1085,7 @@ export default function UiLab() {
             <FramesSpecimens />
             <NotesSpecimens />
             <FeedbackSpecimens />
+            <PatternAvatarPrototypeSpecimen />
             <MenuSpecimens />
             <DialogSpecimens />
             <CommentSpecimens />
