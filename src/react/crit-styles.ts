@@ -233,6 +233,7 @@ button.crit-toolbar__title:focus-visible { border-radius: 2px; outline: 2px soli
 .crit-canvas-switcher__item[data-highlighted] { background: oklch(14.7% 0.004 49.3 / 8%); }
 .crit-canvas-switcher__indicator { display: grid; height: 12px; place-items: center; width: 12px; }
 .crit-canvas-switcher__indicator span { background: currentColor; border-radius: 999px; height: 6px; width: 6px; }
+.crit-canvas-switcher__indicator--checkbox span { border-radius: 1px; height: 8px; width: 8px; }
 .crit-canvas-switcher__label { grid-column: 2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .crit-canvas-switcher__separator { background: #d8d5cc; height: 1px; margin: 4px 6px; }
 

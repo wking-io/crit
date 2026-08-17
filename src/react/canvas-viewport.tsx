@@ -96,6 +96,12 @@ import {
   type CanvasCameraInput,
   type CanvasCameraOptions
 } from "./canvas-camera.js"
+import {
+  browserCanvasCameraStorage,
+  clearPersistedCanvasCamera,
+  readPersistedCanvasCamera,
+  writePersistedCanvasCamera
+} from "./canvas-camera-persistence.js"
 import { NewFrameDialog } from "./new-frame-dialog.js"
 import {
   NoteCard,
@@ -235,7 +241,7 @@ export function CanvasViewport(props: CanvasViewportProps) {
       <CanvasActionRunnerProvider
         onError={(cause) => props.onCommandError?.(messageOf(cause))}
       >
-        <CanvasViewportContent {...props} />
+        <CanvasViewportContent key={props.document.id} {...props} />
       </CanvasActionRunnerProvider>
     </ConfirmationProvider>
   )
@@ -263,8 +269,18 @@ function CanvasViewportContent({
   const rootRef = useRef<HTMLDivElement>(null)
   const panShieldRef = useRef<HTMLDivElement>(null)
   const addFrameButtonRef = useRef<HTMLButtonElement>(null)
-  const initialCameraState = useMemo(() => initialCanvasCameraState(), [])
+  const [cameraStorage] = useState(browserCanvasCameraStorage)
+  const [persistedCamera] = useState(() => cameraStorage === null
+    ? null
+    : readPersistedCanvasCamera(cameraStorage, document.id))
+  const initialCameraState = useMemo(
+    () => initialCanvasCameraState(persistedCamera ?? undefined),
+    [persistedCamera]
+  )
   const [camera, setCamera] = useState<Camera>(initialCameraState.camera)
+  const [rememberView, setRememberView] = useState(persistedCamera !== null)
+  const rememberViewRef = useRef(rememberView)
+  rememberViewRef.current = rememberView
   const cameraStateRef = useRef(initialCameraState)
   const cameraOptionsRef = useRef(cameraOptions)
   cameraOptionsRef.current = cameraOptions
@@ -329,6 +345,49 @@ function CanvasViewportContent({
       cameraOptionsRef.current
     ))
   }, [commitCameraState])
+
+  const changeRememberView = useCallback((remember: boolean) => {
+    if (cameraStorage === null) {
+      setRememberView(false)
+      return
+    }
+    if (remember) {
+      const saved = writePersistedCanvasCamera(
+        cameraStorage,
+        document.id,
+        cameraStateRef.current.camera
+      )
+      setRememberView(saved)
+      return
+    }
+    clearPersistedCanvasCamera(cameraStorage, document.id)
+    setRememberView(false)
+  }, [cameraStorage, document.id])
+
+  useEffect(() => {
+    if (!rememberView || cameraStorage === null) return
+    const timeout = window.setTimeout(() => {
+      writePersistedCanvasCamera(cameraStorage, document.id, camera)
+    }, 120)
+    return () => window.clearTimeout(timeout)
+  }, [camera, cameraStorage, document.id, rememberView])
+
+  useEffect(() => {
+    if (cameraStorage === null) return
+    const flush = () => {
+      if (!rememberViewRef.current) return
+      writePersistedCanvasCamera(
+        cameraStorage,
+        document.id,
+        cameraStateRef.current.camera
+      )
+    }
+    window.addEventListener("pagehide", flush)
+    return () => {
+      window.removeEventListener("pagehide", flush)
+      flush()
+    }
+  }, [cameraStorage, document.id])
 
   useEffect(() => {
     const root = rootRef.current
@@ -1506,6 +1565,8 @@ function CanvasViewportContent({
           else if (action === "comment") setTool("comment")
         }}
         onCanvasSelect={onCanvasSelect}
+        onRememberViewChange={changeRememberView}
+        rememberView={rememberView}
         title={document.title}
         trailingControls={presence === undefined
           ? undefined

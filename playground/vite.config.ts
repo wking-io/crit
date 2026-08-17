@@ -78,7 +78,11 @@ const port = Number.parseInt(
   10
 )
 const ampOrb = Boolean(process.env.AMP_ORB)
-const publicUrl = process.env.PUBLIC_URL
+export const playgroundPublicUrl = (
+  environment: Readonly<Record<string, string | undefined>>
+) => environment.PUBLIC_URL ?? environment.PORTLESS_URL
+
+const publicUrl = playgroundPublicUrl(process.env)
 let critOptions: CritVitePluginOptions = {
   frameLoading: ampOrb ? "relay" : "navigate"
 }

@@ -8,7 +8,10 @@ import { createServer } from "vite"
 
 import { CanvasCommandSchema } from "../../src/core/index.js"
 import { CritManifest } from "../../src/discovery/index.js"
-import { isOrbFrameSource } from "../../playground/vite.config.js"
+import {
+  isOrbFrameSource,
+  playgroundPublicUrl
+} from "../../playground/vite.config.js"
 import { migrateLegacyPlaygroundCanvas } from "../../playground/migrate-state.mjs"
 import { serverPort } from "../support/server-address.js"
 
@@ -16,6 +19,17 @@ const readJson = async (file: string) =>
   JSON.parse(await readFile(path.resolve(file), "utf8"))
 
 describe("Crit feature lab", () => {
+  it("uses the stable Portless URL as the browser-visible origin", () => {
+    expect(playgroundPublicUrl({
+      PORTLESS_URL: "http://crit.local"
+    })).toBe("http://crit.local")
+    expect(playgroundPublicUrl({
+      PORTLESS_URL: "http://crit.local",
+      PUBLIC_URL: "https://review.example"
+    })).toBe("https://review.example")
+    expect(playgroundPublicUrl({})).toBeUndefined()
+  })
+
   it("preserves legacy playground state while adding required identities", () => {
     const author = { id: "git:test", name: "Test Author" }
     const legacy = {

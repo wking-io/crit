@@ -55,6 +55,8 @@ export interface CanvasToolbarProps {
   readonly onAction: (action: CanvasToolbarAction) => void
   readonly onCanvasSelect?: ((canvasId: string) => void) | undefined
   readonly onTitleChange?: (title: string) => Effect.Effect<unknown, unknown>
+  readonly rememberView?: boolean
+  readonly onRememberViewChange?: ((remember: boolean) => void) | undefined
   readonly addFrameButtonRef?: Ref<HTMLButtonElement>
   readonly undoAvailable?: boolean
   readonly redoAvailable?: boolean
@@ -257,6 +259,8 @@ export function CanvasToolbar({
   onAction,
   onCanvasSelect,
   onTitleChange,
+  rememberView = false,
+  onRememberViewChange,
   addFrameButtonRef,
   undoAvailable = false,
   redoAvailable = false,
@@ -339,7 +343,9 @@ export function CanvasToolbar({
         : [{ id: canvasId, title }, ...canvasChoices]
   const canvasSelectionAvailable =
     canvasId !== undefined && onCanvasSelect !== undefined && choices.length > 0
-  const canvasMenuAvailable = canvasSelectionAvailable || onTitleChange !== undefined
+  const canvasMenuAvailable = canvasSelectionAvailable ||
+    onTitleChange !== undefined ||
+    onRememberViewChange !== undefined
   const titleContent = (
     <>
       <span>{title}</span>
@@ -439,6 +445,31 @@ export function CanvasToolbar({
                         Rename canvas…
                       </span>
                     </Menu.Item>
+                  </>
+                )}
+                {onRememberViewChange === undefined ? null : (
+                  <>
+                    {canvasSelectionAvailable || onTitleChange !== undefined ? (
+                      <Menu.Separator className="crit-canvas-switcher__separator" />
+                    ) : null}
+                    <Menu.CheckboxItem
+                      checked={rememberView}
+                      className="crit-canvas-switcher__item"
+                      closeOnClick={false}
+                      label="Remember view"
+                      {...informationalHelpTarget({
+                        name: "Remember view",
+                        description: "Restore this canvas's zoom and position after reload."
+                      })}
+                      onCheckedChange={onRememberViewChange}
+                    >
+                      <Menu.CheckboxItemIndicator
+                        className="crit-canvas-switcher__indicator crit-canvas-switcher__indicator--checkbox"
+                      ><span aria-hidden="true" /></Menu.CheckboxItemIndicator>
+                      <span className="crit-canvas-switcher__label">
+                        Remember view
+                      </span>
+                    </Menu.CheckboxItem>
                   </>
                 )}
               </Menu.Popup>
