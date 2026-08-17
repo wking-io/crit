@@ -1131,7 +1131,7 @@ describe("Crit", () => {
     expect(contextMenuIsOpen(openMenu, returnedToInitialZoom.revision)).toBe(false)
   })
 
-  it("uses compact context-menu spacing without changing its color rules", () => {
+  it("uses compact context-menu spacing and the s1 hover surface", () => {
     const popup = cssRule(".crit-context-menu")
     const item = cssRule(
       ".crit-context-menu button, .crit-context-menu a"
@@ -1144,8 +1144,13 @@ describe("Crit", () => {
     expect(popup).toContain("padding: 4px")
     expect(popup).toContain("width: 192px")
     expect(item).toContain("height: 28px")
+    expect(item).toContain("border: 0")
+    expect(item).toContain("box-shadow: none")
     expect(item).toContain("padding: 0 8px")
     expect(cssRule(".crit-context-menu__detail")).toContain("margin-left: 8px")
+    expect(cssRule(".crit-context-menu__item[data-highlighted]")).toContain(
+      "background: var(--crit-color-s1, oklch(99% 0 none))"
+    )
   })
 
   it("shows only the note glyph in collapsed mode", () => {

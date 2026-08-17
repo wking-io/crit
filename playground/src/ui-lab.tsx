@@ -233,8 +233,7 @@ const RECIPE_CONFIG = {
     border: tokenSelect("--crit-color-c3"),
     text: tokenSelect("--crit-color-t2"),
     detailText: tokenSelect("--crit-color-t1"),
-    hoverSurface: tokenSelect("--crit-color-c2"),
-    focusRing: tokenSelect("--crit-color-p2"),
+    hoverSurface: tokenSelect("--crit-color-s1"),
     dangerText: tokenSelect("--crit-color-red-t1")
   },
   dialog: {
@@ -342,7 +341,6 @@ const explicitAssignmentsFor = (
   assignment("--ui-menu-text", values.menu.text),
   assignment("--ui-menu-detail-text", values.menu.detailText),
   assignment("--ui-menu-hover-surface", values.menu.hoverSurface),
-  assignment("--ui-menu-focus-ring", values.menu.focusRing),
   assignment("--ui-menu-danger-text", values.menu.dangerText),
   assignment("--ui-dialog-backdrop", values.dialog.backdrop),
   assignment("--ui-dialog-surface", values.dialog.surface),

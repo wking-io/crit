@@ -1049,6 +1049,7 @@ button.crit-toolbar__title:focus-visible { border-radius: 2px; outline: 2px soli
   background: transparent;
   border: 0;
   border-radius: 5px;
+  box-shadow: none;
   color: #191918;
   cursor: pointer;
   display: flex;
@@ -1068,7 +1069,7 @@ button.crit-toolbar__title:focus-visible { border-radius: 2px; outline: 2px soli
 .crit-context-menu button:hover, .crit-context-menu button:focus-visible,
 .crit-context-menu a:hover, .crit-context-menu a:focus-visible,
 .crit-context-menu__item[data-highlighted] {
-  background: oklch(14.7% 0.004 49.3 / 8%);
+  background: var(--crit-color-s1, oklch(99% 0 none));
   outline: 0;
 }
 .crit-context-menu__item[data-disabled] { cursor: default; opacity: .42; }
