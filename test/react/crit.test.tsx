@@ -1545,6 +1545,15 @@ describe("Crit", () => {
         }}
       />
     )
+    const guest = renderToStaticMarkup(
+      <CanvasPresenceIndicator
+        presence={{
+          currentAuthor: null,
+          availability: "available",
+          activities: []
+        }}
+      />
+    )
     const identity = renderToStaticMarkup(
       <GitIdentityBoundary
         detail="Git user.email is not configured"
@@ -1553,6 +1562,7 @@ describe("Crit", () => {
     )
 
     expect(presence).toContain('aria-label="Anonymous agent presence"')
+    expect(guest).toBe("")
     expect(identity).toContain("Git identity required")
     expect(identity).toContain("Copy fix prompt")
     expect(identity).toContain("crit-identity")

@@ -75,6 +75,12 @@ export type CanvasCameraInput =
       readonly geometries: ReadonlyArray<CanvasGeometry>
       readonly viewport: { readonly width: number; readonly height: number }
     }
+  | {
+      readonly type: "center"
+      readonly geometry: CanvasGeometry
+      readonly viewport: { readonly width: number; readonly height: number }
+      readonly zoom?: number
+    }
 
 export const initialCanvasCameraState = (
   camera: CanvasCamera = { x: 40, y: 40, zoom: 0.65 }
@@ -161,6 +167,16 @@ const wheelBehavior = (
   if (!modified || configured === "none") return configured
   return configured === "pan" ? "zoom" : "pan"
 }
+
+export const cameraCenteringGeometry = (
+  geometry: CanvasGeometry,
+  viewport: { readonly width: number; readonly height: number },
+  zoom: number
+): CanvasCamera => ({
+  zoom,
+  x: viewport.width / 2 - (geometry.x + geometry.width / 2) * zoom,
+  y: viewport.height / 2 - (geometry.y + geometry.height / 2) * zoom
+})
 
 const fitCamera = (
   geometries: ReadonlyArray<CanvasGeometry>,
@@ -308,6 +324,13 @@ export const updateCanvasCamera = (
       }),
       fit: (fitInput) => ({
         camera: fitCamera(fitInput.geometries, fitInput.viewport, options)
+      }),
+      center: (centerInput) => ({
+        camera: cameraCenteringGeometry(
+          centerInput.geometry,
+          centerInput.viewport,
+          centerInput.zoom ?? state.camera.zoom
+        )
       }),
       "zoom-step": (zoomInput) =>
         updateZoomStepCamera(state, zoomInput, options),

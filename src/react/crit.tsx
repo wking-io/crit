@@ -20,7 +20,7 @@ import {
 } from "react"
 
 import { IndexedDbDraftJournal } from "../browser/indexeddb-draft-journal.js"
-import type { CanvasDocument } from "../core/index.js"
+import type { Author, CanvasDocument } from "../core/index.js"
 import { HttpCritClient } from "../http/client.js"
 import { GIT_AUTHOR_REMEDIATION_PROMPT } from "../runtime/author-identity.js"
 import {
@@ -176,6 +176,8 @@ export interface CritProps {
   readonly onSession?: (session: CanvasSessionHandle) => void
   readonly onCanvasSelect?: (canvasId: string) => void
   readonly onCommandError?: (message: string) => void
+  readonly onSignIn?: (author: Author) => void
+  readonly focusItemId?: string
   readonly loadingFallback?: ReactNode
   readonly errorFallback?: (message: string) => ReactNode
 }
@@ -201,6 +203,8 @@ export function Crit({
   onSession,
   onCanvasSelect,
   onCommandError,
+  onSignIn,
+  focusItemId,
   loadingFallback,
   errorFallback
 }: CritProps) {
@@ -384,6 +388,8 @@ export function Crit({
             frameLoading={frameLoading}
             onCommandError={onCommandError}
             onCanvasSelect={onCanvasSelect}
+            onSignIn={onSignIn}
+            focusItemId={focusItemId}
             presence={sessionState?.presence}
           />
           <CanvasHelpPanel />

@@ -64,7 +64,7 @@ export type CanvasPresenceAvailability =
   typeof CanvasPresenceAvailability.Type
 
 export const CanvasPresence = Schema.Struct({
-  currentAuthor: Author,
+  currentAuthor: Schema.NullOr(Author),
   activities: Schema.Array(AgentActivity),
   availability: CanvasPresenceAvailability
 })
@@ -162,7 +162,9 @@ const open = (
     )
     const opened = yield* Effect.all({
       authoritative: client.load(canvasId),
-      currentAuthor: client.currentAuthor()
+      currentAuthor: client.currentAuthor().pipe(
+        Effect.catch(() => Effect.succeed(null))
+      )
     }, { concurrency: "unbounded" })
     const authoritative = opened.authoritative
     const currentAuthor = opened.currentAuthor

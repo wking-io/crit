@@ -99,7 +99,14 @@ describe("CanvasControls", () => {
     expect(missingAuthor).toMatchObject({
       availability: "disabled",
       reason: "missing-comment-author",
-      availabilityMessage: "Configure Git user.name and user.email to add notes."
+      availabilityMessage: "Sign in to add a note."
+    })
+    expect(resolve({ commentAuthorPresent: false }).action({
+      id: "open-new-frame"
+    })).toMatchObject({
+      availability: "disabled",
+      reason: "missing-comment-author",
+      availabilityMessage: "Sign in to add a frame."
     })
 
     const forbiddenRemoval = resolve().action({

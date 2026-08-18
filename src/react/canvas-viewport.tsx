@@ -1,4 +1,5 @@
 import { Popover } from "@base-ui/react/popover"
+import { Button } from "@base-ui/react/button"
 import { useHotkeys } from "@tanstack/react-hotkeys"
 import { Effect, Match, Option, Schema } from "effect"
 import {
@@ -103,6 +104,7 @@ import {
   writePersistedCanvasCamera
 } from "./canvas-camera-persistence.js"
 import { NewFrameDialog } from "./new-frame-dialog.js"
+import { SignInDialog } from "./sign-in-dialog.js"
 import {
   NoteCard,
   type NotePresentationSize
@@ -175,6 +177,8 @@ export interface CanvasViewportProps {
   readonly cameraOptions?: Partial<CanvasCameraOptions> | undefined
   readonly developerTools?: boolean | undefined
   readonly presence?: CanvasPresence | undefined
+  readonly focusItemId?: string | undefined
+  readonly onSignIn?: ((author: Author) => void) | undefined
 }
 
 const CanvasActionFailure = Schema.Union([
@@ -261,7 +265,9 @@ function CanvasViewportContent({
   presence,
   snapshotFrame,
   frameChrome,
-  cameraOptions
+  cameraOptions,
+  focusItemId,
+  onSignIn
 }: CanvasViewportProps) {
   const controls = useCanvasControls(["canvas"], author !== null)
   const actionRunner = useCanvasActionRunner()
@@ -313,6 +319,7 @@ function CanvasViewportContent({
     readonly x: number
     readonly y: number
   } | null>(null)
+  const [signInOpen, setSignInOpen] = useState(false)
   const commentReviewRef = useRef<ReturnType<typeof makeCommentThreadReview> | null>(null)
   commentReviewRef.current ??= makeCommentThreadReview({
     document,
@@ -399,6 +406,29 @@ function CanvasViewportContent({
     observer.observe(root)
     return () => observer.disconnect()
   }, [])
+
+  const didFocusItem = useRef(
+    persistedCamera !== null || focusItemId === undefined
+  )
+  useEffect(() => {
+    if (didFocusItem.current || focusItemId === undefined) return
+    if (viewport.width <= 0 || viewport.height <= 0) return
+    const item = [...document.frames, ...document.notes]
+      .find((entry) => entry.id === focusItemId)
+    if (item === undefined) return
+    didFocusItem.current = true
+    applyCameraInput({
+      type: "center",
+      geometry: item.geometry,
+      viewport
+    })
+  }, [
+    applyCameraInput,
+    document.frames,
+    document.notes,
+    focusItemId,
+    viewport
+  ])
 
   useEffect(() => {
     const validIds = new Set([
@@ -528,7 +558,7 @@ function CanvasViewportContent({
               return presentCommentReview(blocked)
             }
             const detail = blocked.reason === "current-author-required"
-              ? "Configure Git user.name and user.email to leave comments"
+              ? "Sign in to leave comments"
               : blocked.reason === "archived-frame"
                 ? "Archived Frames do not support comments"
                 : blocked.reason === "dispatch-pending"
@@ -630,9 +660,7 @@ function CanvasViewportContent({
 
   const addNoteAt = useCallback((x: number, y: number) => {
     if (author === null) {
-      return Effect.fail(new Error(
-        "Configure Git user.name and user.email to add notes"
-      ))
+      return Effect.fail(new Error("Sign in to add a note"))
     }
     const id = localId("note")
     return dispatch(CanvasCommand.addNote({ id, text: "", author, x, y })).pipe(
@@ -1568,9 +1596,26 @@ function CanvasViewportContent({
         onRememberViewChange={changeRememberView}
         rememberView={rememberView}
         title={document.title}
-        trailingControls={presence === undefined
-          ? undefined
-          : <CanvasPresenceIndicator presence={presence} />}
+        trailingControls={
+          (author === null && onSignIn !== undefined) || presence !== undefined
+            ? (
+              <>
+                {author === null && onSignIn !== undefined ? (
+                  <Button
+                    className="crit-toolbar__sign-in"
+                    onClick={() => setSignInOpen(true)}
+                    type="button"
+                  >
+                    Sign in
+                  </Button>
+                ) : null}
+                {presence === undefined
+                  ? null
+                  : <CanvasPresenceIndicator presence={presence} />}
+              </>
+            )
+            : undefined
+        }
         tool={tool}
         selectedItemCount={selectedItems.length}
       />
@@ -1589,6 +1634,16 @@ function CanvasViewportContent({
         onError={(message) => onCommandError?.(message)}
         open={newFrameTarget !== null}
       />
+      {onSignIn === undefined ? null : (
+        <SignInDialog
+          onCancel={() => setSignInOpen(false)}
+          onSignIn={(nextAuthor) => {
+            setSignInOpen(false)
+            onSignIn(nextAuthor)
+          }}
+          open={signInOpen}
+        />
+      )}
     </div>
     </CritContextActions>
     </Popover.Root>

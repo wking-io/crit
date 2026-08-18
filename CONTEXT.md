@@ -34,11 +34,17 @@ Crit is a local-first tool for arranging and assessing live web iterations.
 
 **Author**: A local collaborator identified by an opaque ID derived from Git identity and shown by Git committer name. Authors may edit their own Notes and Comments, and the opening Comment's Author may resolve or reopen its thread.
 
-**Git Author Identity**: The repository's effective, validated `user.name` and `user.email`, resolved through one reusable identity boundary. Initialization, Canvas Creation, and Canvas Session opening all require it; Crit never guesses it or changes global Git configuration.
+**Git Author Identity**: The repository's effective, validated `user.name` and `user.email`, resolved through one reusable identity boundary. Initialization and Canvas Creation require it; Crit never guesses it or changes global Git configuration. A Canvas Session may open as a Guest Session when Current Author cannot be resolved.
 
 **Identity Remediation Prompt**: The copy-ready agent instruction attached to missing or invalid Git Author Identity failures. It directs the independent `crit-identity` skill to ask the user for unknown values, write only confirmed repository-local configuration, and verify the result through `crit identity`.
 
-**Current Author**: Every Canvas Session has exactly one Current Author: the Git-derived Author using that session. The Current Author supplies authorship for new Notes and Comments and is not part of the Canvas Document.
+**Current Author**: The Author using a Canvas Session. The Current Author supplies authorship for new Notes and Comments and is not part of the Canvas Document. A session may open without one.
+
+**Guest Session**: A Canvas Session with no Current Author. Viewing, panning, and zooming remain available; creating Frames, Notes, and Comments requires a Current Author.
+_Avoid_: read-only mode, anonymous mode, logged-out mode
+
+**Sign-in**: Establishing the Current Author for a Canvas Session from a visitor's name and email so they can add Frames and Notes.
+_Avoid_: authentication, OAuth, Git identity (those are different identity paths)
 
 **Canvas Repository**: The local persistence boundary that serializes semantic command batches under a per-Canvas filesystem lock.
 

@@ -12,6 +12,7 @@ describe("Glyph", () => {
   it("keeps every generated name, definition, and stable source serializer aligned", () => {
     expect(Object.keys(glyphDefinitions)).toEqual([...glyphNames])
     expect(glyphNames).toContain("commentPin")
+    expect(glyphNames).toContain("copy")
     expect(glyphSvgMarkup("commentPin")).toContain('viewBox="0 0 16 16"')
     expect(glyphSvgMarkup("commentPin")).toContain('fill-rule="evenodd"')
   })

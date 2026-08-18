@@ -26,7 +26,8 @@
     "dist",
     "skills",
     "README.md",
-    "ARCHITECTURE.md"
+    "ARCHITECTURE.md",
+    "src/react/base-tokens.css"
   ],
   "exports": {
     ".": {
@@ -52,7 +53,8 @@
     "./vite": {
       "types": "./dist/vite/index.d.ts",
       "import": "./dist/vite/index.js"
-    }
+    },
+    "./tokens.css": "./src/react/base-tokens.css"
   },
   "scripts": {
     "build": "npm run generate:glyphs && tsc -p tsconfig.build.json",
@@ -71,7 +73,10 @@
     "lint": "oxlint",
     "test": "vitest run",
     "typecheck": "npm run check:glyphs && tsc -p tsconfig.json --noEmit",
-    "verify": "npm run lint && npm run typecheck && npm test && npm run check:package"
+    "verify": "npm run lint && npm run typecheck && npm test && npm run check:package",
+    "www:build": "vite build --config www/vite.config.ts",
+    "www:deploy": "npm run www:build && npx wrangler pages deploy www/dist --project-name crit",
+    "www:dev": "vite --config www/vite.config.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",

@@ -52,7 +52,7 @@ describe("CanvasSession", () => {
       })
     ))
 
-  it.effect("fails opening when Current Author cannot be resolved", () =>
+  it.effect("opens a Guest Session when Current Author cannot be resolved", () =>
     Effect.scoped(
       Effect.gen(function*() {
         const stored = Canvas.export(Canvas.create({ id: "review", title: "Review", owner: TEST_AUTHOR }))
@@ -66,16 +66,15 @@ describe("CanvasSession", () => {
           apply: () => Effect.succeed(stored)
         }
 
-        const failure = yield* Effect.flip(
-          CanvasSession.open("review").pipe(
-            Effect.provide(Layer.succeed(CritClient, client))
-          )
+        const session = yield* CanvasSession.open("review", {
+          refreshInterval: false,
+          presenceRefreshInterval: false
+        }).pipe(
+          Effect.provide(Layer.succeed(CritClient, client))
         )
 
-        expect(failure).toMatchObject({
-          operation: "current-author",
-          detail: "Git user.email is not configured"
-        })
+        expect(session.state.value.presence.currentAuthor).toBeNull()
+        expect(session.document.value.id).toBe("review")
       })
     ))
 
