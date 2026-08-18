@@ -136,4 +136,21 @@ describe("canvas camera", () => {
     expect(fitted.camera.x).toBeGreaterThanOrEqual(-100)
     expect(sanitized.camera.zoom).toBeGreaterThan(1)
   })
+
+  it("centers a geometry in the viewport at the current zoom", () => {
+    const centered = updateCanvasCamera(
+      initialCanvasCameraState({ x: 40, y: 40, zoom: 0.65 }),
+      {
+        type: "center",
+        geometry: { x: 0, y: 0, width: 880, height: 560 },
+        viewport: { width: 1280, height: 800 }
+      }
+    )
+
+    expect(centered.camera).toEqual({
+      zoom: 0.65,
+      x: 640 - 440 * 0.65,
+      y: 400 - 280 * 0.65
+    })
+  })
 })

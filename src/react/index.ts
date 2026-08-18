@@ -1,5 +1,11 @@
 export * from "../core/index.js"
+export { BrowserCritClient, type BrowserCritClientOptions } from "../browser/browser-crit-client.js"
+export {
+  IndexedDbCanvasRepository,
+  type IndexedDbCanvasRepositoryOptions
+} from "../browser/indexeddb-canvas-repository.js"
 export { IndexedDbDraftJournal } from "../browser/indexeddb-draft-journal.js"
+export { CanvasRepositoryCritClient } from "../runtime/canvas-repository-crit-client.js"
 export {
   canvasLiveRefreshSocketUrl,
   connectCanvasLiveRefresh,
@@ -49,6 +55,12 @@ export {
   type CanvasDraft
 } from "../session/draft-journal.js"
 export { Crit, type CritProps } from "./crit.js"
+export {
+  isSignInComplete,
+  SignInDialog,
+  SignInForm,
+  signedInAuthor
+} from "./sign-in-dialog.js"
 export type { CanvasChoice } from "./canvas-toolbar.js"
 export {
   Glyph,
@@ -67,7 +79,9 @@ export {
   type FrameLoadingPolicy
 } from "./frame-loading.js"
 export {
+  cameraCenteringGeometry,
   DEFAULT_CANVAS_CAMERA_OPTIONS,
   type CanvasCameraOptions,
   type CanvasWheelBehavior
 } from "./canvas-camera.js"
+export * from "./library.js"

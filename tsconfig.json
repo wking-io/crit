@@ -10,7 +10,10 @@
     "noUncheckedIndexedAccess": true,
     "verbatimModuleSyntax": true,
     "skipLibCheck": true,
-    "types": ["node", "vitest/globals"]
+    "types": ["node", "vitest/globals"],
+    "paths": {
+      "@riff-refine/crit": ["./src/react/index.ts"]
+    }
   },
-  "include": ["src", "test", "playground/src", "playground/vite.config.ts", "vitest.config.ts"]
+  "include": ["src", "test", "playground/src", "playground/vite.config.ts", "www/src", "www/vite.config.ts", "vitest.config.ts"]
 }

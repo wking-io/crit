@@ -83,6 +83,8 @@ internal route managed by the plugin, not a separately configurable asset URL.
 | `cameraOptions` | Partial `CanvasCameraOptions` controlling pan speed, zoom speed, zoom steps, and wheel behavior. |
 | `onSession` | Receives the opened `CanvasSession` handle. |
 | `onCommandError` | Receives a user-command failure message. |
+| `onSignIn` | Receives the Author chosen in the Sign-in dialog. When supplied and the session has no Current Author, the toolbar shows Sign in and adding Frames or Notes requires it. |
+| `focusItemId` | Frame or Note to center on first load when no camera is persisted. Zoom stays at the default; the view is not fitted to every node. |
 | `loadingFallback` | React content shown while the Canvas opens. |
 | `errorFallback` | Renders React content from a Canvas-open failure message. |
 
@@ -319,3 +321,16 @@ npm run dev:agent -- activity feature-lab --id dev-agent --harness Terminal --de
 
 See [playground/README.md](playground/README.md) for the complete browser and
 agent checklist. Playground state persists in ignored `playground/.crit` data.
+
+## Website
+
+`www` is a separate Cloudflare-deployable app. The landing page is the Crit
+canvas itself, consuming the package UI and `BrowserCritClient` (IndexedDB)
+instead of the Vite plugin. Sign-in is required before adding Frames or Notes.
+
+```sh
+npm run www:dev
+```
+
+Build and deploy with `npm run www:build` and `npm run www:deploy`. See
+[www/README.md](www/README.md).

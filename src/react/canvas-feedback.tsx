@@ -150,15 +150,19 @@ export function CanvasPresenceIndicator({
         secondary: activity.harness,
         title: activity.activityId
       }))
-  const entries = [{
-    anonymous: false,
-    background: undefined,
-    fallback: avatarLetter(presence.currentAuthor.name),
-    key: `current-author:${presence.currentAuthor.id}`,
-    label: `Current author: ${presence.currentAuthor.name}`,
-    secondary: presence.currentAuthor.id,
-    title: presence.currentAuthor.name
-  }, ...participants]
+  const authorEntry = presence.currentAuthor === null
+    ? []
+    : [{
+        anonymous: false,
+        background: undefined,
+        fallback: avatarLetter(presence.currentAuthor.name),
+        key: `current-author:${presence.currentAuthor.id}`,
+        label: `Current author: ${presence.currentAuthor.name}`,
+        secondary: presence.currentAuthor.id,
+        title: presence.currentAuthor.name
+      }]
+  const entries = [...authorEntry, ...participants]
+  if (entries.length === 0) return null
   const overflow = Math.max(0, entries.length - 3)
   const collapsedWidth = overflow > 0
     ? 52

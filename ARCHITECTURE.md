@@ -2,8 +2,10 @@
 
 Crit is a local canvas for live web Frames and plain-text Notes. Its V1 design
 optimizes for one person working with multiple local browser windows and agents.
-It deliberately excludes remote collaboration, remote-user presence, CRDTs, authentication,
-freehand drawing, generic shapes, and asset upload.
+It deliberately excludes remote collaboration, remote-user presence, CRDTs,
+freehand drawing, generic shapes, and asset upload. A Canvas Session may open
+as a Guest Session until Sign-in establishes a Current Author; that is local
+identity for authorship, not a remote authentication provider.
 
 ## Domain core
 
@@ -38,6 +40,9 @@ one JSON document per Canvas under `.crit/canvases`, acquires a per-Canvas lock,
 loads the latest revision, applies the command batch, increments the revision,
 and atomically renames the result into place. Browser and CLI agent writes use
 this exact path, so concurrent local writers do not race through separate models.
+The IndexedDB adapter is the same repository for browser-only deployments: it
+stores one document per Canvas in the visitor's IndexedDB, seeds missing
+documents, and serializes writes per Canvas. Mutations stay on that device.
 
 `SnapshotArchive` is a separate binary-artifact boundary. Its filesystem adapter
 captures a live HTTP(S) page, bundles and minifies HTML/CSS/JavaScript, inlines
@@ -99,7 +104,8 @@ remain in the Canvas Document for future Canvas-level discovery.
 The HTTP adapter supports `GET` for Current Author, authoritative documents, and Agent Activities,
 `PATCH` for semantic command batches, and `POST` on a Frame snapshot route. Vite adapts it
 to local Connect middleware, owns the router-independent Crit editor route, and
-serves immutable snapshot artifacts. The React
+serves immutable snapshot artifacts. `BrowserCritClient` adapts the same React
+surface to IndexedDB for sites that cannot use a Node filesystem. The React
 component, Vite plugin, CLI, discovery manifest, and installed agent skill are
 thin adapters around the same core, repository, and archive boundaries.
 

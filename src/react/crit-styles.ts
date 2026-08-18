@@ -244,6 +244,21 @@ button.crit-toolbar__title:focus-visible { border-radius: 2px; outline: 2px soli
   gap: 6px;
 }
 
+.crit-toolbar__sign-in {
+  background: var(--crit-ink, #191918);
+  border: 0;
+  border-radius: 6px;
+  color: var(--crit-paper, #fff);
+  cursor: pointer;
+  font: 600 12px/1 InterVariable, Inter, system-ui, sans-serif;
+  height: 28px;
+  padding: 0 10px;
+}
+.crit-toolbar__sign-in:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
 .crit-toolbar__divider {
   align-self: stretch;
   background: oklch(14.7% 0.004 49.3 / 20%);

@@ -2,21 +2,15 @@ import * as NodeServices from "@effect/platform-node/NodeServices"
 import { open as openFile, readFile, stat, unlink } from "node:fs/promises"
 import { Effect, FileSystem, Layer, Path, Predicate, Schema } from "effect"
 
-import {
-  Canvas,
-  CanvasDocumentTooLarge,
-  CanvasInternals
-} from "../core/canvas.js"
 import { causeMessage } from "../internal/cause-message.js"
+import { applyCanvasCommands } from "../runtime/apply-canvas-commands.js"
 import {
   DocumentAlreadyExists,
   CanvasRepository
 } from "../runtime/canvas-repository.js"
 import {
-  CritClientCommandFailed,
   CritClientInvalidDocument,
   CritClientNotFound,
-  rejectedCanvasCommand,
   unavailableCanvas
 } from "../runtime/canvas-failure.js"
 import {
@@ -212,36 +206,17 @@ const make = (root: string) =>
 
       const mutate = Effect.gen(function*() {
         const current = yield* load(id)
-        const canvas = Canvas.fromDocument(current)
-        const change = yield* Canvas.apply(canvas, ...commands).pipe(
-          Effect.mapError((cause) => rejectedCanvasCommand(id, cause))
-        )
-        CanvasInternals.setRevision(canvas, current.revision + 1)
-        const next = yield* Effect.try({
-          try: () => Canvas.export(canvas),
-          catch: (cause) =>
-            cause instanceof CanvasDocumentTooLarge
-              ? new CritClientInvalidDocument({ id, detail: cause.detail })
-              : storageFailure("apply", id, cause)
-        })
+        const mutation = yield* applyCanvasCommands(id, current, commands)
         yield* fs
-          .writeFileString(temporary, serializeDocument(next), { mode: 0o600 })
+          .writeFileString(temporary, serializeDocument(mutation.document), {
+            mode: 0o600
+          })
           .pipe(Effect.mapError((cause) => storageFailure("apply", id, cause)))
         yield* fs
           .rename(temporary, target)
           .pipe(Effect.mapError((cause) => storageFailure("apply", id, cause)))
-        return { document: next, change }
+        return mutation
       }).pipe(Effect.ensuring(fs.remove(temporary).pipe(Effect.ignore)))
-
-      if (commands.length === 0) {
-        return Effect.fail(
-          new CritClientCommandFailed({
-            id,
-            reason: "invalid-command",
-            detail: "A durable Canvas update requires at least one command"
-          })
-        )
-      }
 
       return load(id).pipe(
         Effect.andThen(acquire),
