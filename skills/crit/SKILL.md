@@ -90,6 +90,8 @@ when an agent does not have an element anchor from the browser:
   their Canvas position.
 - Use Comments for feedback on a specific live Frame location or element. Use
   Notes for general Canvas context. Archived snapshot Frames reject Comments.
+  An open Comment Thread stays on the left edge of its live Frame and moves with
+  it; there is no separate attach command.
 - Preserve the Git-derived Comment author ID and name reported by Crit. Never
   impersonate a different author. Replies are flat; do not model nested replies.
 - Canvas creation records the verified Git Author as immutable Canvas Owner.

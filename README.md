@@ -213,7 +213,8 @@ uploads.
 The React viewport supports infinite pan/zoom, Frame and Note drag/resize,
 review status, editable Notes, and attachment by dropping a Note onto a Frame.
 Dragging it away detaches it without changing its Canvas position. Attached
-Notes move with their Frame. Frame toolbars retain a stable screen size while
+Notes move with their Frame. An open Comment Thread stays on the left edge of
+its live Frame and moves with that Frame. Frame toolbars retain a stable screen size while
 zooming and progressively hide title and secondary controls when space becomes
 tight. A live Frame's saved width and height belong to the iframe viewport, not
 its toolbar: responsive layout stays fixed at that configured size while the

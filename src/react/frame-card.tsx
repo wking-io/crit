@@ -1,6 +1,7 @@
 import { Button } from "@base-ui/react/button"
 import { Input } from "@base-ui/react/input"
 import { Menu } from "@base-ui/react/menu"
+import { Popover } from "@base-ui/react/popover"
 import { Effect, Match } from "effect"
 import {
   AnimatePresence,
@@ -17,7 +18,8 @@ import {
   useMemo,
   useRef,
   useState,
-  type PointerEvent as ReactPointerEvent
+  type PointerEvent as ReactPointerEvent,
+  type ReactNode
 } from "react"
 
 import type {
@@ -331,6 +333,7 @@ export function FrameCard({
   zoom,
   commentMode,
   commentThreads,
+  commentReview = null,
   defaultStatusMenuOpen = false,
   openCommentId = null,
   onBringToFront,
@@ -364,6 +367,7 @@ export function FrameCard({
   readonly zoom: number
   readonly commentMode: boolean
   readonly commentThreads: ReadonlyArray<CanvasCommentThread>
+  readonly commentReview?: ReactNode
   readonly defaultStatusMenuOpen?: boolean
   readonly openCommentId?: string | null
   readonly onBringToFront: () => Effect.Effect<unknown, unknown>
@@ -452,7 +456,11 @@ export function FrameCard({
   const frameStyle = {
     ...canvasItemStyle(
       geometry,
-      statusMenuFrameZIndex(frame.zIndex, topZIndex, statusMenuLayerActive)
+      statusMenuFrameZIndex(
+        frame.zIndex,
+        topZIndex,
+        statusMenuLayerActive || commentReview !== null
+      )
     ),
     height: contentProjection.shellHeight,
     "--crit-ui": uiScale,
@@ -1172,6 +1180,11 @@ export function FrameCard({
           zoom={zoom}
         />
       ) : null}
+      {commentReview === null ? null : (
+        <Popover.Portal container={frameRef}>
+          {commentReview}
+        </Popover.Portal>
+      )}
       {fullscreen ? <CanvasHelpPanel /> : null}
       </section>
     </CritContextActions>

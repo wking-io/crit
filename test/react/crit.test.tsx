@@ -1,5 +1,6 @@
 import { Popover } from "@base-ui/react/popover"
 import { spring } from "motion"
+import { readFile } from "node:fs/promises"
 import { renderToStaticMarkup } from "react-dom/server"
 import { describe, expect, it } from "vitest"
 
@@ -590,6 +591,34 @@ describe("Crit", () => {
       )
       expect(projection.top).toBe(frame.y)
     }
+  })
+
+  it("keeps a comment thread on the same frame edge after the frame moves", async () => {
+    const start = { x: 800, y: 120, width: 600, height: 480, zIndex: 2 }
+    const moved = { x: 1100, y: 200, width: 600, height: 480, zIndex: 2 }
+    const startProjection = commentPopoverProjection(start, 0.5)
+    const movedProjection = commentPopoverProjection(moved, 0.5)
+    const source = await readFile(
+      new URL("../../src/react/frame-card.tsx", import.meta.url),
+      "utf8"
+    )
+
+    expect(startProjection.left - start.x).toBe(-688)
+    expect(startProjection.top - start.y).toBe(0)
+    expect(movedProjection.left - moved.x).toBe(-688)
+    expect(movedProjection.top - moved.y).toBe(0)
+    expect(startProjection.scale).toBe(2)
+    expect(source).toContain("<Popover.Portal container={frameRef}>")
+    expect(source).toContain("statusMenuLayerActive || commentReview !== null")
+    expect(cssRule(".crit-comment-popover-positioner[data-sticky]")).toContain(
+      "left: var(--crit-comment-left) !important"
+    )
+    expect(cssRule(".crit-comment-popover-positioner[data-sticky]")).toContain(
+      "top: var(--crit-comment-top) !important"
+    )
+    expect(cssRule(".crit-comment-popover-positioner[data-sticky]")).toContain(
+      "transform: scale(var(--crit-comment-scale)) !important"
+    )
   })
 
   it("renders an existing Comment Thread read-only without a Current Author", () => {

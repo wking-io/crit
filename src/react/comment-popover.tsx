@@ -22,6 +22,7 @@ import {
   actionHelpTarget,
   informationalHelpTarget
 } from "./canvas-help.js"
+import { cssVariableStyle } from "./css-variable-style.js"
 import { Glyph } from "./glyph.js"
 import { useCritOverlayContainer } from "./overlay-container.js"
 
@@ -38,6 +39,18 @@ export const commentPopoverProjection = (
     top: frame.y,
     scale
   }
+}
+
+const commentPopoverStickyStyle = (
+  frame: CanvasGeometry,
+  zoom: number
+) => {
+  const projection = commentPopoverProjection(frame, zoom)
+  return cssVariableStyle({
+    "--crit-comment-left": `${projection.left - frame.x}px`,
+    "--crit-comment-scale": projection.scale,
+    "--crit-comment-top": `${projection.top - frame.y}px`
+  })
 }
 
 export type CommentDraftClear = {
@@ -391,6 +404,8 @@ export function CommentPopover(props: {
   </>
 
   const label = props.thread === undefined ? "New comment" : "Comment thread"
+  const frameGeometry = props.frameGeometry
+  const zoom = props.zoom
   if (props.inline) {
     return (
       <aside
@@ -402,6 +417,31 @@ export function CommentPopover(props: {
       >
         {contents}
       </aside>
+    )
+  }
+  if (frameGeometry !== undefined && zoom !== undefined) {
+    return (
+      <Popover.Positioner
+        className="crit-comment-popover-positioner"
+        collisionAvoidance={{
+          align: "none",
+          fallbackAxisSide: "none",
+          side: "none"
+        }}
+        data-sticky="true"
+        style={commentPopoverStickyStyle(frameGeometry, zoom)}
+      >
+        <Popover.Popup
+          aria-label={label}
+          className="crit-comment-popover"
+          initialFocus={props.canSubmit ? composerRef : true}
+          onPointerDown={(event) => event.stopPropagation()}
+          render={<aside />}
+          style={{ color: props.statusColor }}
+        >
+          {contents}
+        </Popover.Popup>
+      </Popover.Positioner>
     )
   }
 

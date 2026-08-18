@@ -1151,20 +1151,52 @@ function CanvasViewportContent({
     commentFrame?.snapshot === undefined &&
     commentGeometry !== undefined &&
     (commentReview.kind === "composing" || commentThread !== undefined)
-  const commentPopoverAnchor = useMemo(() => {
-    if (commentGeometry === undefined) return null
-    return {
-      getBoundingClientRect: () => {
-        const canvasRect = rootRef.current?.getBoundingClientRect()
-        return new DOMRect(
-          (canvasRect?.left ?? 0) + camera.x + commentGeometry.x * camera.zoom,
-          (canvasRect?.top ?? 0) + camera.y + commentGeometry.y * camera.zoom,
-          commentGeometry.width * camera.zoom,
-          commentGeometry.height * camera.zoom
-        )
+  const commentReviewPanel = commentPopoverOpen && commentGeometry !== undefined ? (
+    <CommentPopover
+      key={commentReview.kind === "thread"
+        ? commentReview.threadId
+        : "new-comment"}
+      canSubmit={commentReview.kind === "composing"
+        ? commentReview.canCreate
+        : commentReview.canReply}
+      clearDraft={commentDraftClear}
+      currentAuthorId={author?.id ?? null}
+      frameGeometry={commentGeometry}
+      frameId={commentReview.frameId}
+      pending={commentReview.pending !== null}
+      statusColor={commentStatusColor}
+      threadManageable={
+        author !== null &&
+        commentThread !== undefined &&
+        canManageCommentThread(document.owner, commentThread, author.id)
       }
-    }
-  }, [camera, commentGeometry])
+      thread={commentThread}
+      zoom={camera.zoom}
+      onClose={() => focusCommentReview(null)}
+      onActionError={(cause) => onCommandError?.(messageOf(cause))}
+      onDraftStatus={setCommentDraftDirty}
+      onEdit={(commentId, expectedBody, body) => {
+        return presentCommentReview(commentReviewRef.current!.perform({
+          type: "edit",
+          commentId,
+          expectedBody,
+          body
+        }))
+      }}
+      onResolve={(resolved) => {
+        return presentCommentReview(commentReviewRef.current!.perform({
+          type: "set-resolved",
+          resolved
+        }))
+      }}
+      onSubmit={(body) => {
+        return presentCommentReview(commentReviewRef.current!.perform({
+          type: "submit",
+          body
+        }))
+      }}
+    />
+  ) : null
   const commentPopoverClosePending = useRef(false)
   const requestCommentPopoverClose = useCallback(() => {
     if (commentPopoverClosePending.current) return
@@ -1295,6 +1327,11 @@ function CanvasViewportContent({
               selected={selectedIds.has(item.id)}
               commentMode={tool === "comment"}
               commentThreads={activeComments.filter((thread) => thread.frameId === item.id)}
+              commentReview={
+                commentPopoverOpen && commentReview.frameId === item.id
+                  ? commentReviewPanel
+                  : null
+              }
               openCommentId={
                 commentReview.kind === "thread" && commentReview.frameId === item.id
                   ? commentReview.threadId
@@ -1464,53 +1501,6 @@ function CanvasViewportContent({
             />
           )
         )}
-        {commentPopoverOpen ? (
-          <CommentPopover
-            anchor={commentPopoverAnchor}
-            key={commentReview.kind === "thread"
-              ? commentReview.threadId
-              : "new-comment"}
-            canSubmit={commentReview.kind === "composing"
-              ? commentReview.canCreate
-              : commentReview.canReply}
-            clearDraft={commentDraftClear}
-            currentAuthorId={author?.id ?? null}
-            frameGeometry={commentGeometry}
-            frameId={commentReview.frameId}
-            pending={commentReview.pending !== null}
-            statusColor={commentStatusColor}
-            threadManageable={
-              author !== null &&
-              commentThread !== undefined &&
-              canManageCommentThread(document.owner, commentThread, author.id)
-            }
-            thread={commentThread}
-            zoom={camera.zoom}
-            onClose={() => focusCommentReview(null)}
-            onActionError={(cause) => onCommandError?.(messageOf(cause))}
-            onDraftStatus={setCommentDraftDirty}
-            onEdit={(commentId, expectedBody, body) => {
-              return presentCommentReview(commentReviewRef.current!.perform({
-                type: "edit",
-                commentId,
-                expectedBody,
-                body
-              }))
-            }}
-            onResolve={(resolved) => {
-              return presentCommentReview(commentReviewRef.current!.perform({
-                type: "set-resolved",
-                resolved
-              }))
-            }}
-            onSubmit={(body) => {
-              return presentCommentReview(commentReviewRef.current!.perform({
-                type: "submit",
-                body
-              }))
-            }}
-          />
-        ) : null}
       </div>
       {selectionMarquee === null ? null : (
         <div

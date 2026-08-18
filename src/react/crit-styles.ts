@@ -602,6 +602,7 @@ button.crit-toolbar__title:focus-visible { border-radius: 2px; outline: 2px soli
 .crit-comment-pin:focus-visible { outline: calc(2px * var(--crit-ui)) solid currentColor; outline-offset: calc(2px * var(--crit-ui)); }
 .crit-comment-pin svg { display: block; height: calc(18px * var(--crit-ui)); width: calc(18px * var(--crit-ui)); }
 .crit-comment-popover-positioner { z-index: 5000; }
+.crit-comment-popover-positioner[data-sticky] { left: var(--crit-comment-left) !important; position: absolute !important; top: var(--crit-comment-top) !important; transform: scale(var(--crit-comment-scale)) !important; transform-origin: top left !important; }
 .crit-comment-popover { animation: crit-comment-popover-in 90ms cubic-bezier(.22, 1, .36, 1) both; background: oklch(97% 0.001 106.4); border: 1px solid currentColor; border-radius: 10px; box-shadow: oklch(14.7% 0.004 49.3 / 24%) 0 12px 36px; box-sizing: border-box; font-family: system-ui, -apple-system, sans-serif; max-height: min(440px, calc(100vh - 24px)); outline: 0; overflow: auto; padding: 12px; position: relative; transform-origin: var(--transform-origin, top left); width: 332px; z-index: 5000; }
 .crit-comment-popover[data-inline] { inset: auto; max-height: none; overflow: visible; position: relative; transform: none !important; width: 100%; }
 @keyframes crit-comment-popover-in { from { opacity: 0; translate: 0 4px; } to { opacity: 1; translate: 0 0; } }
