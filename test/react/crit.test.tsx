@@ -610,6 +610,7 @@ describe("Crit", () => {
     expect(startProjection.scale).toBe(2)
     expect(source).toContain("<Popover.Portal container={frameRef}>")
     expect(source).toContain("statusMenuLayerActive || commentReview !== null")
+    expect(source).toContain("data-frame-id={frame.id}")
     expect(cssRule(".crit-comment-popover-positioner[data-sticky]")).toContain(
       "left: var(--crit-comment-left) !important"
     )

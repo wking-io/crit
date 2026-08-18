@@ -1254,6 +1254,17 @@ function CanvasViewportContent({
     <Popover.Root
       onOpenChange={(open, details) => {
         if (open || details.reason === "trigger-press") return
+        if (
+          details.reason === "outside-press" &&
+          commentReview.kind !== "idle" &&
+          details.event.composedPath().some((node) =>
+            node instanceof Element &&
+            node.getAttribute("data-frame-id") === commentReview.frameId
+          )
+        ) {
+          details.cancel()
+          return
+        }
         details.cancel()
         requestCommentPopoverClose()
       }}

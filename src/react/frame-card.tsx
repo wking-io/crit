@@ -794,6 +794,7 @@ export function FrameCard({
     >
       <section
         className="crit-frame"
+        data-frame-id={frame.id}
         data-frame-status={frame.status}
         data-selected={selected || undefined}
         onPointerDown={(event) => onSelect(
