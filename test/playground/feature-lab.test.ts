@@ -10,8 +10,12 @@ import { CanvasCommandSchema } from "../../src/core/index.js"
 import { CritManifest } from "../../src/discovery/index.js"
 import {
   isOrbFrameSource,
+  playgroundMode,
   playgroundPublicUrl
 } from "../../playground/vite.config.js"
+import {
+  resolvePlaygroundProfile
+} from "../../playground/src/playground-profile.js"
 import { migrateLegacyPlaygroundCanvas } from "../../playground/migrate-state.mjs"
 import { serverPort } from "../support/server-address.js"
 
@@ -28,6 +32,29 @@ describe("Crit feature lab", () => {
       PUBLIC_URL: "https://review.example"
     })).toBe("https://review.example")
     expect(playgroundPublicUrl({})).toBeUndefined()
+  })
+
+  it("defaults to full development features and can emulate an alpha release", () => {
+    expect(playgroundMode({})).toBe("development")
+    expect(playgroundMode({ CRIT_PLAYGROUND_MODE: "alpha" })).toBe("alpha")
+    expect(playgroundMode({ CRIT_PLAYGROUND_MODE: "release" })).toBe("release")
+  })
+
+  it("resolves the live playground profile from URL, then cookie, then storage", () => {
+    expect(resolvePlaygroundProfile({})).toBe("development")
+    expect(resolvePlaygroundProfile({ url: "alpha" })).toBe("alpha")
+    expect(resolvePlaygroundProfile({
+      url: "nope",
+      cookie: "other=1; crit-playground-profile=release"
+    })).toBe("release")
+    expect(resolvePlaygroundProfile({
+      cookie: "crit-playground-profile=nope",
+      stored: "alpha"
+    })).toBe("alpha")
+    expect(resolvePlaygroundProfile({
+      stored: "nope",
+      fallback: "release"
+    })).toBe("release")
   })
 
   it("preserves legacy playground state while adding required identities", () => {
@@ -93,11 +120,49 @@ describe("Crit feature lab", () => {
       expect(html).not.toContain("<script src=")
       expect(html).not.toContain("<link rel=stylesheet")
       expect(html).not.toContain("/@vite/client")
+      expect(html).toContain("@riff-refine/crit/frame-comments")
     } finally {
       if (http.listening) await new Promise<void>((resolve, reject) => http.close((cause) => cause ? reject(cause) : resolve()))
       await vite.close()
       if (previous === undefined) delete process.env.AMP_ORB
       else process.env.AMP_ORB = previous
+    }
+  })
+
+  it("omits the comment bridge from orb frames in alpha playground mode", async () => {
+    const previousOrb = process.env.AMP_ORB
+    const previousMode = process.env.CRIT_PLAYGROUND_MODE
+    process.env.AMP_ORB = "1"
+    process.env.CRIT_PLAYGROUND_MODE = "alpha"
+    const vite = await createServer({
+      configFile: path.resolve("playground/vite.config.ts"),
+      logLevel: "silent",
+      server: { middlewareMode: true }
+    })
+    const http = createHttpServer(vite.middlewares)
+    try {
+      await new Promise<void>((resolve, reject) => {
+        http.once("error", reject)
+        http.listen(0, "127.0.0.1", resolve)
+      })
+      const response = await fetch(
+        `http://127.0.0.1:${serverPort(http)}/synth?variant=B&preview=1`,
+        { headers: { Connection: "close" } }
+      )
+      const html = await response.text()
+      expect(response.status).toBe(200)
+      expect(html).not.toContain("@riff-refine/crit/frame-comments")
+    } finally {
+      if (http.listening) {
+        await new Promise<void>((resolve, reject) => {
+          http.close((cause) => cause ? reject(cause) : resolve())
+        })
+      }
+      await vite.close()
+      if (previousOrb === undefined) delete process.env.AMP_ORB
+      else process.env.AMP_ORB = previousOrb
+      if (previousMode === undefined) delete process.env.CRIT_PLAYGROUND_MODE
+      else process.env.CRIT_PLAYGROUND_MODE = previousMode
     }
   })
 
@@ -116,7 +181,7 @@ describe("Crit feature lab", () => {
       })
       const port = serverPort(http)
       const origin = `http://127.0.0.1:${port}`
-      const [home, ui, mainSource, uiSource, uiStyles, baseTokens, frameCardSource] = await Promise.all([
+      const [home, ui, mainSource, uiSource, uiStyles, baseTokens, frameCardSource, editorShell] = await Promise.all([
         fetch(origin, {
           headers: { Connection: "close" },
           redirect: "manual"
@@ -129,12 +194,17 @@ describe("Crit feature lab", () => {
         readFile(path.resolve("playground/src/ui-lab.tsx"), "utf8"),
         readFile(path.resolve("playground/src/ui-lab.css"), "utf8"),
         readFile(path.resolve("playground/src/base-tokens.css"), "utf8"),
-        readFile(path.resolve("src/react/frame-card.tsx"), "utf8")
+        readFile(path.resolve("src/react/frame-card.tsx"), "utf8"),
+        readFile(path.resolve("playground/src/editor-shell.tsx"), "utf8")
       ])
 
       expect(home.status).toBe(200)
       expect(home.headers.get("location")).toBeNull()
       expect(await home.text()).toContain("Crit · feature-lab")
+      expect(editorShell).toContain('aria-label="Playground version"')
+      expect(editorShell).toContain("Development")
+      expect(editorShell).toContain("Alpha")
+      expect(editorShell).toContain("Release")
       expect(ui.status).toBe(200)
       expect(ui.headers.get("location")).toBeNull()
       expect(await ui.text()).toContain("Crit feature lab")

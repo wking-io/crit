@@ -12,6 +12,11 @@ import type { Plugin, ResolvedConfig, ViteDevServer } from "vite"
 import type { CanvasLiveRefreshEndpoint } from "../browser/canvas-live-refresh.js"
 import { causeMessage } from "../internal/cause-message.js"
 import {
+  DEFAULT_CRIT_FEATURES,
+  resolveCritFeatures,
+  type CritFeatures
+} from "../core/features.js"
+import {
   CRIT_MANIFEST_FILE,
   CRIT_MANIFEST_PATH,
   CritManifest,
@@ -59,6 +64,9 @@ export interface CritVitePluginOptions {
   readonly manifestPath?: string
   readonly editorPath?: string | false
   readonly frameInputBridge?: boolean
+  readonly frameCommentBridge?: boolean
+  readonly features?: Partial<CritFeatures>
+  readonly featuresForRequest?: (request: Request) => Partial<CritFeatures>
   /** `parent-fetch` is retained as a deprecated alias for `relay`. */
   readonly frameLoading?: "navigate" | "relay" | "parent-fetch"
   /** Trusted browser-visible origin used for manifest URLs and frame loading. */
@@ -402,7 +410,8 @@ const resolvedVirtualEditorId = () =>
 const editorModuleSource = (
   reactEntry: string,
   delivery: "vite" | "bundle",
-  frameLoading: "navigate" | "relay" | "parent-fetch" = "navigate"
+  frameLoading: "navigate" | "relay" | "parent-fetch" = "navigate",
+  features: CritFeatures = DEFAULT_CRIT_FEATURES
 ) => {
   const frameLoadingPolicy = frameLoading === "navigate"
     ? { strategy: "navigate" }
@@ -459,6 +468,7 @@ const editorModuleSource = (
       canvasId,
       canvasChoices,
       developerTools: ${delivery === "vite"},
+      features: ${JSON.stringify(features)},
       frameLoading: ${JSON.stringify(frameLoadingPolicy)},
       onCanvasSelect: selectCanvas,
       onSession: attachLiveRefresh,
@@ -474,12 +484,13 @@ const editorModuleSource = (
 }
 
 const buildEditorBundle = async (
-  frameLoading: "navigate" | "relay" | "parent-fetch"
+  frameLoading: "navigate" | "relay" | "parent-fetch",
+  features: CritFeatures
 ) => {
   const reactEntry = resolveReactEntry()
   const result = await build({
     stdin: {
-      contents: editorModuleSource(reactEntry, "bundle", frameLoading),
+      contents: editorModuleSource(reactEntry, "bundle", frameLoading, features),
       loader: "js",
       resolveDir: path.dirname(reactEntry),
       sourcefile: "crit-editor.js"
@@ -504,6 +515,10 @@ export const crit = (options: CritVitePluginOptions = {}): Plugin => {
   const manifestPath = options.manifestPath ?? CRIT_MANIFEST_PATH
   const editorPath = options.editorPath ?? "/crit"
   const enabled = options.enabled ?? true
+  const features = resolveCritFeatures(options.features)
+  const featuresForRequest = options.featuresForRequest
+  const frameInputBridge = options.frameInputBridge ?? true
+  const frameCommentBridge = options.frameCommentBridge ?? features.comments
   const frameLoading = options.frameLoading ?? "navigate"
   const publicOrigin = normalizePublicOrigin(options.publicOrigin)
   let resolvedRoot = options.root ?? process.cwd()
@@ -536,7 +551,7 @@ export const crit = (options: CritVitePluginOptions = {}): Plugin => {
     const editorBundle =
       editorBase === undefined || !isPreview
         ? undefined
-        : buildEditorBundle(frameLoading)
+        : buildEditorBundle(frameLoading, features)
     const runtime = ManagedRuntime.make(
       Layer.mergeAll(
         documentLayer,
@@ -572,7 +587,13 @@ export const crit = (options: CritVitePluginOptions = {}): Plugin => {
               snapshots.snapshotFrame
             ),
             activity: CanvasRepositoryCritActivityClient.make(activity.read)
-          }, { apiPath })
+          }, featuresForRequest === undefined
+            ? { apiPath, features }
+            : {
+              apiPath,
+              featuresForRequest: (request) =>
+                resolveCritFeatures(featuresForRequest(request))
+            })
         }))
       )
     )
@@ -864,26 +885,29 @@ export const crit = (options: CritVitePluginOptions = {}): Plugin => {
     load(id) {
       if (id === resolvedVirtualEditorId()) {
         return editorModuleSource(
-          resolveReactEntry(), "vite", frameLoading
+          resolveReactEntry(), "vite", frameLoading, features
         )
       }
     },
     transformIndexHtml() {
-      if (options.frameInputBridge === false) return []
-      return [
-        {
+      const tags = []
+      if (frameInputBridge) {
+        tags.push({
           tag: "script",
           attrs: { "data-crit-frame-input-bridge": "" },
           children: critFrameInputBridgeScript,
-          injectTo: "head-prepend"
-        },
-        {
+          injectTo: "head-prepend" as const
+        })
+      }
+      if (frameCommentBridge) {
+        tags.push({
           tag: "script",
           attrs: { "data-crit-frame-comment-bridge": "" },
           children: critFrameCommentBridgeScript,
-          injectTo: "head-prepend"
-        }
-      ]
+          injectTo: "head-prepend" as const
+        })
+      }
+      return tags
     },
     configureServer(server) {
       isPreview = false
@@ -897,3 +921,10 @@ export const crit = (options: CritVitePluginOptions = {}): Plugin => {
 }
 
 export const critVitePlugin = crit
+
+export {
+  ALPHA_FEATURES,
+  DEFAULT_CRIT_FEATURES,
+  DEVELOPMENT_FEATURES,
+  type CritFeatures
+} from "../core/features.js"

@@ -242,6 +242,115 @@ describe("crit Vite plugin", () => {
     expect(invalidBody.error.code).toBe("invalid-request")
   })
 
+  it("rejects Comment commands by default and preserves stored threads", async () => {
+    await createCanvas("homepage")
+    const origin = await start()
+    const { client } = HttpCritClient.make({
+      apiPath: `${origin}/__crit/api`
+    })
+    await Effect.runPromise(client.apply("homepage", [
+      CanvasCommand.addFrame({
+        id: "candidate",
+        url: `${origin}/`,
+        title: "Candidate",
+        provenance: { kind: "manual", sourceId: "test" }
+      })
+    ]))
+    const seeded = await Effect.runPromise(client.load("homepage"))
+    const withComments = {
+      ...seeded,
+      comments: [{
+        id: "thread-1",
+        frameId: "candidate",
+        anchor: { kind: "frame" as const, xRatio: 0.5, yRatio: 0.5 },
+        opening: {
+          id: "comment-1",
+          body: "Tighten this spacing",
+          author: TEST_AUTHOR,
+          createdAt: "2026-08-09T12:00:00.000Z",
+          editedAt: null
+        },
+        replies: [],
+        resolvedAt: null,
+        resolvedBy: null
+      }]
+    }
+    await writeFile(
+      path.join(root, ".crit/canvases/homepage.json"),
+      `${JSON.stringify(withComments)}\n`
+    )
+
+    const rejected = await fetch(`${origin}/__crit/api/canvases/homepage`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        commands: [{
+          _tag: "AddCommentThread",
+          id: "thread-2",
+          frameId: "candidate",
+          anchor: { kind: "frame", xRatio: 0.2, yRatio: 0.2 },
+          opening: {
+            id: "comment-2",
+            body: "Should not land",
+            author: TEST_AUTHOR,
+            createdAt: "2026-08-09T12:01:00.000Z",
+            editedAt: null
+          }
+        }]
+      })
+    })
+    const rejectedBody = Schema.decodeUnknownSync(TestErrorBody)(await rejected.json())
+    await Effect.runPromise(client.apply("homepage", [
+      CanvasCommand.setFrameTitle({
+        id: "candidate",
+        title: "Candidate v2"
+      })
+    ]))
+    const updated = await Effect.runPromise(client.load("homepage"))
+
+    expect(rejected.status).toBe(400)
+    expect(rejectedBody.error.message).toContain("unavailable")
+    expect(updated.frames[0]?.title).toBe("Candidate v2")
+    expect(updated.comments).toEqual(withComments.comments)
+  })
+
+  it("resolves Comment availability from featuresForRequest", async () => {
+    await createCanvas("homepage")
+    const origin = await start({
+      featuresForRequest: (request) => ({
+        comments: request.headers.get("cookie")?.includes(
+          "crit-playground-profile=development"
+        ) === true
+      })
+    })
+    const commands = {
+      commands: [{
+        _tag: "AddCommentThread",
+        id: "thread-1",
+        frameId: "candidate",
+        anchor: { kind: "frame", xRatio: 0.5, yRatio: 0.5 },
+        opening: {
+          id: "comment-1",
+          body: "Should follow the request profile",
+          author: TEST_AUTHOR,
+          createdAt: "2026-08-09T12:00:00.000Z",
+          editedAt: null
+        }
+      }]
+    }
+    const denied = await fetch(`${origin}/__crit/api/canvases/homepage`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        cookie: "crit-playground-profile=alpha"
+      },
+      body: JSON.stringify(commands)
+    })
+    const deniedBody = Schema.decodeUnknownSync(TestErrorBody)(await denied.json())
+    expect(denied.status).toBe(400)
+    expect(deniedBody.error.message).toContain("unavailable")
+  })
+
   it("loads the development editor through Vite's watched module graph", async () => {
     const origin = await start({ root }, process.cwd())
     const editorHtml = await (await fetch(`${origin}/crit/homepage`, {
@@ -260,6 +369,7 @@ describe("crit Vite plugin", () => {
     expect(editorModule).toContain("DEFAULT_FRAME_CHROME_SETTINGS")
     expect(editorModule).toContain("DEFAULT_CANVAS_CAMERA_OPTIONS")
     expect(editorModule).toContain("developerTools: true")
+    expect(editorModule).toContain("features: {\"comments\":false}")
     expect(editorModule).toContain('frameLoading: {"strategy":"navigate"}')
   })
 
@@ -274,6 +384,18 @@ describe("crit Vite plugin", () => {
     )).text()
 
     expect(editorModule).toContain('frameLoading: {"strategy":"relay"}')
+  })
+
+  it("serializes the resolved feature profile into the editor", async () => {
+    const origin = await start({
+      root,
+      features: { comments: true }
+    }, process.cwd())
+    const editorModule = await (await fetch(
+      `${origin}/@id/virtual:crit-editor.js`
+    )).text()
+
+    expect(editorModule).toContain("features: {\"comments\":true}")
   })
 
   it("relays a validated live Frame as a real navigable HTML document", async () => {
@@ -492,6 +614,33 @@ describe("crit Vite plugin", () => {
     expect(html).toContain('type: "pinch"')
     expect(html).toContain("event.preventDefault()")
     expect(html).toContain("window.parent.postMessage")
+    expect(html).not.toContain("@riff-refine/crit/frame-comments")
+    expect(html).not.toContain("data-crit-frame-comment-bridge")
+  })
+
+  it("injects the Frame comment bridge only when comments are enabled", async () => {
+    await writeFile(
+      path.join(root, "index.html"),
+      "<!doctype html><html><head></head><body>Frame app</body></html>"
+    )
+    const origin = await start({ features: { comments: true } })
+    const html = await (await fetch(origin)).text()
+    expect(html).toContain("@riff-refine/crit/frame-comments")
+    expect(html).toContain("data-crit-frame-comment-bridge")
+  })
+
+  it("keeps the input and comment bridges independently configurable", async () => {
+    await writeFile(
+      path.join(root, "index.html"),
+      "<!doctype html><html><head></head><body>Frame app</body></html>"
+    )
+    const origin = await start({
+      frameInputBridge: false,
+      frameCommentBridge: true
+    })
+    const html = await (await fetch(origin)).text()
+    expect(html).not.toContain("@riff-refine/crit/frame-input")
+    expect(html).toContain("@riff-refine/crit/frame-comments")
   })
 
   it("publishes the project manifest without trusting forwarded headers or creating on load", async () => {

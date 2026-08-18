@@ -115,6 +115,6 @@ export default defineConfig({})
       install: { command: "npm", args: ["install"] }
     })
     expect(output).toMatchObject({ author: TEST_AUTHOR })
-    expect(packageJson.dependencies["@riff-refine/crit"]).toBe("^0.0.0")
+    expect(packageJson.dependencies["@riff-refine/crit"]).toBe("^0.1.0-alpha.0")
   })
 })

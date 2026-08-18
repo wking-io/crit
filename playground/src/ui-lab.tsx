@@ -620,6 +620,7 @@ function ToolbarSpecimens() {
       <div className="ui-toolbar-stage">
         <CanvasToolbar
           commentAvailable
+          commentsEnabled
           noteAvailable
           onAction={() => {}}
           title="Feature lab"
@@ -704,6 +705,7 @@ function FrameSpecimen({
     >
       <FrameCard
         commentMode={false}
+        commentsEnabled
         commentThreads={[]}
         defaultStatusMenuOpen={defaultStatusMenuOpen}
         frame={frame}

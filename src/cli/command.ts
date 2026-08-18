@@ -6,6 +6,8 @@ import {
   Canvas,
   CanvasCommand,
   CanvasCommandSchema,
+  DEFAULT_CRIT_FEATURES,
+  unavailableCommentCommandDetail,
   type CanvasCommand as CanvasCommandInput,
   type CanvasDocument
 } from "../core/index.js"
@@ -26,13 +28,18 @@ import {
   CanvasRepository,
   type CanvasRepositoryMutation
 } from "../runtime/canvas-repository.js"
+import { CritFeaturePolicy } from "../runtime/feature-policy.js"
 import { SnapshotService } from "../runtime/snapshot-service.js"
 import { PACKAGE_VERSION } from "../version.js"
 
 class InvalidCliInput extends Schema.TaggedError<InvalidCliInput>()(
   "InvalidCliInput",
   { detail: Schema.String }
-) {}
+) {
+  override get message() {
+    return this.detail
+  }
+}
 
 const writeStdout = (value: string) =>
   Effect.gen(function*() {
@@ -40,13 +47,20 @@ const writeStdout = (value: string) =>
     yield* Stream.run(Stream.make(value), stdio.stdout())
   })
 
-const canvasView = (document: CanvasDocument) => {
+const canvasView = (
+  document: CanvasDocument,
+  features = DEFAULT_CRIT_FEATURES
+) => {
   const canvas = Canvas.fromDocument(document)
-  return {
+  const view = {
     canvas: Canvas.summarize(canvas),
     frames: Canvas.listFrames(canvas),
     notes: Canvas.listNotes(canvas),
-    owner: document.owner,
+    owner: document.owner
+  }
+  if (!features.comments) return view
+  return {
+    ...view,
     comments: Canvas.listCommentThreads(canvas)
   }
 }
@@ -260,7 +274,10 @@ const syncCommand = Command.make(
   )
 )
 
-const decodeCanvasCommands = (input: string) =>
+const decodeCanvasCommands = (
+  input: string,
+  features = DEFAULT_CRIT_FEATURES
+) =>
   Effect.try({
     try: () => JSON.parse(input),
     catch: (cause) =>
@@ -283,7 +300,16 @@ const decodeCanvasCommands = (input: string) =>
             })
           )
         : Effect.succeed(decoded)
-    )
+    ),
+    Effect.flatMap((decoded) => {
+      const commentsUnavailable = unavailableCommentCommandDetail(
+        decoded,
+        features
+      )
+      return commentsUnavailable === undefined
+        ? Effect.succeed(decoded)
+        : Effect.fail(new InvalidCliInput({ detail: commentsUnavailable }))
+    })
   )
 
 const applyCommand = Command.make(
@@ -296,8 +322,12 @@ const applyCommand = Command.make(
   ({ id, commands, json }) =>
     Effect.gen(function*() {
       const documents = yield* CanvasRepository
+      const features = Option.getOrElse(
+        yield* Effect.serviceOption(CritFeaturePolicy),
+        () => DEFAULT_CRIT_FEATURES
+      )
       const decoded: ReadonlyArray<CanvasCommandInput> =
-        yield* decodeCanvasCommands(commands)
+        yield* decodeCanvasCommands(commands, features)
       if (decoded.length === 0) {
         return yield* new InvalidCliInput({
           detail: "At least one Canvas command is required"
@@ -305,23 +335,27 @@ const applyCommand = Command.make(
       }
       const persisted = yield* documents.apply(id, decoded)
       const mutation = canvasMutation(persisted)
-      const updated = canvasView(persisted.document)
+      const updated = canvasView(persisted.document, features)
+      const applyPayload = {
+        schemaVersion: 1 as const,
+        command: "apply" as const,
+        mutation,
+        frames: updated.frames,
+        notes: updated.notes,
+        owner: updated.owner
+      }
       const output = json
-        ? JSON.stringify({
-            schemaVersion: 1,
-            command: "apply",
-            mutation,
-            frames: updated.frames,
-            notes: updated.notes,
-            owner: updated.owner,
-            comments: updated.comments
-          })
+        ? JSON.stringify(
+          "comments" in updated
+            ? { ...applyPayload, comments: updated.comments }
+            : applyPayload
+        )
         : `Applied ${decoded.length} command(s) to "${updated.canvas.title}" at revision ${mutation.revision}.`
       yield* writeStdout(`${output}\n`)
     })
 ).pipe(
   Command.withDescription(
-    "Atomically apply semantic Frame, Note, and Comment commands"
+    "Atomically apply semantic Frame and Note commands"
   )
 )
 
@@ -459,13 +493,17 @@ const openCommand = Command.make(
   ({ id, json }) =>
     Effect.gen(function*() {
       const documents = yield* CanvasRepository
-      const view = canvasView(yield* documents.load(id))
+      const features = Option.getOrElse(
+        yield* Effect.serviceOption(CritFeaturePolicy),
+        () => DEFAULT_CRIT_FEATURES
+      )
+      const view = canvasView(yield* documents.load(id), features)
       const output = json
         ? JSON.stringify({ schemaVersion: 1, command: "open", ...view })
         : `Canvas "${view.canvas.title}" (${view.canvas.id}), revision ${view.canvas.revision}, ${view.canvas.frameCount} Frame(s).`
       yield* writeStdout(`${output}\n`)
     })
-).pipe(Command.withDescription("Read a Crit Canvas, Frames, Notes, and Comments"))
+).pipe(Command.withDescription("Read a Crit Canvas, Frames, and Notes"))
 
 const snapshotCommand = Command.make(
   "snapshot",

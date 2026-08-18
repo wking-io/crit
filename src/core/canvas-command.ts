@@ -5,6 +5,10 @@ import {
   CommentAnchor,
   CommentMessage
 } from "./comment.js"
+import {
+  COMMENTS_UNAVAILABLE_DETAIL,
+  type CritFeatures
+} from "./features.js"
 
 export const FrameReviewStatus = Schema.Union([
   Schema.Literal("in-progress"),
@@ -557,6 +561,17 @@ const updateCommentAnchor = (
   ...input
 })
 
+export const CommentCommandSchema = Schema.Union([
+  AddCommentThreadCommand,
+  ReplyToCommentThreadCommand,
+  EditCommentCommand,
+  SetCommentThreadResolvedCommand,
+  UpdateCommentAnchorCommand
+])
+export type CommentCommand = typeof CommentCommandSchema.Type
+
+export const isCommentCommand = Schema.is(CommentCommandSchema)
+
 export const CanvasCommandSchema = Schema.Union([
   RenameCanvasCommand,
   AddFrameCommand,
@@ -587,6 +602,14 @@ export const CanvasCommandSchema = Schema.Union([
   UpdateCommentAnchorCommand
 ])
 export type CanvasCommand = typeof CanvasCommandSchema.Type
+
+export const unavailableCommentCommandDetail = (
+  commands: ReadonlyArray<CanvasCommand>,
+  features: CritFeatures
+) =>
+  features.comments || !commands.some(isCommentCommand)
+    ? undefined
+    : COMMENTS_UNAVAILABLE_DETAIL
 
 export const CanvasCommand = {
   RenameCanvas: RenameCanvasCommand,

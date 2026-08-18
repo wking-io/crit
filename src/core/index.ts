@@ -40,6 +40,19 @@ export {
   type FrameCommentAnchor as FrameCommentAnchorValue
 } from "./comment.js"
 export {
+  ALPHA_FEATURES,
+  COMMENTS_UNAVAILABLE_DETAIL,
+  CritFeatureProfile,
+  CritFeatures,
+  DEFAULT_CRIT_FEATURES,
+  DEVELOPMENT_FEATURES,
+  critFeaturesForProfile,
+  resolveCritFeatureProfile,
+  resolveCritFeatures,
+  type CritFeatureProfile as CritFeatureProfileName,
+  type CritFeatures as CritFeaturesValue
+} from "./features.js"
+export {
   AddNoteCommand,
   AddCommentThreadCommand,
   AddSnapshotFrameCommand,
@@ -49,6 +62,9 @@ export {
   BringNoteToFrontCommand,
   CanvasCommand,
   CanvasCommandSchema,
+  CommentCommandSchema,
+  isCommentCommand,
+  unavailableCommentCommandDetail,
   FrameDisplay,
   FrameProvenance,
   NoteColorFamily,
@@ -75,6 +91,7 @@ export {
   EditCommentCommand,
   SetCommentThreadResolvedCommand,
   UpdateCommentAnchorCommand,
+  type CommentCommand,
   type AddCommentThreadInput,
   type ReplyToCommentThreadInput,
   type EditCommentInput,

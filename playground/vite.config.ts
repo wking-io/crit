@@ -8,6 +8,11 @@ import { crit, type CritVitePluginOptions } from "../src/vite/index.js"
 import { critFrameInputBridgeScript } from "../src/frame-bridge/index.js"
 import { critFrameCommentBridgeScript } from "../src/frame-bridge/comment-bridge.js"
 import { causeMessage } from "../src/internal/cause-message.js"
+import {
+  featuresForPlaygroundProfile,
+  resolvePlaygroundProfile,
+  type PlaygroundProfile
+} from "./src/playground-profile.js"
 
 const framePattern = /^\/synth\/?$/
 const escapeInline = (value: string, element: "script" | "style") =>
@@ -21,7 +26,27 @@ export const isOrbFrameSource = (file: string) =>
     pathRelative(fileURLToPath(new URL("..", import.meta.url)), file)
   )
 
-export const orbFramePlugin = (): Plugin => {
+export type PlaygroundMode = PlaygroundProfile
+
+export const playgroundMode = (
+  environment: Readonly<Record<string, string | undefined>>
+): PlaygroundMode => {
+  if (environment.CRIT_PLAYGROUND_MODE === "alpha") return "alpha"
+  if (environment.CRIT_PLAYGROUND_MODE === "release") return "release"
+  return "development"
+}
+
+const profileFromRequest = (
+  cookieHeader: string | undefined,
+  fallback: PlaygroundProfile
+) => resolvePlaygroundProfile({
+  cookie: cookieHeader ?? null,
+  fallback
+})
+
+export const orbFramePlugin = (
+  fallbackProfile: PlaygroundProfile = "development"
+): Plugin => {
   let bundlePromise: Promise<{ readonly javascript: string; readonly css: string }> | undefined
   const bundle = () => bundlePromise ??= build({
     entryPoints: [fileURLToPath(new URL("./src/frame-entry.tsx", import.meta.url))],
@@ -50,8 +75,15 @@ export const orbFramePlugin = (): Plugin => {
         const url = new URL(request.url ?? "/", "http://crit.localhost")
         const pathname = url.pathname
         if (request.method !== "GET" || !framePattern.test(pathname)) return next()
+        const commentsEnabled = featuresForPlaygroundProfile(
+          profileFromRequest(request.headers.cookie, fallbackProfile)
+        ).comments
         void bundle().then(({ javascript, css }) => {
-          const scripts = [critFrameInputBridgeScript, critFrameCommentBridgeScript, javascript]
+          const scripts = [
+            critFrameInputBridgeScript,
+            ...(commentsEnabled ? [critFrameCommentBridgeScript] : []),
+            javascript
+          ]
             .map((script) => `<script>${escapeInline(script, "script")}</script>`).join("")
           const frameUrl = escapeAttribute(`${pathname}${url.search}`)
           const html = `<!doctype html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="crit-frame-url" content="${frameUrl}"><style>${escapeInline(css, "style")}</style></head><body><div id="root"></div>${scripts}</body></html>`
@@ -73,6 +105,16 @@ export const orbFramePlugin = (): Plugin => {
   }
 }
 
+const playgroundEditorPlugin = (): Plugin => ({
+  name: "crit-playground-editor",
+  enforce: "pre",
+  resolveId(id) {
+    if (id === "virtual:crit-editor.js") {
+      return fileURLToPath(new URL("./src/editor-shell.tsx", import.meta.url))
+    }
+  }
+})
+
 const port = Number.parseInt(
   process.env.PORT ?? process.env.CRIT_PLAYGROUND_PORT ?? "5173",
   10
@@ -82,9 +124,18 @@ export const playgroundPublicUrl = (
   environment: Readonly<Record<string, string | undefined>>
 ) => environment.PUBLIC_URL ?? environment.PORTLESS_URL
 
+const mode = playgroundMode(process.env)
 const publicUrl = playgroundPublicUrl(process.env)
 let critOptions: CritVitePluginOptions = {
-  frameLoading: ampOrb ? "relay" : "navigate"
+  features: featuresForPlaygroundProfile(mode),
+  frameCommentBridge: true,
+  frameLoading: ampOrb ? "relay" : "navigate",
+  featuresForRequest: (request) => featuresForPlaygroundProfile(
+    resolvePlaygroundProfile({
+      cookie: request.headers.get("cookie"),
+      fallback: mode
+    })
+  )
 }
 if (publicUrl) {
   critOptions = { ...critOptions, publicOrigin: publicUrl }
@@ -92,7 +143,10 @@ if (publicUrl) {
 const serverOptions: ServerOptions = {
   host: process.env.HOST ?? "127.0.0.1",
   port,
-  strictPort: true
+  strictPort: true,
+  fs: {
+    allow: [fileURLToPath(new URL("..", import.meta.url))]
+  }
 }
 if (ampOrb) {
   serverOptions.allowedHosts = true
@@ -100,8 +154,18 @@ if (ampOrb) {
 
 export default defineConfig({
   root: fileURLToPath(new URL(".", import.meta.url)),
+  define: {
+    __CRIT_PLAYGROUND_DEFAULT_PROFILE__: JSON.stringify(mode),
+    __CRIT_PLAYGROUND_FRAME_LOADING__: JSON.stringify(
+      ampOrb ? "relay" : "navigate"
+    ),
+    __CRIT_RELEASE_ENTRY__: JSON.stringify(
+      fileURLToPath(new URL("../dist/react/index.js", import.meta.url))
+    )
+  },
   plugins: [
-    ...(ampOrb ? [orbFramePlugin()] : []),
+    playgroundEditorPlugin(),
+    ...(ampOrb ? [orbFramePlugin(mode)] : []),
     {
       name: "crit-feature-lab-home",
       configureServer(server) {
@@ -118,7 +182,7 @@ export default defineConfig({
           next()
         })
       }
-    },
+    } satisfies Plugin,
     crit(critOptions)
   ],
   server: serverOptions

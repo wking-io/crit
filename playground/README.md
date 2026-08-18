@@ -24,8 +24,16 @@ Signal Rack designs from the `wking` synth iteration Canvas. All three pages are
 served by the same Vite process. Canvas state persists under
 `playground/.crit`, which is ignored by git.
 
+`npm run dev` opens the playground with a live **Playground** version selector
+in the editor (Development, Alpha, Release). Development enables Comments;
+Alpha and Release hide them. Release loads the compiled package from `dist`.
+`npm run playground:alpha` and `npm run playground:release` only change the
+selector's default before the first visit. Pair those with `npm run dev:agent`
+or `npm run playground:alpha:agent`.
+
 ## Browser checks
 
+- Switch **Playground** from Development to Alpha and verify the comment tool disappears; stored threads remain after switching back.
 - Pan, zoom, and use **Fit**; verify toolbars remain a readable screen size.
 - Right-click empty canvas space; create a Frame or Note and use **Zoom to fit**.
 - Right-click a Frame; verify delete, fullscreen, new-tab, ordering, and **Fit content** actions.

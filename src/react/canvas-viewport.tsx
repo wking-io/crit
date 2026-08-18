@@ -15,6 +15,7 @@ import {
   CanvasCommand,
   CanvasCommandFailed,
   canManageCommentThread,
+  DEFAULT_CRIT_FEATURES,
   type CanvasDocument,
   type CanvasFrame,
   type CanvasGeometry,
@@ -22,6 +23,7 @@ import {
   type Author,
   type CanvasCommand as CanvasCommandValue
 } from "../core/index.js"
+import type { CritFeatures } from "../core/features.js"
 import {
   CritClientErrorSchema,
   critClientErrorMessage
@@ -176,6 +178,7 @@ export interface CanvasViewportProps {
   readonly frameChrome?: Partial<FrameChromeSettings> | undefined
   readonly cameraOptions?: Partial<CanvasCameraOptions> | undefined
   readonly developerTools?: boolean | undefined
+  readonly features?: CritFeatures | undefined
   readonly presence?: CanvasPresence | undefined
   readonly focusItemId?: string | undefined
   readonly onSignIn?: ((author: Author) => void) | undefined
@@ -267,8 +270,10 @@ function CanvasViewportContent({
   frameChrome,
   cameraOptions,
   focusItemId,
-  onSignIn
+  onSignIn,
+  features = DEFAULT_CRIT_FEATURES
 }: CanvasViewportProps) {
+  const commentsEnabled = features.comments
   const controls = useCanvasControls(["canvas"], author !== null)
   const actionRunner = useCanvasActionRunner()
   const requestConfirmation = useConfirmation()
@@ -320,18 +325,21 @@ function CanvasViewportContent({
     readonly y: number
   } | null>(null)
   const [signInOpen, setSignInOpen] = useState(false)
+  const idleCommentReview = { kind: "idle" as const, notice: null }
   const commentReviewRef = useRef<ReturnType<typeof makeCommentThreadReview> | null>(null)
-  commentReviewRef.current ??= makeCommentThreadReview({
-    document,
-    currentAuthor: author,
-    clock: { now: () => new Date().toISOString() },
-    ids: {
-      commentThreadId: () => localId("thread"),
-      commentId: () => localId("comment")
-    }
-  })
+  if (commentsEnabled) {
+    commentReviewRef.current ??= makeCommentThreadReview({
+      document,
+      currentAuthor: author,
+      clock: { now: () => new Date().toISOString() },
+      ids: {
+        commentThreadId: () => localId("thread"),
+        commentId: () => localId("comment")
+      }
+    })
+  }
   const [commentReview, setCommentReview] = useState(
-    commentReviewRef.current.state()
+    () => commentReviewRef.current?.state() ?? idleCommentReview
   )
   const [commentDraftDirty, setCommentDraftDirty] = useState(false)
   const [commentDraftClear, setCommentDraftClear] =
@@ -500,6 +508,8 @@ function CanvasViewportContent({
   const presentCommentReview = useCallback((
     transition: CommentThreadReviewTransition
   ) => {
+    const review = commentReviewRef.current
+    if (review === null) return Effect.void
     const adopt = (next: CommentThreadReviewTransition) => {
       setCommentReview(next.state)
       Match.value(next).pipe(
@@ -525,13 +535,13 @@ function CanvasViewportContent({
           blocked: () => Effect.void,
           dispatch: (pending) => dispatch(...pending.commands).pipe(
             Effect.tapError((cause) => Effect.sync(() => adopt(
-              commentReviewRef.current!.settle(pending.key, {
+              review.settle(pending.key, {
                 type: "rejected",
                 cause
               })
             ))),
             Effect.tap(() => Effect.sync(() => adopt(
-              commentReviewRef.current!.settle(pending.key, {
+              review.settle(pending.key, {
                 type: "accepted"
               })
             )))
@@ -544,7 +554,9 @@ function CanvasViewportContent({
   const focusCommentReview = useCallback((
     target: CommentThreadReviewTarget | null
   ) => {
-    const transition = commentReviewRef.current!.focus(target, {
+    const review = commentReviewRef.current
+    if (review === null) return Effect.void
+    const transition = review.focus(target, {
       draft: commentDraftDirty ? "dirty" : "clean"
     })
 
@@ -581,7 +593,7 @@ function CanvasViewportContent({
       })).pipe(
         Effect.flatMap((discardDraft) => presentOrReport(
           discardDraft
-            ? commentReviewRef.current!.focus(target, {
+            ? review.focus(target, {
                 draft: "dirty",
                 discardDraft: true
               })
@@ -598,10 +610,31 @@ function CanvasViewportContent({
   ])
 
   useEffect(() => {
+    if (!commentsEnabled) {
+      commentReviewRef.current = null
+      setCommentReview(idleCommentReview)
+      setCommentDraftDirty(false)
+      setCommentDraftClear(null)
+      setTool((current) => current === "comment" ? "select" : current)
+      return
+    }
+    commentReviewRef.current ??= makeCommentThreadReview({
+      document,
+      currentAuthor: author,
+      clock: { now: () => new Date().toISOString() },
+      ids: {
+        commentThreadId: () => localId("thread"),
+        commentId: () => localId("comment")
+      }
+    })
+  }, [author, commentsEnabled, document])
+
+  useEffect(() => {
+    if (!commentsEnabled || commentReviewRef.current === null) return
     Effect.runFork(presentCommentReview(
-      commentReviewRef.current!.reconcile(document, author)
+      commentReviewRef.current.reconcile(document, author)
     ).pipe(Effect.catch(() => Effect.void)))
-  }, [author, document, presentCommentReview])
+  }, [author, commentsEnabled, document, presentCommentReview])
 
   const geometryOf = useCallback(
     (item: CanvasFrame | CanvasNote) => {
@@ -1165,16 +1198,22 @@ function CanvasViewportContent({
     (highest, item) => Math.max(highest, item.zIndex),
     0
   ) + 1
-  const activeComments = useMemo(() => document.comments.filter((thread) => thread.resolvedAt === null), [document.comments])
-  const commentThread = commentReview.kind === "thread"
+  const activeComments = useMemo(
+    () => commentsEnabled
+      ? document.comments.filter((thread) => thread.resolvedAt === null)
+      : [],
+    [commentsEnabled, document.comments]
+  )
+  const commentThread = commentsEnabled && commentReview.kind === "thread"
     ? commentReview.thread
     : undefined
-  const commentFrame = commentReview.kind === "idle"
+  const commentFrame = !commentsEnabled || commentReview.kind === "idle"
     ? undefined
     : document.frames.find((frame) => frame.id === commentReview.frameId)
   const commentGeometry = commentFrame === undefined ? undefined : geometryOf(commentFrame)
   const commentStatusColor = frameStatus(commentFrame?.status ?? "archived").ink
   const commentPopoverOpen =
+    commentsEnabled &&
     commentReview.kind !== "idle" &&
     commentFrame?.snapshot === undefined &&
     commentGeometry !== undefined &&
@@ -1321,7 +1360,8 @@ function CanvasViewportContent({
                 geometryOf(item), camera, viewport.width, viewport.height
               )}
               selected={selectedIds.has(item.id)}
-              commentMode={tool === "comment"}
+              commentMode={commentsEnabled && tool === "comment"}
+              commentsEnabled={commentsEnabled}
               commentThreads={activeComments.filter((thread) => thread.frameId === item.id)}
               openCommentId={
                 commentReview.kind === "thread" && commentReview.frameId === item.id
@@ -1580,7 +1620,8 @@ function CanvasViewportContent({
         addFrameButtonRef={addFrameButtonRef}
         canvasId={document.id}
         canvasChoices={canvasChoices}
-        commentAvailable={author !== null}
+        commentAvailable={commentsEnabled && author !== null}
+        commentsEnabled={commentsEnabled}
         noteAvailable={author !== null}
         onArrange={arrangeSelection}
         onTitleChange={(title) =>
@@ -1590,7 +1631,9 @@ function CanvasViewportContent({
           else if (action === "pan") setTool("pan")
           else if (action === "add-frame") openNewFrameAtCenter()
           else if (action === "add-note") addNoteAtCenter()
-          else if (action === "comment") setTool("comment")
+          else if (action === "comment") {
+            if (commentsEnabled) setTool("comment")
+          }
         }}
         onCanvasSelect={onCanvasSelect}
         onRememberViewChange={changeRememberView}

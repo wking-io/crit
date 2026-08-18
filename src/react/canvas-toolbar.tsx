@@ -51,6 +51,7 @@ export interface CanvasToolbarProps {
   readonly title: string
   readonly tool: CanvasTool
   readonly commentAvailable: boolean
+  readonly commentsEnabled?: boolean
   readonly noteAvailable: boolean
   readonly onAction: (action: CanvasToolbarAction) => void
   readonly onCanvasSelect?: ((canvasId: string) => void) | undefined
@@ -255,6 +256,7 @@ export function CanvasToolbar({
   title,
   tool,
   commentAvailable,
+  commentsEnabled = false,
   noteAvailable,
   onAction,
   onCanvasSelect,
@@ -285,7 +287,9 @@ export function CanvasToolbar({
   const hand = controls.action({ id: "hand-tool" })
   const addFrame = controls.action({ id: "open-new-frame" })
   const addNote = controls.action({ id: "create-note" })
-  const comment = controls.action({ id: "activate-comment-tool" })
+  const comment = commentsEnabled
+    ? controls.action({ id: "activate-comment-tool" })
+    : null
   const beginTitleEdit = controls.action({ id: "begin-canvas-title-edit" })
   const openArrangement = controls.action({
     id: "open-arrangement-menu",
@@ -635,9 +639,11 @@ export function CanvasToolbar({
         <ActionButton action={addNote} controls={controls} onRun={() => onAction("add-note")}>
           <Glyph name="note" />
         </ActionButton>
-        <ActionButton action={comment} controls={controls} pressed={tool === "comment"} onRun={() => onAction("comment")}>
-          <Glyph name="comment" />
-        </ActionButton>
+        {comment === null ? null : (
+          <ActionButton action={comment} controls={controls} pressed={tool === "comment"} onRun={() => onAction("comment")}>
+            <Glyph name="comment" />
+          </ActionButton>
+        )}
       </Toolbar.Group>
       {trailingControls === undefined ? null : (
         <>

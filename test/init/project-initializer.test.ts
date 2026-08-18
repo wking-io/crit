@@ -105,7 +105,7 @@ export default [
       cwd: root
     })
     expect(JSON.parse(firstSnapshot.packageJson)).toMatchObject({
-      dependencies: { "@riff-refine/crit": "^0.0.0" }
+      dependencies: { "@riff-refine/crit": "^0.1.0-alpha.0" }
     })
     expect(firstSnapshot.vite).toContain(
       `import { crit as critPlugin } from "@riff-refine/crit/vite"`

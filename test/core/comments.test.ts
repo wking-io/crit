@@ -183,4 +183,27 @@ describe("Canvas Comments", () => {
       })
       expect(Canvas.export(canvas).comments).toEqual([])
     }))
+
+  it.effect("keeps stored Comment Threads unchanged through unrelated Frame edits", () =>
+    Effect.gen(function*() {
+      const canvas = Canvas.create({ id: "review", title: "Review", owner: alice })
+      yield* addLiveFrame(canvas)
+      yield* Canvas.apply(
+        canvas,
+        CanvasCommand.addCommentThread({
+          id: "thread-1",
+          frameId: "candidate",
+          anchor: { kind: "frame", xRatio: 0.25, yRatio: 0.75 },
+          opening: message("comment-1", "Tighten this spacing")
+        })
+      )
+      const comments = Canvas.export(canvas).comments
+
+      yield* Canvas.apply(
+        canvas,
+        CanvasCommand.setFrameTitle({ id: "candidate", title: "Candidate v2" })
+      )
+
+      expect(Canvas.export(canvas).comments).toEqual(comments)
+    }))
 })

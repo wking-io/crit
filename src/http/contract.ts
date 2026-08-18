@@ -5,7 +5,10 @@ import {
   Author,
   CanvasCommandSchema,
   CanvasDocument,
-  MAX_CANVAS_DOCUMENT_BYTES
+  DEFAULT_CRIT_FEATURES,
+  MAX_CANVAS_DOCUMENT_BYTES,
+  unavailableCommentCommandDetail,
+  type CritFeatures
 } from "../core/index.js"
 import {
   CritClientErrorSchema,
@@ -61,6 +64,8 @@ export type CritHttpHandler = (
 export interface CritHttpHandlerOptions {
   readonly apiPath?: string
   readonly maxBodyBytes?: number
+  readonly features?: CritFeatures
+  readonly featuresForRequest?: (request: Request) => CritFeatures
 }
 
 export type CritHttpServices = CritClientServices
@@ -260,6 +265,11 @@ export const makeCritHttpHandler = (
 ): CritHttpHandler => {
   const apiPath = options.apiPath ?? DEFAULT_CRIT_API_PATH
   const maxBodyBytes = options.maxBodyBytes ?? MAX_CRIT_HTTP_BODY_BYTES
+  const featuresForRequest = options.featuresForRequest
+  const resolveFeatures = (request: Request): CritFeatures =>
+    featuresForRequest === undefined
+      ? options.features ?? DEFAULT_CRIT_FEATURES
+      : featuresForRequest(request)
   const { activity, client, snapshots } = services
 
   const handleCurrentAuthor = (request: Request) => {
@@ -349,6 +359,15 @@ export const makeCritHttpHandler = (
           return yield* new InvalidApplyRequest({
             detail:
               "AddSnapshotFrame is reserved for snapshot capture; POST to the Frame snapshot route to archive an existing live Frame"
+          })
+        }
+        const commentsUnavailable = unavailableCommentCommandDetail(
+          input.commands,
+          resolveFeatures(request)
+        )
+        if (commentsUnavailable !== undefined) {
+          return yield* new InvalidApplyRequest({
+            detail: commentsUnavailable
           })
         }
         return yield* client.apply(route.id, input.commands)

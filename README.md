@@ -6,6 +6,12 @@ them with plain-text Notes. It is designed for one person
 working with multiple local browser windows and agents, with no collaboration
 server or canvas framework to configure.
 
+This is the `0.1.0-alpha` line. Install the alpha dist-tag:
+
+```sh
+npm install @riff-refine/crit@alpha
+```
+
 ## Install
 
 Initialize Crit in a Vite + React project:
@@ -56,6 +62,7 @@ automatic editor route can be moved or disabled with `editorPath`.
 | `manifestPath` | URL that publishes the resolved manifest; defaults to `/.well-known/crit.json`. |
 | `editorPath` | URL prefix for the standalone editor; defaults to `/crit`. Set it to `false` to disable the editor. |
 | `frameInputBridge` | Injects the script that forwards input from same-origin live Frames; defaults to `true`. |
+| `features` | Capability profile passed to the generated editor and HTTP apply surface. Defaults to the alpha profile, which does not expose Comments. |
 
 When the standalone editor is enabled, Crit reserves
 `<editorPath>/__assets/editor.js` for its generated browser bundle. This is an
@@ -81,6 +88,7 @@ internal route managed by the plugin, not a separately configurable asset URL.
 | `iframeAllow`, `iframeSandbox` | Capability and sandbox attributes for live Frames. |
 | `frameChrome` | Partial `FrameChromeSettings` controlling title and action width thresholds. |
 | `cameraOptions` | Partial `CanvasCameraOptions` controlling pan speed, zoom speed, zoom steps, and wheel behavior. |
+| `features` | Capability profile for this editor. Defaults to the alpha profile. |
 | `onSession` | Receives the opened `CanvasSession` handle. |
 | `onCommandError` | Receives a user-command failure message. |
 | `onSignIn` | Receives the Author chosen in the Sign-in dialog. When supplied and the session has no Current Author, the toolbar shows Sign in and adding Frames or Notes requires it. |
@@ -164,9 +172,7 @@ All commands accept `--json` for machine-readable output where applicable.
 The command schema includes Frame operations (`AddFrame`, `SetFrameSource`,
 `SetFrameTitle`, `SetFrameStatus`, `SetFrameDisplay`, `MoveFrame`, `ResizeFrame`,
 `RemoveFrame`) and Note operations (`AddNote`, `EditNote`, `MoveNote`,
-`ResizeNote`, `AttachNote`, `DetachNote`, `RemoveNote`). Comment operations are `AddCommentThread`,
-`ReplyToCommentThread`, `EditComment`, `SetCommentThreadResolved`, and
-`UpdateCommentAnchor`. Frames and Notes also expose `Bring…ToFront` and `Send…ToBack`
+`ResizeNote`, `AttachNote`, `DetachNote`, `RemoveNote`). Frames and Notes also expose `Bring…ToFront` and `Send…ToBack`
 commands against one shared stacking order. Related commands commit as one batch. Per-Canvas filesystem locks
 serialize local writers against the latest revision, so unrelated agent and
 browser edits merge without manual revision wiring.
@@ -175,14 +181,6 @@ Every Note records its Author. `EditNote` and `RemoveNote` require that Author's
 actor ID; collaborators can still move, reorder, attach, detach, and resize its
 width. Note height is measured from its rendered text, and removing a Frame
 detaches its Notes without deleting them.
-
-Agents leave Comments through the same `apply` surface. Use `crit identity
---json` to verify the Current Author; do not invent another person's identity.
-Canvas creation stores that Author as immutable Canvas Owner. `crit open
-<canvas> --json` returns the Owner and full active and resolved thread history.
-Frame-coordinate anchors work for every live Frame, while element anchors are
-created by the instrumented browser UI and may be reused or re-anchored by their
-owner. Archived snapshot Frames reject Comments.
 
 Canvas Documents live under `.crit/canvases`. Use Crit commands and interfaces
 instead of editing those files directly.
@@ -292,7 +290,25 @@ Before publishing, run `npm run verify`. It typechecks, tests, packs the module,
 installs it in an isolated consumer, builds the React entry point, imports every
 public adapter, and exercises the installed CLI.
 
+## Alpha notes
+
+`0.1.0-alpha` is for local testers. Publish with `npm publish --tag alpha` and
+install with `npm install @riff-refine/crit@alpha`. Later `alpha.1`, `alpha.2`
+releases stay off npm's `latest` tag.
+
+Known limitations:
+
+- Comments are not part of the supported alpha surface. Existing Comment
+  records remain in Canvas Documents and reappear if the capability is enabled.
+- Capture currently supports HTTP and HTTPS Frames only, with per-resource,
+  artifact, and timeout limits described above.
+- There is no remote collaboration, authentication, or hosted canvas service.
+- Node.js 22.12 or newer is required.
+
 ## Local feature playground
+
+The playground is a repository-only test app. It is not included in the
+published npm package.
 
 Run the source-backed visual test app from this repository:
 
@@ -306,6 +322,25 @@ macOS may request administrator access so Portless can bind standard HTTPS port
 443; accepting that prompt is what makes the URL work without a port. The app
 uses the real Vite plugin, four real local Frame pages, filesystem persistence,
 manifest discovery, Notes, every review state, snapshots, and agent activity.
+
+The playground can switch versions live from the editor. Use
+`npm run dev` (or `npm run dev:portless`) and the **Playground** control in the
+top-right:
+
+| Version | What it tests |
+| --- | --- |
+| Development | Source editor with Comments on. |
+| Alpha | Source editor with the alpha capability profile. Comments stay in the document but are hidden. |
+| Release | Compiled `dist` editor with the alpha profile. Requires a prior `npm run build`, which `npm run dev` already runs. |
+
+The selector is stored in a cookie and the URL (`?profile=alpha`), so HTTP apply
+and Frame comment bridges follow the same choice. CLI agents still use
+`CRIT_FEATURE_PROFILE`; `npm run playground:alpha` and
+`npm run playground:release` only change the selector's default before the
+first visit.
+
+Use `npm run dev:agent` against the development profile. Use
+`npm run playground:alpha:agent` when checking the alpha CLI surface.
 
 Use `npm run dev` when you want direct Vite without Portless; it defaults to
 `http://127.0.0.1:5173`. Both commands serve the Crit editor from the package's

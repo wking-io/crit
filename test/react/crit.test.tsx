@@ -67,7 +67,7 @@ import {
   noteContextMenuItems,
   noteHeightForContent
 } from "../../src/react/note-card.js"
-import { Canvas, CanvasCommand } from "../../src/core/index.js"
+import { Canvas, CanvasCommand, DEVELOPMENT_FEATURES } from "../../src/core/index.js"
 import { Effect } from "effect"
 
 const cssRule = (selector: string) => {
@@ -139,6 +139,7 @@ describe("Crit", () => {
           ]}
           canvasId="feature-lab"
           commentAvailable
+          commentsEnabled
           noteAvailable
           onAction={() => {}}
           onCanvasSelect={() => {}}
@@ -1566,5 +1567,58 @@ describe("Crit", () => {
     expect(identity).toContain("Git identity required")
     expect(identity).toContain("Copy fix prompt")
     expect(identity).toContain("crit-identity")
+  })
+
+  it("hides Comment UI in the alpha profile and restores it when enabled", async () => {
+    const canvas = Canvas.create({
+      id: "review",
+      title: "Review",
+      owner: { id: "git:test", name: "Test Author" }
+    })
+    await Effect.runPromise(Canvas.apply(
+      canvas,
+      CanvasCommand.addFrame({
+        id: "candidate",
+        url: "https://example.com/candidate",
+        title: "Candidate",
+        provenance: { kind: "manual", sourceId: "test" }
+      }),
+      CanvasCommand.addCommentThread({
+        id: "thread-1",
+        frameId: "candidate",
+        anchor: { kind: "frame", xRatio: 0.5, yRatio: 0.5 },
+        opening: {
+          id: "comment-1",
+          body: "Tighten this spacing",
+          author: { id: "git:test", name: "Test Author" },
+          createdAt: "2026-08-09T12:00:00.000Z",
+          editedAt: null
+        }
+      })
+    ))
+    const document = Canvas.export(canvas)
+    const author = { id: "git:test", name: "Test Author" }
+    const alpha = renderToStaticMarkup(
+      <CanvasViewport
+        author={author}
+        dispatch={() => Effect.void}
+        document={document}
+      />
+    )
+    const development = renderToStaticMarkup(
+      <CanvasViewport
+        author={author}
+        dispatch={() => Effect.void}
+        document={document}
+        features={DEVELOPMENT_FEATURES}
+      />
+    )
+
+    expect(alpha).not.toContain('aria-label="Add comment"')
+    expect(alpha).not.toContain('class="crit-comment-pin"')
+    expect(alpha).not.toContain('data-crit-help-name="Add comment"')
+    expect(development).toContain('aria-label="Add comment"')
+    expect(development).toContain('class="crit-comment-pin"')
+    expect(development).toContain('data-crit-help-name="Add comment"')
   })
 })

@@ -21,6 +21,10 @@ import {
 
 import { IndexedDbDraftJournal } from "../browser/indexeddb-draft-journal.js"
 import type { Author, CanvasDocument } from "../core/index.js"
+import {
+  DEFAULT_CRIT_FEATURES,
+  type CritFeatures
+} from "../core/features.js"
 import { HttpCritClient } from "../http/client.js"
 import { GIT_AUTHOR_REMEDIATION_PROMPT } from "../runtime/author-identity.js"
 import {
@@ -173,6 +177,7 @@ export interface CritProps {
   readonly frameChrome?: Partial<FrameChromeSettings>
   readonly cameraOptions?: Partial<CanvasCameraOptions>
   readonly developerTools?: boolean
+  readonly features?: CritFeatures
   readonly onSession?: (session: CanvasSessionHandle) => void
   readonly onCanvasSelect?: (canvasId: string) => void
   readonly onCommandError?: (message: string) => void
@@ -200,6 +205,7 @@ export function Crit({
   frameChrome,
   cameraOptions,
   developerTools = false,
+  features = DEFAULT_CRIT_FEATURES,
   onSession,
   onCanvasSelect,
   onCommandError,
@@ -379,6 +385,7 @@ export function Crit({
             dispatch={session.dispatch}
             document={document}
             developerTools={developerTools}
+            features={features}
             snapshotFrame={session.snapshotFrame}
             canvasChoices={canvasChoices}
             frameChrome={frameChrome}

@@ -1,0 +1,85 @@
+.playground-profile {
+  background: oklch(97% 0.001 106.4 / 92%);
+  border: 1px solid #d8d5cc;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px oklch(14.7% 0.004 49.3 / 12%);
+  color: #191918;
+  display: grid;
+  font: 400 10px/14px InterVariable, Inter, sans-serif;
+  gap: 8px;
+  padding: 8px 10px 10px;
+  pointer-events: auto;
+  position: absolute;
+  right: 16px;
+  top: 16px;
+  width: max-content;
+  z-index: 1001;
+}
+
+.playground-profile header {
+  align-items: baseline;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.playground-profile header strong {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.playground-profile header span {
+  color: #77746c;
+  letter-spacing: .04em;
+}
+
+.playground-profile__options {
+  border: 0;
+  display: flex;
+  gap: 0;
+  margin: 0;
+  min-inline-size: 0;
+  padding: 0;
+}
+
+.playground-profile__options label {
+  background: #fff;
+  border: 1px solid #d8d5cc;
+  color: #191918;
+  cursor: pointer;
+  margin: 0;
+  padding: 4px 8px;
+}
+
+.playground-profile__options label:first-of-type {
+  border-radius: 6px 0 0 6px;
+}
+
+.playground-profile__options label:last-of-type {
+  border-radius: 0 6px 6px 0;
+}
+
+.playground-profile__options label:not(:first-of-type) {
+  margin-left: -1px;
+}
+
+.playground-profile__options label:has(input:checked) {
+  background: #191918;
+  border-color: #191918;
+  color: #fff;
+  z-index: 1;
+}
+
+.playground-profile__options input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.playground-profile__options label:focus-within {
+  outline: 2px solid #191918;
+  outline-offset: 2px;
+  z-index: 2;
+}

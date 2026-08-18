@@ -11,7 +11,7 @@ identity for authorship, not a remote authentication provider.
 
 `Canvas` is the platform-neutral authority for the Canvas Document, validation,
 summaries, and semantic commands. The durable document contains its creation-time
-Owner, revision, Frames, Notes, and Comment Threads. Camera, selection, iframe state,
+Owner, revision, Frames, Notes, and any retained Comment records. Camera, selection, iframe state,
 and other viewport details are browser-session state and are never persisted.
 
 Frames own URL, title, review status, provenance, geometry, display policy, and
@@ -21,11 +21,6 @@ Author, optional Frame attachment, and stacking order. Attached Notes use absolu
 Canvas coordinates; moving their Frame moves them by the same delta, and
 detaching preserves their position. Removing a Frame detaches its attached Notes
 and preserves their Canvas positions.
-
-Comment Threads belong to live Frames and contain one opening Comment followed
-by flat Replies. Canvas-core predicates project Comment editing and thread
-resolution capabilities, and the semantic commands enforce those same durable
-invariants.
 
 Every mutation is an atomic semantic command batch. The core applies a batch to
 a draft and publishes it only if every command succeeds. Conflicts are expressed
@@ -55,10 +50,6 @@ to the immutable artifact. Snapshot bytes do not bloat the Canvas Document.
 CLI and discovery adapters use the Canvas Repository directly and derive views
 through the Canvas core. `CanvasSession` adds optimistic browser state,
 single-flight autosave, semantic-command draft recovery, and revision adoption.
-`CommentThreadReview` is a separate per-session module that owns the transient
-create/read/edit/reply/resolve workflow. It reconciles stable identities from
-each optimistic or authoritative Canvas Document and constructs command batches,
-while `CanvasSession` remains responsible for dispatch and persistence.
 The Vite plugin watches the Canvas directory and sends change hints to browser
 windows; polling remains a fallback. Notifications are only an optimization—the
 file and its revision are authoritative.
@@ -94,13 +85,6 @@ and pointer selection—across document and origin boundaries. Trackpad pan and
 pinch remain Canvas navigation when crossing live Frame content; shortcut
 matching and camera actions remain owned by the React viewport.
 
-Element and Frame comment adapters terminate after producing a normalized
-Comment Anchor or Comment Thread identity. React owns draft text, focus,
-geometry, animation, and iframe readiness; `CommentThreadReview` owns workflow
-state, capability projection, identity and timestamp allocation, and accepted or
-rejected dispatch transitions. Resolved threads are omitted from Frame pins but
-remain in the Canvas Document for future Canvas-level discovery.
-
 The HTTP adapter supports `GET` for Current Author, authoritative documents, and Agent Activities,
 `PATCH` for semantic command batches, and `POST` on a Frame snapshot route. Vite adapts it
 to local Connect middleware, owns the router-independent Crit editor route, and
@@ -111,8 +95,8 @@ thin adapters around the same core, repository, and archive boundaries.
 
 Visible UI icons cross one generated Glyph seam. Individual SVG sources compile
 to a renderer-neutral typed map; React roots render uniquely prefixed inline
-symbol sheets, while isolated documents such as the Frame comment bridge
-serialize the same definitions directly. Sheet ownership belongs to
+symbol sheets. Isolated documents such as Frame bridges serialize the same
+definitions directly. Sheet ownership belongs to
 `GlyphProvider`, so nested and sibling Crit roots cannot create ambiguous global
 fragment IDs.
 

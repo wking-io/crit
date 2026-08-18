@@ -7,8 +7,15 @@ import { Effect, FileSystem, Layer, Path, Stdio, Terminal } from "effect"
 import { ChildProcessSpawner } from "effect/unstable/process"
 
 import { runCrit } from "../../src/cli/command.js"
+import {
+  Canvas,
+  CanvasCommand,
+  DEVELOPMENT_FEATURES
+} from "../../src/core/index.js"
 import { FileSystemAgentActivity } from "../../src/node/file-system-agent-activity.js"
 import { FileSystemCanvasRepository } from "../../src/node/file-system-canvas-repository.js"
+import { CanvasRepository } from "../../src/runtime/canvas-repository.js"
+import { CritFeaturePolicy } from "../../src/runtime/feature-policy.js"
 import { SnapshotArchive } from "../../src/runtime/snapshot-archive.js"
 import {
   SnapshotService,
@@ -181,8 +188,7 @@ describe("crit Canvas workflows", () => {
         canvas: added.mutation.canvas,
         frames: added.frames,
         notes: [],
-        owner: TEST_AUTHOR,
-        comments: []
+        owner: TEST_AUTHOR
       })
       expect(snapshotted).toMatchObject({
         schemaVersion: 1,
@@ -239,6 +245,7 @@ describe("crit Canvas workflows", () => {
         ChildProcessSpawner.ChildProcessSpawner,
         ChildProcessSpawner.make(() => Effect.die("unused"))
       ),
+      Layer.succeed(CritFeaturePolicy, DEVELOPMENT_FEATURES),
       storeLayer
     )
 
@@ -414,6 +421,136 @@ describe("crit Canvas workflows", () => {
       yield* runCrit(["open", "review", "--json"])
       const opened = JSON.parse(stdout.join(""))
       expect(opened.canvas).toMatchObject({ revision: 0, frameCount: 0 })
+    }).pipe(Effect.provide(cliLayer))
+  })
+
+  it.effect("rejects Comment commands when comments are disabled", () => {
+    const storeLayer = FileSystemCanvasRepository.layer({ root })
+    const cliLayer = Layer.mergeAll(
+      TestAuthorIdentityLayer,
+      FileSystem.layerNoop({}),
+      Path.layer,
+      Stdio.layerTest({
+        stdout: () =>
+          collectStdout((value) => stdout.push(value))
+      }),
+      Layer.succeed(
+        Terminal.Terminal,
+        Terminal.make({
+          columns: Effect.succeed(80),
+          rows: Effect.succeed(24),
+          readInput: Effect.die("unused"),
+          readLine: Effect.die("unused"),
+          display: () => Effect.void
+        })
+      ),
+      Layer.succeed(
+        ChildProcessSpawner.ChildProcessSpawner,
+        ChildProcessSpawner.make(() => Effect.die("unused"))
+      ),
+      storeLayer
+    )
+
+    return Effect.gen(function*() {
+      yield* runCrit(["create", "review", "--title", "Review", "--json"])
+      const failure = yield* runCrit([
+        "apply",
+        "review",
+        JSON.stringify([{
+          _tag: "AddCommentThread",
+          id: "thread-1",
+          frameId: "candidate",
+          anchor: { kind: "frame", xRatio: 0.5, yRatio: 0.5 },
+          opening: {
+            id: "comment-1",
+            body: "Check this state",
+            author: TEST_AUTHOR,
+            createdAt: "2026-08-09T12:00:00.000Z",
+            editedAt: null
+          }
+        }]),
+        "--json"
+      ]).pipe(Effect.flip)
+      expect(failure).toMatchObject({
+        _tag: "InvalidCliInput",
+        detail: expect.stringContaining("unavailable")
+      })
+    }).pipe(Effect.provide(cliLayer))
+  })
+
+  it.effect("preserves stored comments through unrelated alpha edits", () => {
+    const storeLayer = FileSystemCanvasRepository.layer({ root })
+    const cliLayer = Layer.mergeAll(
+      TestAuthorIdentityLayer,
+      FileSystem.layerNoop({}),
+      Path.layer,
+      Stdio.layerTest({
+        stdout: () =>
+          collectStdout((value) => stdout.push(value))
+      }),
+      Layer.succeed(
+        Terminal.Terminal,
+        Terminal.make({
+          columns: Effect.succeed(80),
+          rows: Effect.succeed(24),
+          readInput: Effect.die("unused"),
+          readLine: Effect.die("unused"),
+          display: () => Effect.void
+        })
+      ),
+      Layer.succeed(
+        ChildProcessSpawner.ChildProcessSpawner,
+        ChildProcessSpawner.make(() => Effect.die("unused"))
+      ),
+      storeLayer
+    )
+
+    return Effect.gen(function*() {
+      const documents = yield* CanvasRepository
+      const canvas = Canvas.create({
+        id: "review",
+        title: "Review",
+        owner: TEST_AUTHOR
+      })
+      yield* Canvas.apply(
+        canvas,
+        CanvasCommand.addFrame({
+          id: "candidate",
+          url: "https://checkout.localhost/v1",
+          title: "Checkout candidate",
+          provenance: { kind: "manual", sourceId: "test" }
+        }),
+        CanvasCommand.addCommentThread({
+          id: "thread-1",
+          frameId: "candidate",
+          anchor: { kind: "frame", xRatio: 0.25, yRatio: 0.75 },
+          opening: {
+            id: "comment-1",
+            body: "Tighten this spacing",
+            author: TEST_AUTHOR,
+            createdAt: "2026-08-09T12:00:00.000Z",
+            editedAt: null
+          }
+        })
+      )
+      const created = Canvas.export(canvas)
+      yield* documents.create(created)
+      const comments = created.comments
+
+      yield* runCrit([
+        "apply",
+        "review",
+        JSON.stringify([{
+          _tag: "SetFrameTitle",
+          id: "candidate",
+          title: "Checkout candidate v2"
+        }]),
+        "--json"
+      ])
+
+      const updated = yield* documents.load("review")
+      expect(updated.comments).toEqual(comments)
+      expect(updated.frames[0]?.title).toBe("Checkout candidate v2")
     }).pipe(Effect.provide(cliLayer))
   })
 

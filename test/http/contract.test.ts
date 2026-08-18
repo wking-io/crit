@@ -1,7 +1,7 @@
 import { Effect, Schema } from "effect"
 import { describe, expect, it } from "vitest"
 
-import { Canvas, CanvasCommand } from "../../src/core/index.js"
+import { Canvas, CanvasCommand, DEVELOPMENT_FEATURES } from "../../src/core/index.js"
 import { HttpCritClient } from "../../src/http/client.js"
 import {
   makeCritHttpHandler,
@@ -322,5 +322,110 @@ describe("makeCritHttpHandler", () => {
     const body = Schema.decodeUnknownSync(TestErrorBody)(await response?.json())
     expect(body.error.message).toContain("AddSnapshotFrame")
     expect(client.applied).toHaveLength(0)
+  })
+
+  it("rejects Comment commands when comments are disabled", async () => {
+    const client = makeServices()
+    const handler = makeCritHttpHandler(client)
+    const response = await Effect.runPromise(
+      handler(
+        new Request(canvasUrl, {
+          method: "PATCH",
+          body: JSON.stringify({
+            commands: [{
+              _tag: "AddCommentThread",
+              id: "thread-1",
+              frameId: "candidate",
+              anchor: { kind: "frame", xRatio: 0.5, yRatio: 0.5 },
+              opening: {
+                id: "comment-1",
+                body: "Check this state",
+                author: TEST_AUTHOR,
+                createdAt: "2026-08-09T12:00:00.000Z",
+                editedAt: null
+              }
+            }]
+          })
+        })
+      )
+    )
+    expect(response?.status).toBe(400)
+    const body = Schema.decodeUnknownSync(TestErrorBody)(await response?.json())
+    expect(body.error.message).toContain("unavailable")
+    expect(client.applied).toHaveLength(0)
+  })
+
+  it("accepts Comment commands when comments are enabled", async () => {
+    const client = makeServices()
+    const handler = makeCritHttpHandler(client, {
+      features: { comments: true }
+    })
+    const commands = [{
+      _tag: "AddCommentThread" as const,
+      id: "thread-1",
+      frameId: "candidate",
+      anchor: { kind: "frame" as const, xRatio: 0.5, yRatio: 0.5 },
+      opening: {
+        id: "comment-1",
+        body: "Check this state",
+        author: TEST_AUTHOR,
+        createdAt: "2026-08-09T12:00:00.000Z",
+        editedAt: null
+      }
+    }]
+    const response = await Effect.runPromise(
+      handler(
+        new Request(canvasUrl, {
+          method: "PATCH",
+          body: JSON.stringify({ commands })
+        })
+      )
+    )
+    expect(response?.status).toBe(200)
+    expect(client.applied).toEqual([commands])
+  })
+
+  it("resolves Comment availability from a per-request feature policy", async () => {
+    const client = makeServices()
+    const handler = makeCritHttpHandler(client, {
+      featuresForRequest: (request) => request.headers.get("cookie") === "comments=on"
+        ? DEVELOPMENT_FEATURES
+        : { comments: false }
+    })
+    const commands = [{
+      _tag: "AddCommentThread" as const,
+      id: "thread-1",
+      frameId: "candidate",
+      anchor: { kind: "frame" as const, xRatio: 0.5, yRatio: 0.5 },
+      opening: {
+        id: "comment-1",
+        body: "Check this state",
+        author: TEST_AUTHOR,
+        createdAt: "2026-08-09T12:00:00.000Z",
+        editedAt: null
+      }
+    }]
+    const denied = await Effect.runPromise(
+      handler(
+        new Request(canvasUrl, {
+          method: "PATCH",
+          body: JSON.stringify({ commands })
+        })
+      )
+    )
+    expect(denied?.status).toBe(400)
+    expect(client.applied).toHaveLength(0)
+
+    const allowed = await Effect.runPromise(
+      handler(
+        new Request(canvasUrl, {
+          method: "PATCH",
+          headers: { cookie: "comments=on" },
+          body: JSON.stringify({ commands })
+        })
+      )
+    )
+    expect(allowed?.status).toBe(200)
+    expect(client.applied).toEqual([commands])
   })
 })

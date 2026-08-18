@@ -330,6 +330,7 @@ export function FrameCard({
   topZIndex,
   zoom,
   commentMode,
+  commentsEnabled = false,
   commentThreads,
   defaultStatusMenuOpen = false,
   openCommentId = null,
@@ -363,6 +364,7 @@ export function FrameCard({
   readonly topZIndex: number
   readonly zoom: number
   readonly commentMode: boolean
+  readonly commentsEnabled?: boolean
   readonly commentThreads: ReadonlyArray<CanvasCommentThread>
   readonly defaultStatusMenuOpen?: boolean
   readonly openCommentId?: string | null
@@ -572,7 +574,7 @@ export function FrameCard({
   ])
   useEffect(() => {
     const iframe = iframeRef.current
-    if (iframe === null || frame.snapshot !== undefined) {
+    if (!commentsEnabled || iframe === null || frame.snapshot !== undefined) {
       setCommentBridgeReady(false)
       return
     }
@@ -623,7 +625,7 @@ export function FrameCard({
       bridge.disconnect()
       if (commentBridgeRef.current === bridge) commentBridgeRef.current = null
     }
-  }, [frame.snapshot, frame.url, iframeUrl, status.ink])
+  }, [commentsEnabled, frame.snapshot, frame.url, iframeUrl, status.ink])
   useEffect(() => {
     if (!commentBridgeReady) return
     commentBridgeRef.current?.configure({
@@ -1120,7 +1122,7 @@ export function FrameCard({
             description: "This frame is unloaded while far outside the current view to save resources."
           })}
         >Frame paused while offscreen</div>}
-        {frame.snapshot === undefined ? commentThreads
+        {commentsEnabled && frame.snapshot === undefined ? commentThreads
           .filter((thread) => thread.anchor.kind === "frame")
           .map((thread) => {
             if (thread.anchor.kind !== "frame") return null
@@ -1137,7 +1139,7 @@ export function FrameCard({
               zoom={zoom}
             />
           }) : null}
-        {commentMode && frame.snapshot === undefined && !commentBridgeReady ? (
+        {commentsEnabled && commentMode && frame.snapshot === undefined && !commentBridgeReady ? (
           <Button
             aria-label={`Place a comment on ${frame.title}`}
             className="crit-frame__comment-fallback"
