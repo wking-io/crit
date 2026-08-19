@@ -45,5 +45,6 @@ describe("Canvas RemoveFrame command", () => {
         attachedTo: null,
         geometry: { x: 20, y: 20 }
       }])
+      expect(Canvas.export(canvas).removedFrameIds).toEqual(["checkout-v1"])
     }))
 })

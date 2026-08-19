@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks"
 import { existsSync } from "node:fs"
 import { readFile } from "node:fs/promises"
 import type { IncomingHttpHeaders, IncomingMessage, ServerResponse } from "node:http"
@@ -203,6 +204,35 @@ const internalRequestOrigin = (request: IncomingMessage) => {
     ? "https:"
     : "http:"
   return `${protocol}//${hostname}:${request.socket.localPort ?? 80}`
+}
+
+type SnapshotFetchContext = {
+  readonly internalOrigin: string
+  readonly requestOrigin: string
+  readonly publicOrigin: string | undefined
+}
+
+const snapshotFetchContext = new AsyncLocalStorage<SnapshotFetchContext>()
+
+const fetchUrl = (input: Parameters<typeof fetch>[0]) =>
+  typeof input === "string" ? input : input instanceof URL ? input.href : input.url
+
+const snapshotFetch: typeof fetch = (input, init) => {
+  const context = snapshotFetchContext.getStore()
+  if (context === undefined) return fetch(input, init)
+  const url = new URL(fetchUrl(input), context.internalOrigin)
+  const published = context.publicOrigin !== undefined &&
+    url.origin === context.publicOrigin
+  if (
+    url.origin !== context.internalOrigin &&
+    (published || url.origin === context.requestOrigin)
+  ) {
+    const target = new URL(`${url.pathname}${url.search}`, context.internalOrigin)
+    return input instanceof Request
+      ? fetch(new Request(target, input), init)
+      : fetch(target, init)
+  }
+  return fetch(input, init)
 }
 
 const FrameRelayRequestHeaders = Schema.Struct({
@@ -535,7 +565,10 @@ export const crit = (options: CritVitePluginOptions = {}): Plugin => {
         : liveRefreshEndpoint
     const documentLayer = FileSystemCanvasRepository.layer({ root: resolvedRoot })
     const agentActivityLayer = FileSystemAgentActivity.layer({ root: resolvedRoot })
-    const archiveLayer = FileSystemSnapshotArchive.layer({ root: resolvedRoot })
+    const archiveLayer = FileSystemSnapshotArchive.layer({
+      root: resolvedRoot,
+      fetch: snapshotFetch
+    })
     const snapshotServiceLayer = SnapshotServiceLive.pipe(
       Layer.provide(Layer.mergeAll(documentLayer, archiveLayer))
     )
@@ -853,7 +886,14 @@ export const crit = (options: CritVitePluginOptions = {}): Plugin => {
       }
       void services
         .then((resolved) =>
-          Effect.runPromise(resolved.handler(webRequest(request), route))
+          snapshotFetchContext.run(
+            {
+              internalOrigin: internalRequestOrigin(request),
+              requestOrigin: requestOrigin(request),
+              publicOrigin
+            },
+            () => Effect.runPromise(resolved.handler(webRequest(request), route))
+          )
         )
         .then((output) =>
           output === null ? next() : sendWebResponse(output, response)

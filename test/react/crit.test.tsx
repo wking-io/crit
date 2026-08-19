@@ -62,10 +62,10 @@ import {
   blurNoteEditorOnSurfacePress,
   listenForNoteEditorBlur,
   NoteCard,
+  NotePlacementPhantom,
   NOTE_INTERACTION_BAND_HEIGHT,
   NOTE_MINIMUM_ROWS,
-  noteContextMenuItems,
-  noteHeightForContent
+  noteContextMenuItems
 } from "../../src/react/note-card.js"
 import { Canvas, CanvasCommand, DEVELOPMENT_FEATURES } from "../../src/core/index.js"
 import { Effect } from "effect"
@@ -188,6 +188,26 @@ describe("Crit", () => {
     expect(html).not.toContain("Layers")
   })
 
+  it("presses the note tool while placing a Note", () => {
+    const html = renderToStaticMarkup(
+      <CanvasActionRunnerProvider>
+        <CanvasToolbar
+          commentAvailable
+          commentsEnabled
+          noteAvailable
+          onAction={() => {}}
+          title="Feature lab"
+          tool="note"
+        />
+      </CanvasActionRunnerProvider>
+    )
+
+    const addNote = html.match(/<button[^>]*aria-label="Add note"[^>]*>/)?.[0]
+    const select = html.match(/<button[^>]*aria-label="Select"[^>]*>/)?.[0]
+    expect(addNote).toContain('aria-pressed="true"')
+    expect(select).toContain('aria-pressed="false"')
+  })
+
   it("anchors the arrangement menu below the whole toolbar", () => {
     const anchor = arrangementMenuAnchorRect(
       {
@@ -282,7 +302,10 @@ describe("Crit", () => {
     expect(arrangementPopover).toContain(
       "oklch(14.7% 0.004 49.3 / 10%) 0 2px 4px"
     )
-    expect(arrangementPopover).not.toContain("border-top")
+    expect(arrangementPopover).toContain(
+      "font-family: InterVariable, Inter, sans-serif"
+    )
+    expect(arrangementPopover).toContain("letter-spacing: 0")
     expect(critStyles).not.toContain(
       ".crit-arrangement-popover__grid--distribution {"
     )
@@ -350,6 +373,35 @@ describe("Crit", () => {
     expect(chrome).toContain("font-optical-sizing: none")
     expect(chrome).toContain('font-variation-settings: "opsz" 14')
     expect(titleLine).not.toContain("system-ui")
+  })
+
+  it("sets Inter on every Crit UI surface", () => {
+    const root = cssRule(".crit-root, .crit-canvas")
+    const surfaces = [
+      root,
+      cssRule(".crit-arrangement-popover"),
+      cssRule(".crit-frame__paused"),
+      cssRule(".crit-overlay-container .crit-status-option"),
+      cssRule(".crit-save-state"),
+      cssRule(".crit-message"),
+      cssRule(".crit-identity-error"),
+      cssRule(".crit-context-menu"),
+      cssRule(".crit-confirmation-dialog"),
+      cssRule(".crit-new-frame-dialog"),
+      cssRule(".crit-new-frame-dialog input")
+    ]
+
+    expect(root).toContain("font-family: InterVariable, Inter, sans-serif")
+    expect(root).toContain("font-optical-sizing: none")
+    expect(root).toContain('font-variation-settings: "opsz" 14')
+    expect(root).toContain("letter-spacing: 0")
+    for (const rule of surfaces) {
+      expect(rule).toContain("InterVariable, Inter, sans-serif")
+      expect(rule).not.toContain("system-ui")
+      expect(rule).not.toContain("JetBrains")
+    }
+    expect(critStyles).not.toContain("system-ui")
+    expect(critStyles).not.toContain("JetBrains")
   })
 
   it("uses the Frame palette selected in the UI lab", () => {
@@ -482,8 +534,18 @@ describe("Crit", () => {
   })
 
   it("measures status pills with the same deterministic heuristic everywhere", () => {
-    expect(measureStatusPillWidth("Approved")).toBe(92)
-    expect(measureStatusPillWidth("Ready for review")).toBe(144)
+    expect(measureStatusPillWidth("Approved")).toBe(95)
+    expect(measureStatusPillWidth("Ready for review")).toBe(135)
+    expect(measureStatusPillWidth("Changes requested")).toBe(151)
+    expect(measureStatusPillWidth("In progress")).toBe(106)
+  })
+
+  it("keeps status pill labels on one line at any zoom", () => {
+    const option = cssRule(".crit-overlay-container .crit-status-option")
+
+    expect(option).toContain("white-space: nowrap")
+    expect(option).toContain("grid-template-columns: 18px max-content")
+    expect(option).not.toContain("minmax(0, 1fr)")
   })
 
   it("keeps iframe viewport geometry independent from the Canvas shell zoom", () => {
@@ -658,6 +720,30 @@ describe("Crit", () => {
     expect(critStyles).not.toContain(".crit-comment-pin::after")
   })
 
+  it("locks Comment typography so zoom cannot change letter-spacing", () => {
+    const popover = cssRule(".crit-comment-popover")
+    const header = cssRule(".crit-comment-popover__header > span")
+    const author = cssRule(".crit-comment__message-header strong")
+    const body = cssRule(".crit-comment__message p")
+    const actions = cssRule(
+      ".crit-comment-popover__header button, .crit-comment__actions button, .crit-comment__text-action"
+    )
+    const composer = cssRule(
+      ".crit-comment__composer textarea, .crit-comment__message textarea"
+    )
+
+    for (const rule of [popover, header, author, body, actions, composer]) {
+      expect(rule).toContain("InterVariable, Inter, sans-serif")
+      expect(rule).toContain(
+        'font-feature-settings: "calt" 1, "case" 1, "ss02" 1, "tnum" 1, "ss03" 1'
+      )
+      expect(rule).toContain("font-optical-sizing: none")
+      expect(rule).toContain('font-variation-settings: "opsz" 14')
+      expect(rule).toContain("letter-spacing: 0")
+      expect(rule).not.toContain("system-ui")
+    }
+  })
+
   it("composes Canvas comment pins with the shared Popover root", () => {
     const html = renderToStaticMarkup(
       <CanvasActionRunnerProvider>
@@ -823,6 +909,7 @@ describe("Crit", () => {
     expect(description).toContain('font-variation-settings: "opsz" 14')
     expect(description).toContain("letter-spacing: 0")
     expect(description).toContain("max-width: 307px")
+    expect(description).toContain("text-wrap: pretty")
     expect(description).toContain("var(--crit-color-t1, oklch(52% 0 0))")
   })
 
@@ -846,7 +933,7 @@ describe("Crit", () => {
 
   })
 
-  it("keeps Note sizing content-driven and actions in its context menu", () => {
+  it("keeps Note actions in its context menu", () => {
     const controls = CanvasControls.resolve({
       platform: "macos",
       activeScopes: ["canvas", "menu"],
@@ -868,7 +955,6 @@ describe("Crit", () => {
 
     expect(NOTE_MINIMUM_ROWS).toBe(3)
     expect(NOTE_INTERACTION_BAND_HEIGHT).toBe(28.5)
-    expect(noteHeightForContent(84)).toBe(115)
     expect(items.map((item) => item.action.label)).toEqual([
       "Note color",
       "Bring to front",
@@ -925,11 +1011,19 @@ describe("Crit", () => {
     )
     expect(forbiddenItems.at(-1)?.action.availability).toBe("hidden")
     expect(cssRule(".crit-note textarea")).toContain("overflow: hidden")
-    expect(cssRule(".crit-note textarea")).toContain("min-height:")
+    expect(cssRule(".crit-note textarea")).toContain("min-height: calc(72px * var(--crit-ui))")
+    expect(cssRule(".crit-note textarea")).toContain(
+      "padding: calc(12px * var(--crit-ui)) calc(12px * var(--crit-ui)) 0"
+    )
     expect(cssRule(".crit-note textarea")).toContain("overflow-wrap: anywhere")
     expect(cssRule(".crit-note textarea")).toContain("text-wrap: pretty")
     expect(cssRule(".crit-note textarea")).toContain(
-      "font: 400 calc(14px * var(--crit-ui))/calc(20px * var(--crit-ui)) system-ui, -apple-system, sans-serif"
+      "font: 400 calc(14px * var(--crit-ui))/calc(20px * var(--crit-ui)) InterVariable, Inter, sans-serif"
+    )
+    expect(cssRule(".crit-note textarea")).toContain("letter-spacing: 0")
+    expect(cssRule(".crit-note textarea")).toContain("font-optical-sizing: none")
+    expect(cssRule(".crit-note textarea")).toContain(
+      'font-variation-settings: "opsz" 14'
     )
     expect(cssRule(".crit-note__interaction-band")).toContain(
       "height: var(--crit-note-corner-size)"
@@ -959,7 +1053,7 @@ describe("Crit", () => {
     expect(cssRule(
       ".crit-note[data-selected], .crit-note:focus-visible"
     )).toContain(
-      "--crit-note-outline: var(--crit-color-t2, oklch(28% 0 none))"
+      "--crit-note-outline: var(--crit-note-text)"
     )
     expect(cssRule(
       ".crit-note[data-selected], .crit-note:focus-visible"
@@ -992,14 +1086,13 @@ describe("Crit", () => {
           onSelect={() => {}}
           onSendToBack={() => Effect.void}
           selected
-          zoom={1}
         />
       </CanvasActionRunnerProvider>
     )
 
     const noteSurface = html.match(/<article[^>]*class="crit-note"[^>]*>/)?.[0]
-    expect(noteSurface).toContain('data-mode="preview"')
-    expect(noteSurface).toContain("width:230px")
+    expect(noteSurface).toContain("width:332px")
+    expect(noteSurface).toContain("height:103px")
     expect(noteSurface).toContain("--crit-ui:1")
     expect(noteSurface).toContain('aria-label="Note actions"')
     expect(noteSurface).toContain('aria-haspopup="menu"')
@@ -1039,7 +1132,7 @@ describe("Crit", () => {
     expect(blurCount).toBe(2)
   })
 
-  it("elevates an expanded Note above the canvas without changing its saved layer", () => {
+  it("keeps a selected empty Note as a readable card at low zoom", () => {
     const note = {
       id: "feedback",
       text: "",
@@ -1062,16 +1155,17 @@ describe("Crit", () => {
           onSelect={() => {}}
           onSendToBack={() => Effect.void}
           selected
-          topZIndex={9}
-          zoom={.35}
         />
       </CanvasActionRunnerProvider>
     )
 
     const noteSurface = html.match(/<article[^>]*class="crit-note"[^>]*>/)?.[0]
-    expect(noteSurface).toContain('data-mode="expanded"')
-    expect(noteSurface).toContain("z-index:9")
-    expect(note.zIndex).toBe(1)
+    expect(noteSurface).toContain("width:332px")
+    expect(noteSurface).toContain("height:103px")
+    expect(noteSurface).toContain("z-index:1")
+    expect(html).toContain('aria-label="Note"')
+    expect(html).not.toContain('aria-label="Expand note"')
+    expect(html).not.toContain('aria-label="Collapse note"')
   })
 
   it("allows nested context triggers to preserve each item surface", () => {
@@ -1139,8 +1233,9 @@ describe("Crit", () => {
     )
 
     expect(popup).toContain(
-      "font: 500 12px/16px system-ui, -apple-system, sans-serif"
+      "font: 500 12px/16px InterVariable, Inter, sans-serif"
     )
+    expect(popup).toContain("letter-spacing: 0")
     expect(popup).toContain("gap: 0")
     expect(popup).toContain("padding: 4px")
     expect(popup).toContain("width: 192px")
@@ -1149,20 +1244,47 @@ describe("Crit", () => {
     expect(item).toContain("box-shadow: none")
     expect(item).toContain("padding: 0 8px")
     expect(cssRule(".crit-context-menu__detail")).toContain("margin-left: 8px")
+    expect(cssRule(".crit-context-menu__check")).toContain("font-size: 16px")
+    expect(cssRule(".crit-context-menu__check")).toContain("height: 16px")
+    expect(cssRule(".crit-context-menu__check")).toContain("width: 16px")
+    expect(cssRule(".crit-context-menu__check svg")).toContain("height: 16px")
+    expect(cssRule(".crit-context-menu__check svg")).toContain("width: 16px")
     expect(cssRule(".crit-context-menu__item[data-highlighted]")).toContain(
       "background: var(--crit-color-s1, oklch(99% 0 none))"
     )
+    expect(cssRule(".crit-context-menu__item[data-selected][data-highlighted]")).toContain(
+      "background: var(--crit-color-blue-c1, oklch(95.25% 0.024 245.3))"
+    )
+    expect(cssRule(".crit-context-menu__item[data-selected][data-highlighted]")).toContain(
+      "color: var(--crit-color-blue-t1, oklch(52% 0.2 245.3))"
+    )
   })
 
-  it("shows only the note glyph in collapsed mode", () => {
-    const collapsed = cssRule('.crit-note[data-mode="collapsed"]')
-
-    expect(collapsed).toContain("background: transparent")
-    expect(collapsed).toContain("box-shadow: none")
-    expect(collapsed).not.toContain("border-radius")
+  it("shows a readable Note card without a collapsed glyph mode", () => {
+    expect(critStyles).not.toContain('.crit-note[data-mode="collapsed"]')
+    expect(critStyles).not.toContain(".crit-note__collapsed")
+    expect(critStyles).not.toContain(".crit-note__close")
   })
 
-  it("renders Frames and keeps attached Notes visible above the collapse zoom", async () => {
+  it("renders a translucent blue-family Note placement phantom", () => {
+    const html = renderToStaticMarkup(
+      <NotePlacementPhantom x={40} y={80} zIndex={4} />
+    )
+    const phantom = html.match(/<article[^>]*class="crit-note"[^>]*>/)?.[0]
+    expect(phantom).toContain('data-phantom=""')
+    expect(phantom).toContain('aria-hidden="true"')
+    expect(phantom).toContain("left:40px")
+    expect(phantom).toContain("top:80px")
+    expect(phantom).toContain("width:332px")
+    expect(phantom).toContain("height:103px")
+    expect(phantom).toContain("--crit-note-ink:var(--crit-color-blue-t1")
+    expect(phantom).toContain("pointer-events:none")
+    expect(html).not.toContain("<textarea")
+    expect(cssRule(".crit-note[data-phantom]")).toContain("opacity: .5")
+    expect(critStyles).toContain(".crit-canvas__pan-shield, .crit-canvas__note-placement")
+  })
+
+  it("renders Frames and attached Notes", async () => {
     const canvas = Canvas.create({ id: "review", title: "Review", owner: { id: "git:test", name: "Test Author" } })
     await Effect.runPromise(Canvas.apply(
       canvas,
@@ -1211,7 +1333,7 @@ describe("Crit", () => {
     expect(html).toContain("Status: Approved. Change status")
     expect(html).toContain("A: Candidate")
     expect(html).toContain("Tighten spacing")
-    expect(html).toContain('data-mode="preview"')
+    expect(html).not.toContain('data-mode="preview"')
     expect(html).not.toContain('aria-label="Expand note"')
     expect(html).not.toContain("Attached to candidate")
     expect(html).toContain('data-crit-help-name="Change frame status"')
@@ -1464,8 +1586,11 @@ describe("Crit", () => {
 
     expect(html).toContain("Current author: Willa King")
     expect(html).toContain("Codex agent: codex-1")
-    expect(html).toContain(">W<")
-    expect(html).toContain(">C<")
+    expect(html).not.toContain(">W<")
+    expect(html).not.toContain(">C<")
+    expect(html.match(/class="crit-presence__pattern"/g)).toHaveLength(2)
+    expect(html).toContain('viewBox="0 0 22 22"')
+    expect(html).toContain("--crit-color-")
     expect(html.match(/aria-haspopup="dialog"/g)).toHaveLength(2)
     expect(html.match(/data-base-ui-click-trigger/g)).toHaveLength(2)
     expect(html).not.toContain('role="tooltip"')
@@ -1478,12 +1603,9 @@ describe("Crit", () => {
     expect(critStyles).toContain(
       '.crit-presence__card[data-starting-style], .crit-presence__card[data-ending-style]'
     )
-    expect(critStyles).toContain(".crit-presence__glyph {")
-    expect(critStyles).toContain("font-size: 14px")
-    expect(critStyles).toContain("font-weight: 400")
-    expect(critStyles).toContain(
-      "transform: scale(var(--crit-presence-glyph-scale))"
-    )
+    expect(critStyles).toContain(".crit-presence__pattern {")
+    expect(critStyles).toContain("shape-rendering: crispEdges")
+    expect(critStyles).not.toContain(".crit-presence__glyph {")
     expect(critStyles).toContain(
       ".crit-presence__name { color: var(--crit-color-t2"
     )

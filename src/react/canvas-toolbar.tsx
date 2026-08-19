@@ -636,7 +636,7 @@ export function CanvasToolbar({
         <ActionButton action={addFrame} buttonRef={addFrameButtonRef} controls={controls} onRun={() => onAction("add-frame")}>
           <Glyph name="addFrame" />
         </ActionButton>
-        <ActionButton action={addNote} controls={controls} onRun={() => onAction("add-note")}>
+        <ActionButton action={addNote} controls={controls} pressed={tool === "note"} onRun={() => onAction("add-note")}>
           <Glyph name="note" />
         </ActionButton>
         {comment === null ? null : (

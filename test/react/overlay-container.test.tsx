@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs"
+import path from "node:path"
+
 import { Effect } from "effect"
 import { renderToStaticMarkup } from "react-dom/server"
 import { describe, expect, it } from "vitest"
@@ -7,6 +10,7 @@ import { CanvasControls } from "../../src/react/canvas-controls.js"
 import { cssVariableStyle } from "../../src/react/css-variable-style.js"
 import {
   CritMenuSpecimen,
+  extraCanvasContextMenuItems,
   type ContextMenuItem
 } from "../../src/react/canvas-context-menu.js"
 import { CritOverlayProvider } from "../../src/react/overlay-container.js"
@@ -54,5 +58,57 @@ describe("Crit overlay container", () => {
     expect(html).toContain('class="crit-context-menu-specimen__anchor"')
     expect(html).toContain("min-height:36px")
     expect(html).not.toContain("data-programmatic")
+  })
+
+  it("projects extra canvas menus into a labeled playground submenu", () => {
+    const items = extraCanvasContextMenuItems([{
+      label: "Playground",
+      description: "Choose which editor version the playground loads.",
+      items: [
+        {
+          label: "Development",
+          description: "Comments on",
+          selected: true,
+          onSelect: () => undefined
+        },
+        {
+          label: "Alpha",
+          description: "Comments hidden",
+          onSelect: () => undefined
+        },
+        {
+          label: "Release",
+          description: "Packed editor",
+          onSelect: () => undefined
+        }
+      ]
+    }])
+    const html = renderToStaticMarkup(
+      <CanvasActionRunnerProvider>
+        <CritMenuSpecimen ariaLabel="Canvas menu specimen" items={items} />
+      </CanvasActionRunnerProvider>
+    )
+
+    expect(items[0]).toMatchObject({
+      label: "Playground",
+      description: "Choose which editor version the playground loads."
+    })
+    expect("items" in items[0]! ? items[0].items.map((item) => ({
+      label: item.label,
+      selected: item.selected === true
+    })) : []).toEqual([
+      { label: "Development", selected: true },
+      { label: "Alpha", selected: false },
+      { label: "Release", selected: false }
+    ])
+    expect(html).toContain("min-height:36px")
+    const menuSource = readFileSync(
+      path.resolve("src/react/canvas-context-menu.tsx"),
+      "utf8"
+    )
+    expect(menuSource).toContain('"data-selected": item.selected === true ? "" : undefined')
+    expect(menuSource).toContain("crit-context-menu__check")
+    expect(menuSource).toContain('<Glyph name="check2" />')
+    expect(menuSource).not.toContain("crit-canvas-switcher__indicator")
   })
 })

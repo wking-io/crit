@@ -51,7 +51,7 @@ describe("Canvas Frame geometry commands", () => {
       })
       expect(note).toMatchObject({
         text: "Align this copy",
-        geometry: { x: 380, y: 260, width: 280, height: 160 }
+        geometry: { x: 380, y: 260, width: 332, height: 103 }
       })
     }))
 

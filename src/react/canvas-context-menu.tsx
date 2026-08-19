@@ -19,7 +19,10 @@ import {
 import {
   type ResolvedCanvasAction
 } from "./canvas-controls.js"
-import { actionHelpTarget } from "./canvas-help.js"
+import {
+  actionHelpTarget,
+  informationalHelpTarget
+} from "./canvas-help.js"
 import { cssVariableStyle } from "./css-variable-style.js"
 import { Glyph } from "./glyph.js"
 import { useCritOverlayContainer } from "./overlay-container.js"
@@ -46,7 +49,21 @@ export interface ContextMenuSwatchOption {
   readonly onFailure?: (cause: unknown) => void
 }
 
-export type ContextMenuItem =
+export interface ContextMenuLabeledAction {
+  readonly label: string
+  readonly description: string
+  readonly detail?: ReactNode
+  readonly selected?: boolean
+  readonly execute: Effect.Effect<unknown, unknown>
+}
+
+export interface ContextMenuLabeledSubmenu {
+  readonly label: string
+  readonly description: string
+  readonly items: ReadonlyArray<ContextMenuLabeledAction>
+}
+
+export type BoundContextMenuItem =
   | ContextMenuActionItem
   | {
       readonly action: ResolvedCanvasAction
@@ -56,6 +73,38 @@ export type ContextMenuItem =
       readonly action: ResolvedCanvasAction
       readonly swatches: ReadonlyArray<ContextMenuSwatchOption>
     }
+
+export type ContextMenuItem =
+  | BoundContextMenuItem
+  | ContextMenuLabeledSubmenu
+  | ContextMenuLabeledAction
+
+export const contextMenuItemIsVisible = (item: ContextMenuItem) =>
+  !("action" in item) || item.action.availability !== "hidden"
+
+export interface ExtraCanvasContextMenu {
+  readonly label: string
+  readonly description: string
+  readonly items: ReadonlyArray<{
+    readonly label: string
+    readonly description: string
+    readonly selected?: boolean
+    readonly onSelect: () => void
+  }>
+}
+
+export const extraCanvasContextMenuItems = (
+  menus: ReadonlyArray<ExtraCanvasContextMenu>
+): ReadonlyArray<ContextMenuLabeledSubmenu> => menus.map((menu) => ({
+  label: menu.label,
+  description: menu.description,
+  items: menu.items.map((item) => ({
+    label: item.label,
+    description: item.description,
+    selected: item.selected === true,
+    execute: Effect.sync(item.onSelect)
+  }))
+}))
 
 type ActionMenuKind = "context-menu" | "menu"
 const CONTEXT_MENU_KEY_SHORTCUTS = "Shift+F10 ContextMenu"
@@ -127,12 +176,24 @@ function openContextMenuFromKeyboard(event: KeyboardEvent<HTMLElement>) {
   }))
 }
 
-function ActionItemContent({ item }: { readonly item: ContextMenuActionItem }) {
+function ActionItemContent({
+  detail,
+  label,
+  selected = false
+}: {
+  readonly detail?: ReactNode
+  readonly label: string
+  readonly selected?: boolean
+}) {
   return (
     <>
-      <span>{item.action.label}</span>
-      {item.detail === undefined ? null : (
-        <span className="crit-context-menu__detail">{item.detail}</span>
+      <span>{label}</span>
+      {selected ? (
+        <span aria-hidden="true" className="crit-context-menu__check">
+          <Glyph name="check2" />
+        </span>
+      ) : detail === undefined ? null : (
+        <span className="crit-context-menu__detail">{detail}</span>
       )}
     </>
   )
@@ -160,7 +221,7 @@ function BaseActionMenuItem({
   if ("href" in item && action.availability === "enabled") {
     const link = (
       <a href={item.href} rel="noreferrer" target="_blank">
-        <ActionItemContent item={item} />
+        <ActionItemContent detail={item.detail} label={action.label} />
       </a>
     )
     return kind === "context-menu" ? (
@@ -182,12 +243,92 @@ function BaseActionMenuItem({
   }
   return kind === "context-menu" ? (
     <ContextMenu.Item {...itemProps}>
-      <ActionItemContent item={item} />
+      <ActionItemContent detail={item.detail} label={action.label} />
     </ContextMenu.Item>
   ) : (
     <Menu.Item {...itemProps}>
-      <ActionItemContent item={item} />
+      <ActionItemContent detail={item.detail} label={action.label} />
     </Menu.Item>
+  )
+}
+
+function LabeledActionMenuItem({
+  item,
+  kind
+}: {
+  readonly item: ContextMenuLabeledAction
+  readonly kind: ActionMenuKind
+}) {
+  const itemProps = {
+    className: "crit-context-menu__item",
+    "data-selected": item.selected === true ? "" : undefined,
+    label: item.label,
+    nativeButton: true,
+    onClick: () => {
+      Effect.runFork(item.execute)
+    },
+    render: <Button type="button" />,
+    ...informationalHelpTarget({
+      name: item.label,
+      description: item.description
+    })
+  }
+  const content = (
+    <ActionItemContent
+      detail={item.detail}
+      label={item.label}
+      selected={item.selected === true}
+    />
+  )
+  return kind === "context-menu" ? (
+    <ContextMenu.Item {...itemProps}>{content}</ContextMenu.Item>
+  ) : (
+    <Menu.Item {...itemProps}>{content}</Menu.Item>
+  )
+}
+
+function SubmenuItems({
+  items,
+  kind,
+  label
+}: {
+  readonly items: ReadonlyArray<ContextMenuItem>
+  readonly kind: ActionMenuKind
+  readonly label: string
+}) {
+  const overlayContainer = useCritOverlayContainer()
+  return kind === "context-menu" ? (
+    <ContextMenu.Portal container={overlayContainer}>
+      <ContextMenu.Positioner
+        align="start"
+        className="crit-context-menu__positioner crit-context-menu__positioner--submenu"
+        side="right"
+        sideOffset={4}
+      >
+        <ContextMenu.Popup
+          aria-label={label}
+          className="crit-context-menu crit-context-menu--submenu"
+        >
+          <BaseActionMenuItems items={items} kind={kind} />
+        </ContextMenu.Popup>
+      </ContextMenu.Positioner>
+    </ContextMenu.Portal>
+  ) : (
+    <Menu.Portal container={overlayContainer}>
+      <Menu.Positioner
+        align="start"
+        className="crit-context-menu__positioner crit-context-menu__positioner--submenu"
+        side="right"
+        sideOffset={4}
+      >
+        <Menu.Popup
+          aria-label={label}
+          className="crit-context-menu crit-context-menu--submenu"
+        >
+          <BaseActionMenuItems items={items} kind={kind} />
+        </Menu.Popup>
+      </Menu.Positioner>
+    </Menu.Portal>
   )
 }
 
@@ -200,8 +341,52 @@ function BaseActionMenuItems({
 }) {
   const controls = useCanvasControls(["canvas", "menu"], true)
   const runner = useCanvasActionRunner()
-  const overlayContainer = useCritOverlayContainer()
   return items.map((item) => {
+    if (!("action" in item)) {
+      if (!("items" in item)) {
+        return (
+          <LabeledActionMenuItem
+            item={item}
+            key={item.label}
+            kind={kind}
+          />
+        )
+      }
+      const triggerProps = {
+        className: "crit-context-menu__item",
+        label: item.label,
+        nativeButton: true,
+        openOnHover: true,
+        render: <Button type="button" />,
+        ...informationalHelpTarget({
+          name: item.label,
+          description: item.description
+        })
+      }
+      const triggerContent = (
+        <>
+          <span>{item.label}</span>
+          <span aria-hidden="true" className="crit-context-menu__arrow">
+            <Glyph name="chevronRight" />
+          </span>
+        </>
+      )
+      return kind === "context-menu" ? (
+        <ContextMenu.SubmenuRoot key={item.label}>
+          <ContextMenu.SubmenuTrigger {...triggerProps}>
+            {triggerContent}
+          </ContextMenu.SubmenuTrigger>
+          <SubmenuItems items={item.items} kind={kind} label={item.label} />
+        </ContextMenu.SubmenuRoot>
+      ) : (
+        <Menu.SubmenuRoot key={item.label}>
+          <Menu.SubmenuTrigger {...triggerProps}>
+            {triggerContent}
+          </Menu.SubmenuTrigger>
+          <SubmenuItems items={item.items} kind={kind} label={item.label} />
+        </Menu.SubmenuRoot>
+      )
+    }
     if (item.action.availability === "hidden") return null
     if ("swatches" in item) {
       const swatchProps = (option: ContextMenuSwatchOption) => ({
@@ -279,21 +464,11 @@ function BaseActionMenuItems({
         <ContextMenu.SubmenuTrigger {...triggerProps}>
           {triggerContent}
         </ContextMenu.SubmenuTrigger>
-        <ContextMenu.Portal container={overlayContainer}>
-          <ContextMenu.Positioner
-            align="start"
-            className="crit-context-menu__positioner crit-context-menu__positioner--submenu"
-            side="right"
-            sideOffset={4}
-          >
-            <ContextMenu.Popup
-              aria-label={item.action.label}
-              className="crit-context-menu crit-context-menu--submenu"
-            >
-              <BaseActionMenuItems items={item.items} kind={kind} />
-            </ContextMenu.Popup>
-          </ContextMenu.Positioner>
-        </ContextMenu.Portal>
+        <SubmenuItems
+          items={item.items}
+          kind={kind}
+          label={item.action.label}
+        />
       </ContextMenu.SubmenuRoot>
     ) : (
       <Menu.SubmenuRoot
@@ -304,21 +479,11 @@ function BaseActionMenuItems({
         <Menu.SubmenuTrigger {...triggerProps}>
           {triggerContent}
         </Menu.SubmenuTrigger>
-        <Menu.Portal container={overlayContainer}>
-          <Menu.Positioner
-            align="start"
-            className="crit-context-menu__positioner crit-context-menu__positioner--submenu"
-            side="right"
-            sideOffset={4}
-          >
-            <Menu.Popup
-              aria-label={item.action.label}
-              className="crit-context-menu crit-context-menu--submenu"
-            >
-              <BaseActionMenuItems items={item.items} kind={kind} />
-            </Menu.Popup>
-          </Menu.Positioner>
-        </Menu.Portal>
+        <SubmenuItems
+          items={item.items}
+          kind={kind}
+          label={item.action.label}
+        />
       </Menu.SubmenuRoot>
     )
   })
@@ -389,9 +554,7 @@ export function CritMenuSpecimen({
 }) {
   const anchorRef = useRef<HTMLDivElement>(null)
   const overlayContainer = useCritOverlayContainer()
-  const visibleItemCount = items.filter(
-    (item) => item.action.availability !== "hidden"
-  ).length
+  const visibleItemCount = items.filter(contextMenuItemIsVisible).length
   return (
     <div
       className="crit-context-menu-cluster"

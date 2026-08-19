@@ -413,8 +413,8 @@ const addNote = (input: AddNoteInput): AddNoteCommand => ({
   author: input.author,
   x: input.x,
   y: input.y,
-  width: input.width ?? 280,
-  height: input.height ?? 160,
+  width: input.width ?? 332,
+  height: input.height ?? 103,
   color: input.color ?? "blue"
 })
 

@@ -775,4 +775,40 @@ describe("crit Vite plugin", () => {
     expect(html).not.toContain('href="/app.css"')
     expect(html).not.toContain('src="/app.js"')
   })
+
+  it("captures a Frame whose URL uses the published origin", async () => {
+    await writeFile(
+      path.join(root, "index.html"),
+      '<!doctype html><html><head></head><body><main>Published origin</main></body></html>'
+    )
+    await createCanvas("review")
+    const publicOrigin = "http://portal.example"
+    const origin = await start({ publicOrigin })
+    const { client, snapshots } = HttpCritClient.make({
+      apiPath: `${origin}/__crit/api`
+    })
+    await Effect.runPromise(client.load("review"))
+    await Effect.runPromise(
+      client.apply("review", [
+        CanvasCommand.addFrame({
+          id: "candidate",
+          url: `${publicOrigin}/`,
+          title: "Candidate",
+          provenance: { kind: "manual", sourceId: "test" }
+        })
+      ])
+    )
+
+    const saved = await Effect.runPromise(
+      snapshots.snapshot("review", "candidate")
+    )
+    const archived = saved.frames.at(-1)!
+
+    expect(saved.frames).toHaveLength(2)
+    expect(archived).toMatchObject({
+      status: "archived",
+      provenance: { kind: "snapshot", sourceId: "candidate" },
+      snapshot: { sourceUrl: `${publicOrigin}/` }
+    })
+  })
 })

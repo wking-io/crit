@@ -76,6 +76,9 @@ export const CanvasDocument = Schema.Struct({
   owner: Author,
   comments: Schema.Array(CanvasCommentThread).pipe(
     Schema.withDecodingDefaultKey(Effect.succeed([]))
+  ),
+  removedFrameIds: Schema.Array(Schema.String).pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed([]))
   )
 })
 export type CanvasDocument = typeof CanvasDocument.Type
@@ -188,11 +191,20 @@ type CanvasState = {
   notes: Array<CanvasNote>
   owner: Author
   comments: Array<CanvasCommentThread>
+  removedFrameIds: Array<string>
 }
 
 const states = new WeakMap<object, CanvasState>()
 
 const clone = <A>(value: A): A => structuredClone(value)
+
+const rememberRemovedFrame = (draft: CanvasState, id: string) => {
+  if (!draft.removedFrameIds.includes(id)) draft.removedFrameIds.push(id)
+}
+
+const forgetRemovedFrame = (draft: CanvasState, id: string) => {
+  draft.removedFrameIds = draft.removedFrameIds.filter((item) => item !== id)
+}
 
 class CanvasHandle implements Canvas {
   readonly [CanvasTypeId]: typeof CanvasTypeId = CanvasTypeId
@@ -221,7 +233,8 @@ const documentOf = (state: CanvasState): CanvasDocument => ({
   frames: clone(state.frames),
   notes: clone(state.notes),
   owner: clone(state.owner),
-  comments: clone(state.comments)
+  comments: clone(state.comments),
+  removedFrameIds: [...state.removedFrameIds]
 })
 
 export const CanvasInternals = {
@@ -242,6 +255,7 @@ export const CanvasInternals = {
     target.notes = clone(source.notes)
     target.owner = clone(source.owner)
     target.comments = clone(source.comments)
+    target.removedFrameIds = [...source.removedFrameIds]
   }
 } as const
 
@@ -257,7 +271,8 @@ const create = (input: {
     frames: [],
     notes: [],
     owner: clone(input.owner),
-    comments: []
+    comments: [],
+    removedFrameIds: []
   })
 
 const encodedBytes = (input: CanvasOpenInput) => {
@@ -342,7 +357,8 @@ const fromDocument = (document: CanvasDocument): Canvas => {
     frames: clone(Array.from(validated.frames)),
     notes: clone(Array.from(validated.notes)),
     owner: clone(validated.owner),
-    comments: clone(Array.from(validated.comments))
+    comments: clone(Array.from(validated.comments)),
+    removedFrameIds: [...validated.removedFrameIds]
   })
 }
 
@@ -581,6 +597,7 @@ const applyAddFrame = (
     },
     zIndex: nextZIndex(context.draft)
   })
+  forgetRemovedFrame(context.draft, command.id)
   context.markFrame(command.id)
 }
 
@@ -629,6 +646,7 @@ const applyAddSnapshotFrame = (
     zIndex: nextZIndex(context.draft),
     snapshot: command.artifact
   })
+  forgetRemovedFrame(context.draft, command.id)
   context.markFrame(command.id)
 }
 
@@ -753,6 +771,7 @@ const applyFrameMutation = (
     },
     RemoveFrame: (removal) => {
       context.draft.frames.splice(index, 1)
+      rememberRemovedFrame(context.draft, removal.id)
       context.draft.notes = context.draft.notes.map((note) => {
         if (note.attachedTo !== removal.id) return note
         context.markNote(note.id)
@@ -1049,7 +1068,8 @@ const apply = (
             frames: clone(current.frames),
             notes: clone(current.notes),
             owner: clone(current.owner),
-            comments: clone(current.comments)
+            comments: clone(current.comments),
+            removedFrameIds: [...current.removedFrameIds]
           }
           const changedFrameIds: Array<string> = []
           const changedNoteIds: Array<string> = []
@@ -1109,6 +1129,7 @@ const apply = (
           current.notes = draft.notes
           current.owner = draft.owner
           current.comments = draft.comments
+          current.removedFrameIds = draft.removedFrameIds
           return {
             commandCount: decoded.length,
             changedFrameIds,

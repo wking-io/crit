@@ -39,7 +39,9 @@ import { CanvasPresenceIndicator } from "./canvas-feedback.js"
 import {
   CritContextActions,
   CritContextMenuDismissalScope,
-  type ContextMenuItem
+  extraCanvasContextMenuItems,
+  type ContextMenuItem,
+  type ExtraCanvasContextMenu
 } from "./canvas-context-menu.js"
 import {
   CanvasActionRunnerProvider,
@@ -79,7 +81,6 @@ import {
 } from "./canvas-toolbar.js"
 import {
   FrameCard,
-  frameContentProjection,
   type FrameChromeSettings
 } from "./frame-card.js"
 import {
@@ -108,14 +109,12 @@ import {
 import { NewFrameDialog } from "./new-frame-dialog.js"
 import { SignInDialog } from "./sign-in-dialog.js"
 import {
+  NOTE_CARD_WIDTH,
   NoteCard,
+  NotePlacementPhantom,
+  notePlacementOrigin,
   type NotePresentationSize
 } from "./note-card.js"
-import {
-  DEFAULT_NOTE_PRESENTATION_THRESHOLDS,
-  type NotePresentationThresholds
-} from "./note-presentation.js"
-import { NotePresentationControls } from "./note-presentation-controls.js"
 import {
   CommentPopover,
   type CommentDraftClear
@@ -180,6 +179,7 @@ export interface CanvasViewportProps {
   readonly developerTools?: boolean | undefined
   readonly features?: CritFeatures | undefined
   readonly presence?: CanvasPresence | undefined
+  readonly extraCanvasContextMenus?: ReadonlyArray<ExtraCanvasContextMenu> | undefined
   readonly focusItemId?: string | undefined
   readonly onSignIn?: ((author: Author) => void) | undefined
 }
@@ -267,6 +267,7 @@ function CanvasViewportContent({
   onCanvasSelect,
   presence,
   snapshotFrame,
+  extraCanvasContextMenus,
   frameChrome,
   cameraOptions,
   focusItemId,
@@ -279,6 +280,7 @@ function CanvasViewportContent({
   const requestConfirmation = useConfirmation()
   const rootRef = useRef<HTMLDivElement>(null)
   const panShieldRef = useRef<HTMLDivElement>(null)
+  const notePlacementRef = useRef<HTMLDivElement>(null)
   const addFrameButtonRef = useRef<HTMLButtonElement>(null)
   const [cameraStorage] = useState(browserCanvasCameraStorage)
   const [persistedCamera] = useState(() => cameraStorage === null
@@ -299,8 +301,6 @@ function CanvasViewportContent({
   const [preview, setPreview] = useState<Preview>({})
   const [notePresentationSizes, setNotePresentationSizes] =
     useState<NotePresentationSizes>({})
-  const [notePresentationThresholds, setNotePresentationThresholds] =
-    useState<NotePresentationThresholds>(DEFAULT_NOTE_PRESENTATION_THRESHOLDS)
   const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(
     () => new Set()
   )
@@ -315,6 +315,10 @@ function CanvasViewportContent({
   const [selectionMarquee, setSelectionMarquee] =
     useState<CanvasSelectionBox | null>(null)
   const [tool, setTool] = useState<CanvasTool>("select")
+  const [notePlacement, setNotePlacement] = useState<{
+    readonly x: number
+    readonly y: number
+  } | null>(null)
   const [panning, setPanning] = useState(false)
   const canvasActionPointRef = useRef<{
     readonly worldX: number
@@ -473,21 +477,6 @@ function CanvasViewportContent({
     })
   }, [])
 
-  const frameClearanceGeometries = useMemo(
-    () => document.frames.map((frame) => {
-      const geometry = preview[frame.id] ?? frame.geometry
-      return {
-        ...geometry,
-        height: frameContentProjection(
-          geometry.width,
-          geometry.height,
-          camera.zoom
-        ).shellHeight
-      }
-    }),
-    [camera.zoom, document.frames, preview]
-  )
-
   const selectFrame = useCallback((frameId: string, additive: boolean) => {
     setSelectedIds((current) => selectCanvasFrame(current, frameId, additive))
   }, [])
@@ -641,7 +630,11 @@ function CanvasViewportContent({
       const geometry = preview[item.id] ?? item.geometry
       if ("url" in item) return geometry
       const size = notePresentationSizes[item.id]
-      return size === undefined ? geometry : { ...geometry, ...size }
+      return {
+        ...geometry,
+        width: NOTE_CARD_WIDTH,
+        height: size?.height ?? geometry.height
+      }
     },
     [notePresentationSizes, preview]
   )
@@ -896,11 +889,17 @@ function CanvasViewportContent({
   }, [camera, viewport])
 
   const addNoteAtCenter = useCallback(() => {
-    return addNoteAt(
-      (viewport.width / 2 - camera.x) / camera.zoom - 140,
-      (viewport.height / 2 - camera.y) / camera.zoom - 80
+    const origin = notePlacementOrigin(
+      (viewport.width / 2 - camera.x) / camera.zoom,
+      (viewport.height / 2 - camera.y) / camera.zoom
     )
+    return addNoteAt(origin.x, origin.y)
   }, [addNoteAt, camera, viewport])
+
+  const activateNoteTool = useCallback(() => {
+    setNotePlacement(null)
+    setTool((current) => current === "note" ? "select" : "note")
+  }, [])
 
   const selectedFramesForRemoval = document.frames.filter((frame) =>
     selectedFrameIds.has(frame.id)
@@ -989,8 +988,7 @@ function CanvasViewportContent({
     ...hotkeys(createNoteAction, () => actionRunner.run(
       controls,
       createNoteAction,
-      addNoteAtCenter(),
-      (cause) => onCommandError?.(messageOf(cause))
+      Effect.sync(activateNoteTool)
     ), true),
     ...hotkeys(removeSelectionAction, deleteSelection, true),
     ...hotkeys(zoomInAction, () => actionRunner.run(
@@ -1047,8 +1045,7 @@ function CanvasViewportContent({
   const startMove = (
     event: ReactPointerEvent,
     item: CanvasFrame | CanvasNote,
-    selectedFrameIds: ReadonlySet<string> = EMPTY_FRAME_SELECTION,
-    onTap?: () => void
+    selectedFrameIds: ReadonlySet<string> = EMPTY_FRAME_SELECTION
   ) => {
     event.preventDefault()
     event.stopPropagation()
@@ -1121,13 +1118,6 @@ function CanvasViewportContent({
       pointer.x = next.clientX
       pointer.y = next.clientY
       cleanUp()
-      if (
-        onTap !== undefined &&
-        Math.hypot(pointer.x - start.pointer.x, pointer.y - start.pointer.y) < 6
-      ) {
-        onTap()
-        return
-      }
       run(...interaction.finish(deltaAt()))
     }
     const cancel = () => cleanUp()
@@ -1260,6 +1250,23 @@ function CanvasViewportContent({
     }
   }, [camera])
 
+  const notePlacementFromClient = useCallback((
+    clientX: number,
+    clientY: number
+  ) => {
+    const rect = rootRef.current?.getBoundingClientRect()
+    if (rect === undefined) return null
+    const current = cameraStateRef.current.camera
+    return notePlacementOrigin(
+      (clientX - rect.left - current.x) / current.zoom,
+      (clientY - rect.top - current.y) / current.zoom
+    )
+  }, [])
+
+  useEffect(() => {
+    if (tool !== "note") setNotePlacement(null)
+  }, [tool])
+
   const canvasContextItems: ReadonlyArray<ContextMenuItem> = [
     {
       action: controls.action({ id: "open-new-frame" }),
@@ -1282,7 +1289,8 @@ function CanvasViewportContent({
     {
       action: controls.action({ id: "zoom-to-fit" }),
       execute: Effect.sync(fit)
-    }
+    },
+    ...extraCanvasContextMenuItems(extraCanvasContextMenus ?? [])
   ]
   return (
     <CritContextMenuDismissalScope signal={camera.zoom}>
@@ -1303,7 +1311,11 @@ function CanvasViewportContent({
       onOpenChange={(open, details) => {
         if (!open) return
         const target = details.event.target
-        if (target !== rootRef.current && target !== panShieldRef.current) {
+        if (
+          target !== rootRef.current &&
+          target !== panShieldRef.current &&
+          target !== notePlacementRef.current
+        ) {
           details.cancel()
         }
       }}
@@ -1505,24 +1517,17 @@ function CanvasViewportContent({
               key={item.id}
               note={item}
               geometry={geometryOf(item)}
-              clearanceAnchor={preview[item.id] ?? item.geometry}
               developerTools={developerTools}
-              frameGeometries={frameClearanceGeometries}
-              cameraOffset={camera}
               selectMode={tool === "select"}
               selected={selectedIds.has(item.id)}
-              viewport={viewport}
-              zoom={camera.zoom}
-              thresholds={notePresentationThresholds}
-              topZIndex={topCanvasZIndex}
               onSelect={(additive = false) => setSelectedIds((current) =>
                 selectCanvasFrame(current, item.id, additive)
               )}
               onBringToFront={() =>
                 dispatch(CanvasCommand.bringNoteToFront({ id: item.id }))
               }
-              onMove={(event, note, onTap) =>
-                startMove(event, note, EMPTY_FRAME_SELECTION, onTap)
+              onMove={(event, note) =>
+                startMove(event, note, EMPTY_FRAME_SELECTION)
               }
               onPresentationSize={reportNotePresentationSize}
               onRemove={() => removeNote(item, false)}
@@ -1579,6 +1584,13 @@ function CanvasViewportContent({
             }}
           />
         ) : null}
+        {tool === "note" && notePlacement !== null ? (
+          <NotePlacementPhantom
+            x={notePlacement.x}
+            y={notePlacement.y}
+            zIndex={topCanvasZIndex}
+          />
+        ) : null}
       </div>
       {selectionMarquee === null ? null : (
         <div
@@ -1606,16 +1618,36 @@ function CanvasViewportContent({
           ref={panShieldRef}
         />
       ) : null}
-      <NotePresentationControls
-        onChange={setNotePresentationThresholds}
-        onZoomChange={(zoom) => applyCameraInput({
-          type: "zoom-to",
-          zoom,
-          viewport
-        })}
-        thresholds={notePresentationThresholds}
-        zoom={camera.zoom}
-      />
+      {tool === "note" ? (
+        <div
+          aria-hidden="true"
+          className="crit-canvas__note-placement"
+          onContextMenu={(event) =>
+            rememberCanvasActionPoint(event.clientX, event.clientY)}
+          onPointerDown={(event) => {
+            if (event.button !== 0) return
+            event.preventDefault()
+            rememberCanvasActionPoint(event.clientX, event.clientY)
+            const origin = notePlacementFromClient(event.clientX, event.clientY)
+            if (origin === null) return
+            actionRunner.run(
+              controls,
+              createNoteAction,
+              addNoteAt(origin.x, origin.y).pipe(
+                Effect.tap(() => Effect.sync(() => setTool("select")))
+              ),
+              (cause) => onCommandError?.(messageOf(cause))
+            )
+          }}
+          onPointerLeave={() => setNotePlacement(null)}
+          onPointerMove={(event) => {
+            const origin = notePlacementFromClient(event.clientX, event.clientY)
+            if (origin === null) return
+            setNotePlacement(origin)
+          }}
+          ref={notePlacementRef}
+        />
+      ) : null}
       <CanvasToolbar
         addFrameButtonRef={addFrameButtonRef}
         canvasId={document.id}
@@ -1630,7 +1662,7 @@ function CanvasViewportContent({
           if (action === "select") setTool("select")
           else if (action === "pan") setTool("pan")
           else if (action === "add-frame") openNewFrameAtCenter()
-          else if (action === "add-note") addNoteAtCenter()
+          else if (action === "add-note") activateNoteTool()
           else if (action === "comment") {
             if (commentsEnabled) setTool("comment")
           }

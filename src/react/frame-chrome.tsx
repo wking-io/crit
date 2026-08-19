@@ -18,7 +18,14 @@ export const STATUS_PILL_HEIGHT = 24
 export const STATUS_PILL_STEP = 40
 const STATUS_PILL_RADIUS = 8
 const STATUS_PILL_CHROME_WIDTH = 40
-const STATUS_PILL_CHARACTER_WIDTH = 6.5
+const STATUS_PILL_CHARACTER_WIDTH = 7
+const STATUS_PILL_LABEL_WIDTH: Record<string, number> = {
+  "Changes requested": 151,
+  "In progress": 106,
+  "Archived": 90,
+  "Approved": 95,
+  "Ready for review": 135
+}
 export const STATUS_PILL_MOTION = {
   spring: { type: "spring", visualDuration: 0.18, bounce: 0 },
   close: { duration: 0.2, ease: "easeOut" },
@@ -67,7 +74,8 @@ export function statusPillMotionPath({
 }
 
 export const measureStatusPillWidth = (label: string) =>
-  STATUS_PILL_CHROME_WIDTH + label.length * STATUS_PILL_CHARACTER_WIDTH
+  STATUS_PILL_LABEL_WIDTH[label] ??
+    STATUS_PILL_CHROME_WIDTH + label.length * STATUS_PILL_CHARACTER_WIDTH
 
 const roundedRectangleSupport = (
   width: number,

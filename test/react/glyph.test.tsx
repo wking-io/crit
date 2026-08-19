@@ -13,6 +13,8 @@ describe("Glyph", () => {
     expect(Object.keys(glyphDefinitions)).toEqual([...glyphNames])
     expect(glyphNames).toContain("commentPin")
     expect(glyphNames).toContain("copy")
+    expect(glyphNames).toContain("check2")
+    expect(glyphSvgMarkup("check2")).toContain("M2.75 9.5L6.5 13.25L15.25 4.5")
     expect(glyphSvgMarkup("commentPin")).toContain('viewBox="0 0 16 16"')
     expect(glyphSvgMarkup("commentPin")).toContain('fill-rule="evenodd"')
   })

@@ -74,7 +74,8 @@ Owner.
 - Preserve Frame identity. Do not remove and recreate a Frame merely to change
   its status, title, URL, position, or size.
 - Treat manifest IDs as durable. Edit `crit.manifest.json` when a project-owned
-  discovery declaration needs to change; sync never deletes absent Frames.
+  discovery declaration needs to change; sync never deletes absent Frames and
+  never restores Frames removed from the Canvas.
 - Attach Notes to their Frame when they should move together; detaching preserves
   their Canvas position.
 - Canvas creation records the verified Git Author as immutable Canvas Owner.

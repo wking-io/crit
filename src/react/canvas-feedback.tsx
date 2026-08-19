@@ -1,4 +1,3 @@
-import { Avatar } from "@base-ui/react/avatar"
 import { Button } from "@base-ui/react/button"
 import { Popover } from "@base-ui/react/popover"
 import { useState, type CSSProperties, type ReactNode } from "react"
@@ -10,13 +9,18 @@ import type {
 import { ConfirmationDialog } from "./confirmation-dialog.js"
 import { cssVariableStyle } from "./css-variable-style.js"
 import { useCritOverlayContainer } from "./overlay-container.js"
+import { WovenAvatarPattern, wovenAvatarFor } from "./woven-avatar.js"
 
 const boundaryStyle: CSSProperties = {
   alignItems: "center",
   background: "var(--crit-message-surface, oklch(98.5% 0 none))",
   color: "var(--crit-message-ink, #68655e)",
   display: "flex",
-  font: '500 12px/1.7 "JetBrains Mono", ui-monospace, monospace',
+  font: "500 12px/1.7 InterVariable, Inter, sans-serif",
+  fontFeatureSettings: '"calt" 1, "case" 1, "ss02" 1, "tnum" 1, "ss03" 1',
+  fontOpticalSizing: "none",
+  fontVariationSettings: '"opsz" 14',
+  letterSpacing: 0,
   height: "100%",
   justifyContent: "center",
   minHeight: 420,
@@ -47,20 +51,6 @@ export function CritBoundaryMessage({
   )
 }
 
-const avatarColors = [
-  "var(--crit-color-orange-p1, oklch(67% 0.18 55))",
-  "var(--crit-color-blue-p2, oklch(65% 0.2 245.3))",
-  "var(--crit-color-green-p2, oklch(65% 0.2 156.3))",
-  "var(--crit-color-red-p1, oklch(67% 0.18 9))",
-  "var(--crit-color-purple-p1, oklch(67% 0.18 302))"
-] as const
-
-const avatarColor = (index: number) =>
-  avatarColors[index % avatarColors.length]!
-
-const avatarLetter = (label: string) =>
-  Array.from(label.trim())[0]?.toLocaleUpperCase() ?? "?"
-
 type PresencePopoverPayload = {
   readonly secondary: string
   readonly title: string
@@ -68,21 +58,19 @@ type PresencePopoverPayload = {
 
 function PresenceAvatar({
   anonymous = false,
-  background,
-  fallback,
   handle,
   index,
   label,
   payload,
+  seed,
   total
 }: {
   readonly anonymous?: boolean
-  readonly background?: string
-  readonly fallback: string
   readonly handle: Popover.Handle<PresencePopoverPayload>
   readonly index: number
   readonly label: string
   readonly payload: PresencePopoverPayload
+  readonly seed: string
   readonly total: number
 }) {
   const collapsedIndex = Math.min(index, 2)
@@ -95,29 +83,21 @@ function PresenceAvatar({
         "--crit-presence-collapsed-scale": collapsedSize / 22,
         "--crit-presence-collapsed-x": `${1 + collapsedIndex * 5}px`,
         "--crit-presence-expanded-x": `${1 + index * 23}px`,
-        "--crit-presence-glyph-scale": 22 / collapsedSize,
         "--crit-presence-layer": total - index
       })}
     >
-      <Avatar.Root
+      <Popover.Trigger
+        aria-label={label}
         className="crit-presence__avatar"
+        closeDelay={100}
         data-anonymous={anonymous || undefined}
-        render={(
-          <Popover.Trigger
-            aria-label={label}
-            closeDelay={100}
-            delay={0}
-            handle={handle}
-            openOnHover
-            payload={payload}
-          />
-        )}
-        style={background === undefined ? undefined : { background }}
+        delay={0}
+        handle={handle}
+        openOnHover
+        payload={payload}
       >
-        <Avatar.Fallback className="crit-presence__glyph">
-          {fallback}
-        </Avatar.Fallback>
-      </Avatar.Root>
+        <WovenAvatarPattern spec={wovenAvatarFor(seed)} />
+      </Popover.Trigger>
     </div>
   )
 }
@@ -134,8 +114,6 @@ export function CanvasPresenceIndicator({
   const participants = presence.availability === "unavailable"
     ? [{
         anonymous: true,
-        background: undefined,
-        fallback: "?",
         key: "anonymous-agent",
         label: "Anonymous agent presence",
         secondary: "Unknown harness",
@@ -143,8 +121,6 @@ export function CanvasPresenceIndicator({
       }]
     : presence.activities.map((activity) => ({
         anonymous: false,
-        background: undefined,
-        fallback: avatarLetter(activity.activityId),
         key: activity.activityId,
         label: `${activity.harness} agent: ${activity.activityId}`,
         secondary: activity.harness,
@@ -154,8 +130,6 @@ export function CanvasPresenceIndicator({
     ? []
     : [{
         anonymous: false,
-        background: undefined,
-        fallback: avatarLetter(presence.currentAuthor.name),
         key: `current-author:${presence.currentAuthor.id}`,
         label: `Current author: ${presence.currentAuthor.name}`,
         secondary: presence.currentAuthor.id,
@@ -185,13 +159,12 @@ export function CanvasPresenceIndicator({
       {entries.map((entry, index) => (
         <PresenceAvatar
           anonymous={entry.anonymous}
-          {...(entry.anonymous ? {} : { background: avatarColor(index) })}
-          fallback={entry.fallback}
           handle={popoverHandle}
           index={index}
           key={entry.key}
           label={entry.label}
           payload={{ secondary: entry.secondary, title: entry.title }}
+          seed={entry.key}
           total={entries.length}
         />
       ))}

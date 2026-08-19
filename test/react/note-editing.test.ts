@@ -11,7 +11,7 @@ const note: CanvasNote = {
   id: "feedback",
   text: "Original",
   author: { id: "author", name: "Test Author" },
-  geometry: { x: 40, y: 60, width: 280, height: 160 },
+  geometry: { x: 40, y: 60, width: 332, height: 115 },
   attachedTo: null,
   zIndex: 1,
   color: "blue"

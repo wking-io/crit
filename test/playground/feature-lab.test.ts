@@ -201,7 +201,12 @@ describe("Crit feature lab", () => {
       expect(home.status).toBe(200)
       expect(home.headers.get("location")).toBeNull()
       expect(await home.text()).toContain("Crit · feature-lab")
-      expect(editorShell).toContain('aria-label="Playground version"')
+      expect(editorShell).not.toContain('aria-label="Playground version"')
+      expect(editorShell).not.toContain("PlaygroundProfileSelector")
+      expect(editorShell).not.toContain('className="playground-profile"')
+      expect(editorShell).not.toContain("editor-shell.css")
+      expect(editorShell).toContain("extraCanvasContextMenus")
+      expect(editorShell).toContain('label: "Playground"')
       expect(editorShell).toContain("Development")
       expect(editorShell).toContain("Alpha")
       expect(editorShell).toContain("Release")
@@ -250,6 +255,8 @@ describe("Crit feature lab", () => {
       expect(uiSource).toContain('from "../../src/react/canvas-feedback.js"')
       expect(uiSource).toContain('from "../../src/react/canvas-context-menu.js"')
       expect(uiSource).toContain("CritMenuSpecimen")
+      expect(uiSource).toContain('label: "Playground"')
+      expect(uiSource).toContain("hover Playground for submenu")
       expect(uiSource).not.toContain("CritContextMenu")
       expect(uiSource).toContain("CritOverlayProvider")
       expect(uiSource).toContain("container={overlayContainer}")
@@ -343,7 +350,9 @@ describe("Crit feature lab", () => {
       "prototype-eyes-art-directed",
       "prototype-pattern-directions",
       "prototype-pattern-color-mixing",
-      "prototype-pattern-family-review"
+      "prototype-pattern-family-review",
+      "prototype-pattern-density-review",
+      "prototype-pattern-character-review"
     ])
     expect(canvas.frames.map((frame) => frame.url)).toEqual([
       "/synth?variant=A&preview=1",
@@ -353,7 +362,9 @@ describe("Crit feature lab", () => {
       "/ui/prototypes/eyes-art-directed",
       "/ui/prototypes/pattern-directions",
       "/ui/prototypes/pattern-color-mixing",
-      "/pattern-review-prototype.html"
+      "/pattern-review-prototype.html",
+      "/pattern-review-prototype-v2.html",
+      "/pattern-review-prototype-v3.html"
     ])
     expect(canvas.frames.map((frame) => frame.title)).toEqual([
       "Polyphonic Workbench",
@@ -363,12 +374,16 @@ describe("Crit feature lab", () => {
       "Art-directed Eye Systems",
       "Three Pattern Directions",
       "Mixed-color Pattern Study",
-      "Woven Pattern Family Review"
+      "Woven Pattern Family Review",
+      "Woven Pattern Density Review",
+      "Woven Pattern Character Review"
     ])
     expect(canvas.frames.map((frame) => frame.status)).toEqual([
       "approved",
       "changes-requested",
       "in-progress",
+      undefined,
+      undefined,
       undefined,
       undefined,
       undefined,

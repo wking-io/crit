@@ -246,9 +246,11 @@ const resolve = (
 const planFrameCommands = (
   manifest: ResolvedCritManifest,
   canvas: ResolvedCritManifestCanvas,
-  current: ReadonlyArray<CanvasFrame>
+  current: ReadonlyArray<CanvasFrame>,
+  removedFrameIds: ReadonlyArray<string>
 ) => {
   const byId = new Map(current.map((frame) => [frame.id, frame]))
+  const removed = new Set(removedFrameIds)
   const commands: Array<CanvasCommandInput> = []
   const addedFrameIds: Array<string> = []
   const updatedFrameIds: Array<string> = []
@@ -264,6 +266,10 @@ const planFrameCommands = (
     }
 
     if (existing === undefined) {
+      if (removed.has(id)) {
+        unchangedFrameIds.push(id)
+        continue
+      }
       const status = frame.status._tag === "Managed"
         ? frame.status.value
         : "in-progress"
@@ -414,7 +420,8 @@ const syncWith = (
       const plan = planFrameCommands(
         manifest,
         canvas,
-        Canvas.listFrames(Canvas.fromDocument(current))
+        current.frames,
+        current.removedFrameIds
       )
       if (plan.commands.length === 0) {
         return {

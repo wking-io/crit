@@ -154,6 +154,7 @@ if (ampOrb) {
 
 export default defineConfig({
   root: fileURLToPath(new URL(".", import.meta.url)),
+  cacheDir: fileURLToPath(new URL("../node_modules/.vite/playground", import.meta.url)),
   define: {
     __CRIT_PLAYGROUND_DEFAULT_PROFILE__: JSON.stringify(mode),
     __CRIT_PLAYGROUND_FRAME_LOADING__: JSON.stringify(

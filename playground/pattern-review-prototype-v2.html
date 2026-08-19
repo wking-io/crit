@@ -1,0 +1,625 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Woven Pattern Density Review — Prototype v2</title>
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --page: #f7f7f5;
+      --surface: #fff;
+      --text: #242423;
+      --muted: #73736f;
+      --border: #dfdfda;
+      --danger: #a52a25;
+      --danger-soft: #fff0ef;
+      --shadow: 0 8px 28px #16161512;
+      --red-c2: oklch(94% 0.028 9);
+      --red-p1: oklch(67% 0.18 9);
+      --red-t2: oklch(28% 0.1 9);
+      --orange-c2: oklch(94% 0.028 55);
+      --orange-p1: oklch(67% 0.18 55);
+      --orange-t2: oklch(28% 0.1 55);
+      --blue-c2: oklch(94% 0.028 245.3);
+      --blue-p1: oklch(67% 0.18 245.3);
+      --blue-t2: oklch(28% 0.1 245.3);
+      --green-c2: oklch(94% 0.028 156.3);
+      --green-p1: oklch(67% 0.18 156.3);
+      --green-t2: oklch(28% 0.1 156.3);
+      --purple-c2: oklch(94% 0.028 302);
+      --purple-p1: oklch(67% 0.18 302);
+      --purple-t2: oklch(28% 0.1 302);
+    }
+
+    * { box-sizing: border-box; }
+    body { background: var(--page); color: var(--text); margin: 0; overflow: hidden; }
+    button, select { font: inherit; }
+    button { color: inherit; }
+    .page { display: grid; grid-template-rows: auto auto minmax(0, 1fr); height: 100vh; }
+
+    .topbar {
+      align-items: center;
+      background: color-mix(in oklch, var(--surface) 94%, transparent);
+      border-bottom: 1px solid var(--border);
+      display: grid;
+      gap: 18px;
+      grid-template-columns: minmax(340px, 1fr) auto;
+      padding: 14px 18px;
+    }
+    .title { display: grid; gap: 3px; }
+    .title span { color: var(--muted); font: 700 8px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .1em; text-transform: uppercase; }
+    .title h1 { font-size: 20px; letter-spacing: -.025em; margin: 0; }
+    .title p { color: var(--muted); font-size: 11px; line-height: 1.35; margin: 0; }
+    .toolbar { align-items: center; display: flex; gap: 7px; }
+    .toolbar button, .toolbar select, .side-actions button {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 10px;
+      height: 32px;
+      padding: 0 10px;
+    }
+    .toolbar button:hover, .side-actions button:hover { border-color: #a5a59f; }
+    .toolbar .primary, .side-actions .primary { background: var(--text); border-color: var(--text); color: white; }
+    .toolbar .danger { color: var(--danger); }
+
+    .family-bar {
+      align-items: center;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      display: grid;
+      gap: 5px;
+      grid-template-columns: repeat(11, minmax(0, 1fr));
+      padding: 7px 18px;
+    }
+    .family-tab {
+      background: transparent;
+      border: 1px solid transparent;
+      border-radius: 6px;
+      cursor: pointer;
+      display: grid;
+      gap: 2px;
+      min-width: 0;
+      padding: 6px 4px;
+      text-align: center;
+    }
+    .family-tab:hover { background: var(--page); }
+    .family-tab[aria-selected="true"] { background: var(--text); color: white; }
+    .family-tab strong { font: 700 8px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; overflow: hidden; text-overflow: ellipsis; text-transform: capitalize; }
+    .family-tab span { color: var(--muted); font-size: 8px; }
+    .family-tab[aria-selected="true"] span { color: #ffffffa8; }
+
+    .workspace { display: grid; grid-template-columns: minmax(0, 1fr) 280px; min-height: 0; }
+    .grid-wrap { min-height: 0; padding: 12px; }
+    .candidate-grid {
+      --columns: 12;
+      --rows: 8;
+      display: grid;
+      gap: 5px;
+      grid-template-columns: repeat(var(--columns), minmax(0, 1fr));
+      grid-template-rows: repeat(var(--rows), minmax(0, 1fr));
+      height: 100%;
+      min-height: 0;
+    }
+    .candidate {
+      align-items: center;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      cursor: pointer;
+      display: grid;
+      gap: 3px;
+      justify-items: center;
+      min-height: 0;
+      min-width: 0;
+      padding: 4px 2px;
+      position: relative;
+    }
+    .candidate:hover { border-color: #9b9b94; box-shadow: var(--shadow); }
+    .candidate:focus-visible { outline: 2px solid var(--text); outline-offset: 1px; }
+    .candidate.is-bad { background: var(--danger-soft); border-color: var(--danger); }
+    .candidate.is-bad::after {
+      align-items: center;
+      background: var(--danger);
+      border-radius: 999px;
+      color: white;
+      content: "×";
+      display: flex;
+      font-size: 10px;
+      height: 15px;
+      justify-content: center;
+      position: absolute;
+      right: 3px;
+      top: 3px;
+      width: 15px;
+    }
+    .candidate small { color: var(--muted); font: 7px/1 ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .pattern-avatar { border-radius: 2px; display: block; height: 22px; overflow: hidden; width: 22px; }
+    .pattern-avatar svg { display: block; height: 22px; width: 22px; }
+
+    .sidebar {
+      background: var(--surface);
+      border-left: 1px solid var(--border);
+      display: grid;
+      grid-template-rows: auto auto auto auto minmax(0, 1fr);
+      min-height: 0;
+      padding: 14px;
+    }
+    .state-panel { display: grid; gap: 9px; }
+    .state-panel > span { color: var(--muted); font: 700 8px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .08em; text-transform: uppercase; }
+    .state-list { display: grid; gap: 5px; margin: 0; }
+    .state-list div { align-items: baseline; display: flex; justify-content: space-between; }
+    .state-list dt { color: var(--muted); font-size: 9px; }
+    .state-list dd { font-size: 11px; font-weight: 700; margin: 0; }
+    .last-action { background: var(--page); border-radius: 6px; color: var(--muted); font-size: 9px; line-height: 1.4; min-height: 38px; padding: 8px; }
+    .rules { background: var(--page); border-radius: 6px; color: var(--muted); font-size: 9px; line-height: 1.4; margin: 0; padding: 8px; }
+    .rules strong { color: var(--text); }
+    .side-actions { border-top: 1px solid var(--border); display: grid; gap: 6px; grid-template-columns: 1fr 1fr; margin-top: 12px; padding-top: 12px; }
+    .side-actions button { padding: 0 6px; }
+    .side-actions .wide { grid-column: 1 / -1; }
+    .handoff { border-top: 1px solid var(--border); display: grid; gap: 7px; margin-top: 12px; padding-top: 12px; }
+    .handoff p { color: var(--muted); font-size: 9px; line-height: 1.4; margin: 0; }
+    .handoff-status { color: #16734a; font-size: 9px; min-height: 13px; }
+
+    .guide { align-self: end; border-top: 1px solid var(--border); margin-top: 12px; overflow: auto; padding-top: 10px; }
+    .guide summary { cursor: pointer; font-size: 10px; font-weight: 700; }
+    .guide-tabs { display: grid; gap: 8px; margin-top: 9px; }
+    .guide-card { background: var(--page); border-radius: 7px; display: grid; gap: 5px; padding: 8px; }
+    .guide-card strong { font-size: 9px; }
+    .guide-card p { color: var(--muted); font-size: 8px; line-height: 1.35; margin: 0; }
+    .guide-card button { background: var(--surface); border: 1px solid var(--border); border-radius: 5px; cursor: pointer; font-size: 8px; height: 25px; }
+
+    @media (max-width: 900px) {
+      .topbar { grid-template-columns: 1fr; }
+      .toolbar { flex-wrap: wrap; }
+      .family-bar { grid-template-columns: repeat(6, 1fr); }
+      .workspace { grid-template-columns: 1fr 220px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header class="topbar">
+      <div class="title">
+        <span>Prototype v2 · density revision</span>
+        <h1>Woven pattern density review</h1>
+        <p>Question: do occupancy floors, accent density, and revised family formulas remove the plain wash cases without making every family look the same?</p>
+      </div>
+      <div class="toolbar">
+        <button id="new-batch" type="button">New family batch</button>
+        <button id="mark-visible" type="button">Mark all visible bad</button>
+        <button id="clear-visible" type="button">Clear visible</button>
+        <button class="danger" id="reset-session" type="button">Reset session</button>
+      </div>
+    </header>
+    <nav class="family-bar" id="family-bar" aria-label="Pattern families" role="tablist"></nav>
+    <section class="workspace">
+      <div class="grid-wrap"><div class="candidate-grid" id="candidate-grid" role="grid" aria-label="Generated patterns"></div></div>
+      <aside class="sidebar">
+        <section class="state-panel">
+          <span>Current review state</span>
+          <dl class="state-list">
+            <div><dt>Family</dt><dd id="state-family"></dd></div>
+            <div><dt>Batch</dt><dd id="state-batch"></dd></div>
+            <div><dt>Visible</dt><dd id="state-visible"></dd></div>
+            <div><dt>Gated this batch</dt><dd id="state-gated"></dd></div>
+            <div><dt>Bad in family</dt><dd id="state-family-bad"></dd></div>
+            <div><dt>Bad this session</dt><dd id="state-total-bad"></dd></div>
+            <div><dt>Saved in</dt><dd>this tab</dd></div>
+          </dl>
+          <div class="last-action" id="last-action"></div>
+          <p class="rules"><strong>v1 rejections used here:</strong> occupancy below ~20% read as empty; occupancy 1.0 or ~67% with no transitions read as a wash; accent matrices were often empty; diamond/square masks clipped motifs to a few pixels; checker is removed; basket collapsed to empty, four dots, or solid; pinwheel with modulus 3 / threshold 2 filled solid.</p>
+        </section>
+        <section class="side-actions">
+          <button id="clear-family" type="button">Clear family</button>
+          <button id="download-review" type="button">Download JSON</button>
+          <button class="primary wide" id="copy-review" type="button">Copy for conversation</button>
+        </section>
+        <section class="handoff">
+          <p>This page cannot post directly into chat. Copy the structured review payload, then paste it into the conversation so remaining failures can be analyzed against v1.</p>
+          <div class="handoff-status" id="handoff-status"></div>
+        </section>
+        <details class="guide">
+          <summary>Guided walkthroughs</summary>
+          <div class="guide-tabs">
+            <div class="guide-card"><strong>Sparse families first</strong><p>Start on Diamonds, then Rings — the two families that most often lacked foreground.</p><button data-guide="sparse" type="button">Start scenario</button></div>
+            <div class="guide-card"><strong>Broken weaves</strong><p>Open Basket and Pinwheel and check they no longer collapse to empty or solid.</p><button data-guide="weave" type="button">Start scenario</button></div>
+            <div class="guide-card"><strong>Handoff remaining misses</strong><p>Mark a few leftover failures in Windows and Maze, then copy the payload.</p><button data-guide="handoff" type="button">Start scenario</button></div>
+          </div>
+        </details>
+      </aside>
+    </section>
+  </main>
+
+  <script>
+    const PatternGenerator = (() => {
+      const families = ["diamonds", "rings", "lattice", "stepped", "diagonal", "basket", "cross", "medallion", "windows", "pinwheel", "maze"];
+      const hues = ["red", "orange", "blue", "green", "purple"];
+      const wrap = (value, modulus) => ((value % modulus) + modulus) % modulus;
+      const banded = (value, spacing, thickness) => wrap(value, spacing) < thickness;
+      const randomFor = (seed) => {
+        let state = seed >>> 0;
+        return () => {
+          state += 0x6d2b79f5;
+          let value = state;
+          value = Math.imul(value ^ value >>> 15, value | 1);
+          value ^= value + Math.imul(value ^ value >>> 7, value | 61);
+          return ((value ^ value >>> 14) >>> 0) / 4294967296;
+        };
+      };
+      const paletteFor = (seed) => {
+        const random = randomFor(seed ^ 0x5f3759df);
+        const background = hues[Math.floor(random() * hues.length)];
+        const remaining = hues.filter((hue) => hue !== background);
+        const foreground = remaining[Math.floor(random() * remaining.length)];
+        const accents = hues.filter((hue) => hue !== background && hue !== foreground);
+        const accent = accents[Math.floor(random() * accents.length)];
+        const dark = random() > 0.5;
+        return {
+          accent: `var(--${accent}-p1)`,
+          background: `var(--${background}-${dark ? "t2" : "c2"})`,
+          foreground: `var(--${foreground}-${dark ? "c2" : "t2"})`,
+          families: [background, foreground, accent],
+          ground: dark ? "dark" : "light"
+        };
+      };
+      const parametersFor = (family, random) => ({
+        band: family === "cross" ? Math.floor(random() * 2) : 1,
+        block: 2 + Math.floor(random() * 2),
+        framed: false,
+        mask: "none",
+        modulus: 4,
+        phase: Math.floor(random() * 8),
+        radius: 4,
+        spacing: family === "lattice" ? 3 + Math.floor(random() * 2) : 3,
+        threshold: 2
+      });
+      const formula = (family, x, y, p) => {
+        const dx = Math.abs(x - 5);
+        const dy = Math.abs(y - 5);
+        const inner = Math.min(dx, dy);
+        const outer = Math.max(dx, dy);
+        const sum = dx + dy;
+        const difference = Math.abs(dx - dy);
+        if (family === "diamonds") return banded(sum + p.phase, 4, 2);
+        if (family === "rings") return p.phase % 2 === 0
+          ? outer <= 2 || outer === 3 + (p.phase % 4 === 0 ? 0 : 1)
+          : sum <= 3 || sum === 5 || (p.phase % 4 === 3 && sum === 6);
+        if (family === "lattice") {
+          const xBand = wrap(dx + p.phase, p.spacing);
+          const yBand = wrap(dy + p.phase, p.spacing);
+          return xBand === 0 || yBand === 0 || (xBand === 1 && yBand === 1);
+        }
+        if (family === "stepped") return banded(inner + outer * 2 + p.phase, 4, 2);
+        if (family === "diagonal") return wrap(x - y + p.phase, 4) < 2;
+        if (family === "basket") {
+          const unit = p.block;
+          const over = (Math.floor(x / unit) + Math.floor(y / unit) + p.phase) % 2 === 0;
+          return over ? wrap(y, unit * 2) < unit : wrap(x, unit * 2) < unit;
+        }
+        if (family === "cross") return dx <= p.band || dy <= p.band || difference === p.band + 1;
+        if (family === "medallion") return sum <= 3 || outer === 4 || dx === 0 || dy === 0;
+        if (family === "windows") return outer === 4 || outer === 3 || dx === 0 || dy === 0 || (dx <= 1 && dy <= 1);
+        if (family === "pinwheel") {
+          const a = banded(dx * 2 + dy + p.phase, 5, 2);
+          const b = banded(dy * 2 + dx + p.phase, 5, 2);
+          return a !== b || sum <= 2;
+        }
+        return wrap(x + p.phase, 4) === 0 !== (wrap(y + p.phase, 4) === 0) || wrap(x + y + p.phase, 4) === 0;
+      };
+      const familyAccent = (family, x, y, p) => {
+        const dx = Math.abs(x - 5);
+        const dy = Math.abs(y - 5);
+        const sum = dx + dy;
+        const outer = Math.max(dx, dy);
+        if (family === "lattice") return wrap(dx + p.phase, p.spacing) === 0 && wrap(dy + p.phase, p.spacing) === 0;
+        if (family === "cross") return dx <= 1 && dy <= 1;
+        if (family === "rings") return outer <= 1 || dx === 0 || dy === 0 || dx === dy;
+        if (family === "windows") return (dx === 0 && dy === 0) || (outer === 4 && (dx === 0 || dy === 0 || dx === dy));
+        if (family === "diamonds") return wrap(sum + p.phase, 4) === 0;
+        if (family === "basket") return (Math.floor(x / p.block) + Math.floor(y / p.block) + p.phase) % 2 === 0;
+        if (family === "medallion") return sum <= 2 || dx === dy;
+        if (family === "pinwheel") return dx === 0 || dy === 0 || dx === dy;
+        if (family === "maze") return wrap(x + y + p.phase, 3) === 0;
+        if (family === "stepped") return wrap(sum + p.phase, 3) === 0;
+        return wrap(x + y + p.phase, 3) === 0;
+      };
+      const metricsFor = (cells, accentCells) => {
+        const active = cells.reduce((count, cell) => count + Number(cell), 0);
+        let transitions = 0;
+        for (let y = 0; y < 11; y += 1) for (let x = 0; x < 11; x += 1) {
+          const index = y * 11 + x;
+          if (x < 10 && cells[index] !== cells[index + 1]) transitions += 1;
+          if (y < 10 && cells[index] !== cells[index + 11]) transitions += 1;
+        }
+        return {
+          occupancy: Math.round(active / 121 * 1000) / 1000,
+          accentShare: Math.round(accentCells.length / 121 * 1000) / 1000,
+          accentOfPattern: active === 0 ? 0 : Math.round(accentCells.length / active * 1000) / 1000,
+          transitions
+        };
+      };
+      const qualityFor = (metrics) => {
+        const checks = [
+          { label: "28–72% occupancy", passed: metrics.occupancy >= 0.28 && metrics.occupancy <= 0.72 },
+          { label: "Accent covers ≥8% of the field", passed: metrics.accentShare >= 0.08 },
+          { label: "Accent covers ≥18% of pattern cells", passed: metrics.accentOfPattern >= 0.18 },
+          { label: "Structured transitions", passed: metrics.transitions >= 28 && metrics.transitions <= 180 }
+        ];
+        return { checks, passed: checks.every((check) => check.passed) };
+      };
+      const paint = (family, seed) => {
+        const random = randomFor(seed);
+        const edgeMode = random() > 0.5 ? "full" : "inset";
+        const parameters = parametersFor(family, random);
+        const cells = Array.from({ length: 121 }, (_, index) => {
+          const x = index % 11;
+          const y = Math.floor(index / 11);
+          const onEdge = x === 0 || x === 10 || y === 0 || y === 10;
+          if (edgeMode === "inset" && onEdge) return false;
+          return formula(family, x, y, parameters);
+        });
+        const accents = cells.map((cell, index) => cell && familyAccent(family, index % 11, Math.floor(index / 11), parameters));
+        const active = cells.reduce((count, cell) => count + Number(cell), 0);
+        let accentCount = accents.reduce((count, cell) => count + Number(cell), 0);
+        if (active > 0 && accentCount / 121 < 0.08) {
+          cells.forEach((cell, index) => {
+            if (cell && wrap((index % 11) + Math.floor(index / 11) * 2 + parameters.phase, 3) === 0) accents[index] = true;
+          });
+          accentCount = accents.reduce((count, cell) => count + Number(cell), 0);
+        }
+        const accentCells = accents.flatMap((cell, index) => cell ? [index] : []);
+        const palette = paletteFor(seed);
+        const matrix = cells.map(Number).join("");
+        const accentMatrix = accents.map(Number).join("");
+        const metrics = metricsFor(cells, accentCells);
+        return {
+          id: `${family}:${seed}`,
+          seed,
+          family,
+          edgeMode,
+          palette,
+          parameters,
+          cells,
+          accentCells,
+          matrix,
+          metrics,
+          quality: qualityFor(metrics),
+          fingerprint: `${matrix}|${accentMatrix}|${palette.families.join("-")}|${palette.ground}`
+        };
+      };
+      const generate = (family, batch, count) => {
+        const familyIndex = families.indexOf(family);
+        const seen = new Set();
+        const candidates = [];
+        let attempt = 0;
+        let gated = 0;
+        while (candidates.length < count && attempt < count * 200) {
+          const seed = 9101 + familyIndex * 100003 + batch * 10000019 + attempt * 193;
+          const candidate = paint(family, seed);
+          attempt += 1;
+          if (seen.has(candidate.fingerprint)) continue;
+          if (!candidate.quality.passed) {
+            gated += 1;
+            continue;
+          }
+          seen.add(candidate.fingerprint);
+          candidates.push(candidate);
+        }
+        return { candidates, gated, attempts: attempt };
+      };
+      const fromId = (id) => {
+        const split = id.lastIndexOf(":");
+        return paint(id.slice(0, split), Number(id.slice(split + 1)));
+      };
+      return { families, generate, fromId };
+    })();
+
+    const ReviewModel = (() => {
+      const emptyMap = () => Object.fromEntries(PatternGenerator.families.map((family) => [family, []]));
+      const initial = () => ({
+        version: 2,
+        activeFamily: PatternGenerator.families[0],
+        badByFamily: emptyMap(),
+        batchByFamily: Object.fromEntries(PatternGenerator.families.map((family) => [family, 0])),
+        lastAction: "Session started. Click any pattern to mark it bad; Shift-click marks a range."
+      });
+      const unique = (values) => [...new Set(values)];
+      const reduce = (state, action) => {
+        if (action.type === "reset") return initial();
+        if (action.type === "switch_family") return { ...state, activeFamily: action.family, lastAction: `Switched to ${action.family}.` };
+        if (action.type === "new_batch") return {
+          ...state,
+          batchByFamily: { ...state.batchByFamily, [state.activeFamily]: state.batchByFamily[state.activeFamily] + 1 },
+          lastAction: `Generated a new ${state.activeFamily} batch; earlier selections remain saved.`
+        };
+        if (action.type === "toggle_bad") {
+          const current = state.badByFamily[action.family];
+          const next = current.includes(action.id) ? current.filter((id) => id !== action.id) : [...current, action.id];
+          return { ...state, badByFamily: { ...state.badByFamily, [action.family]: next }, lastAction: `${next.includes(action.id) ? "Marked" : "Unmarked"} one ${action.family} pattern.` };
+        }
+        if (action.type === "mark_many") {
+          const next = unique([...state.badByFamily[action.family], ...action.ids]);
+          return { ...state, badByFamily: { ...state.badByFamily, [action.family]: next }, lastAction: `Marked ${action.ids.length} ${action.family} patterns bad.` };
+        }
+        if (action.type === "clear_many") {
+          const removed = new Set(action.ids);
+          const next = state.badByFamily[action.family].filter((id) => !removed.has(id));
+          return { ...state, badByFamily: { ...state.badByFamily, [action.family]: next }, lastAction: `Cleared visible selections for ${action.family}.` };
+        }
+        if (action.type === "clear_family") return { ...state, badByFamily: { ...state.badByFamily, [action.family]: [] }, lastAction: `Cleared every saved rejection for ${action.family}.` };
+        return state;
+      };
+      const payload = (state) => ({
+        review: "woven-pattern-density-v2",
+        version: state.version,
+        instructions: "These are remaining bad cases after the density revision. Checker is removed. Use family, seed, parameters, matrix, palette, and metrics to infer what still fails.",
+        revisions: {
+          droppedFamilies: ["checker"],
+          occupancy: [0.28, 0.72],
+          accentShare: 0.08,
+          accentOfPattern: 0.18,
+          masks: "none",
+          framed: false
+        },
+        totals: {
+          rejected: Object.values(state.badByFamily).reduce((sum, ids) => sum + ids.length, 0),
+          byFamily: Object.fromEntries(PatternGenerator.families.map((family) => [family, state.badByFamily[family].length]))
+        },
+        badCasesByFamily: Object.fromEntries(PatternGenerator.families.map((family) => [family, state.badByFamily[family].map((id) => {
+          const candidate = PatternGenerator.fromId(id);
+          return {
+            seed: candidate.seed,
+            edgeMode: candidate.edgeMode,
+            palette: candidate.palette,
+            parameters: candidate.parameters,
+            matrix: candidate.matrix,
+            metrics: candidate.metrics,
+            fingerprint: candidate.fingerprint
+          };
+        })]))
+      });
+      return { initial, payload, reduce };
+    })();
+
+    const storageKey = "crit-pattern-review-prototype-v2";
+    const loadState = () => {
+      try {
+        const stored = sessionStorage.getItem(storageKey);
+        return stored ? { ...ReviewModel.initial(), ...JSON.parse(stored) } : ReviewModel.initial();
+      } catch { return ReviewModel.initial(); }
+    };
+    let state = loadState();
+    let visibleCandidates = [];
+    let lastGated = 0;
+    let lastClickedIndex = null;
+    let gridRows = 8;
+    let gridColumns = 12;
+
+    const grid = document.getElementById("candidate-grid");
+    const familyBar = document.getElementById("family-bar");
+    const persist = () => sessionStorage.setItem(storageKey, JSON.stringify(state));
+    const dispatch = (action) => { state = ReviewModel.reduce(state, action); persist(); lastClickedIndex = null; render(); };
+    const totalBad = () => Object.values(state.badByFamily).reduce((sum, ids) => sum + ids.length, 0);
+    const currentIds = () => visibleCandidates.map(({ id }) => id);
+    const percent = (value) => `${Math.round(value * 100)}%`;
+
+    const renderSvg = (candidate) => {
+      const accents = new Set(candidate.accentCells);
+      const cells = candidate.cells.map((active, index) => active ? `<rect x="${index % 11 * 2}" y="${Math.floor(index / 11) * 2}" width="2" height="2" fill="${accents.has(index) ? candidate.palette.accent : candidate.palette.foreground}"/>` : "").join("");
+      return `<span class="pattern-avatar"><svg aria-hidden="true" shape-rendering="crispEdges" viewBox="0 0 22 22"><rect width="22" height="22" fill="${candidate.palette.background}"/>${cells}</svg></span>`;
+    };
+
+    const renderFamilies = () => {
+      familyBar.innerHTML = PatternGenerator.families.map((family) => `<button class="family-tab" data-family="${family}" aria-selected="${family === state.activeFamily}" role="tab"><strong>${family}</strong><span>${state.badByFamily[family].length} bad</span></button>`).join("");
+      familyBar.querySelectorAll("button").forEach((button) => button.addEventListener("click", () => dispatch({ type: "switch_family", family: button.dataset.family })));
+    };
+
+    const renderGrid = () => {
+      const capacity = gridRows * gridColumns;
+      const generated = PatternGenerator.generate(state.activeFamily, state.batchByFamily[state.activeFamily], capacity);
+      visibleCandidates = generated.candidates;
+      lastGated = generated.gated;
+      grid.style.setProperty("--columns", String(gridColumns));
+      grid.style.setProperty("--rows", String(gridRows));
+      const bad = new Set(state.badByFamily[state.activeFamily]);
+      grid.innerHTML = visibleCandidates.map((candidate, index) => `<button class="candidate${bad.has(candidate.id) ? " is-bad" : ""}" data-index="${index}" data-id="${candidate.id}" title="${candidate.family} · occ ${percent(candidate.metrics.occupancy)} · accent ${percent(candidate.metrics.accentShare)} · ${candidate.edgeMode}" aria-pressed="${bad.has(candidate.id)}" role="gridcell">${renderSvg(candidate)}<small>${percent(candidate.metrics.occupancy)}·${percent(candidate.metrics.accentShare)}</small></button>`).join("");
+      grid.querySelectorAll("button").forEach((button) => button.addEventListener("click", (event) => {
+        const index = Number(button.dataset.index);
+        if (event.shiftKey && lastClickedIndex !== null) {
+          const start = Math.min(lastClickedIndex, index);
+          const end = Math.max(lastClickedIndex, index);
+          dispatch({ type: "mark_many", family: state.activeFamily, ids: visibleCandidates.slice(start, end + 1).map(({ id }) => id) });
+          return;
+        }
+        lastClickedIndex = index;
+        state = ReviewModel.reduce(state, { type: "toggle_bad", family: state.activeFamily, id: button.dataset.id });
+        persist();
+        render();
+        lastClickedIndex = index;
+      }));
+    };
+
+    const renderState = () => {
+      document.getElementById("state-family").textContent = state.activeFamily;
+      document.getElementById("state-batch").textContent = String(state.batchByFamily[state.activeFamily] + 1);
+      document.getElementById("state-visible").textContent = String(visibleCandidates.length);
+      document.getElementById("state-gated").textContent = String(lastGated);
+      document.getElementById("state-family-bad").textContent = String(state.badByFamily[state.activeFamily].length);
+      document.getElementById("state-total-bad").textContent = String(totalBad());
+      document.getElementById("last-action").textContent = state.lastAction;
+    };
+
+    const render = () => { renderFamilies(); renderGrid(); renderState(); };
+
+    const updateCapacity = () => {
+      const rect = grid.getBoundingClientRect();
+      const nextColumns = Math.max(6, Math.floor(rect.width / 58));
+      const nextRows = Math.max(4, Math.floor(rect.height / 55));
+      if (nextColumns === gridColumns && nextRows === gridRows) return;
+      gridColumns = nextColumns;
+      gridRows = nextRows;
+      lastClickedIndex = null;
+      render();
+    };
+
+    const copyText = async (text) => {
+      try { await navigator.clipboard.writeText(text); return true; }
+      catch {
+        const textarea = document.createElement("textarea");
+        textarea.value = text;
+        textarea.style.position = "fixed";
+        textarea.style.opacity = "0";
+        document.body.append(textarea);
+        textarea.select();
+        const copied = document.execCommand("copy");
+        textarea.remove();
+        return copied;
+      }
+    };
+
+    const copyPayload = async () => {
+      const payload = JSON.stringify(ReviewModel.payload(state), null, 2);
+      const copied = await copyText(payload);
+      document.getElementById("handoff-status").textContent = copied ? `Copied ${totalBad()} bad cases — paste them into the conversation.` : "Copy was blocked; download the JSON instead.";
+    };
+
+    document.getElementById("new-batch").addEventListener("click", () => dispatch({ type: "new_batch" }));
+    document.getElementById("mark-visible").addEventListener("click", () => dispatch({ type: "mark_many", family: state.activeFamily, ids: currentIds() }));
+    document.getElementById("clear-visible").addEventListener("click", () => dispatch({ type: "clear_many", family: state.activeFamily, ids: currentIds() }));
+    document.getElementById("clear-family").addEventListener("click", () => dispatch({ type: "clear_family", family: state.activeFamily }));
+    document.getElementById("reset-session").addEventListener("click", () => { if (confirm("Clear every rejection and batch in this review session?")) dispatch({ type: "reset" }); });
+    document.getElementById("copy-review").addEventListener("click", copyPayload);
+    document.getElementById("download-review").addEventListener("click", () => {
+      const blob = new Blob([JSON.stringify(ReviewModel.payload(state), null, 2)], { type: "application/json" });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = "crit-woven-pattern-review-v2.json";
+      link.click();
+      URL.revokeObjectURL(link.href);
+    });
+    document.querySelectorAll("[data-guide]").forEach((button) => button.addEventListener("click", async () => {
+      state = ReviewModel.initial();
+      if (button.dataset.guide === "sparse") state = ReviewModel.reduce(state, { type: "switch_family", family: "diamonds" });
+      if (button.dataset.guide === "weave") state = ReviewModel.reduce(state, { type: "switch_family", family: "basket" });
+      if (button.dataset.guide === "handoff") {
+        const windows = PatternGenerator.generate("windows", 0, 4).candidates.slice(0, 2).map(({ id }) => id);
+        const maze = PatternGenerator.generate("maze", 0, 4).candidates.slice(1, 3).map(({ id }) => id);
+        state = ReviewModel.reduce(state, { type: "mark_many", family: "windows", ids: windows });
+        state = ReviewModel.reduce(state, { type: "mark_many", family: "maze", ids: maze });
+        state = ReviewModel.reduce(state, { type: "switch_family", family: "maze" });
+      }
+      persist();
+      render();
+      if (button.dataset.guide === "handoff") await copyPayload();
+    }));
+
+    new ResizeObserver(updateCapacity).observe(grid);
+    render();
+    requestAnimationFrame(updateCapacity);
+  </script>
+</body>
+</html>

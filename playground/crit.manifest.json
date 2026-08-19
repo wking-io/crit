@@ -56,6 +56,18 @@
           "url": "/pattern-review-prototype.html",
           "title": "Woven Pattern Family Review",
           "geometry": { "x": 5520, "y": 980, "width": 1440, "height": 1000 }
+        },
+        {
+          "id": "prototype-pattern-density-review",
+          "url": "/pattern-review-prototype-v2.html",
+          "title": "Woven Pattern Density Review",
+          "geometry": { "x": 7040, "y": 980, "width": 1440, "height": 1000 }
+        },
+        {
+          "id": "prototype-pattern-character-review",
+          "url": "/pattern-review-prototype-v3.html",
+          "title": "Woven Pattern Character Review",
+          "geometry": { "x": 8560, "y": 980, "width": 1440, "height": 1000 }
         }
       ]
     }

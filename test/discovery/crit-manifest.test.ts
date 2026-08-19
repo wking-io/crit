@@ -9,7 +9,7 @@ import {
   CritManifest,
   CritManifestInvalid
 } from "../../src/discovery/index.js"
-import { Canvas } from "../../src/core/index.js"
+import { Canvas, CanvasCommand } from "../../src/core/index.js"
 import { FileSystemCanvasRepository } from "../../src/node/file-system-canvas-repository.js"
 import { TEST_AUTHOR } from "../support/author-identity.js"
 import { CanvasRepository } from "../../src/runtime/canvas-repository.js"
@@ -209,5 +209,37 @@ describe("CritManifest", () => {
       revision: 3
     })
     expect(fifth.frames).toHaveLength(1)
+  })
+
+  it("does not restore Frames the user removed from the Canvas", async () => {
+    const storeLayer = FileSystemCanvasRepository.layer({ root })
+    const resolved = await Effect.runPromise(
+      CritManifest.resolve(input, { baseUrl: "https://iteration.localhost" })
+    )
+
+    await Effect.runPromise(
+      CritManifest.sync(resolved, { owner: TEST_AUTHOR }).pipe(
+        Effect.provide(storeLayer)
+      )
+    )
+    const afterRemoval = await Effect.runPromise(
+      Effect.gen(function*() {
+        const documents = yield* CanvasRepository
+        yield* documents.apply("checkout-review", [
+          CanvasCommand.removeFrame({ id: "current" })
+        ])
+        const sync = yield* CritManifest.sync(resolved, { owner: TEST_AUTHOR })
+        const canvas = Canvas.fromDocument(
+          yield* documents.load("checkout-review")
+        )
+        return { sync, frames: Canvas.listFrames(canvas) }
+      }).pipe(Effect.provide(storeLayer))
+    )
+
+    expect(afterRemoval.frames).toEqual([])
+    expect(afterRemoval.sync.canvases[0]).toMatchObject({
+      action: "unchanged",
+      addedFrameIds: []
+    })
   })
 })

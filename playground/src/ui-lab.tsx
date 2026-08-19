@@ -811,7 +811,6 @@ function NoteSpecimen({
         onSelect={() => {}}
         onSendToBack={() => Effect.void}
         selected={selected}
-        zoom={1}
       />
     </div>
   )
@@ -925,7 +924,29 @@ const FRAME_MENU_ITEMS: ReadonlyArray<ContextMenuItem> = [
 const EMPTY_MENU_ITEMS: ReadonlyArray<ContextMenuItem> = [
   { action: LAB_CONTROLS.action({ id: "open-new-frame" }), execute: Effect.void },
   { action: LAB_CONTROLS.action({ id: "create-note" }), execute: Effect.void },
-  { action: LAB_CONTROLS.action({ id: "zoom-to-fit" }), execute: Effect.void }
+  { action: LAB_CONTROLS.action({ id: "zoom-to-fit" }), execute: Effect.void },
+  {
+    label: "Playground",
+    description: "Choose which editor version the playground loads.",
+    items: [
+      {
+        label: "Development",
+        description: "Comments on",
+        selected: true,
+        execute: Effect.void
+      },
+      {
+        label: "Alpha",
+        description: "Comments hidden",
+        execute: Effect.void
+      },
+      {
+        label: "Release",
+        description: "Packed editor",
+        execute: Effect.void
+      }
+    ]
+  }
 ]
 
 function ContextMenuSpecimen({ ariaLabel, items }: {
@@ -945,7 +966,7 @@ function MenuSpecimens() {
     <SpecimenSection id="06" title="Context menus">
       <div className="ui-menu-grid">
         <div><StateLabel>Frame menu · hover Set size for submenu</StateLabel><ContextMenuSpecimen ariaLabel="Frame menu specimen" items={FRAME_MENU_ITEMS} /></div>
-        <div><StateLabel>Empty canvas menu</StateLabel><ContextMenuSpecimen ariaLabel="Canvas menu specimen" items={EMPTY_MENU_ITEMS} /></div>
+        <div><StateLabel>Empty canvas menu · hover Playground for submenu</StateLabel><ContextMenuSpecimen ariaLabel="Canvas menu specimen" items={EMPTY_MENU_ITEMS} /></div>
       </div>
     </SpecimenSection>
   )

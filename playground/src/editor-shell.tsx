@@ -4,9 +4,7 @@ import {
   useEffect,
   useState,
   type ComponentType,
-  type LazyExoticComponent,
-  type PointerEvent,
-  type WheelEvent
+  type LazyExoticComponent
 } from "react"
 import { createElement } from "react"
 import { createRoot } from "react-dom/client"
@@ -28,8 +26,6 @@ import {
   resolvePlaygroundProfile,
   type PlaygroundProfile
 } from "./playground-profile.js"
-
-import "./editor-shell.css"
 
 declare const __CRIT_PLAYGROUND_DEFAULT_PROFILE__: PlaygroundProfile
 declare const __CRIT_RELEASE_ENTRY__: string
@@ -116,47 +112,6 @@ const ReleaseCrit: LazyExoticComponent<ComponentType<CritProps>> = lazy(
   }
 )
 
-function PlaygroundProfileSelector({
-  profile,
-  onChange
-}: {
-  readonly profile: PlaygroundProfile
-  readonly onChange: (profile: PlaygroundProfile) => void
-}) {
-  const stopPointer = (event: PointerEvent) => event.stopPropagation()
-  const stopWheel = (event: WheelEvent) => event.stopPropagation()
-  return (
-    <aside
-      aria-label="Playground version"
-      className="playground-profile"
-      onPointerDown={stopPointer}
-      onWheel={stopWheel}
-    >
-      <header>
-        <strong>Playground</strong>
-        <span>{PROFILE_COPY[profile].detail}</span>
-      </header>
-      <fieldset
-        aria-label="Editor version"
-        className="playground-profile__options"
-      >
-        {PLAYGROUND_PROFILES.map((option) => (
-          <label key={option}>
-            <input
-              checked={profile === option}
-              name="playground-profile"
-              onChange={() => onChange(option)}
-              type="radio"
-              value={option}
-            />
-            {PROFILE_COPY[option].label}
-          </label>
-        ))}
-      </fieldset>
-    </aside>
-  )
-}
-
 function PlaygroundEditor() {
   const [profile, setProfile] = useState(initialPlaygroundProfile)
   const features = featuresForPlaygroundProfile(profile)
@@ -167,26 +122,30 @@ function PlaygroundEditor() {
   }, [profile])
 
   return (
-    <>
-      <PlaygroundProfileSelector
-        profile={profile}
-        onChange={setProfile}
+    <Suspense fallback={null}>
+      <Editor
+        cameraOptions={DEFAULT_CANVAS_CAMERA_OPTIONS}
+        canvasChoices={canvasChoices}
+        canvasId={canvasId}
+        developerTools={profile !== "release"}
+        features={features}
+        frameChrome={DEFAULT_FRAME_CHROME_SETTINGS}
+        frameLoading={frameLoading}
+        key={profile}
+        extraCanvasContextMenus={[{
+          label: "Playground",
+          description: "Choose which editor version the playground loads.",
+          items: PLAYGROUND_PROFILES.map((option) => ({
+            label: PROFILE_COPY[option].label,
+            description: PROFILE_COPY[option].detail,
+            selected: option === profile,
+            onSelect: () => setProfile(option)
+          }))
+        }]}
+        onCanvasSelect={selectCanvas}
+        onSession={attachLiveRefresh}
       />
-      <Suspense fallback={null}>
-        <Editor
-          cameraOptions={DEFAULT_CANVAS_CAMERA_OPTIONS}
-          canvasChoices={canvasChoices}
-          canvasId={canvasId}
-          developerTools={profile !== "release"}
-          features={features}
-          frameChrome={DEFAULT_FRAME_CHROME_SETTINGS}
-          frameLoading={frameLoading}
-          key={profile}
-          onCanvasSelect={selectCanvas}
-          onSession={attachLiveRefresh}
-        />
-      </Suspense>
-    </>
+    </Suspense>
   )
 }
 

@@ -12,7 +12,7 @@ Crit is a local-first tool for arranging and assessing live web iterations.
 
 **Canvas Creation**: The explicit operation that creates a Canvas Document and records its Git-derived Canvas Owner. Loading a missing Canvas never creates it; creation occurs through manifest synchronization or `crit create`.
 
-**Frame**: A web iteration placed on a Canvas, together with its review status, stable identity, and geometry. A Frame is either live at its source URL or archived against an immutable Snapshot Artifact. Its identity is independent from its URL, and multiple Frames may reference the same URL.
+**Frame**: A web iteration placed on a Canvas, together with its review status, stable identity, and geometry. A Frame is either live at its source URL or archived against an immutable Snapshot Artifact. Its identity is independent from its URL, and multiple Frames may reference the same URL. Removing a Frame from a Canvas is durable; later manifest discovery does not restore it.
 
 **Snapshot Artifact**: A self-contained, minified HTML capture of a live Frame at one point in time. It is stored outside the Canvas Document and is never mutated after capture.
 
@@ -20,7 +20,7 @@ Crit is a local-first tool for arranging and assessing live web iterations.
 
 **Snapshot Archive**: The storage and capture boundary for immutable Snapshot Artifacts.
 
-**Note**: Author-owned plain-text review feedback with Canvas geometry. Only the Note's Author may change its text or remove it; collaborators may arrange its position, stacking, and Frame attachment. Its content owns an automatic 28–42-character line measure and the height required to keep every line visible. Its presented geometry never overlaps a Frame and preserves 20 screen pixels of clearance by growing away from a nearby Frame as zoom changes. Removing its attached Frame detaches and preserves the Note.
+**Note**: Author-owned plain-text review feedback with Canvas geometry. Only the Note's Author may change its text or remove it; collaborators may arrange its position, stacking, and Frame attachment. Its card uses a fixed 42-character reading measure at the Note type size; height grows to show all text. The card scales with the Canvas plane so its placed position does not move. The note tool shows a translucent blue-family phantom at the pointer; a click places the Note. Removing its attached Frame detaches and preserves the Note.
 
 **Comment Thread**: A Canvas-owned feedback conversation pinned to a live Frame or to an element within that Frame. A Comment Thread contains one opening Comment and zero or more flat Replies, and may be active or resolved.
 

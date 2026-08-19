@@ -54,6 +54,7 @@ import {
 import { DraftJournal } from "../session/draft-journal.js"
 import {
   CanvasViewport,
+  type CanvasViewportProps,
   type FrameChromeSettings
 } from "./canvas-viewport.js"
 import type { CanvasCameraOptions } from "./canvas-camera.js"
@@ -91,7 +92,7 @@ declare global {
 const rootStyle: CSSProperties = {
   background: "oklch(98.5% 0 none)",
   color: "#191918",
-  fontFamily: '"JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace',
+  fontFamily: "InterVariable, Inter, sans-serif",
   height: "100%",
   minHeight: 420,
   overflow: "hidden",
@@ -182,6 +183,7 @@ export interface CritProps {
   readonly onCanvasSelect?: (canvasId: string) => void
   readonly onCommandError?: (message: string) => void
   readonly onSignIn?: (author: Author) => void
+  readonly extraCanvasContextMenus?: CanvasViewportProps["extraCanvasContextMenus"]
   readonly focusItemId?: string
   readonly loadingFallback?: ReactNode
   readonly errorFallback?: (message: string) => ReactNode
@@ -210,6 +212,7 @@ export function Crit({
   onCanvasSelect,
   onCommandError,
   onSignIn,
+  extraCanvasContextMenus,
   focusItemId,
   loadingFallback,
   errorFallback
@@ -395,6 +398,7 @@ export function Crit({
             frameLoading={frameLoading}
             onCommandError={onCommandError}
             onCanvasSelect={onCanvasSelect}
+            extraCanvasContextMenus={extraCanvasContextMenus}
             onSignIn={onSignIn}
             focusItemId={focusItemId}
             presence={sessionState?.presence}
