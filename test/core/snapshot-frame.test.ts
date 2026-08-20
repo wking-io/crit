@@ -35,7 +35,7 @@ describe("Canvas snapshot Frames", () => {
         {
           id: "snapshot-20260808120000-deadbeef",
           url: "/__crit/snapshots/20260808120000-deadbeef",
-          title: "Candidate · Snapshot",
+          title: "Candidate",
           status: "archived",
           provenance: { kind: "snapshot", sourceId: "candidate" },
           snapshot: {

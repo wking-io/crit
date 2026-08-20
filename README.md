@@ -219,7 +219,7 @@ tight. A live Frame's saved width and height belong to the iframe viewport, not
 its toolbar: responsive layout stays fixed at that configured size while the
 complete Frame representation follows the Canvas camera transform. Frame and
 Note headers include send-to-back and bring-to-front controls. Offscreen iframes
-are paused for performance.
+keep their loaded page and skip painting until they return to view.
 
 Global shortcuts are registered through TanStack Hotkeys: `V` selects the
 Select tool, `H` selects the Hand tool, and `Mod++` / `Mod+-` zoom the Canvas.

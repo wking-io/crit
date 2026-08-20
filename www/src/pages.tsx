@@ -8,7 +8,6 @@ import {
   CanvasControls,
   CanvasHelpPanel,
   CanvasPresenceIndicator,
-  CanvasSaveIndicator,
   Checkbox,
   CritOverlayProvider,
   critStyles,
@@ -238,11 +237,6 @@ export function LaunchFeaturesPage() {
             availability: "available",
             activities: []
           }}
-        />
-        <CanvasSaveIndicator
-          onDiscardLocalChanges={() => {}}
-          recoveryStatus="available"
-          saveStatus="clean"
         />
       </div>
     </LaunchPage>

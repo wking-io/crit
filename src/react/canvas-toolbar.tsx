@@ -30,6 +30,11 @@ import {
 } from "./canvas-help.js"
 import { Glyph } from "./glyph.js"
 import { useCritOverlayContainer } from "./overlay-container.js"
+import {
+  TOOLBAR_OVERLAY_GAP,
+  toolbarOverlayAnchor,
+  toolbarOverlayPositionerProps
+} from "./canvas-toolbar-overlay.js"
 
 export type CanvasToolbarAction =
   | "undo"
@@ -58,6 +63,9 @@ export interface CanvasToolbarProps {
   readonly onTitleChange?: (title: string) => Effect.Effect<unknown, unknown>
   readonly rememberView?: boolean
   readonly onRememberViewChange?: ((remember: boolean) => void) | undefined
+  readonly pauseOffscreenFrames?: boolean
+  readonly onPauseOffscreenFramesChange?: ((pause: boolean) => void) | undefined
+  readonly saving?: boolean
   readonly addFrameButtonRef?: Ref<HTMLButtonElement>
   readonly undoAvailable?: boolean
   readonly redoAvailable?: boolean
@@ -128,32 +136,6 @@ const distributionOptions = [
   { axis: "vertical", glyph: "distributeVertical" },
   { axis: "horizontal", glyph: "distributeHorizontal" }
 ] as const
-
-interface ArrangementAnchorBounds {
-  readonly bottom: number
-  readonly height: number
-  readonly left: number
-  readonly right: number
-  readonly top: number
-  readonly width: number
-  readonly x: number
-  readonly y: number
-}
-
-export const arrangementMenuAnchorRect = (
-  trigger: ArrangementAnchorBounds,
-  toolbar: ArrangementAnchorBounds
-) => ({
-  bottom: toolbar.bottom,
-  height: toolbar.height,
-  left: trigger.left,
-  right: trigger.right,
-  top: toolbar.top,
-  width: trigger.width,
-  x: trigger.x,
-  y: toolbar.y,
-  toJSON: () => ({})
-})
 
 function CanvasTitleDialog({
   finalFocus,
@@ -263,6 +245,9 @@ export function CanvasToolbar({
   onTitleChange,
   rememberView = false,
   onRememberViewChange,
+  pauseOffscreenFrames = true,
+  onPauseOffscreenFramesChange,
+  saving = false,
   addFrameButtonRef,
   undoAvailable = false,
   redoAvailable = false,
@@ -323,19 +308,10 @@ export function CanvasToolbar({
     )
   )
 
-  const arrangementAnchor = () => {
-    const trigger = arrangementTriggerRef.current
-    const toolbar = toolbarRef.current
-    if (trigger === null || toolbar === null) return trigger
-
-    return {
-      contextElement: trigger,
-      getBoundingClientRect: () => arrangementMenuAnchorRect(
-        trigger.getBoundingClientRect(),
-        toolbar.getBoundingClientRect()
-      )
-    }
-  }
+  const arrangementAnchor = () => toolbarOverlayAnchor(
+    arrangementTriggerRef.current,
+    toolbarRef.current
+  )
 
   const choices = canvasChoices === undefined
     ? []
@@ -349,16 +325,22 @@ export function CanvasToolbar({
     canvasId !== undefined && onCanvasSelect !== undefined && choices.length > 0
   const canvasMenuAvailable = canvasSelectionAvailable ||
     onTitleChange !== undefined ||
-    onRememberViewChange !== undefined
+    onRememberViewChange !== undefined ||
+    onPauseOffscreenFramesChange !== undefined
+  const hasViewPreferences = onRememberViewChange !== undefined ||
+    onPauseOffscreenFramesChange !== undefined
   const titleContent = (
     <>
       <span>{title}</span>
-      <Glyph name="switcher" />
+      <Glyph name={saving ? "loader" : "switcher"} />
     </>
   )
-  const titleTriggerLabel = onTitleChange === undefined
-    ? "Change canvas"
-    : "Canvas options"
+  const titleSavingProps = saving
+    ? { "aria-busy": true, "data-saving": true as const }
+    : {}
+  const titleTriggerLabel = onTitleChange !== undefined || hasViewPreferences
+    ? "Canvas options"
+    : "Change canvas"
   const titleHelp = informationalHelpTarget(onTitleChange !== undefined
     ? {
         name: "Canvas options",
@@ -366,6 +348,11 @@ export function CanvasToolbar({
           ? "Rename this canvas or choose a different canvas."
           : "Rename this canvas."
       }
+    : hasViewPreferences
+      ? {
+          name: "Canvas options",
+          description: "Change how this canvas keeps its view and loaded Frame pages."
+        }
     : canvasSelectionAvailable
       ? {
           name: "Change canvas",
@@ -380,6 +367,7 @@ export function CanvasToolbar({
     <Toolbar.Root
       aria-label="Canvas toolbar"
       className="crit-toolbar"
+      data-crit-toolbar=""
       loopFocus
       onPointerDown={(event) => event.stopPropagation()}
       ref={toolbarRef}
@@ -390,17 +378,16 @@ export function CanvasToolbar({
             aria-label={titleTriggerLabel}
             className="crit-toolbar__title"
             ref={titleTriggerRef}
+            {...titleSavingProps}
             {...titleHelp}
             render={<Menu.Trigger />}
           >{titleContent}</Toolbar.Button>
           <Menu.Portal container={overlayContainer}>
             <Menu.Positioner
-              align="start"
-              alignOffset={8}
+              {...toolbarOverlayPositionerProps}
+              alignOffset={TOOLBAR_OVERLAY_GAP}
               anchor={toolbarRef}
-              className="crit-canvas-switcher-positioner"
-              side="bottom"
-              sideOffset={8}
+              className="crit-toolbar-overlay-positioner crit-canvas-switcher-positioner"
             >
               <Menu.Popup
                 aria-label={titleTriggerLabel}
@@ -451,29 +438,52 @@ export function CanvasToolbar({
                     </Menu.Item>
                   </>
                 )}
-                {onRememberViewChange === undefined ? null : (
+                {onRememberViewChange === undefined
+                  && onPauseOffscreenFramesChange === undefined ? null : (
                   <>
                     {canvasSelectionAvailable || onTitleChange !== undefined ? (
                       <Menu.Separator className="crit-canvas-switcher__separator" />
                     ) : null}
-                    <Menu.CheckboxItem
-                      checked={rememberView}
-                      className="crit-canvas-switcher__item"
-                      closeOnClick={false}
-                      label="Remember view"
-                      {...informationalHelpTarget({
-                        name: "Remember view",
-                        description: "Restore this canvas's zoom and position after reload."
-                      })}
-                      onCheckedChange={onRememberViewChange}
-                    >
-                      <Menu.CheckboxItemIndicator
-                        className="crit-canvas-switcher__indicator crit-canvas-switcher__indicator--checkbox"
-                      ><span aria-hidden="true" /></Menu.CheckboxItemIndicator>
-                      <span className="crit-canvas-switcher__label">
-                        Remember view
-                      </span>
-                    </Menu.CheckboxItem>
+                    {onRememberViewChange === undefined ? null : (
+                      <Menu.CheckboxItem
+                        checked={rememberView}
+                        className="crit-canvas-switcher__item"
+                        closeOnClick={false}
+                        label="Remember view"
+                        {...informationalHelpTarget({
+                          name: "Remember view",
+                          description: "Restore this canvas's zoom and position after reload."
+                        })}
+                        onCheckedChange={onRememberViewChange}
+                      >
+                        <Menu.CheckboxItemIndicator
+                          className="crit-canvas-switcher__indicator crit-canvas-switcher__indicator--checkbox"
+                        ><span aria-hidden="true" /></Menu.CheckboxItemIndicator>
+                        <span className="crit-canvas-switcher__label">
+                          Remember view
+                        </span>
+                      </Menu.CheckboxItem>
+                    )}
+                    {onPauseOffscreenFramesChange === undefined ? null : (
+                      <Menu.CheckboxItem
+                        checked={pauseOffscreenFrames}
+                        className="crit-canvas-switcher__item"
+                        closeOnClick={false}
+                        label="Pause offscreen frames"
+                        {...informationalHelpTarget({
+                          name: "Pause offscreen frames",
+                          description: "Hide live Frame pages that are far outside the current view. Turn off to keep loaded pages painted."
+                        })}
+                        onCheckedChange={onPauseOffscreenFramesChange}
+                      >
+                        <Menu.CheckboxItemIndicator
+                          className="crit-canvas-switcher__indicator crit-canvas-switcher__indicator--checkbox"
+                        ><span aria-hidden="true" /></Menu.CheckboxItemIndicator>
+                        <span className="crit-canvas-switcher__label">
+                          Pause offscreen frames
+                        </span>
+                      </Menu.CheckboxItem>
+                    )}
                   </>
                 )}
               </Menu.Popup>
@@ -481,7 +491,7 @@ export function CanvasToolbar({
           </Menu.Portal>
         </Menu.Root>
       ) : (
-        <span className="crit-toolbar__title" {...titleHelp}>
+        <span className="crit-toolbar__title" {...titleSavingProps} {...titleHelp}>
           {titleContent}
         </span>
       )}
@@ -540,11 +550,10 @@ export function CanvasToolbar({
           ><Glyph name="arrangement" /></Toolbar.Button>
           <Menu.Portal container={overlayContainer}>
             <Menu.Positioner
+              {...toolbarOverlayPositionerProps}
               align="center"
               anchor={arrangementAnchor}
-              className="crit-arrangement-positioner"
-              side="bottom"
-              sideOffset={8}
+              className="crit-toolbar-overlay-positioner crit-arrangement-positioner"
             >
               <Menu.Popup
                 aria-label="Align and distribute"

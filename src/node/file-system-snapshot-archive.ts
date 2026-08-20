@@ -213,7 +213,8 @@ const acceptHeaderFor = (url: string) => {
 const fetchResourceOnce = async (
   fetchImpl: typeof globalThis.fetch,
   url: string,
-  signal: AbortSignal
+  signal: AbortSignal,
+  allowOutdatedDepFallback = true
 ): Promise<FetchedResource> => {
   const response = await fetchImpl(url, {
     headers: {
@@ -224,6 +225,14 @@ const fetchResourceOnce = async (
     signal
   })
   if (!response.ok) {
+    if (allowOutdatedDepFallback && response.status === 504) {
+      const fallback = await fetchOutdatedViteDepFallback(
+        fetchImpl,
+        url,
+        signal
+      )
+      if (fallback !== undefined) return fallback
+    }
     throw new Error(`Could not snapshot ${url} (${response.status}).`)
   }
   const declaredLength = Number(response.headers.get("content-length"))
@@ -243,6 +252,61 @@ const fetchResourceOnce = async (
     contentType: response.headers.get("content-type") ?? "",
     url: response.url || url
   }
+}
+
+const VITE_OPTIMIZE_DEP_PATH =
+  /^(?<prefix>\/@fs\/.+\/node_modules)\/\.vite(?:\/[^/]+)?\/deps\/(?<id>[^/]+)\.js$/
+
+const fetchIfOk = async (
+  fetchImpl: typeof globalThis.fetch,
+  url: string,
+  signal: AbortSignal
+) => {
+  try {
+    const resource = await fetchResourceOnce(fetchImpl, url, signal, false)
+    const contentType = resource.contentType.toLowerCase()
+    if (contentType.includes("html")) return undefined
+    return resource
+  } catch {
+    return undefined
+  }
+}
+
+const fetchOutdatedViteDepFallback = async (
+  fetchImpl: typeof globalThis.fetch,
+  url: string,
+  signal: AbortSignal
+): Promise<FetchedResource | undefined> => {
+  let parsed: URL
+  try {
+    parsed = new URL(url)
+  } catch {
+    return undefined
+  }
+  const match = parsed.pathname.match(VITE_OPTIMIZE_DEP_PATH)
+  const id = match?.groups?.id
+  const prefix = match?.groups?.prefix
+  if (id === undefined || prefix === undefined) return undefined
+  const decodedId = decodeURIComponent(id)
+  if (decodedId.startsWith("chunk-")) {
+    return {
+      body: Buffer.from("export {}"),
+      contentType: "text/javascript",
+      url
+    }
+  }
+  const specifier = decodedId.replace(/_/g, "/")
+  const originPrefix = `${parsed.origin}${prefix}`
+  const candidates = [
+    `${originPrefix}/${specifier}.js`,
+    `${originPrefix}/${specifier}/dist/index.js`,
+    `${originPrefix}/${specifier}/index.js`
+  ]
+  for (const candidate of candidates) {
+    const resource = await fetchIfOk(fetchImpl, candidate, signal)
+    if (resource !== undefined) return resource
+  }
+  return undefined
 }
 
 const buildSnapshotHtml = async (
@@ -486,7 +550,11 @@ const createHttpBundlePlugin = (
       ) {
         return { path: url.href, namespace: "react-refresh-stub" }
       }
-      return { path: url.href, namespace: "snapshot-http" }
+      return {
+        path: url.href,
+        namespace: "snapshot-http",
+        pluginData: args.kind
+      }
     })
     bundle.onLoad({ filter: /.*/, namespace: "vite-client-stub" }, () => ({
       contents: VITE_CLIENT_STUB,
@@ -502,9 +570,26 @@ const createHttpBundlePlugin = (
     }))
     bundle.onLoad({ filter: /.*/, namespace: "snapshot-http" }, async (args) => {
       const resource = await fetchResource(args.path)
+      const loader = loaderForResource(resource)
+      if (
+        loader === "css" &&
+        args.pluginData !== "import-rule" &&
+        args.pluginData !== "entry-point"
+      ) {
+        const css = await transform(resource.body.toString("utf8"), {
+          legalComments: "none",
+          loader: "css",
+          minify: true
+        })
+        return {
+          contents:
+            `document.head.appendChild(Object.assign(document.createElement("style"),{textContent:${JSON.stringify(css.code)}}));`,
+          loader: "js"
+        }
+      }
       return {
         contents: resource.body,
-        loader: loaderForResource(resource)
+        loader
       }
     })
   }
@@ -533,7 +618,7 @@ export function validateRefreshBoundaryAndEnqueueUpdate(){}
 const loaderForResource = (resource: FetchedResource): Loader => {
   const contentType = resource.contentType.toLowerCase()
   const pathname = new URL(resource.url).pathname.toLowerCase()
-  if (contentType.includes("text/css")) return "css"
+  if (contentType.includes("text/css") || pathname.endsWith(".css")) return "css"
   if (
     contentType.includes("javascript") ||
     contentType.includes("ecmascript") ||

@@ -73,8 +73,10 @@ by anonymous presence rather than an empty agent list.
 
 `CanvasViewport` is a Crit-owned DOM viewport. It implements infinite pan/zoom,
 Frame and Note movement and resizing, review status, note editing and
-attach/detach behavior. Offscreen iframes are not mounted, keeping the cost tied
-to visible work. The iframe `allow` and `sandbox` policies are configurable.
+attach/detach behavior. Offscreen Frame iframes stay mounted after first
+paint and skip painting while outside the view, so returning to them does not
+reload. The canvas title menu can turn this pause off so loaded pages stay
+painted. The iframe `allow` and `sandbox` policies are configurable.
 Frame geometry is the iframe's configured layout viewport; fixed-screen chrome
 is projected outside that height. The complete Frame representation participates
 in the Canvas camera transform, so zoom never changes the iframe's responsive

@@ -776,6 +776,53 @@ describe("crit Vite plugin", () => {
     expect(html).not.toContain('src="/app.js"')
   })
 
+  it("captures a Frame that imports CSS from JavaScript", async () => {
+    await writeFile(
+      path.join(root, "index.html"),
+      '<!doctype html><html><head></head><body><main>Imported stylesheet</main><script type="module" src="/app.js"></script></body></html>'
+    )
+    await writeFile(
+      path.join(root, "app.css"),
+      "main { text-wrap: pretty; }"
+    )
+    await writeFile(
+      path.join(root, "app.js"),
+      'import "./app.css"; document.body.dataset.ready = "true"'
+    )
+    await createCanvas("review")
+    const origin = await start()
+    const { client, snapshots } = HttpCritClient.make({
+      apiPath: `${origin}/__crit/api`
+    })
+    await Effect.runPromise(client.load("review"))
+    await Effect.runPromise(
+      client.apply("review", [
+        CanvasCommand.addFrame({
+          id: "candidate",
+          url: `${origin}/`,
+          title: "Candidate",
+          provenance: { kind: "manual", sourceId: "test" }
+        })
+      ])
+    )
+
+    const saved = await Effect.runPromise(
+      snapshots.snapshot("review", "candidate")
+    )
+    const archived = saved.frames.at(-1)!
+    const html = await (await fetch(`${origin}${archived.url}`)).text()
+
+    expect(archived).toMatchObject({
+      status: "archived",
+      provenance: { kind: "snapshot", sourceId: "candidate" }
+    })
+    expect(html).toContain("Imported stylesheet")
+    const encodedModules = [...html.matchAll(
+      /src="data:text\/javascript;charset=utf-8;base64,([^"]+)"/g
+    )].map((match) => Buffer.from(match[1]!, "base64").toString("utf8"))
+    expect(encodedModules.join("\n")).toContain("text-wrap:pretty")
+  })
+
   it("captures a Frame whose URL uses the published origin", async () => {
     await writeFile(
       path.join(root, "index.html"),

@@ -96,7 +96,131 @@ describe("FileSystemSnapshotArchive", () => {
       Effect.provide(FileSystemSnapshotArchive.layer({ root }))
     ))
 
-  // it.live: the deadline relies on the real clock, which it.effect virtualizes.
+  it.effect("inlines CSS imported from JavaScript into the frozen page", () =>
+    Effect.gen(function*() {
+      const archive = yield* SnapshotArchive
+      const origin = yield* Effect.promise(startCssImportServer)
+      const artifact = yield* archive.capture(`${origin}/`)
+      const html = new TextDecoder().decode(yield* archive.read(artifact.artifactId))
+
+      expect(html).toContain("Imported measure")
+      expect(decodeModuleScripts(html)).toContain("text-wrap:pretty")
+      expect(html).not.toContain('from "./app.css"')
+    }).pipe(
+      Effect.provide(FileSystemSnapshotArchive.layer({
+        root,
+        createId: () => "20260808120000-cssimport"
+      }))
+    ))
+
+  it.effect("recovers from Vite outdated optimize-dep responses", () =>
+    Effect.gen(function*() {
+      const archive = yield* SnapshotArchive
+      const origin = yield* Effect.promise(startOutdatedDepServer)
+      const artifact = yield* archive.capture(`${origin}/`)
+      const html = new TextDecoder().decode(yield* archive.read(artifact.artifactId))
+
+      expect(html).toContain("stale-dep")
+      expect(decodeModuleScripts(html)).toContain("fallback-widget")
+    }).pipe(
+      Effect.provide(FileSystemSnapshotArchive.layer({
+        root,
+        createId: () => "20260808120000-outdated"
+      }))
+    ))
+
+  const decodeModuleScripts = (html: string) =>
+    parse(html)
+      .querySelectorAll('script[type="module"]')
+      .map((script) => script.getAttribute("src")?.split("base64,")[1])
+      .filter((encoded): encoded is string => encoded !== undefined)
+      .map((encoded) => Buffer.from(encoded, "base64").toString("utf8"))
+      .join("\n")
+
+  const startCssImportServer = () =>
+    new Promise<string>((resolve, reject) => {
+      server = createServer((request, response) => {
+        switch (request.url) {
+          case "/":
+            response.setHeader("Content-Type", "text/html")
+            response.end(`<!doctype html><html><head></head><body>
+              <main>Imported measure</main>
+              <script type="module" src="/app.js"></script></body></html>`)
+            return
+          case "/app.js":
+            response.setHeader("Content-Type", "text/javascript")
+            response.end('import "./app.css"; document.body.dataset.ready = "true";')
+            return
+          case "/app.css":
+            response.setHeader("Content-Type", "text/css")
+            response.end("main { text-wrap: pretty; }")
+            return
+          default:
+            response.statusCode = 404
+            response.end("not found")
+        }
+      })
+      listenFixture(server, resolve, reject)
+    })
+
+  const startOutdatedDepServer = () =>
+    new Promise<string>((resolve, reject) => {
+      server = createServer((request, response) => {
+        const url = request.url ?? "/"
+        if (url === "/") {
+          response.setHeader("Content-Type", "text/html")
+          response.end(`<!doctype html><html><head></head><body>
+            <main>stale-dep</main>
+            <script type="module" src="/app.js"></script></body></html>`)
+          return
+        }
+        if (url === "/app.js") {
+          response.setHeader("Content-Type", "text/javascript")
+          response.end(
+            `import "/@fs/repo/node_modules/.vite/playground/deps/widget.js?v=stale";`
+          )
+          return
+        }
+        if (url.startsWith("/@fs/repo/node_modules/.vite/playground/deps/widget.js")) {
+          response.statusCode = 504
+          response.setHeader("Content-Type", "text/plain")
+          response.end("")
+          return
+        }
+        if (url === "/@fs/repo/node_modules/widget/package.json") {
+          response.setHeader("Content-Type", "application/json")
+          response.end(JSON.stringify({
+            name: "widget",
+            module: "./dist/index.js",
+            exports: { ".": { import: { default: "./dist/index.js" } } }
+          }))
+          return
+        }
+        if (url === "/@fs/repo/node_modules/widget/dist/index.js") {
+          response.setHeader("Content-Type", "text/javascript")
+          response.end('document.documentElement.dataset.widget = "fallback-widget"; export {}')
+          return
+        }
+        response.statusCode = 404
+        response.end("not found")
+      })
+      listenFixture(server, resolve, reject)
+    })
+
+  const listenFixture = (
+    fixture: Server,
+    resolve: (origin: string) => void,
+    reject: (cause: unknown) => void
+  ) => {
+    fixture.once("error", reject)
+    fixture.listen(0, "127.0.0.1", () => {
+      try {
+        resolve(`http://127.0.0.1:${serverPort(fixture)}`)
+      } catch (cause) {
+        reject(cause)
+      }
+    })
+  }
   it.live("fails once a capture exceeds its overall deadline", () => {
     const pendingSignals: Array<AbortSignal> = []
     const hangingFetch: typeof fetch = (_input, init) =>

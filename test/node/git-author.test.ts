@@ -36,8 +36,11 @@ describe("GitAuthorIdentity", () => {
     const second = await Effect.runPromise(GitAuthorIdentity.make().resolve(root))
 
     expect(first.name).toBe("Willa King")
+    expect(first.email).toBe("Willa@example.com")
+    expect(first.handle).toBe("Willa King")
     expect(first.id).toMatch(/^git:[a-f0-9]{64}$/)
     expect(second.id).toBe(first.id)
+    expect(second.email).toBe("willa@EXAMPLE.com")
   })
 
   it("returns copy-ready remediation for missing or invalid identity", async () => {

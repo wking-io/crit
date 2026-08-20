@@ -7,7 +7,9 @@ const Ratio = Schema.Finite.check(
 
 export const Author = Schema.Struct({
   id: Schema.String,
-  name: Schema.String
+  name: Schema.String,
+  email: Schema.optionalKey(Schema.String),
+  handle: Schema.optionalKey(Schema.String)
 })
 export type Author = typeof Author.Type
 

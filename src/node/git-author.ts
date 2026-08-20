@@ -72,7 +72,7 @@ const authorFrom = (nameInput: string, emailInput: string): Author => {
   const id = createHash("sha256")
     .update(email.toLowerCase())
     .digest("hex")
-  return { id: `git:${id}`, name }
+  return { id: `git:${id}`, name, email, handle: name }
 }
 
 const make = (): AuthorIdentity["Service"] => ({

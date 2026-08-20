@@ -14,7 +14,8 @@ describe("Sign-in", () => {
     expect(isSignInComplete("Ada Lovelace", "ada@example.com")).toBe(true)
     expect(signedInAuthor("Ada Lovelace", "Ada@Example.com")).toEqual({
       id: "signed-in:ada@example.com",
-      name: "Ada Lovelace"
+      name: "Ada Lovelace",
+      email: "Ada@Example.com"
     })
   })
 

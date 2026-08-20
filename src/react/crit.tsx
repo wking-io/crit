@@ -402,6 +402,7 @@ export function Crit({
             onSignIn={onSignIn}
             focusItemId={focusItemId}
             presence={sessionState?.presence}
+            saving={sessionState?.saveStatus === "saving"}
           />
           <CanvasHelpPanel />
           {sessionState === null ? null : (

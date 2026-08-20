@@ -96,10 +96,19 @@ import {
 import {
   initialCanvasCameraState,
   updateCanvasCamera,
-  type CanvasCamera,
   type CanvasCameraInput,
   type CanvasCameraOptions
 } from "./canvas-camera.js"
+import {
+  applyCanvasPlaneCamera,
+  canvasCameraSnapshotKind,
+  canvasPlaneTransform
+} from "./canvas-camera-session.js"
+import {
+  frameIntersectsViewport,
+  readPauseOffscreenFrames,
+  writePauseOffscreenFrames
+} from "./canvas-frame-occupancy.js"
 import {
   browserCanvasCameraStorage,
   clearPersistedCanvasCamera,
@@ -146,7 +155,6 @@ export {
   type FrameToolbarMode
 } from "./frame-card.js"
 
-type Camera = CanvasCamera
 type Preview = Readonly<Record<string, CanvasGeometry>>
 type NotePresentationSizes = Readonly<Record<string, NotePresentationSize>>
 type WheelInput = Omit<
@@ -179,6 +187,7 @@ export interface CanvasViewportProps {
   readonly developerTools?: boolean | undefined
   readonly features?: CritFeatures | undefined
   readonly presence?: CanvasPresence | undefined
+  readonly saving?: boolean | undefined
   readonly extraCanvasContextMenus?: ReadonlyArray<ExtraCanvasContextMenu> | undefined
   readonly focusItemId?: string | undefined
   readonly onSignIn?: ((author: Author) => void) | undefined
@@ -223,25 +232,6 @@ export const noteRemovalConfirmationDetails: ConfirmationDetails = {
   title: "Delete note?"
 }
 
-const intersectsViewport = (
-  geometry: CanvasGeometry,
-  camera: Camera,
-  width: number,
-  height: number
-) => {
-  const margin = 500
-  const left = geometry.x * camera.zoom + camera.x
-  const top = geometry.y * camera.zoom + camera.y
-  const right = left + geometry.width * camera.zoom
-  const bottom = top + geometry.height * camera.zoom
-  return (
-    right >= -margin &&
-    bottom >= -margin &&
-    left <= width + margin &&
-    top <= height + margin
-  )
-}
-
 export function CanvasViewport(props: CanvasViewportProps) {
   return (
     <ConfirmationProvider>
@@ -266,6 +256,7 @@ function CanvasViewportContent({
   onCommandError,
   onCanvasSelect,
   presence,
+  saving = false,
   snapshotFrame,
   extraCanvasContextMenus,
   frameChrome,
@@ -279,6 +270,7 @@ function CanvasViewportContent({
   const actionRunner = useCanvasActionRunner()
   const requestConfirmation = useConfirmation()
   const rootRef = useRef<HTMLDivElement>(null)
+  const planeRef = useRef<HTMLDivElement>(null)
   const panShieldRef = useRef<HTMLDivElement>(null)
   const notePlacementRef = useRef<HTMLDivElement>(null)
   const addFrameButtonRef = useRef<HTMLButtonElement>(null)
@@ -290,11 +282,15 @@ function CanvasViewportContent({
     () => initialCanvasCameraState(persistedCamera ?? undefined),
     [persistedCamera]
   )
-  const [camera, setCamera] = useState<Camera>(initialCameraState.camera)
+  const cameraStateRef = useRef(initialCameraState)
+  const [zoom, setZoom] = useState(initialCameraState.camera.zoom)
   const [rememberView, setRememberView] = useState(persistedCamera !== null)
   const rememberViewRef = useRef(rememberView)
   rememberViewRef.current = rememberView
-  const cameraStateRef = useRef(initialCameraState)
+  const persistCameraTimeoutRef = useRef(0)
+  const [pauseOffscreenFrames, setPauseOffscreenFrames] = useState(() =>
+    readPauseOffscreenFrames(cameraStorage)
+  )
   const cameraOptionsRef = useRef(cameraOptions)
   cameraOptionsRef.current = cameraOptions
   const [viewport, setViewport] = useState({ width: 0, height: 0 })
@@ -351,10 +347,24 @@ function CanvasViewportContent({
   const commentDraftClearVersion = useRef(0)
   const commitCameraState = useCallback(
     (next: ReturnType<typeof initialCanvasCameraState>) => {
+      const previous = cameraStateRef.current.camera
       cameraStateRef.current = next
-      setCamera(next.camera)
+      const plane = planeRef.current
+      if (plane !== null) applyCanvasPlaneCamera(plane, next.camera)
+      if (canvasCameraSnapshotKind(previous, next.camera) === "zoom") {
+        setZoom(next.camera.zoom)
+      }
+      if (!rememberViewRef.current || cameraStorage === null) return
+      window.clearTimeout(persistCameraTimeoutRef.current)
+      persistCameraTimeoutRef.current = window.setTimeout(() => {
+        writePersistedCanvasCamera(
+          cameraStorage,
+          document.id,
+          cameraStateRef.current.camera
+        )
+      }, 120)
     },
-    []
+    [cameraStorage, document.id]
   )
 
   const applyCameraInput = useCallback((input: CanvasCameraInput) => {
@@ -383,13 +393,12 @@ function CanvasViewportContent({
     setRememberView(false)
   }, [cameraStorage, document.id])
 
-  useEffect(() => {
-    if (!rememberView || cameraStorage === null) return
-    const timeout = window.setTimeout(() => {
-      writePersistedCanvasCamera(cameraStorage, document.id, camera)
-    }, 120)
-    return () => window.clearTimeout(timeout)
-  }, [camera, cameraStorage, document.id, rememberView])
+  const changePauseOffscreenFrames = useCallback((pause: boolean) => {
+    writePauseOffscreenFrames(cameraStorage, pause)
+    setPauseOffscreenFrames(pause)
+  }, [cameraStorage])
+
+  useEffect(() => () => window.clearTimeout(persistCameraTimeoutRef.current), [])
 
   useEffect(() => {
     if (cameraStorage === null) return
@@ -653,7 +662,7 @@ function CanvasViewportContent({
         id: item.id,
         geometry: item.geometry,
         kind: "url" in item ? "frame" : "note",
-        zoom: camera.zoom
+        zoom
       }))
     }).pipe(
       Effect.flatMap((plan) => {
@@ -682,9 +691,12 @@ function CanvasViewportContent({
         const commands = [...frameCommands, ...noteCommands]
         return commands.length === 0 ? Effect.void : dispatch(...commands)
       })
-    ), [camera.zoom, dispatch, selectedItems])
+    ), [dispatch, selectedItems, zoom])
 
-  const addNoteAt = useCallback((x: number, y: number) => {
+  const addNoteAt = useCallback((
+    x: number,
+    y: number
+  ): Effect.Effect<unknown, Error | CanvasCommandFailed> => {
     if (author === null) {
       return Effect.fail(new Error("Sign in to add a note"))
     }
@@ -784,6 +796,7 @@ function CanvasViewportContent({
       id: item.id,
       geometry: geometryOf(item)
     }))
+    const startCamera = cameraStateRef.current.camera
     let dragged = false
     if (!additive) setSelectedIds(initialSelection)
 
@@ -799,12 +812,12 @@ function CanvasViewportContent({
       setSelectionMarquee(selectionBoxBetween(start, current))
       const worldBox = selectionBoxBetween(
         {
-          x: (start.x - camera.x) / camera.zoom,
-          y: (start.y - camera.y) / camera.zoom
+          x: (start.x - startCamera.x) / startCamera.zoom,
+          y: (start.y - startCamera.y) / startCamera.zoom
         },
         {
-          x: (current.x - camera.x) / camera.zoom,
-          y: (current.y - camera.y) / camera.zoom
+          x: (current.x - startCamera.x) / startCamera.zoom,
+          y: (current.y - startCamera.y) / startCamera.zoom
         }
       )
       setSelectedIds(selectCanvasFramesInBox(
@@ -834,7 +847,11 @@ function CanvasViewportContent({
     event.preventDefault()
     setSelectedIds(new Set())
     setPanning(true)
-    const start = { x: event.clientX, y: event.clientY, camera }
+    const start = {
+      x: event.clientX,
+      y: event.clientY,
+      camera: cameraStateRef.current.camera
+    }
     captureCanvasInteractionPointer(event)
     const move = (next: PointerEvent) =>
       commitCameraState(initialCanvasCameraState({
@@ -882,19 +899,21 @@ function CanvasViewportContent({
   }, [applyCameraInput, viewport])
 
   const openNewFrameAtCenter = useCallback(() => {
+    const camera = cameraStateRef.current.camera
     setNewFrameTarget({
       x: (viewport.width / 2 - camera.x) / camera.zoom - 600,
       y: (viewport.height / 2 - camera.y) / camera.zoom - 400
     })
-  }, [camera, viewport])
+  }, [viewport])
 
   const addNoteAtCenter = useCallback(() => {
+    const camera = cameraStateRef.current.camera
     const origin = notePlacementOrigin(
       (viewport.width / 2 - camera.x) / camera.zoom,
       (viewport.height / 2 - camera.y) / camera.zoom
     )
     return addNoteAt(origin.x, origin.y)
-  }, [addNoteAt, camera, viewport])
+  }, [addNoteAt, viewport])
 
   const activateNoteTool = useCallback(() => {
     setNotePlacement(null)
@@ -1135,6 +1154,7 @@ function CanvasViewportContent({
     event.stopPropagation()
     captureCanvasInteractionPointer(event)
     const start = { x: event.clientX, y: event.clientY, geometry: geometryOf(item) }
+    const startZoom = cameraStateRef.current.camera.zoom
     const interaction = beginCanvasInteraction({
       document,
       itemId: item.id,
@@ -1144,8 +1164,8 @@ function CanvasViewportContent({
       selectedFrameIds: EMPTY_FRAME_SELECTION
     })
     const deltaAt = (clientX: number, clientY: number) => ({
-      x: (clientX - start.x) / camera.zoom,
-      y: (clientY - start.y) / camera.zoom
+      x: (clientX - start.x) / startZoom,
+      y: (clientY - start.y) / startZoom
     })
     const move = (next: PointerEvent) => {
       setPreview((current) => ({
@@ -1213,6 +1233,7 @@ function CanvasViewportContent({
     return {
       getBoundingClientRect: () => {
         const canvasRect = rootRef.current?.getBoundingClientRect()
+        const camera = cameraStateRef.current.camera
         return new DOMRect(
           (canvasRect?.left ?? 0) + camera.x + commentGeometry.x * camera.zoom,
           (canvasRect?.top ?? 0) + camera.y + commentGeometry.y * camera.zoom,
@@ -1221,7 +1242,7 @@ function CanvasViewportContent({
         )
       }
     }
-  }, [camera, commentGeometry])
+  }, [commentGeometry])
   const commentPopoverClosePending = useRef(false)
   const requestCommentPopoverClose = useCallback(() => {
     if (commentPopoverClosePending.current) return
@@ -1244,11 +1265,12 @@ function CanvasViewportContent({
   ) => {
     const rect = rootRef.current?.getBoundingClientRect()
     if (rect === undefined) return
+    const camera = cameraStateRef.current.camera
     canvasActionPointRef.current = {
       worldX: (clientX - rect.left - camera.x) / camera.zoom,
       worldY: (clientY - rect.top - camera.y) / camera.zoom
     }
-  }, [camera])
+  }, [])
 
   const notePlacementFromClient = useCallback((
     clientX: number,
@@ -1293,7 +1315,7 @@ function CanvasViewportContent({
     ...extraCanvasContextMenuItems(extraCanvasContextMenus ?? [])
   ]
   return (
-    <CritContextMenuDismissalScope signal={camera.zoom}>
+    <CritContextMenuDismissalScope signal={zoom}>
     <Popover.Root
       onOpenChange={(open, details) => {
         if (open || details.reason === "trigger-press") return
@@ -1349,8 +1371,9 @@ function CanvasViewportContent({
       <style data-crit-styles="">{critStyles}</style>
       <div
         className="crit-canvas__plane"
+        ref={planeRef}
         style={{
-          transform: `translate(${camera.x}px, ${camera.y}px) scale(${camera.zoom})`
+          transform: canvasPlaneTransform(cameraStateRef.current.camera)
         }}
       >
         {sortedItems.map((item) =>
@@ -1364,13 +1387,18 @@ function CanvasViewportContent({
               )}
               topZIndex={topCanvasZIndex}
               geometry={geometryOf(item)}
-              zoom={camera.zoom}
+              zoom={zoom}
               iframeAllow={iframeAllow}
               iframeUrl={frameIframeUrl(document.id, item, frameLoading)}
               iframeSandbox={iframeSandbox}
-              iframeVisible={intersectsViewport(
-                geometryOf(item), camera, viewport.width, viewport.height
+              iframeVisible={frameIntersectsViewport(
+                geometryOf(item),
+                cameraStateRef.current.camera,
+                viewport.width,
+                viewport.height
               )}
+              occupancyTracking="observed"
+              pauseOffscreenFrames={pauseOffscreenFrames}
               selected={selectedIds.has(item.id)}
               commentMode={commentsEnabled && tool === "comment"}
               commentsEnabled={commentsEnabled}
@@ -1558,7 +1586,7 @@ function CanvasViewportContent({
               canManageCommentThread(document.owner, commentThread, author.id)
             }
             thread={commentThread}
-            zoom={camera.zoom}
+            zoom={zoom}
             onClose={() => focusCommentReview(null)}
             onActionError={(cause) => onCommandError?.(messageOf(cause))}
             onDraftStatus={setCommentDraftDirty}
@@ -1669,7 +1697,10 @@ function CanvasViewportContent({
         }}
         onCanvasSelect={onCanvasSelect}
         onRememberViewChange={changeRememberView}
+        pauseOffscreenFrames={pauseOffscreenFrames}
+        onPauseOffscreenFramesChange={changePauseOffscreenFrames}
         rememberView={rememberView}
+        saving={saving}
         title={document.title}
         trailingControls={
           (author === null && onSignIn !== undefined) || presence !== undefined

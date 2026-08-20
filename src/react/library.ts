@@ -25,6 +25,13 @@ export {
 } from "./canvas-help.js"
 export { CanvasCommentPin } from "./canvas-comment-pin.js"
 export { CanvasToolbar } from "./canvas-toolbar.js"
+export {
+  TOOLBAR_OVERLAY_GAP,
+  toolbarOverlayAnchor,
+  toolbarOverlayAnchorFor,
+  toolbarOverlayAnchorRect,
+  toolbarOverlayPositionerProps
+} from "./canvas-toolbar-overlay.js"
 export { CommentPopover } from "./comment-popover.js"
 export { critStyles } from "./crit-styles.js"
 export { FRAME_STATUSES, frameStatus } from "./frame-chrome.js"

@@ -1,6 +1,13 @@
 import { Button } from "@base-ui/react/button"
+import { Input } from "@base-ui/react/input"
 import { Popover } from "@base-ui/react/popover"
-import { useState, type CSSProperties, type ReactNode } from "react"
+import {
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode
+} from "react"
 
 import type {
   CanvasPresence,
@@ -8,7 +15,20 @@ import type {
 } from "../session/canvas-session.js"
 import { ConfirmationDialog } from "./confirmation-dialog.js"
 import { cssVariableStyle } from "./css-variable-style.js"
+import {
+  browserAuthorProfileStorage,
+  currentAuthorNameLabel,
+  currentAuthorProfile,
+  readPersistedAuthorDisplayName,
+  writePersistedAuthorDisplayName,
+  type AuthorProfileStorage
+} from "./current-author-profile.js"
+import { Glyph } from "./glyph.js"
 import { useCritOverlayContainer } from "./overlay-container.js"
+import {
+  toolbarOverlayAnchorFor,
+  toolbarOverlayPositionerProps
+} from "./canvas-toolbar-overlay.js"
 import { WovenAvatarPattern, wovenAvatarFor } from "./woven-avatar.js"
 
 const boundaryStyle: CSSProperties = {
@@ -51,9 +71,140 @@ export function CritBoundaryMessage({
   )
 }
 
-type PresencePopoverPayload = {
+type AgentPresencePayload = {
+  readonly kind: "agent"
   readonly secondary: string
   readonly title: string
+}
+
+type AuthorPresencePayload = {
+  readonly kind: "author"
+  readonly authorId: string
+  readonly displayName: string
+  readonly email: string | null
+  readonly handle: string | null
+}
+
+type PresencePopoverPayload = AgentPresencePayload | AuthorPresencePayload
+
+export function CurrentAuthorProfileCard({
+  displayName,
+  editing,
+  email,
+  handle,
+  nameDraft,
+  onCancelEdit,
+  onEdit,
+  onNameDraftChange,
+  onSaveName
+}: {
+  readonly displayName: string
+  readonly editing: boolean
+  readonly email: string | null
+  readonly handle: string | null
+  readonly nameDraft: string
+  readonly onCancelEdit: () => void
+  readonly onEdit: () => void
+  readonly onNameDraftChange: (value: string) => void
+  readonly onSaveName: () => void
+}) {
+  const inputRef = useRef<HTMLInputElement>(null)
+  const ignoreBlurRef = useRef(false)
+  const missing = displayName.length === 0
+  useEffect(() => {
+    if (!editing) return
+    inputRef.current?.focus()
+    inputRef.current?.select()
+  }, [editing])
+  const cancel = () => {
+    ignoreBlurRef.current = true
+    onCancelEdit()
+  }
+  const save = () => {
+    ignoreBlurRef.current = true
+    onSaveName()
+  }
+  return (
+    <div
+      className="crit-presence__author"
+      data-editing={editing || undefined}
+    >
+      <div
+        className="crit-presence__header"
+        onBlur={(event) => {
+          if (!editing) return
+          const nextFocus = event.relatedTarget
+          if (
+            nextFocus instanceof Node &&
+            event.currentTarget.contains(nextFocus)
+          ) return
+          if (ignoreBlurRef.current) {
+            ignoreBlurRef.current = false
+            return
+          }
+          onSaveName()
+        }}
+      >
+        {editing ? (
+          <Input
+            aria-label="Display name"
+            autoCapitalize="off"
+            autoComplete="off"
+            autoCorrect="off"
+            className="crit-presence__name-input"
+            data-1p-ignore=""
+            data-lpignore="true"
+            onChange={(event) => onNameDraftChange(event.currentTarget.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault()
+                save()
+              }
+              if (event.key !== "Escape") return
+              event.preventDefault()
+              event.stopPropagation()
+              cancel()
+            }}
+            ref={inputRef}
+            spellCheck={false}
+            value={nameDraft}
+          />
+        ) : (
+          <strong
+            className="crit-presence__name"
+            data-missing={missing || undefined}
+          >
+            {currentAuthorNameLabel(displayName)}
+          </strong>
+        )}
+        {editing ? (
+          <Button
+            aria-label="Save name"
+            className="crit-icon-button crit-presence__edit"
+            onClick={save}
+            type="button"
+          >
+            <Glyph name="save" />
+          </Button>
+        ) : (
+          <Button
+            aria-label="Edit name"
+            className="crit-icon-button crit-presence__edit"
+            onClick={onEdit}
+            type="button"
+          >
+            <Glyph name="edit" />
+          </Button>
+        )}
+      </div>
+      {email === null ? null : (
+        <span className="crit-presence__secondary">{email}</span>
+      )}
+      {handle === null ? null : (
+        <span className="crit-presence__handle">{handle}</span>
+      )}
+    </div>
+  )
 }
 
 function PresenceAvatar({
@@ -103,37 +254,65 @@ function PresenceAvatar({
 }
 
 export function CanvasPresenceIndicator({
-  presence
+  presence,
+  profileStorage = browserAuthorProfileStorage()
 }: {
   readonly presence: CanvasPresence
+  readonly profileStorage?: AuthorProfileStorage | null
 }) {
   const [popoverHandle] = useState(
     () => Popover.createHandle<PresencePopoverPayload>()
   )
   const overlayContainer = useCritOverlayContainer()
+  const presenceRef = useRef<HTMLDivElement>(null)
+  const currentAuthor = presence.currentAuthor
+  const [storedDisplayName, setStoredDisplayName] = useState<string | null>(
+    () => currentAuthor === null || profileStorage === null
+      ? null
+      : readPersistedAuthorDisplayName(profileStorage, currentAuthor.id)
+  )
+  const [editingName, setEditingName] = useState(false)
+  const [nameDraft, setNameDraft] = useState("")
+  const overlayAnchor = () => toolbarOverlayAnchorFor(
+    presenceRef.current?.querySelector("[data-popup-open]") ?? presenceRef.current
+  )
   const participants = presence.availability === "unavailable"
     ? [{
         anonymous: true,
         key: "anonymous-agent",
         label: "Anonymous agent presence",
-        secondary: "Unknown harness",
-        title: "Anonymous agent"
+        payload: {
+          kind: "agent" as const,
+          secondary: "Unknown harness",
+          title: "Anonymous agent"
+        }
       }]
     : presence.activities.map((activity) => ({
         anonymous: false,
         key: activity.activityId,
         label: `${activity.harness} agent: ${activity.activityId}`,
-        secondary: activity.harness,
-        title: activity.activityId
+        payload: {
+          kind: "agent" as const,
+          secondary: activity.harness,
+          title: activity.activityId
+        }
       }))
-  const authorEntry = presence.currentAuthor === null
+  const authorProfile = currentAuthor === null
+    ? null
+    : currentAuthorProfile(currentAuthor, storedDisplayName)
+  const authorEntry = currentAuthor === null || authorProfile === null
     ? []
     : [{
         anonymous: false,
-        key: `current-author:${presence.currentAuthor.id}`,
-        label: `Current author: ${presence.currentAuthor.name}`,
-        secondary: presence.currentAuthor.id,
-        title: presence.currentAuthor.name
+        key: `current-author:${currentAuthor.id}`,
+        label: `Current author: ${currentAuthorNameLabel(authorProfile.displayName)}`,
+        payload: {
+          kind: "author" as const,
+          authorId: currentAuthor.id,
+          displayName: authorProfile.displayName,
+          email: authorProfile.email,
+          handle: authorProfile.handle
+        }
       }]
   const entries = [...authorEntry, ...participants]
   if (entries.length === 0) return null
@@ -144,12 +323,29 @@ export function CanvasPresenceIndicator({
       ? 24
       : 22 + Math.min(entries.length - 1, 2) * 5
   const expandedWidth = entries.length * 23 + 1
+  const beginNameEdit = (displayName: string) => {
+    setNameDraft(displayName)
+    setEditingName(true)
+  }
+  const cancelNameEdit = () => {
+    setEditingName(false)
+    setNameDraft("")
+  }
+  const saveName = (authorId: string) => {
+    const nextName = nameDraft.trim()
+    if (profileStorage !== null) {
+      writePersistedAuthorDisplayName(profileStorage, authorId, nextName)
+    }
+    setStoredDisplayName(nextName)
+    setEditingName(false)
+  }
   return (
     <div
       aria-label={`Canvas presence: ${entries.length}`}
       aria-live="polite"
       className="crit-presence"
       data-overflow={overflow > 0 || undefined}
+      ref={presenceRef}
       role="status"
       style={cssVariableStyle({
         "--crit-presence-collapsed-width": `${collapsedWidth}px`,
@@ -163,7 +359,7 @@ export function CanvasPresenceIndicator({
           index={index}
           key={entry.key}
           label={entry.label}
-          payload={{ secondary: entry.secondary, title: entry.title }}
+          payload={entry.payload}
           seed={entry.key}
           total={entries.length}
         />
@@ -173,21 +369,45 @@ export function CanvasPresenceIndicator({
           +{overflow}
         </span>
       )}
-      <Popover.Root handle={popoverHandle}>
+      <Popover.Root
+        handle={popoverHandle}
+        onOpenChange={(open) => {
+          if (!open) cancelNameEdit()
+        }}
+      >
         {({ payload }) => (
           <Popover.Portal container={overlayContainer}>
             <Popover.Positioner
-              align="end"
-              className="crit-presence__positioner"
-              side="bottom"
-              sideOffset={8}
+              {...toolbarOverlayPositionerProps}
+              anchor={overlayAnchor}
+              className="crit-toolbar-overlay-positioner crit-presence__positioner"
             >
               <Popover.Popup
+                aria-label={payload === undefined
+                  ? undefined
+                  : payload.kind === "author"
+                    ? currentAuthorNameLabel(authorProfile?.displayName ?? payload.displayName)
+                    : payload.title}
                 className="crit-presence__card"
                 initialFocus={false}
               >
                 <Popover.Viewport className="crit-presence__viewport">
-                  {payload === undefined ? null : (
+                  {payload === undefined
+                    ? null
+                    : payload.kind === "author" && authorProfile !== null
+                      ? (
+                    <CurrentAuthorProfileCard
+                      displayName={authorProfile.displayName}
+                      editing={editingName}
+                      email={authorProfile.email}
+                      handle={authorProfile.handle}
+                      nameDraft={nameDraft}
+                      onCancelEdit={cancelNameEdit}
+                      onEdit={() => beginNameEdit(authorProfile.displayName)}
+                      onNameDraftChange={setNameDraft}
+                      onSaveName={() => saveName(payload.authorId)}
+                    />
+                  ) : payload.kind === "agent" ? (
                     <div className="crit-presence__content">
                       <Popover.Title
                         className="crit-presence__name"
@@ -199,7 +419,7 @@ export function CanvasPresenceIndicator({
                         {payload.secondary}
                       </span>
                     </div>
-                  )}
+                  ) : null}
                 </Popover.Viewport>
               </Popover.Popup>
             </Popover.Positioner>
@@ -261,6 +481,13 @@ export function CanvasSaveIndicator({
   readonly onDiscardLocalChanges: () => void
 }) {
   const [confirmationOpen, setConfirmationOpen] = useState(false)
+  if (
+    saveStatus !== "conflict" &&
+    saveStatus !== "save-error" &&
+    recoveryStatus !== "recovered"
+  ) {
+    return null
+  }
   return (
     <>
       <Button

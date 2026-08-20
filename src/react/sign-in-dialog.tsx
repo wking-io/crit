@@ -11,7 +11,8 @@ import { useCritOverlayContainer } from "./overlay-container.js"
 
 export const signedInAuthor = (name: string, email: string): Author => ({
   id: `signed-in:${email.trim().toLowerCase()}`,
-  name: name.trim()
+  name: name.trim(),
+  email: email.trim()
 })
 
 export const isSignInComplete = (name: string, email: string) =>

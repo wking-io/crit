@@ -617,24 +617,60 @@ const LAB_PRESENCE_ACTIVITIES = LAB_AGENT_IDENTITIES.map(
 function ToolbarSpecimens() {
   return (
     <SpecimenSection id="02" title="Canvas toolbar">
-      <div className="ui-toolbar-stage">
-        <CanvasToolbar
-          commentAvailable
-          commentsEnabled
-          noteAvailable
-          onAction={() => {}}
-          title="Feature lab"
-          trailingControls={(
-            <CanvasPresenceIndicator
-              presence={{
-                currentAuthor: { id: "git:ui-lab", name: "Willa King" },
-                availability: "available",
-                activities: LAB_PRESENCE_ACTIVITIES
-              }}
-            />
-          )}
-          tool="select"
-        />
+      <div>
+        <StateLabel>Idle</StateLabel>
+        <div className="ui-toolbar-stage">
+          <CanvasToolbar
+            commentAvailable
+            commentsEnabled
+            noteAvailable
+            onAction={() => {}}
+            title="Feature lab"
+            trailingControls={(
+              <CanvasPresenceIndicator
+                presence={{
+                  currentAuthor: {
+                    id: "git:ui-lab",
+                    name: "Willa King",
+                    email: "willa@example.com",
+                    handle: "wking-io"
+                  },
+                  availability: "available",
+                  activities: LAB_PRESENCE_ACTIVITIES
+                }}
+              />
+            )}
+            tool="select"
+          />
+        </div>
+      </div>
+      <div>
+        <StateLabel>Saving</StateLabel>
+        <div className="ui-toolbar-stage">
+          <CanvasToolbar
+            commentAvailable
+            commentsEnabled
+            noteAvailable
+            onAction={() => {}}
+            saving
+            title="Feature lab"
+            trailingControls={(
+              <CanvasPresenceIndicator
+                presence={{
+                  currentAuthor: {
+                    id: "git:ui-lab",
+                    name: "Willa King",
+                    email: "willa@example.com",
+                    handle: "wking-io"
+                  },
+                  availability: "available",
+                  activities: LAB_PRESENCE_ACTIVITIES
+                }}
+              />
+            )}
+            tool="select"
+          />
+        </div>
       </div>
       <div className="ui-state-grid ui-state-grid--buttons">
         {TOOLBAR_BUTTON_STATES.map(({ icon, label, state, toggle }) => (
@@ -838,7 +874,12 @@ function FeedbackSpecimens() {
           <StateLabel>Presence · single</StateLabel>
           <CanvasPresenceIndicator
             presence={{
-              currentAuthor: { id: "git:ui-lab", name: "Willa King" },
+              currentAuthor: {
+                id: "git:ui-lab",
+                name: "Willa King",
+                email: "willa@example.com",
+                handle: "wking-io"
+              },
               availability: "available",
               activities: []
             }}
@@ -846,7 +887,12 @@ function FeedbackSpecimens() {
           <StateLabel>Presence · overflow / hover</StateLabel>
           <CanvasPresenceIndicator
             presence={{
-              currentAuthor: { id: "git:ui-lab", name: "Willa King" },
+              currentAuthor: {
+                id: "git:ui-lab",
+                name: "Willa King",
+                email: "willa@example.com",
+                handle: "wking-io"
+              },
               availability: "available",
               activities: LAB_PRESENCE_ACTIVITIES
             }}
@@ -866,7 +912,7 @@ function FeedbackSpecimens() {
         </div>
         <div className="ui-feedback-badges">
           <StateLabel>Save lifecycle</StateLabel>
-          {(["clean", "dirty", "saving", "save-error", "conflict"] as const).map((saveStatus) => (
+          {(["save-error", "conflict"] as const).map((saveStatus) => (
             <CanvasSaveIndicator
               key={saveStatus}
               onDiscardLocalChanges={() => {}}

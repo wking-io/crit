@@ -635,7 +635,7 @@ const applyAddSnapshotFrame = (
   context.draft.frames.push({
     id: command.id,
     url: command.url,
-    title: `${source.title} · Snapshot`,
+    title: source.title,
     status: "archived",
     provenance: { kind: "snapshot", sourceId: source.id },
     display: source.display,

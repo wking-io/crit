@@ -70,6 +70,11 @@ import {
   type FrameSizePreset
 } from "./frame-breakpoints.js"
 import { Glyph } from "./glyph.js"
+import {
+  DEFAULT_PAUSE_OFFSCREEN_FRAMES,
+  FRAME_IFRAME_MOUNT_MARGIN,
+  frameIframeOccupancy
+} from "./canvas-frame-occupancy.js"
 
 export type FrameToolbarMode = "full" | "compact" | "minimal"
 export type FrameChromeAction =
@@ -325,6 +330,8 @@ export function FrameCard({
   iframeSandbox,
   iframeUrl = frame.url,
   iframeVisible,
+  occupancyTracking = "controlled",
+  pauseOffscreenFrames = DEFAULT_PAUSE_OFFSCREEN_FRAMES,
   selected,
   shortId,
   topZIndex,
@@ -359,6 +366,8 @@ export function FrameCard({
   readonly iframeSandbox?: string | undefined
   readonly iframeUrl?: string
   readonly iframeVisible: boolean
+  readonly occupancyTracking?: "controlled" | "observed"
+  readonly pauseOffscreenFrames?: boolean
   readonly selected: boolean
   readonly shortId: string
   readonly topZIndex: number
@@ -392,6 +401,17 @@ export function FrameCard({
 }) {
   const frameRef = useRef<HTMLElement>(null)
   const iframeRef = useRef<HTMLIFrameElement>(null)
+  const [observedIntersecting, setObservedIntersecting] = useState(iframeVisible)
+  const [hasMounted, setHasMounted] = useState(iframeVisible)
+  const intersecting = occupancyTracking === "observed"
+    ? observedIntersecting
+    : iframeVisible
+  if (intersecting && !hasMounted) setHasMounted(true)
+  const occupancy = frameIframeOccupancy(
+    intersecting,
+    hasMounted,
+    pauseOffscreenFrames
+  )
   const statusMenuActionsRef = useRef<Menu.Root.Actions | null>(null)
   const statusMenuTriggerRef = useRef<HTMLButtonElement>(null)
   const restoreStatusTriggerFocusRef = useRef(false)
@@ -425,6 +445,22 @@ export function FrameCard({
   onCommentAnchorRef.current = onCommentAnchor
   onOpenCommentRef.current = onOpenComment
   useEffect(() => setTitleDraft(frame.title), [frame.title])
+  useEffect(() => {
+    if (occupancyTracking !== "observed") return
+    const frameElement = frameRef.current
+    if (frameElement === null) return
+    const canvas = frameElement.closest(".crit-canvas")
+    const observer = new IntersectionObserver((entries) => {
+      const entry = entries[0]
+      if (entry === undefined) return
+      setObservedIntersecting(entry.isIntersecting)
+    }, {
+      root: canvas,
+      rootMargin: `${FRAME_IFRAME_MOUNT_MARGIN}px`
+    })
+    observer.observe(frameElement)
+    return () => observer.disconnect()
+  }, [occupancyTracking])
   useEffect(() => {
     if (!selected) setTitleEditing(false)
   }, [selected])
@@ -1098,9 +1134,10 @@ export function FrameCard({
         </div>
         </header>
         <div className="crit-frame__viewport">
-        {iframeVisible ? (
+        {occupancy.mounted ? (
           <iframe
             allow={iframeAllow}
+            data-paused={occupancy.painted ? undefined : "true"}
             // The relay URL is stable by Frame identity, so recreate the
             // browsing context when that Frame's canonical URL changes.
             ref={iframeRef}
@@ -1115,11 +1152,12 @@ export function FrameCard({
             src={iframeUrl}
             title={frame.title}
           />
-        ) : <div
+        ) : null}
+        {occupancy.painted ? null : <div
           className="crit-frame__paused"
           {...informationalHelpTarget({
             name: "Paused frame",
-            description: "This frame is unloaded while far outside the current view to save resources."
+            description: "This frame keeps its loaded page but is not painted while far outside the current view."
           })}
         >Frame paused while offscreen</div>}
         {commentsEnabled && frame.snapshot === undefined ? commentThreads

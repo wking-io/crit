@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest"
 import { Crit, sessionIdForCanvas } from "../../src/react/crit.js"
 import {
   CanvasPresenceIndicator,
+  CanvasSaveIndicator,
   GitIdentityBoundary
 } from "../../src/react/canvas-feedback.js"
 import { GIT_AUTHOR_REMEDIATION_PROMPT } from "../../src/runtime/author-identity.js"
@@ -52,10 +53,12 @@ import {
   statusPillFrameGap,
   statusPillMotionPath
 } from "../../src/react/frame-chrome.js"
+import { CanvasToolbar } from "../../src/react/canvas-toolbar.js"
 import {
-  arrangementMenuAnchorRect,
-  CanvasToolbar
-} from "../../src/react/canvas-toolbar.js"
+  TOOLBAR_OVERLAY_GAP,
+  toolbarOverlayAnchorRect,
+  toolbarOverlayPositionerProps
+} from "../../src/react/canvas-toolbar-overlay.js"
 import { CanvasActionRunnerProvider } from "../../src/react/canvas-action-runner.js"
 import { CanvasControls } from "../../src/react/canvas-controls.js"
 import {
@@ -160,6 +163,7 @@ describe("Crit", () => {
     )
 
     expect(html).toContain('role="toolbar"')
+    expect(html).toContain("data-crit-toolbar")
     expect(html).toContain('aria-orientation="horizontal"')
     expect(html.match(/role="group"/g)).toHaveLength(2)
     expect(html).toContain("Feature lab")
@@ -188,6 +192,78 @@ describe("Crit", () => {
     expect(html).not.toContain("Layers")
   })
 
+  it("swaps the canvas dropdown glyph for a rotating loader while saving", () => {
+    const html = renderToStaticMarkup(
+      <CanvasActionRunnerProvider>
+        <CanvasToolbar
+          commentAvailable
+          commentsEnabled
+          noteAvailable
+          onAction={() => {}}
+          saving
+          title="Feature lab"
+          tool="select"
+        />
+      </CanvasActionRunnerProvider>
+    )
+
+    expect(html).toContain('data-saving="true"')
+    expect(html).toContain('aria-busy="true"')
+    expect(html).toContain("M9 1.75V4.25")
+    expect(html).not.toContain("M12.5 6.25 9 2.75l-3.5 3.5")
+    expect(cssRule(".crit-toolbar__title[data-saving] svg")).toContain(
+      "animation: crit-loader-spin 800ms cubic-bezier(.2, .8, .2, 1) infinite"
+    )
+  })
+
+  it("keeps the save pill for recovery and write failures only", () => {
+    expect(renderToStaticMarkup(
+      <CanvasSaveIndicator
+        onDiscardLocalChanges={() => {}}
+        recoveryStatus="unavailable"
+        saveStatus="clean"
+      />
+    )).toBe("")
+    expect(renderToStaticMarkup(
+      <CanvasSaveIndicator
+        onDiscardLocalChanges={() => {}}
+        recoveryStatus="unavailable"
+        saveStatus="saving"
+      />
+    )).toBe("")
+    expect(renderToStaticMarkup(
+      <CanvasSaveIndicator
+        onDiscardLocalChanges={() => {}}
+        recoveryStatus="unavailable"
+        saveStatus="conflict"
+      />
+    )).toContain("conflict")
+  })
+
+  it("offers canvas options when offscreen Frame pausing can be changed", () => {
+    const html = renderToStaticMarkup(
+      <CanvasActionRunnerProvider>
+        <CanvasToolbar
+          commentAvailable
+          commentsEnabled
+          noteAvailable
+          onAction={() => {}}
+          onPauseOffscreenFramesChange={() => {}}
+          pauseOffscreenFrames
+          title="Feature lab"
+          tool="select"
+        />
+      </CanvasActionRunnerProvider>
+    )
+
+    expect(html).toContain('aria-haspopup="menu"')
+    expect(html).toContain('aria-label="Canvas options"')
+    expect(html).toContain('data-crit-help-name="Canvas options"')
+    expect(html).toContain(
+      'data-crit-help-description="Change how this canvas keeps its view and loaded Frame pages."'
+    )
+  })
+
   it("presses the note tool while placing a Note", () => {
     const html = renderToStaticMarkup(
       <CanvasActionRunnerProvider>
@@ -208,30 +284,34 @@ describe("Crit", () => {
     expect(select).toContain('aria-pressed="false"')
   })
 
-  it("anchors the arrangement menu below the whole toolbar", () => {
-    const anchor = arrangementMenuAnchorRect(
-      {
-        bottom: 32,
-        height: 24,
-        left: 208,
-        right: 232,
-        top: 8,
-        width: 24,
-        x: 208,
-        y: 8
-      },
-      {
-        bottom: 40,
-        height: 40,
-        left: 0,
-        right: 315,
-        top: 0,
-        width: 315,
-        x: 0,
-        y: 0
-      }
-    )
-
+  it("anchors toolbar overlays to the trigger horizontally and the bar vertically", () => {
+    const trigger = {
+      bottom: 32,
+      height: 24,
+      left: 208,
+      right: 232,
+      top: 8,
+      width: 24,
+      x: 208,
+      y: 8
+    }
+    const toolbar = {
+      bottom: 40,
+      height: 40,
+      left: 0,
+      right: 315,
+      top: 0,
+      width: 315,
+      x: 0,
+      y: 0
+    }
+    const anchor = toolbarOverlayAnchorRect(trigger, toolbar)
+    expect(TOOLBAR_OVERLAY_GAP).toBe(8)
+    expect(toolbarOverlayPositionerProps).toEqual({
+      align: "start",
+      side: "bottom",
+      sideOffset: 8
+    })
     expect(anchor).toMatchObject({
       bottom: 40,
       height: 40,
@@ -561,6 +641,9 @@ describe("Crit", () => {
     expect(iframe).toContain("height: 100%")
     expect(iframe).toContain("width: 100%")
     expect(iframe).not.toContain("transform:")
+    expect(cssRule('.crit-frame__viewport iframe[data-paused="true"]')).toContain(
+      "content-visibility: hidden"
+    )
   })
 
   it("matches the neutral segmented drag-selection marquee", () => {
@@ -1058,6 +1141,11 @@ describe("Crit", () => {
     expect(cssRule(
       ".crit-note[data-selected], .crit-note:focus-visible"
     )).toContain("outline: 0")
+    expect(cssRule(".crit-note")).not.toContain("filter:")
+    expect(cssRule(".crit-note::after")).toContain(
+      "drop-shadow(0 calc(2px * var(--crit-ui)) calc(4px * var(--crit-ui))"
+    )
+    expect(cssRule(".crit-canvas__plane")).not.toContain("will-change:")
     expect(critStyles).not.toContain(".crit-note__chrome")
     expect(critStyles).not.toContain(".crit-note__more-actions")
     expect(critStyles).not.toContain(".crit-frame__more-actions")
@@ -1597,6 +1685,7 @@ describe("Crit", () => {
     expect(html).toContain("--crit-presence-collapsed-width:27px")
     expect(html).toContain("--crit-presence-expanded-width:47px")
     expect(critStyles).toContain(".crit-presence__positioner { height: var(--positioner-height)")
+    expect(critStyles).toContain(".crit-toolbar-overlay-positioner { z-index: 5000")
     expect(critStyles).toContain("z-index: 5000")
     expect(critStyles).toContain(".crit-presence__viewport {")
     expect(critStyles).toContain('data-activation-direction~="right"')
@@ -1610,8 +1699,29 @@ describe("Crit", () => {
       ".crit-presence__name { color: var(--crit-color-t2"
     )
     expect(critStyles).toContain(
-      ".crit-presence__secondary { color: var(--crit-color-t1"
+      ".crit-presence__secondary, .crit-presence__handle { color: var(--crit-color-t1, oklch(52% 0 0)); font: 400 14px/20px"
     )
+    expect(critStyles).toContain(".crit-presence__edit")
+  })
+
+  it("labels the Current Author profile with email and Handle instead of the Author ID", () => {
+    const html = renderToStaticMarkup(
+      <CanvasPresenceIndicator
+        presence={{
+          currentAuthor: {
+            id: "git:willa",
+            name: "wking-io",
+            email: "contact@wking.dev",
+            handle: "wking-io"
+          },
+          availability: "available",
+          activities: []
+        }}
+      />
+    )
+
+    expect(html).toContain('aria-label="Current author: Missing name"')
+    expect(html).not.toContain("git:willa")
   })
 
   it("collapses presence overflow and preserves every avatar for expansion", () => {

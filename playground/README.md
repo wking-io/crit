@@ -46,7 +46,7 @@ or `npm run playground:alpha:agent`.
 - Move the attached Note with its Frame, then drag it away to detach it.
 - Take a snapshot, change the live page, and verify the archived Frame remains.
 - Open the Canvas in two browser windows and verify edits synchronize.
-- Pan a Frame offscreen and verify its iframe pauses.
+- Pan a Frame offscreen and verify its iframe pauses without reloading when it returns. Turn **Pause offscreen frames** off in the canvas title menu and verify loaded pages stay painted offscreen.
 
 ## Agent checks
 

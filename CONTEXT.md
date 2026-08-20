@@ -16,7 +16,7 @@ Crit is a local-first tool for arranging and assessing live web iterations.
 
 **Snapshot Artifact**: A self-contained, minified HTML capture of a live Frame at one point in time. It is stored outside the Canvas Document and is never mutated after capture.
 
-**Archived Frame**: A separate Frame created beside its live source Frame. It points to a Snapshot Artifact and records the source URL, capture time, artifact ID, and byte size.
+**Archived Frame**: A separate Frame created beside its live source Frame. It keeps the source Frame's title, points to a Snapshot Artifact, and records the source URL, capture time, artifact ID, and byte size.
 
 **Snapshot Archive**: The storage and capture boundary for immutable Snapshot Artifacts.
 
@@ -32,9 +32,16 @@ Crit is a local-first tool for arranging and assessing live web iterations.
 
 **Canvas Owner**: Every Canvas has exactly one Canvas Owner: the Author recorded when the Canvas is created. The Canvas Owner may resolve or reopen any Comment Thread on that Canvas.
 
-**Author**: A local collaborator identified by an opaque ID derived from Git identity and shown by Git committer name. Authors may edit their own Notes and Comments, and the opening Comment's Author may resolve or reopen its thread.
+**Author**: A local collaborator identified by an opaque ID derived from Git identity. Authors may edit their own Notes and Comments, and the opening Comment's Author may resolve or reopen its thread.
 
-**Git Author Identity**: The repository's effective, validated `user.name` and `user.email`, resolved through one reusable identity boundary. Initialization and Canvas Creation require it; Crit never guesses it or changes global Git configuration. A Canvas Session may open as a Guest Session when Current Author cannot be resolved.
+**Handle**: The Git `user.name` shown on the Current Author profile. It is not the Author ID.
+_Avoid_: username, nickname, login
+
+**Author Email**: The Git `user.email` or signed-in email shown on the Current Author profile. The Author ID is derived from it and is not shown.
+
+**Display Name**: An optional Current Author name edited from the profile popover. When unset, the profile shows "Missing name".
+
+**Git Author Identity**: The repository's effective, validated `user.name` and `user.email`, resolved through one reusable identity boundary. `user.name` is the Handle; `user.email` is shown on the Current Author profile and hashed into the Author ID. Initialization and Canvas Creation require it; Crit never guesses it or changes global Git configuration. A Canvas Session may open as a Guest Session when Current Author cannot be resolved.
 
 **Identity Remediation Prompt**: The copy-ready agent instruction attached to missing or invalid Git Author Identity failures. It directs the independent `crit-identity` skill to ask the user for unknown values, write only confirmed repository-local configuration, and verify the result through `crit identity`.
 
