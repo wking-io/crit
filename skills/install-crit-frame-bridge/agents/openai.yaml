@@ -1,0 +1,4 @@
+interface:
+  display_name: "Install Crit Frame Bridge"
+  short_description: "Install the bridge with production-safe defaults"
+  default_prompt: "Use $install-crit-frame-bridge to add the Crit Frame Bridge to this project safely."

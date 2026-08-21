@@ -1,0 +1,14 @@
+ts	phase	decision	why	evidence	result
+2026-08-21T14:45:00-05:00	frame	Treat Phase 1 as the five-unit pilot	The package and domain contracts constrain every later phase	docs/plans/001-cloudflare-native-v1/phase-01-domain-and-protocol.md	open
+2026-08-21T14:46:00-05:00	frame	Isolate rewrite work under target package paths	The current main worktree contains unrelated alpha edits that must survive	git status --short	open
+2026-08-21T14:47:00-05:00	frame	Use the plain orchestration store format	The Poteto orchestration helper is not installed and adding it is not a Crit product requirement	orchestrate/crit-v1/overview.md	active
+2026-08-21T15:04:00-05:00	phase-1	Choose private npm workspaces with TypeScript project references	Physical package boundaries enforce the target ownership graph and let platform libraries vary without relying only on a custom checker	orchestrate/crit-v1/briefs/P1-01-package-boundaries.md	selected for pilot
+2026-08-21T15:05:00-05:00	phase-1	Keep nine future packages empty during the scaffold	Ownership fences are useful now but speculative interfaces would create shallow modules	docs/plans/001-cloudflare-native-v1/phase-01-domain-and-protocol.md	selected
+2026-08-21T15:06:00-05:00	phase-1	Use fixtures to port alpha behavior	The rewrite needs stable invariants without importing alpha types or implementation	src/core/canvas.ts, test/core/	grounded
+2026-08-21T15:25:00-05:00	P1-01	Reject the first scaffold verification	The negative gauntlet found alpha import, graph drift, root completeness, and real workspace resolution false passes	orchestrate/crit-v1/ledger.tsv	fix in progress
+2026-08-21T15:48:00-05:00	P1-01	Require five artifacts to agree for every package edge	A declared edge was not buildable until manifest, reference, resolver, checker, and compiled import matched	scripts/check-target-boundaries.mjs	verified
+2026-08-21T16:12:00-05:00	P1-02	Separate authenticated Principal from durable accepted attribution	Authentication subjects authorize requests but do not belong in Canvas history	packages/domain/src/identity.ts	verified
+2026-08-21T16:13:00-05:00	P1-02	Nest runtime details under client-reported provenance	Harness and model details are useful but not verified by the Crit authority	packages/domain/src/identity.ts	verified
+2026-08-21T16:34:00-05:00	P1-03	Reject ambiguous route and host encodings	Durable Representation identity must not depend on browser normalization or alternate loopback spelling	packages/domain/src/representation.ts	fix in progress
+2026-08-21T16:55:00-05:00	P1-03	Reserve percent encoding for canonical non-ASCII UTF-8	Allowing escaped ASCII created multiple durable names for the same application route	packages/domain/src/representation.ts	verified
+2026-08-21T16:56:00-05:00	P1-03	Limit web-url to canonical public DNS hosts	Runtime-neutral handling of IP and intranet aliases could not guarantee one host identity	packages/domain/test/representation.test.ts	verified

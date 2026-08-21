@@ -19,13 +19,18 @@ export const STATUS_PILL_STEP = 40
 const STATUS_PILL_RADIUS = 8
 const STATUS_PILL_CHROME_WIDTH = 40
 const STATUS_PILL_CHARACTER_WIDTH = 7
-const STATUS_PILL_LABEL_WIDTH: Record<string, number> = {
-  "Changes requested": 151,
-  "In progress": 106,
-  "Archived": 90,
-  "Approved": 95,
-  "Ready for review": 135
+interface StatusPillLabelWidth {
+  readonly label: string
+  readonly width: number
 }
+
+const STATUS_PILL_LABEL_WIDTHS = [
+  { label: "Changes requested", width: 151 },
+  { label: "In progress", width: 106 },
+  { label: "Archived", width: 90 },
+  { label: "Approved", width: 95 },
+  { label: "Ready for review", width: 135 }
+] satisfies ReadonlyArray<StatusPillLabelWidth>
 export const STATUS_PILL_MOTION = {
   spring: { type: "spring", visualDuration: 0.18, bounce: 0 },
   close: { duration: 0.2, ease: "easeOut" },
@@ -74,7 +79,7 @@ export function statusPillMotionPath({
 }
 
 export const measureStatusPillWidth = (label: string) =>
-  STATUS_PILL_LABEL_WIDTH[label] ??
+  STATUS_PILL_LABEL_WIDTHS.find((candidate) => candidate.label === label)?.width ??
     STATUS_PILL_CHROME_WIDTH + label.length * STATUS_PILL_CHARACTER_WIDTH
 
 const roundedRectangleSupport = (

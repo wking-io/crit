@@ -8,6 +8,7 @@ import { crit, type CritVitePluginOptions } from "../src/vite/index.js"
 import { critFrameInputBridgeScript } from "../src/frame-bridge/index.js"
 import { critFrameCommentBridgeScript } from "../src/frame-bridge/comment-bridge.js"
 import { causeMessage } from "../src/internal/cause-message.js"
+import type { AgentActivityCollection } from "../src/runtime/agent-activity.js"
 import {
   featuresForPlaygroundProfile,
   resolvePlaygroundProfile,
@@ -115,6 +116,55 @@ const playgroundEditorPlugin = (): Plugin => ({
   }
 })
 
+const PLAYGROUND_AGENT_IDENTITIES = [
+  { activityId: "Arbor", harness: "Codex", detail: "Refining canvas interactions" },
+  { activityId: "Kite", harness: "Claude Code", detail: "Reviewing component behavior" },
+  { activityId: "Mosaic", harness: "Cursor", detail: "Polishing interface copy" },
+  { activityId: "Relay", harness: "Terminal", detail: "Running visual checks" }
+] as const
+
+export const playgroundAgentPresence = (
+  now: Date = new Date()
+): AgentActivityCollection => {
+  const timestamp = now.toISOString()
+  const activeUntil = new Date(now.getTime() + 86_400_000).toISOString()
+  return {
+    schemaVersion: 1,
+    canvasId: "feature-lab",
+    activities: PLAYGROUND_AGENT_IDENTITIES.map((identity) => ({
+      schemaVersion: 1,
+      canvasId: "feature-lab",
+      activityId: identity.activityId,
+      harness: identity.harness,
+      model: null,
+      detail: identity.detail,
+      reference: null,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      activeUntil
+    }))
+  }
+}
+
+const playgroundAgentPresencePlugin = (): Plugin => ({
+  name: "crit-playground-agent-presence",
+  configureServer(server) {
+    server.middlewares.use((request, response, next) => {
+      const url = new URL(request.url ?? "/", "http://crit.localhost")
+      if (
+        request.method !== "GET"
+        || url.pathname !== "/__crit/api/canvases/feature-lab/activity"
+      ) {
+        next()
+        return
+      }
+      response.statusCode = 200
+      response.setHeader("Content-Type", "application/json; charset=utf-8")
+      response.end(JSON.stringify(playgroundAgentPresence()))
+    })
+  }
+})
+
 const port = Number.parseInt(
   process.env.PORT ?? process.env.CRIT_PLAYGROUND_PORT ?? "5173",
   10
@@ -184,6 +234,7 @@ export default defineConfig({
         })
       }
     } satisfies Plugin,
+    playgroundAgentPresencePlugin(),
     crit(critOptions)
   ],
   server: serverOptions

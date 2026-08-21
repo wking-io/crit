@@ -7,7 +7,7 @@ import { Readable } from "node:stream"
 import { fileURLToPath } from "node:url"
 
 import { build } from "esbuild"
-import { Effect, Layer, ManagedRuntime, Match, Schema } from "effect"
+import { Effect, Layer, ManagedRuntime, Match, Predicate, Schema } from "effect"
 import type { Plugin, ResolvedConfig, ViteDevServer } from "vite"
 
 import type { CanvasLiveRefreshEndpoint } from "../browser/canvas-live-refresh.js"
@@ -215,7 +215,7 @@ type SnapshotFetchContext = {
 const snapshotFetchContext = new AsyncLocalStorage<SnapshotFetchContext>()
 
 const fetchUrl = (input: Parameters<typeof fetch>[0]) =>
-  typeof input === "string" ? input : input instanceof URL ? input.href : input.url
+  Predicate.isString(input) ? input : input instanceof URL ? input.href : input.url
 
 const snapshotFetch: typeof fetch = (input, init) => {
   const context = snapshotFetchContext.getStore()

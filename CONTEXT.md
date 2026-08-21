@@ -1,72 +1,95 @@
 # Crit
 
-Crit is a local-first tool for arranging and assessing live web iterations.
+Crit is a local-first collaborative review canvas for live web applications.
 
 ## Language
 
-**Crit**: The product, repository, and package that provides the review environment.
+**Installation**: One customer-hosted Crit deployment. The Installation is the tenant and security boundary.
+_Avoid_: Organization, tenant record
 
-**Canvas**: A named review workspace containing the live web iterations being assessed together.
+**Workspace**: The collaboration and authorization boundary inside an Installation. Workspaces contain members, Teams, Applications, and Canvases.
 
-**Canvas Document**: The sole durable representation of a Canvas, including its owner, Frames, Notes, Comment Threads, layout, and monotonic revision.
+**Default Workspace**: The first Workspace created in an Installation, unless an administrator later changes the default. Crit selects it automatically when a Person has not chosen another accessible Workspace.
 
-**Canvas Creation**: The explicit operation that creates a Canvas Document and records its Git-derived Canvas Owner. Loading a missing Canvas never creates it; creation occurs through manifest synchronization or `crit create`.
+**Active Workspace**: The Workspace used for new links and Workspace-scoped browsing. Changing it does not move an existing linked Canvas.
 
-**Frame**: A web iteration placed on a Canvas, together with its review status, stable identity, and geometry. A Frame is either live at its source URL or archived against an immutable Snapshot Artifact. Its identity is independent from its URL, and multiple Frames may reference the same URL. Removing a Frame from a Canvas is durable; later manifest discovery does not restore it.
+**Canvas**: A named review space containing Frames, Notes, and Comment Threads.
 
-**Snapshot Artifact**: A self-contained, minified HTML capture of a live Frame at one point in time. It is stored outside the Canvas Document and is never mutated after capture.
+**Canvas Projection**: The current Canvas content rebuilt from accepted Canvas Changes. It is a view, not the canonical history.
+_Avoid_: Canvas Document, authoritative document
 
-**Archived Frame**: A separate Frame created beside its live source Frame. It keeps the source Frame's title, points to a Snapshot Artifact, and records the source URL, capture time, artifact ID, and byte size.
+**Canvas Change**: One atomic batch of semantic Canvas Commands submitted under a stable change identity.
 
-**Snapshot Archive**: The storage and capture boundary for immutable Snapshot Artifacts.
+**Proposed Canvas Change**: Unauthored local or remote intent that has not been accepted by the active Canvas Authority.
 
-**Note**: Author-owned plain-text review feedback with Canvas geometry. Only the Note's Author may change its text or remove it; collaborators may arrange its position, stacking, and Frame attachment. Its card uses a fixed 42-character reading measure at the Note type size; height grows to show all text. The card scales with the Canvas plane so its placed position does not move. The note tool shows a translucent blue-family phantom at the pointer; a click places the Note. Removing its attached Frame detaches and preserves the Note.
+**Accepted Canvas Change**: A Canvas Change assigned a canonical sequence, cursor, acceptance time, and trusted attribution by a Canvas Authority.
 
-**Comment Thread**: A Canvas-owned feedback conversation pinned to a live Frame or to an element within that Frame. A Comment Thread contains one opening Comment and zero or more flat Replies, and may be active or resolved.
+**Canvas Command**: One semantic request to change Canvas content. Commands contain intent and narrow content preconditions. They do not contain trusted authorship or server time.
 
-**Comment Thread Review**: A Canvas Session's transient focus on composing a new Comment Thread or reading and acting on one existing Comment Thread. Exactly one may be active per Canvas Session; its durable facts remain in the Canvas Document.
+**Canvas Authority**: The component that orders and stores accepted changes for one Canvas. A local-only Canvas uses the local authority. A linked Canvas uses its remote authority.
 
-**Comment**: An authored message within a Comment Thread. The opening Comment owns the thread; subsequent Comments are Replies and cannot contain nested Replies.
+**Canvas Ledger**: The canonical ordered history of accepted changes owned by a Canvas Authority.
 
-**Comment Anchor**: The durable location of a Comment Thread within a live Frame. An Element Anchor identifies DOM content through the Crit Frame Bridge, while a Frame Anchor preserves a normalized point for an uninstrumented Frame.
+**Canvas Replica**: The local accepted history, pending changes, acknowledged remote cursor, conflicts, and current Canvas Projection for one Canvas.
 
-**Canvas Owner**: Every Canvas has exactly one Canvas Owner: the Author recorded when the Canvas is created. The Canvas Owner may resolve or reopen any Comment Thread on that Canvas.
+**Pending Change**: A Proposed Canvas Change stored in a Canvas Replica and not yet accepted by the remote Canvas Authority.
 
-**Author**: A local collaborator identified by an opaque ID derived from Git identity. Authors may edit their own Notes and Comments, and the opening Comment's Author may resolve or reopen its thread.
+**Replica Conflict**: A pending change whose semantic precondition no longer holds after accepted remote work is applied. Crit preserves it for recovery.
 
-**Handle**: The Git `user.name` shown on the Current Author profile. It is not the Author ID.
-_Avoid_: username, nickname, login
+**Cursor**: An opaque position in one Canvas Ledger. A cursor supports resuming reads. It is not an exact content precondition.
 
-**Author Email**: The Git `user.email` or signed-in email shown on the Current Author profile. The Author ID is derived from it and is not shown.
+**First Share**: The retry-safe operation that creates a remote Canvas from a local-only Canvas and links the local replica to it.
 
-**Display Name**: An optional Current Author name edited from the profile popover. When unset, the profile shows "Missing name".
+**Frame**: A stable Canvas item that places one Representation at a viewport size and Canvas geometry. A Frame also carries review state.
 
-**Git Author Identity**: The repository's effective, validated `user.name` and `user.email`, resolved through one reusable identity boundary. `user.name` is the Handle; `user.email` is shown on the Current Author profile and hashed into the Author ID. Initialization and Canvas Creation require it; Crit never guesses it or changes global Git configuration. A Canvas Session may open as a Guest Session when Current Author cannot be resolved.
+**Representation**: The content a Frame means to display, independent of the current viewer's environment.
 
-**Identity Remediation Prompt**: The copy-ready agent instruction attached to missing or invalid Git Author Identity failures. It directs the independent `crit-identity` skill to ask the user for unknown values, write only confirmed repository-local configuration, and verify the result through `crit identity`.
+**Application Route**: A logical Representation identified by an Application, route, and optional serializable page state.
 
-**Current Author**: The Author using a Canvas Session. The Current Author supplies authorship for new Notes and Comments and is not part of the Canvas Document. A session may open without one.
+**Web URL Representation**: A Representation identified by an explicit external URL. Crit provides reduced guarantees for authentication, embedding, and inspection.
 
-**Guest Session**: A Canvas Session with no Current Author. Viewing, panning, and zooming remain available; creating Frames, Notes, and Comments requires a Current Author.
-_Avoid_: read-only mode, anonymous mode, logged-out mode
+**Artifact Representation**: An immutable Representation identified by an Artifact ID and content digest.
 
-**Sign-in**: Establishing the Current Author for a Canvas Session from a visitor's name and email so they can add Frames and Notes.
-_Avoid_: authentication, OAuth, Git identity (those are different identity paths)
+**Application**: A named web application that provides Application Route Representations.
 
-**Canvas Repository**: The local persistence boundary that serializes semantic command batches under a per-Canvas filesystem lock.
+**Application Binding**: An environment-specific base URL for an Application. Local bindings remain on the developer's machine. Shared bindings come from Deployments.
 
-**Canvas Session**: One browser window's optimistic view, autosave queue, draft recovery, and adoption of authoritative revisions.
+**Deployment**: A shared Application binding with a channel, URL, source revision, and optional expiration.
 
-**Canvas Presence**: The ephemeral session view combining the Current Author with all active Agent Activities for a Canvas. It supports identity and work awareness without implying remote collaboration. Presence refreshes independently from the Canvas Document, immediately on local activity events and every five seconds as a fallback.
+**Render Plan**: The result of resolving a Representation for one viewer. It is an iframe, immutable artifact, or unavailable state.
 
-**Anonymous Presence**: The public fallback shown as one anonymous avatar when Agent Activities cannot be retrieved. The underlying failure is logged internally; the UI does not expose the error or falsely present an empty activity list.
+**Artifact**: Immutable content stored outside the Canvas Ledger and addressed by a digest.
 
-**Presence Avatar**: A local, deterministic colored avatar containing a letter derived from the Current Author's name or an Agent Activity's harness name. Crit does not resolve or persist remote profile images; unreadable activity presence uses the anonymous fallback avatar.
+**Capture**: The operation that creates an Artifact from a live Representation and adds a separate Artifact Frame.
 
-**Agent Activity**: A renewable, automatically expiring local coordination hint with a stable opaque identity for one agent run working on a Canvas. Only a harness-supplied activity identity may create or renew one; ordinary CLI commands do not create presence, though they may carry existing harness context. Its descriptive metadata is reported by the harness, its identity is independent from optional external references, and it is not durable Canvas state, revision history, or remote-user presence.
+**Note**: Plain-text authored review feedback with Canvas geometry and optional Frame attachment.
 
-**Agent Activity Store**: The ephemeral persistence boundary for independently expiring Agent Activities. The filesystem adapter stores one file per activity under `.crit/activity/<encoded-canvas-id>/<encoded-activity-id>.json`, separately from Canvas Documents and their locks or revisions.
+**Comment Thread**: A Canvas conversation pinned to a Frame or to content within its live Representation. A thread contains one opening Comment and flat Replies.
 
-**Agent Activity Renewal**: Replacement of one Agent Activity's harness-reported metadata under the same activity identity. Renewal preserves the activity identity, Canvas, and creation time; replaces harness, model, work detail, and external reference; and refreshes Crit's fixed 60-second lease. Harnesses renew about every 20 seconds and clear on clean completion. An omitted optional field clears its prior value.
+**Comment**: One authored message in a Comment Thread.
 
-**Agent Activity Reference**: A harness-neutral stable external kind and ID, optionally paired with a genuine desktop-app or web URI supplied by the harness. Crit may open the URI on explicit user action; when no supported URI exists, it shows the ID without inventing or executing a resume command.
+**Comment Anchor**: The durable location of a Comment Thread. An Element Anchor identifies bridged page content. A Frame Anchor stores a normalized Frame point.
+
+**Principal**: The authenticated identity making a request.
+
+**Actor**: The durable author of an accepted change or authored Canvas content. An Actor is either a Person or an Agent.
+
+**Person**: A human Actor associated with company identity for shared work and provisional local identity for local-only work.
+
+**Agent**: A non-human Actor that changes Crit through an authorized local tool or OAuth MCP grant.
+
+**Delegating Person**: The Person who authorized an Agent's OAuth grant. The Delegating Person is not the author of the Agent's work.
+
+**Agent Grant**: A revocable OAuth authorization that fixes an Agent, a Delegating Person, a Workspace, and allowed Crit operations.
+
+**Agent Execution**: One Code Mode or local agent run. It records verified grant facts and optional reported harness, model, session, and task metadata.
+
+**Reported Agent Runtime**: Harness, model, session, and task metadata supplied by an MCP client. Crit displays it separately from server-verified identity.
+
+**Presence**: Ephemeral awareness of connected People and active Agent Executions. Presence is not Canvas history.
+
+**Frame Bridge**: The versioned browser protocol used for input relay, element anchors, route and revision reporting, highlighting, and authorized inspection.
+
+**Code Mode MCP**: Crit's remote agent interface. It uses OAuth and exposes `search` and `execute`.
+
+**Local Daemon**: The `crit dev` process that owns local SQLite state, local artifacts, local API endpoints, and synchronization.

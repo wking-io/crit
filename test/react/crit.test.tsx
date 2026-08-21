@@ -7,7 +7,8 @@ import { Crit, sessionIdForCanvas } from "../../src/react/crit.js"
 import {
   CanvasPresenceIndicator,
   CanvasSaveIndicator,
-  GitIdentityBoundary
+  GitIdentityBoundary,
+  defaultPresenceAvatarLayout
 } from "../../src/react/canvas-feedback.js"
 import { GIT_AUTHOR_REMEDIATION_PROMPT } from "../../src/runtime/author-identity.js"
 import {
@@ -212,7 +213,7 @@ describe("Crit", () => {
     expect(html).toContain("M9 1.75V4.25")
     expect(html).not.toContain("M12.5 6.25 9 2.75l-3.5 3.5")
     expect(cssRule(".crit-toolbar__title[data-saving] svg")).toContain(
-      "animation: crit-loader-spin 800ms cubic-bezier(.2, .8, .2, 1) infinite"
+      "animation: crit-loader-spin 800ms linear infinite"
     )
   })
 
@@ -332,6 +333,7 @@ describe("Crit", () => {
     const canvasMenuItem = cssRule(".crit-canvas-switcher__item")
     const group = cssRule(".crit-toolbar__group")
     const iconButton = cssRule(".crit-icon-button")
+    expect(iconButton).toContain("border-radius: 2px")
     const hitExtension = cssRule(
       ".crit-toolbar__group .crit-icon-button::before"
     )
@@ -1131,19 +1133,25 @@ describe("Crit", () => {
     expect(cssRule(".crit-note::after")).toContain(
       "+ var(--crit-note-mask-overlap)"
     )
+    expect(cssRule(".crit-note")).toContain(
+      "--crit-note-outline: var(--crit-note-swatch)"
+    )
     expect(cssRule(".crit-note__corner")).toContain("bottom: 0")
     expect(cssRule(".crit-note__corner")).toContain("right: 0")
     expect(cssRule(
       ".crit-note[data-selected], .crit-note:focus-visible"
     )).toContain(
-      "--crit-note-outline: var(--crit-note-text)"
+      "--crit-note-outline: var(--crit-note-ink)"
     )
     expect(cssRule(
       ".crit-note[data-selected], .crit-note:focus-visible"
     )).toContain("outline: 0")
     expect(cssRule(".crit-note")).not.toContain("filter:")
     expect(cssRule(".crit-note::after")).toContain(
-      "drop-shadow(0 calc(2px * var(--crit-ui)) calc(4px * var(--crit-ui))"
+      "drop-shadow(0 calc(2px * var(--crit-ui)) calc(4px * var(--crit-ui)) oklch(14.7% 0.004 49.3 / 10%))"
+    )
+    expect(cssRule(".crit-note::after")).toContain(
+      "drop-shadow(0 0 calc(.5px * var(--crit-ui)) oklch(14.7% 0.004 49.3 / 20%))"
     )
     expect(cssRule(".crit-canvas__plane")).not.toContain("will-change:")
     expect(critStyles).not.toContain(".crit-note__chrome")
@@ -1681,19 +1689,54 @@ describe("Crit", () => {
     expect(html).toContain("--crit-color-")
     expect(html.match(/aria-haspopup="dialog"/g)).toHaveLength(2)
     expect(html.match(/data-base-ui-click-trigger/g)).toHaveLength(2)
+    expect(html).toContain('data-crit-presence-key="presence-author"')
+    expect(html).toContain('data-crit-presence-key="presence-agent-0"')
     expect(html).not.toContain('role="tooltip"')
-    expect(html).toContain("--crit-presence-collapsed-width:27px")
-    expect(html).toContain("--crit-presence-expanded-width:47px")
+    expect(html).toContain("--crit-presence-collapsed-width:31px")
+    expect(html).toContain("--crit-presence-expanded-width:52px")
+    expect(cssRule(".crit-presence")).toContain("border-radius: 2px")
     expect(critStyles).toContain(".crit-presence__positioner { height: var(--positioner-height)")
     expect(critStyles).toContain(".crit-toolbar-overlay-positioner { z-index: 5000")
     expect(critStyles).toContain("z-index: 5000")
     expect(critStyles).toContain(".crit-presence__viewport {")
     expect(critStyles).toContain('data-activation-direction~="right"')
+    expect(critStyles).toContain('data-activation-direction~="up"')
+    expect(cssRule(".crit-presence__card")).toContain(
+      "height: var(--popup-height, auto)"
+    )
+    expect(cssRule(".crit-presence__card")).toContain(
+      "height 160ms cubic-bezier(.2, .8, .2, 1)"
+    )
+    expect(cssRule(
+      '.crit-presence__viewport[data-activation-direction~="right"]'
+    )).toContain("--crit-presence-content-exit-x: 8px")
+    expect(cssRule(
+      '.crit-presence__viewport[data-activation-direction~="left"]'
+    )).toContain("--crit-presence-content-enter-x: 8px")
+    expect(cssRule(
+      '.crit-presence__viewport[data-activation-direction~="up"]'
+    )).toContain("--crit-presence-content-exit-y: 6px")
+    expect(cssRule(
+      ".crit-presence__viewport > [data-previous][data-ending-style]"
+    )).toContain("var(--crit-presence-content-exit-x)")
+    expect(cssRule(
+      ".crit-presence__viewport > [data-current][data-starting-style]"
+    )).toContain("var(--crit-presence-content-enter-x)")
     expect(critStyles).toContain(
       '.crit-presence__card[data-starting-style], .crit-presence__card[data-ending-style]'
     )
     expect(critStyles).toContain(".crit-presence__pattern {")
     expect(critStyles).toContain("shape-rendering: crispEdges")
+    expect(cssRule(".crit-presence__item")).toContain("height: 24px")
+    expect(cssRule(".crit-presence__item")).toContain("width: 24px")
+    expect(cssRule(".crit-presence__avatar")).toContain("height: 24px")
+    expect(cssRule(".crit-presence__avatar")).toContain("width: 24px")
+    expect(cssRule(".crit-presence__avatar")).toContain("border-radius: 2px")
+    expect(cssRule(".crit-presence__avatar")).toContain(
+      "box-shadow: oklch(14.7% 0.004 49.3 / 32%) 0 0 0 .5px"
+    )
+    expect(cssRule(".crit-presence__pattern")).toContain("height: 24px")
+    expect(cssRule(".crit-presence__pattern")).toContain("width: 24px")
     expect(critStyles).not.toContain(".crit-presence__glyph {")
     expect(critStyles).toContain(
       ".crit-presence__name { color: var(--crit-color-t2"
@@ -1725,47 +1768,115 @@ describe("Crit", () => {
   })
 
   it("collapses presence overflow and preserves every avatar for expansion", () => {
+    const presence = {
+      currentAuthor: { id: "git:willa", name: "Willa King" },
+      availability: "available" as const,
+      activities: ["Ava", "Jules", "Rin", "June"].map((harness, index) => ({
+        schemaVersion: 1 as const,
+        canvasId: "review",
+        activityId: `agent-${index}`,
+        harness,
+        model: null,
+        detail: null,
+        reference: null,
+        createdAt: "2026-08-11T12:00:00.000Z",
+        updatedAt: "2026-08-11T12:00:20.000Z",
+        activeUntil: "2026-08-11T12:01:20.000Z"
+      }))
+    }
     const html = renderToStaticMarkup(
       <CanvasPresenceIndicator
-        presence={{
-          currentAuthor: { id: "git:willa", name: "Willa King" },
-          availability: "available",
-          activities: ["Ava", "Jules", "Rin", "June"].map((harness, index) => ({
-            schemaVersion: 1 as const,
-            canvasId: "review",
-            activityId: `agent-${index}`,
-            harness,
-            model: null,
-            detail: null,
-            reference: null,
-            createdAt: "2026-08-11T12:00:00.000Z",
-            updatedAt: "2026-08-11T12:00:20.000Z",
-            activeUntil: "2026-08-11T12:01:20.000Z"
-          }))
-        }}
+        presence={presence}
+      />
+    )
+    const adjusted = renderToStaticMarkup(
+      <CanvasPresenceIndicator
+        avatarLayouts={[
+          { collapsedScale: 1, collapsedX: 1, expandedX: 1 },
+          { collapsedScale: 0.75, collapsedX: 9, expandedX: 27 },
+          { collapsedScale: 0.5, collapsedX: 17, expandedX: 53 }
+        ]}
+        presence={presence}
       />
     )
 
     expect(html).toContain('aria-label="Canvas presence: 5"')
-    expect(html).toContain("--crit-presence-collapsed-width:52px")
-    expect(html).toContain("--crit-presence-expanded-width:116px")
+    expect(html).toContain("--crit-presence-collapsed-width:56px")
+    expect(html).toContain("--crit-presence-overflow-x:36px")
+    expect(html).toContain("--crit-presence-expanded-width:130px")
     expect(html).toContain(">+2<")
     expect(html.match(/class="crit-presence__item"/g)).toHaveLength(5)
     expect(html.match(/data-collapsed-hidden="true"/g)).toHaveLength(2)
-    expect(html).toContain("--crit-presence-collapsed-x:11px")
-    expect(html).toContain("--crit-presence-expanded-x:93px")
+    expect(html).toContain("--crit-presence-collapsed-x:17px")
+    expect(html).toContain("--crit-presence-expanded-x:105px")
+    expect(adjusted).toContain("--crit-presence-overflow-x:30px")
+    expect(adjusted).toContain("--crit-presence-collapsed-width:50px")
+    expect(cssRule(".crit-presence__overflow")).toContain(
+      "left: var(--crit-presence-overflow-x)"
+    )
     expect(critStyles).toContain(
-      ".crit-presence:hover, .crit-presence:focus-within"
+      ".crit-presence:has(.crit-presence__avatar[data-popup-open])"
     )
     expect(critStyles).toContain(
       "width: var(--crit-presence-expanded-width)"
     )
     expect(critStyles).toContain(
+      "background: transparent;\n  width: var(--crit-presence-expanded-width)"
+    )
+    expect(critStyles).toContain(
       ".crit-presence__item[data-collapsed-hidden] { opacity: 0; }"
     )
     expect(critStyles).toContain(
-      ".crit-presence:hover .crit-presence__overflow"
+      ".crit-presence:has(.crit-presence__avatar[data-popup-open]) .crit-presence__overflow"
     )
+  })
+
+  it("accepts per-avatar presence layout and generation controls", () => {
+    const presence = {
+      currentAuthor: { id: "git:willa", name: "Willa King" },
+      availability: "available" as const,
+      activities: [{
+        schemaVersion: 1 as const,
+        canvasId: "review",
+        activityId: "agent-0",
+        harness: "Codex",
+        model: null,
+        detail: null,
+        reference: null,
+        createdAt: "2026-08-11T12:00:00.000Z",
+        updatedAt: "2026-08-11T12:00:20.000Z",
+        activeUntil: "2026-08-11T12:01:20.000Z"
+      }]
+    }
+    const layouts = [
+      { collapsedScale: 0.5, collapsedX: 0, expandedX: 0 },
+      { collapsedScale: 1.25, collapsedX: 10, expandedX: 30 }
+    ]
+    const firstGeneration = renderToStaticMarkup(
+      <CanvasPresenceIndicator
+        avatarGeneration={1}
+        avatarLayouts={layouts}
+        presence={presence}
+      />
+    )
+    const nextGeneration = renderToStaticMarkup(
+      <CanvasPresenceIndicator
+        avatarGeneration={2}
+        avatarLayouts={layouts}
+        presence={presence}
+      />
+    )
+
+    expect(defaultPresenceAvatarLayout(3)).toEqual({
+      collapsedScale: 18 / 24,
+      collapsedX: 17,
+      expandedX: 79
+    })
+    expect(firstGeneration).toContain("--crit-presence-collapsed-width:41px")
+    expect(firstGeneration).toContain("--crit-presence-expanded-width:55px")
+    expect(firstGeneration).not.toContain("--crit-presence-expanded-scale")
+    expect(firstGeneration).not.toBe(nextGeneration)
+    expect(critStyles).toContain("scale(1)")
   })
 
   it("renders anonymous presence and a copy-ready Git identity remediation", () => {

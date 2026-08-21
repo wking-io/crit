@@ -635,6 +635,7 @@ describe("crit Canvas workflows", () => {
               ],
               notes: [],
               owner: TEST_AUTHOR,
+              removedFrameIds: [],
               comments: []
             }),
           readArtifact: () => Effect.die("unused")

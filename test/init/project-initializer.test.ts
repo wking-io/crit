@@ -92,6 +92,10 @@ export default [
       component: await read(root, "app/components/crit-canvas.tsx"),
       skill: await read(root, ".agents/skills/crit/SKILL.md"),
       identitySkill: await read(root, ".agents/skills/crit-identity/SKILL.md"),
+      frameBridgeSkill: await read(
+        root,
+        ".agents/skills/install-crit-frame-bridge/SKILL.md"
+      ),
       manifest: await read(root, "crit.manifest.json"),
       gitignore: await read(root, ".gitignore")
     }
@@ -117,6 +121,9 @@ export default [
     )
     expect(firstSnapshot.skill).toContain("name: crit")
     expect(firstSnapshot.identitySkill).toContain("name: crit-identity")
+    expect(firstSnapshot.frameBridgeSkill).toContain(
+      "name: install-crit-frame-bridge"
+    )
     expect(JSON.parse(firstSnapshot.manifest)).toMatchObject({
       schemaVersion: 1,
       id: "review-app",
@@ -145,9 +152,11 @@ export default [
                     ? ".agents/skills/crit/SKILL.md"
                     : key === "identitySkill"
                       ? ".agents/skills/crit-identity/SKILL.md"
-                      : key === "manifest"
-                        ? "crit.manifest.json"
-                        : ".gitignore"
+                      : key === "frameBridgeSkill"
+                        ? ".agents/skills/install-crit-frame-bridge/SKILL.md"
+                        : key === "manifest"
+                          ? "crit.manifest.json"
+                          : ".gitignore"
           expect(await read(root, target)).toBe(value)
         })
       )

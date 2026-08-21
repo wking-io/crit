@@ -112,7 +112,9 @@ import {
 import {
   browserCanvasCameraStorage,
   clearPersistedCanvasCamera,
+  readCanvasCameraPersistenceEnabled,
   readPersistedCanvasCamera,
+  writeCanvasCameraPersistenceEnabled,
   writePersistedCanvasCamera
 } from "./canvas-camera-persistence.js"
 import { NewFrameDialog } from "./new-frame-dialog.js"
@@ -275,16 +277,20 @@ function CanvasViewportContent({
   const notePlacementRef = useRef<HTMLDivElement>(null)
   const addFrameButtonRef = useRef<HTMLButtonElement>(null)
   const [cameraStorage] = useState(browserCanvasCameraStorage)
-  const [persistedCamera] = useState(() => cameraStorage === null
-    ? null
-    : readPersistedCanvasCamera(cameraStorage, document.id))
+  const [cameraPersistenceEnabled] = useState(() => cameraStorage !== null
+    && readCanvasCameraPersistenceEnabled(cameraStorage, document.id))
+  const [persistedCamera] = useState(() =>
+    cameraStorage === null || !cameraPersistenceEnabled
+      ? null
+      : readPersistedCanvasCamera(cameraStorage, document.id)
+  )
   const initialCameraState = useMemo(
     () => initialCanvasCameraState(persistedCamera ?? undefined),
     [persistedCamera]
   )
   const cameraStateRef = useRef(initialCameraState)
   const [zoom, setZoom] = useState(initialCameraState.camera.zoom)
-  const [rememberView, setRememberView] = useState(persistedCamera !== null)
+  const [rememberView, setRememberView] = useState(cameraPersistenceEnabled)
   const rememberViewRef = useRef(rememberView)
   rememberViewRef.current = rememberView
   const persistCameraTimeoutRef = useRef(0)
@@ -381,16 +387,26 @@ function CanvasViewportContent({
       return
     }
     if (remember) {
+      const enabled = writeCanvasCameraPersistenceEnabled(
+        cameraStorage,
+        document.id,
+        true
+      )
       const saved = writePersistedCanvasCamera(
         cameraStorage,
         document.id,
         cameraStateRef.current.camera
       )
-      setRememberView(saved)
+      setRememberView(enabled && saved)
       return
     }
+    const disabled = writeCanvasCameraPersistenceEnabled(
+      cameraStorage,
+      document.id,
+      false
+    )
     clearPersistedCanvasCamera(cameraStorage, document.id)
-    setRememberView(false)
+    if (disabled) setRememberView(false)
   }, [cameraStorage, document.id])
 
   const changePauseOffscreenFrames = useCallback((pause: boolean) => {

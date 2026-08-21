@@ -1,113 +1,185 @@
 # Architecture
 
-Crit is a local canvas for live web Frames and plain-text Notes. Its V1 design
-optimizes for one person working with multiple local browser windows and agents.
-It deliberately excludes remote collaboration, remote-user presence, CRDTs,
-freehand drawing, generic shapes, and asset upload. A Canvas Session may open
-as a Guest Session until Sign-in establishes a Current Author; that is local
-identity for authorship, not a remote authentication provider.
+Crit is a local-first collaborative review canvas for live web applications. People use the Crit UI to arrange and review Frames, Notes, and comments. Agents use the same semantic Canvas operations through local tools or an OAuth Code Mode MCP server.
 
-## Domain core
+The target v1 is a clean rewrite. The current local-only alpha remains a behavior reference during the rewrite. Its persistence, identity, URL, and adapter interfaces do not constrain the new system.
 
-`Canvas` is the platform-neutral authority for the Canvas Document, validation,
-summaries, and semantic commands. The durable document contains its creation-time
-Owner, revision, Frames, Notes, and any retained Comment records. Camera, selection, iframe state,
-and other viewport details are browser-session state and are never persisted.
+## Product boundary
 
-Frames own URL, title, review status, provenance, geometry, display policy, and
-stacking order. An archived Frame additionally owns immutable snapshot metadata:
-artifact ID, original URL, capture time, and byte size. Notes own text, geometry,
-Author, optional Frame attachment, and stacking order. Attached Notes use absolute
-Canvas coordinates; moving their Frame moves them by the same delta, and
-detaching preserves their position. Removing a Frame detaches its attached Notes
-and preserves their Canvas positions.
+Crit runs in two places:
 
-Every mutation is an atomic semantic command batch. The core applies a batch to
-a draft and publishes it only if every command succeeds. Conflicts are expressed
-at the narrowest meaningful boundary: for example, `EditNote` includes the
-Author's actor ID and expected prior text, while unrelated arrangement commands
-can safely serialize.
+- `crit dev` provides complete local authoring, local agents, SQLite persistence, and local artifacts.
+- A customer-hosted Cloudflare deployment provides company identity, team sharing, canonical ordering, shared live Representations, and remote agents.
 
-## Local coordination
+A developer can work without an account or network connection. Linking a Canvas adds synchronization. It does not replace local authoring.
 
-`CanvasRepository` is the durable boundary. The filesystem implementation stores
-one JSON document per Canvas under `.crit/canvases`, acquires a per-Canvas lock,
-loads the latest revision, applies the command batch, increments the revision,
-and atomically renames the result into place. Browser and CLI agent writes use
-this exact path, so concurrent local writers do not race through separate models.
-The IndexedDB adapter is the same repository for browser-only deployments: it
-stores one document per Canvas in the visitor's IndexedDB, seeds missing
-documents, and serializes writes per Canvas. Mutations stay on that device.
+One Cloudflare installation is one tenant. Crit has no Organization model in v1. A Workspace is the collaboration and authorization boundary inside an installation.
 
-`SnapshotArchive` is a separate binary-artifact boundary. Its filesystem adapter
-captures a live HTTP(S) page, bundles and minifies HTML/CSS/JavaScript, inlines
-fetched resources, and atomically stores self-contained HTML under
-`.crit/snapshots`. `SnapshotService` coordinates capture with the repository by
-committing an `AddSnapshotFrame` command that checks the source Frame still has
-the URL that was captured. The live Frame is retained; its archived Frame points
-to the immutable artifact. Snapshot bytes do not bloat the Canvas Document.
+## Package ownership
 
-CLI and discovery adapters use the Canvas Repository directly and derive views
-through the Canvas core. `CanvasSession` adds optimistic browser state,
-single-flight autosave, semantic-command draft recovery, and revision adoption.
-The Vite plugin watches the Canvas directory and sends change hints to browser
-windows; polling remains a fallback. Notifications are only an optimization—the
-file and its revision are authoritative.
+```text
+packages/
+├── domain/           CanvasEngine, commands, projection, identity, Representations
+├── protocol/         accepted changes, cursors, sync, bridge, and errors
+├── authority/        CanvasAuthority and its conformance suite
+├── replica/          CanvasReplica, pending work, rebase, and conflicts
+├── representations/  RepresentationRuntime and RenderPlan
+├── client/           HTTP and WebSocket clients
+├── react/            primary review UI
+├── frame-bridge/     versioned browser bridge
+├── local/            crit dev, SQLite, and filesystem artifacts
+├── cloudflare/       Worker, Durable Object, D1, R2, OAuth, and MCP
+└── cli/              local, sync, Workspace, and deployment commands
+```
 
-Every Canvas Document has one immutable creation-time Owner. Explicit CLI or
-manifest creation resolves that Owner through the Git Author identity service;
-loading never creates or assigns ownership. A Canvas Session separately resolves
-one Current Author through its client and keeps that identity fixed for the
-session lifetime.
+These boundaries are part of the rewrite contract. The old source tree is not migrated package by package.
 
-`AgentActivityStore` is a separate ephemeral coordination boundary. Its
-filesystem adapter writes one 60-second lease per harness-supplied run under
-`.crit/activity/<canvas>/<activity>.json`; those files never enter the Canvas
-Document, lock, or revision history. Renewals replace descriptive metadata while
-preserving run identity and creation time. Browser sessions combine the Current
-Author with all active runs as Canvas Presence, refreshed by Vite events with an
-independent five-second fallback. Retrieval failures are logged and represented
-by anonymous presence rather than an empty agent list.
+## Canvas domain
 
-## UI and adapters
+`CanvasEngine` is the platform-neutral authority for Canvas rules. It accepts unauthored semantic commands and returns an atomic transition. It has no dependency on React, storage, transport, OAuth, or Cloudflare.
 
-`CanvasViewport` is a Crit-owned DOM viewport. It implements infinite pan/zoom,
-Frame and Note movement and resizing, review status, note editing and
-attach/detach behavior. Offscreen Frame iframes stay mounted after first
-paint and skip painting while outside the view, so returning to them does not
-reload. The canvas title menu can turn this pause off so loaded pages stay
-painted. The iframe `allow` and `sandbox` policies are configurable.
-Frame geometry is the iframe's configured layout viewport; fixed-screen chrome
-is projected outside that height. The complete Frame representation participates
-in the Canvas camera transform, so zoom never changes the iframe's responsive
-layout or introduces an independent content scale.
-Global Canvas shortcuts are centralized through TanStack Hotkeys. The iframe
-input bridge only transports input intent—keyboard shortcuts, wheel, pinch,
-and pointer selection—across document and origin boundaries. Trackpad pan and
-pinch remain Canvas navigation when crossing live Frame content; shortcut
-matching and camera actions remain owned by the React viewport.
+A Canvas projection contains:
 
-The HTTP adapter supports `GET` for Current Author, authoritative documents, and Agent Activities,
-`PATCH` for semantic command batches, and `POST` on a Frame snapshot route. Vite adapts it
-to local Connect middleware, owns the router-independent Crit editor route, and
-serves immutable snapshot artifacts. `BrowserCritClient` adapts the same React
-surface to IndexedDB for sites that cannot use a Node filesystem. The React
-component, Vite plugin, CLI, discovery manifest, and installed agent skill are
-thin adapters around the same core, repository, and archive boundaries.
+- Frames and their geometry, viewport, review state, and Representation.
+- Notes and their geometry, attachment, text, and Actor authorship.
+- Comment Threads, replies, anchors, and resolution state.
+- Stable entity IDs and deletion records required for replay.
 
-Visible UI icons cross one generated Glyph seam. Individual SVG sources compile
-to a renderer-neutral typed map; React roots render uniquely prefixed inline
-symbol sheets. Isolated documents such as Frame bridges serialize the same
-definitions directly. Sheet ownership belongs to
-`GlyphProvider`, so nested and sibling Crit roots cannot create ambiguous global
-fragment IDs.
+A projection is a rebuildable view. It is not the canonical stored record.
 
-Effect v4 owns schemas, typed failures, services, Layers, concurrency, and scoped
-lifecycle. Pure synchronous document transitions remain ordinary TypeScript.
+Commands express intent. They never contain trusted Actor identity, acceptance time, server sequence, or Workspace authority. Narrow semantic preconditions protect conflicting text and destructive edits. Unrelated changes can serialize without conflict.
 
-## Deferred extensions
+## Canonical Canvas ledger
 
-The command boundary can later support an MCP or codemod service without granting
-raw file mutation. The repository boundary can later gain another local adapter.
-Remote multi-user collaboration would be a separate architecture and is not
-implied by the V1 interfaces.
+Every Canvas authority stores one ordered stream of accepted semantic changes. Each accepted change contains:
+
+- A globally unique `changeId`.
+- The Canvas ID.
+- The remote cursor the author had observed.
+- The semantic command batch.
+- One server-assigned sequence and opaque cursor.
+- Server-stamped Person or Agent attribution.
+- The acceptance time.
+- A request digest and authorization subject for retry validation.
+
+The authority returns the original receipt for an identical retry. It rejects reuse of the same `changeId` with different commands, observed cursor, or authorization subject.
+
+The observed cursor is not an exact commit precondition. Commands carry exact content preconditions where needed. This permits independent offline work to survive intervening remote changes.
+
+## Local authority and replica
+
+`crit dev` is the only local state owner. The Crit UI, CLI, Vite adapter, and local agents connect to it. The daemon owns:
+
+- A local SQLite Canvas authority.
+- The durable local replica state.
+- Local artifact files.
+- HTTP and WebSocket endpoints.
+- Remote authentication and synchronization.
+
+`CanvasReplica` hides optimistic projection, pending intent, local dependency order, remote cursors, retry, rebase, and recoverable conflicts. Local changes update the projection immediately and survive process restarts.
+
+The daemon binds only to loopback or a user-owned Unix socket. Integrated development servers proxy Crit requests and add the daemon credential server-side. The standalone UI uses a short-lived one-time bootstrap to receive a restricted HttpOnly cookie.
+
+## Synchronization
+
+A linked replica pushes pending changes by stable `changeId` and pulls accepted changes after its acknowledged cursor. The replica applies accepted remote changes, then replays pending local changes in local dependency order.
+
+WebSockets are notification channels. They never establish correctness. A cursor pull repairs missed, duplicated, or reordered notifications.
+
+The first share uses stable share and import IDs. The remote authority stores one receipt that binds the local projection digest to the new remote Canvas, Workspace, and importing Person. A retry returns that receipt. A mismatched retry fails.
+
+The remote ledger begins with the authenticated import. Crit does not label unverified Git identity or offline runtime metadata as server-verified history.
+
+## People, Agents, and attribution
+
+A Principal is the authenticated request identity. An Actor is the durable author of accepted work.
+
+People authenticate locally through a provisional local identity and remotely through Cloudflare Access. Agents authenticate remotely through an OAuth grant issued by Crit after company sign-in and consent.
+
+Human attribution records the Person who acted. Agent attribution records:
+
+- The durable Agent Actor.
+- The Person who delegated access.
+- The OAuth client and grant.
+- The execution ID.
+- Optional client-reported harness, model, session, and task metadata.
+
+The server stamps verified attribution. Client-reported runtime metadata remains visibly separate. Crit stores no private reasoning trace.
+
+Canvas creation records `createdBy` as provenance. Creation grants no permanent authority. Workspace policy controls access.
+
+## Workspaces
+
+The first Workspace created becomes the installation default. Login selects an active Workspace in this order:
+
+1. The remembered Workspace, if the Person can still access it.
+2. The installation default, if accessible.
+3. The only accessible Workspace.
+4. The earliest-created accessible Workspace.
+
+Workspace commands exist to switch. A linked Canvas retains its explicit Workspace when the active Workspace changes.
+
+## Representations
+
+A Frame points to a logical `RepresentationRef`:
+
+- `application-route` identifies an Application, route, and optional serializable page state.
+- `web-url` identifies an explicit external URL.
+- `artifact` identifies immutable content by artifact ID and digest.
+
+`RepresentationRuntime` resolves a reference for the current viewer. It returns an iframe plan, an artifact plan, or an unavailable state.
+
+An `application-route` can resolve to localhost for a developer and a registered preview Deployment for a teammate. Canvas state never stores machine bindings, deployment URLs, credentials, or iframe policy.
+
+Local bindings belong to project and machine configuration. Shared Applications and Deployments belong to the Cloudflare control plane. Artifact bytes live in the local filesystem or R2.
+
+## Frame Bridge
+
+The framework-neutral Frame Bridge provides a versioned browser protocol for input relay, element anchors, route and revision reporting, anchor health, highlighting, and authorized inspection.
+
+The bridge activation matrix is closed:
+
+| Deployment mode | Bridge |
+|---|---|
+| Local development | On |
+| Ordinary production build | Off |
+| Ordinary production preview | Off |
+| Explicit shared review preview | On |
+
+The build requires an exact positive opt-in for a shared review preview. A missing or malformed flag remains off.
+
+## Cloudflare deployment
+
+The shared runtime uses:
+
+- One Worker deployment for the API, OAuth routes, MCP routing, and Workers Static Assets.
+- Cloudflare Access for company identity.
+- D1 for installation settings, Workspaces, memberships, Teams, OAuth grants, Applications, Deployments, and the Canvas directory.
+- One SQLite Durable Object per Canvas for canonical changes, the projection, and hibernating WebSockets.
+- R2 for immutable artifacts and policy-retained Agent execution records.
+
+D1 never stores canonical Canvas content. Queues never participate in Canvas ordering. A Queue is added only with a concrete idempotent background job.
+
+Each Canvas Durable Object performs one local SQLite transaction per accepted change. The transaction checks retry identity, applies the command batch, assigns a sequence, stores the change, and updates the projection. It performs no external I/O.
+
+## OAuth Code Mode MCP
+
+The remote MCP endpoint exposes only `search` and `execute`.
+
+`search` returns the relevant part of Crit's typed operation catalog. `execute` runs model-written code against a capability-limited `crit` client.
+
+Generated code runs in an isolated Cloudflare execution environment with no Crit bindings, secrets, OAuth tokens, arbitrary fetch, filesystem, D1, R2, or Durable Object namespace. One host callback accepts allowlisted operation IDs and schema-validated arguments. The host authorizes each operation.
+
+`CodeExecutionRuntime` isolates Cloudflare's experimental Code Mode package. The public MCP behavior and domain types do not depend on that package.
+
+## Explicit v1 exclusions
+
+Crit v1 has no whole-Canvas CRDT, cross-Canvas transaction, automatic localhost tunnel, unrestricted URL proxy, multi-Organization tenancy, or storage-level MCP tool. Git and document diffs are not synchronization protocols.
+
+## Verification
+
+The rewrite keeps the old alpha runnable only as a behavior reference. New code does not read or write old runtime state.
+
+Shared conformance suites test the local SQLite authority and the Canvas Durable Object. End-to-end verification uses two offline replicas, one Cloudflare deployment, one shared preview, and one OAuth MCP client.
+
+The implementation plan lives in [`docs/plans/001-cloudflare-native-v1`](docs/plans/001-cloudflare-native-v1/overview.md).

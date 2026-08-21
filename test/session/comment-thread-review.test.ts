@@ -37,6 +37,7 @@ const document = (): CanvasDocument => ({
     zIndex: 1
   }],
   notes: [],
+  removedFrameIds: [],
   comments: []
 })
 

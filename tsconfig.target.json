@@ -1,0 +1,16 @@
+{
+  "files": [],
+  "references": [
+    { "path": "./packages/domain" },
+    { "path": "./packages/protocol" },
+    { "path": "./packages/authority" },
+    { "path": "./packages/replica" },
+    { "path": "./packages/representations" },
+    { "path": "./packages/client" },
+    { "path": "./packages/react" },
+    { "path": "./packages/frame-bridge" },
+    { "path": "./packages/local" },
+    { "path": "./packages/cloudflare" },
+    { "path": "./packages/cli" }
+  ]
+}

@@ -357,6 +357,10 @@ const init = (
       new URL("../../skills/crit-identity/SKILL.md", import.meta.url)
     )
     const identitySkillSource = yield* read(identitySkillSourcePath)
+    const frameBridgeSkillSourcePath = fileURLToPath(
+      new URL("../../skills/install-crit-frame-bridge/SKILL.md", import.meta.url)
+    )
+    const frameBridgeSkillSource = yield* read(frameBridgeSkillSourcePath)
     const writes = new Map<string, string>()
     const actions: Array<CritInitAction> = []
 
@@ -432,6 +436,15 @@ const init = (
       "SKILL.md"
     )
     yield* planGenerated(identitySkillPath, identitySkillSource)
+
+    const frameBridgeSkillPath = path.join(
+      root,
+      ".agents",
+      "skills",
+      "install-crit-frame-bridge",
+      "SKILL.md"
+    )
+    yield* planGenerated(frameBridgeSkillPath, frameBridgeSkillSource)
 
     const manifestPath = path.join(root, CRIT_MANIFEST_FILE)
     yield* planGenerated(manifestPath, manifestTemplate(packageJson))

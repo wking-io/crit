@@ -1,0 +1,7 @@
+unit	head	verdict	evidence
+P1-01	working-tree	verifier-failed	alpha alias, root/reference completeness, manifest/reference drift, and permitted-edge build probes
+P1-01	working-tree	unit-test-verified	negative gauntlet, target build, alpha typecheck, and isolated-cache package smoke passed
+P1-02	working-tree	unit-test-verified	54 shipped tests plus independent compile/runtime probes and declaration inspection passed
+P1-03	working-tree	verifier-failed	route canonicalization and alternate loopback spellings produced ambiguous logical identities
+P1-03	working-tree	verifier-failed	reserved ASCII percent aliases remained after the first canonicalization fix
+P1-03	working-tree	unit-test-verified	170 tests plus exhaustive ASCII, canonical UTF-8, loopback, boundary, build, typecheck, lint, and diff proofs passed

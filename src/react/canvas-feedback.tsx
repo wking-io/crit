@@ -72,12 +72,14 @@ export function CritBoundaryMessage({
 }
 
 type AgentPresencePayload = {
+  readonly anchorKey: string
   readonly kind: "agent"
   readonly secondary: string
   readonly title: string
 }
 
 type AuthorPresencePayload = {
+  readonly anchorKey: string
   readonly kind: "author"
   readonly authorId: string
   readonly displayName: string
@@ -86,6 +88,35 @@ type AuthorPresencePayload = {
 }
 
 type PresencePopoverPayload = AgentPresencePayload | AuthorPresencePayload
+
+export const PRESENCE_AVATAR_SIZE = 24
+const PRESENCE_COLLAPSED_OFFSET = 8
+const PRESENCE_COLLAPSED_SIZE_STEP = 3
+const PRESENCE_EXPANDED_GAP = 2
+const PRESENCE_EXPANDED_STEP = PRESENCE_AVATAR_SIZE + PRESENCE_EXPANDED_GAP
+const PRESENCE_OVERFLOW_GAP = 1
+const PRESENCE_OVERFLOW_WIDTH = 18
+const PRESENCE_TRAILING_SPACE = 2
+
+export type PresenceAvatarLayout = {
+  readonly collapsedScale: number
+  readonly collapsedX: number
+  readonly expandedX: number
+}
+
+export const defaultPresenceAvatarLayout = (
+  index: number
+): PresenceAvatarLayout => {
+  const collapsedIndex = Math.min(index, 2)
+  return {
+    collapsedScale: (
+      PRESENCE_AVATAR_SIZE
+        - collapsedIndex * PRESENCE_COLLAPSED_SIZE_STEP
+    ) / PRESENCE_AVATAR_SIZE,
+    collapsedX: 1 + collapsedIndex * PRESENCE_COLLAPSED_OFFSET,
+    expandedX: 1 + index * PRESENCE_EXPANDED_STEP
+  }
+}
 
 export function CurrentAuthorProfileCard({
   displayName,
@@ -212,6 +243,7 @@ function PresenceAvatar({
   handle,
   index,
   label,
+  layout,
   payload,
   seed,
   total
@@ -220,20 +252,19 @@ function PresenceAvatar({
   readonly handle: Popover.Handle<PresencePopoverPayload>
   readonly index: number
   readonly label: string
+  readonly layout: PresenceAvatarLayout
   readonly payload: PresencePopoverPayload
   readonly seed: string
   readonly total: number
 }) {
-  const collapsedIndex = Math.min(index, 2)
-  const collapsedSize = 22 - collapsedIndex * 2
   return (
     <div
       className="crit-presence__item"
       data-collapsed-hidden={index > 2 || undefined}
       style={cssVariableStyle({
-        "--crit-presence-collapsed-scale": collapsedSize / 22,
-        "--crit-presence-collapsed-x": `${1 + collapsedIndex * 5}px`,
-        "--crit-presence-expanded-x": `${1 + index * 23}px`,
+        "--crit-presence-collapsed-scale": layout.collapsedScale,
+        "--crit-presence-collapsed-x": `${layout.collapsedX}px`,
+        "--crit-presence-expanded-x": `${layout.expandedX}px`,
         "--crit-presence-layer": total - index
       })}
     >
@@ -242,6 +273,7 @@ function PresenceAvatar({
         className="crit-presence__avatar"
         closeDelay={100}
         data-anonymous={anonymous || undefined}
+        data-crit-presence-key={payload.anchorKey}
         delay={0}
         handle={handle}
         openOnHover
@@ -254,9 +286,13 @@ function PresenceAvatar({
 }
 
 export function CanvasPresenceIndicator({
+  avatarGeneration,
+  avatarLayouts,
   presence,
   profileStorage = browserAuthorProfileStorage()
 }: {
+  readonly avatarGeneration?: number | undefined
+  readonly avatarLayouts?: ReadonlyArray<PresenceAvatarLayout> | undefined
   readonly presence: CanvasPresence
   readonly profileStorage?: AuthorProfileStorage | null
 }) {
@@ -273,25 +309,33 @@ export function CanvasPresenceIndicator({
   )
   const [editingName, setEditingName] = useState(false)
   const [nameDraft, setNameDraft] = useState("")
-  const overlayAnchor = () => toolbarOverlayAnchorFor(
-    presenceRef.current?.querySelector("[data-popup-open]") ?? presenceRef.current
-  )
+  const overlayAnchor = (payload: PresencePopoverPayload | undefined) => {
+    const avatars = presenceRef.current?.querySelectorAll(
+      ".crit-presence__avatar"
+    ) ?? []
+    const trigger = Array.from(avatars).find((avatar) =>
+      avatar.getAttribute("data-crit-presence-key") === payload?.anchorKey
+    ) ?? presenceRef.current
+    return toolbarOverlayAnchorFor(trigger)
+  }
   const participants = presence.availability === "unavailable"
     ? [{
         anonymous: true,
         key: "anonymous-agent",
         label: "Anonymous agent presence",
         payload: {
+          anchorKey: "presence-agent-0",
           kind: "agent" as const,
           secondary: "Unknown harness",
           title: "Anonymous agent"
         }
       }]
-    : presence.activities.map((activity) => ({
+    : presence.activities.map((activity, index) => ({
         anonymous: false,
         key: activity.activityId,
         label: `${activity.harness} agent: ${activity.activityId}`,
         payload: {
+          anchorKey: `presence-agent-${index}`,
           kind: "agent" as const,
           secondary: activity.harness,
           title: activity.activityId
@@ -307,6 +351,7 @@ export function CanvasPresenceIndicator({
         key: `current-author:${currentAuthor.id}`,
         label: `Current author: ${currentAuthorNameLabel(authorProfile.displayName)}`,
         payload: {
+          anchorKey: "presence-author",
           kind: "author" as const,
           authorId: currentAuthor.id,
           displayName: authorProfile.displayName,
@@ -316,13 +361,22 @@ export function CanvasPresenceIndicator({
       }]
   const entries = [...authorEntry, ...participants]
   if (entries.length === 0) return null
+  const layouts = entries.map((_, index) =>
+    avatarLayouts?.[index] ?? defaultPresenceAvatarLayout(index)
+  )
   const overflow = Math.max(0, entries.length - 3)
+  const visibleCollapsedExtent = Math.ceil(Math.max(
+    ...layouts.slice(0, 3).map((layout) =>
+      layout.collapsedX + PRESENCE_AVATAR_SIZE * layout.collapsedScale
+    )
+  ))
+  const overflowX = visibleCollapsedExtent + PRESENCE_OVERFLOW_GAP
   const collapsedWidth = overflow > 0
-    ? 52
-    : entries.length === 1
-      ? 24
-      : 22 + Math.min(entries.length - 1, 2) * 5
-  const expandedWidth = entries.length * 23 + 1
+    ? overflowX + PRESENCE_OVERFLOW_WIDTH + PRESENCE_TRAILING_SPACE
+    : visibleCollapsedExtent + PRESENCE_OVERFLOW_GAP
+  const expandedWidth = Math.ceil(Math.max(...layouts.map((layout) =>
+    layout.expandedX + PRESENCE_AVATAR_SIZE
+  ))) + 1
   const beginNameEdit = (displayName: string) => {
     setNameDraft(displayName)
     setEditingName(true)
@@ -349,7 +403,8 @@ export function CanvasPresenceIndicator({
       role="status"
       style={cssVariableStyle({
         "--crit-presence-collapsed-width": `${collapsedWidth}px`,
-        "--crit-presence-expanded-width": `${expandedWidth}px`
+        "--crit-presence-expanded-width": `${expandedWidth}px`,
+        "--crit-presence-overflow-x": `${overflowX}px`
       })}
     >
       {entries.map((entry, index) => (
@@ -359,8 +414,11 @@ export function CanvasPresenceIndicator({
           index={index}
           key={entry.key}
           label={entry.label}
+          layout={layouts[index]!}
           payload={entry.payload}
-          seed={entry.key}
+          seed={avatarGeneration === undefined
+            ? entry.key
+            : `${avatarGeneration}:${entry.key}`}
           total={entries.length}
         />
       ))}
@@ -379,7 +437,7 @@ export function CanvasPresenceIndicator({
           <Popover.Portal container={overlayContainer}>
             <Popover.Positioner
               {...toolbarOverlayPositionerProps}
-              anchor={overlayAnchor}
+              anchor={overlayAnchor(payload)}
               className="crit-toolbar-overlay-positioner crit-presence__positioner"
             >
               <Popover.Popup

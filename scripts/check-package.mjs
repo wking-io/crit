@@ -80,7 +80,8 @@ try {
     "dist/node/index.js",
     "dist/vite/index.js",
     "skills/crit/SKILL.md",
-    "skills/crit-identity/SKILL.md"
+    "skills/crit-identity/SKILL.md",
+    "skills/install-crit-frame-bridge/SKILL.md"
   ]
   const missing = requiredFiles.filter((file) => !packagedFiles.has(file))
   if (missing.length > 0) {
