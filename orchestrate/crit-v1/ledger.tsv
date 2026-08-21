@@ -5,3 +5,5 @@ P1-02	working-tree	unit-test-verified	54 shipped tests plus independent compile/
 P1-03	working-tree	verifier-failed	route canonicalization and alternate loopback spellings produced ambiguous logical identities
 P1-03	working-tree	verifier-failed	reserved ASCII percent aliases remained after the first canonicalization fix
 P1-03	working-tree	unit-test-verified	170 tests plus exhaustive ASCII, canonical UTF-8, loopback, boundary, build, typecheck, lint, and diff proofs passed
+P1-04	working-tree	verifier-failed	packaged runtime imports, trusted-field classification, and exact fixture round trips required correction
+P1-04	working-tree	unit-test-verified	172 domain tests, 15 protocol tests, direct built-package import, target gates, and full repository verification passed

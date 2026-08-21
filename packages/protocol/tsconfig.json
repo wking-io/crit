@@ -6,6 +6,7 @@
     "tsBuildInfoFile": "dist/tsconfig.tsbuildinfo",
     "baseUrl": ".",
     "paths": {
+      "@crit/domain": ["../domain/src/index.ts"],
       "@crit/domain/*": ["../domain/src/*"]
     }
   },
