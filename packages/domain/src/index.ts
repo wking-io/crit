@@ -48,3 +48,9 @@ export {
   WebUrlRepresentation,
   decodeRepresentationRef
 } from "./representation.js"
+export {
+  CanvasCommand,
+  CanvasCommandBatch,
+  decodeCanvasCommandBatch,
+  RenameCanvasCommand
+} from "./command.js"

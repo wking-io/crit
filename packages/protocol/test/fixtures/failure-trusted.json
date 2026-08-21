@@ -1,0 +1,1 @@
+{"kind":"protocol-failure","schemaVersion":1,"failure":{"_tag":"trusted-field","location":"command","message":"Trusted field"}}
