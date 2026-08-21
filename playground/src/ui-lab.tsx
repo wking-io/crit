@@ -1,5 +1,7 @@
 import { Button } from "@base-ui/react/button"
 import { Input } from "@base-ui/react/input"
+import { NumberField } from "@base-ui/react/number-field"
+import { Slider } from "@base-ui/react/slider"
 import { Toast } from "@base-ui/react/toast"
 import { Toggle } from "@base-ui/react/toggle"
 import { Tooltip } from "@base-ui/react/tooltip"
@@ -31,7 +33,13 @@ import {
 import { CanvasActionRunnerProvider } from "../../src/react/canvas-action-runner.js"
 import { CanvasControls } from "../../src/react/canvas-controls.js"
 import { cssVariableStyle } from "../../src/react/css-variable-style.js"
-import { CanvasPresenceIndicator, CanvasSaveIndicator, CritBoundaryMessage } from "../../src/react/canvas-feedback.js"
+import {
+  CanvasPresenceIndicator,
+  CanvasSaveIndicator,
+  CritBoundaryMessage,
+  PRESENCE_AVATAR_SIZE,
+  defaultPresenceAvatarLayout
+} from "../../src/react/canvas-feedback.js"
 import { actionHelpDetails, CanvasHelpPanel } from "../../src/react/canvas-help.js"
 import { CanvasCommentPin } from "../../src/react/canvas-comment-pin.js"
 import { CanvasToolbar } from "../../src/react/canvas-toolbar.js"
@@ -596,7 +604,10 @@ const LAB_AGENT_IDENTITIES = [
   { name: "Atlas", harness: "Codex" },
   { name: "Beacon", harness: "Claude Code" },
   { name: "Copywriter", harness: "Cursor" },
-  { name: "Diff checker", harness: "Terminal" }
+  { name: "Diff checker", harness: "Terminal" },
+  { name: "Explorer", harness: "Codex" },
+  { name: "Reviewer", harness: "Claude Code" },
+  { name: "Verifier", harness: "Terminal" }
 ] as const
 
 const LAB_PRESENCE_ACTIVITIES = LAB_AGENT_IDENTITIES.map(
@@ -614,9 +625,174 @@ const LAB_PRESENCE_ACTIVITIES = LAB_AGENT_IDENTITIES.map(
   })
 )
 
+const MAXIMUM_PRESENCE_COUNT = LAB_AGENT_IDENTITIES.length + 1
+const INITIAL_PRESENCE_LAYOUTS = Array.from(
+  { length: MAXIMUM_PRESENCE_COUNT },
+  (_, index) => defaultPresenceAvatarLayout(index)
+)
+const PRESENCE_ANCHOR_X = defaultPresenceAvatarLayout(0).collapsedX
+
+function PresenceLayoutSlider({
+  label,
+  max,
+  min,
+  onValueChange,
+  step = 1,
+  suffix,
+  value
+}: {
+  readonly label: string
+  readonly max: number
+  readonly min: number
+  readonly onValueChange: (value: number) => void
+  readonly step?: number | undefined
+  readonly suffix: string
+  readonly value: number
+}) {
+  return (
+    <Slider.Root
+      className="ui-presence-control"
+      max={max}
+      min={min}
+      onValueChange={onValueChange}
+      step={step}
+      value={value}
+    >
+      <div className="ui-presence-control__label">
+        <Slider.Label>{label}</Slider.Label>
+        <Slider.Value>{(_, values) => `${values[0]}${suffix}`}</Slider.Value>
+      </div>
+      <Slider.Control className="ui-presence-control__control">
+        <Slider.Track className="ui-presence-control__track">
+          <Slider.Indicator className="ui-presence-control__indicator" />
+          <Slider.Thumb className="ui-presence-control__thumb" />
+        </Slider.Track>
+      </Slider.Control>
+    </Slider.Root>
+  )
+}
+
+function PresenceToolbarSpecimen() {
+  const [avatarGeneration, setAvatarGeneration] = useState(0)
+  const [avatarOffset, setAvatarOffset] = useState(8)
+  const [avatarScaleDown, setAvatarScaleDown] = useState(3)
+  const [count, setCount] = useState(5)
+  const avatarLayouts = INITIAL_PRESENCE_LAYOUTS.map((layout, index) => {
+    if (index === 1) {
+      return {
+        ...layout,
+        collapsedScale: (PRESENCE_AVATAR_SIZE - avatarScaleDown)
+          / PRESENCE_AVATAR_SIZE,
+        collapsedX: PRESENCE_ANCHOR_X + avatarOffset,
+      }
+    }
+    if (index === 2) {
+      return {
+        ...layout,
+        collapsedScale: (PRESENCE_AVATAR_SIZE - avatarScaleDown * 2)
+          / PRESENCE_AVATAR_SIZE,
+        collapsedX: PRESENCE_ANCHOR_X + avatarOffset * 2,
+      }
+    }
+    return layout
+  })
+  const updateCount = (value: number | null) => {
+    if (value === null) return
+    const nextCount = Math.max(
+      3,
+      Math.min(MAXIMUM_PRESENCE_COUNT, Math.round(value))
+    )
+    setCount(nextCount)
+  }
+  return (
+    <div className="ui-presence-configurator">
+      <div>
+        <StateLabel>Presence configurator</StateLabel>
+        <div className="ui-toolbar-stage">
+          <CanvasToolbar
+            commentAvailable
+            commentsEnabled
+            noteAvailable
+            onAction={() => {}}
+            title="Feature lab"
+            trailingControls={(
+              <CanvasPresenceIndicator
+                avatarGeneration={avatarGeneration}
+                avatarLayouts={avatarLayouts}
+                presence={{
+                  currentAuthor: {
+                    id: "git:ui-lab",
+                    name: "Willa King",
+                    email: "willa@example.com",
+                    handle: "wking-io"
+                  },
+                  availability: "available",
+                  activities: LAB_PRESENCE_ACTIVITIES.slice(0, count - 1)
+                }}
+              />
+            )}
+            tool="select"
+          />
+        </div>
+      </div>
+      <div className="ui-presence-controls">
+        <NumberField.Root
+          className="ui-presence-number"
+          max={MAXIMUM_PRESENCE_COUNT}
+          min={3}
+          onValueCommitted={updateCount}
+          value={count}
+        >
+          <span>Avatar count</span>
+          <NumberField.Group className="ui-presence-number__group">
+            <NumberField.Decrement aria-label="Decrease avatar count">−</NumberField.Decrement>
+            <NumberField.Input aria-label="Avatar count" />
+            <NumberField.Increment aria-label="Increase avatar count">+</NumberField.Increment>
+          </NumberField.Group>
+        </NumberField.Root>
+        <PresenceLayoutSlider
+          label="Avatar offset"
+          max={22}
+          min={0}
+          onValueChange={setAvatarOffset}
+          suffix="px"
+          value={avatarOffset}
+        />
+        <PresenceLayoutSlider
+          label="Scale-down step"
+          max={8}
+          min={0}
+          onValueChange={setAvatarScaleDown}
+          step={0.5}
+          suffix="px"
+          value={avatarScaleDown}
+        />
+        <div className="ui-presence-controls__actions">
+          <Button
+            className="ui-presence-action"
+            onClick={() => {
+              setAvatarOffset(8)
+              setAvatarScaleDown(3)
+            }}
+          >
+            Reset layout
+          </Button>
+          <Button
+            className="ui-presence-action ui-presence-action--primary"
+            onClick={() => setAvatarGeneration((generation) => generation + 1)}
+          >
+            Regenerate avatars
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function ToolbarSpecimens() {
   return (
     <SpecimenSection id="02" title="Canvas toolbar">
+      <PresenceToolbarSpecimen />
       <div>
         <StateLabel>Idle</StateLabel>
         <div className="ui-toolbar-stage">

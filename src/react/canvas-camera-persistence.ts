@@ -10,6 +10,8 @@ export interface CanvasCameraStorage {
 
 const cameraStorageKey = (canvasId: string) =>
   `@riff-refine/crit/camera/${encodeURIComponent(canvasId)}`
+const cameraPersistencePreferenceKey = (canvasId: string) =>
+  `@riff-refine/crit/camera-preference/${encodeURIComponent(canvasId)}`
 
 const PersistedCanvasCamera = Schema.Struct({
   schemaVersion: Schema.Literal(1),
@@ -23,6 +25,13 @@ const decodePersistedCanvasCamera = Schema.decodeUnknownSync(
   PersistedCanvasCamera
 )
 const isPersistableCanvasCamera = Schema.is(PersistedCanvasCamera.fields.camera)
+const CanvasCameraPersistencePreference = Schema.Struct({
+  schemaVersion: Schema.Literal(1),
+  enabled: Schema.Boolean
+})
+const decodeCanvasCameraPersistencePreference = Schema.decodeUnknownSync(
+  CanvasCameraPersistencePreference
+)
 
 export const browserCanvasCameraStorage = (): CanvasCameraStorage | null => {
   try {
@@ -42,6 +51,35 @@ export const readPersistedCanvasCamera = (
     return decodePersistedCanvasCamera(JSON.parse(source)).camera
   } catch {
     return null
+  }
+}
+
+export const readCanvasCameraPersistenceEnabled = (
+  storage: CanvasCameraStorage,
+  canvasId: string
+) => {
+  try {
+    const source = storage.getItem(cameraPersistencePreferenceKey(canvasId))
+    if (source === null) return true
+    return decodeCanvasCameraPersistencePreference(JSON.parse(source)).enabled
+  } catch {
+    return true
+  }
+}
+
+export const writeCanvasCameraPersistenceEnabled = (
+  storage: CanvasCameraStorage,
+  canvasId: string,
+  enabled: boolean
+) => {
+  try {
+    storage.setItem(cameraPersistencePreferenceKey(canvasId), JSON.stringify({
+      schemaVersion: 1,
+      enabled
+    }))
+    return true
+  } catch {
+    return false
   }
 }
 

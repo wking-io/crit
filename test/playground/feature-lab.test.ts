@@ -10,6 +10,7 @@ import { CanvasCommandSchema } from "../../src/core/index.js"
 import { CritManifest } from "../../src/discovery/index.js"
 import {
   isOrbFrameSource,
+  playgroundAgentPresence,
   playgroundMode,
   playgroundPublicUrl
 } from "../../playground/vite.config.js"
@@ -38,6 +39,24 @@ describe("Crit feature lab", () => {
     expect(playgroundMode({})).toBe("development")
     expect(playgroundMode({ CRIT_PLAYGROUND_MODE: "alpha" })).toBe("alpha")
     expect(playgroundMode({ CRIT_PLAYGROUND_MODE: "release" })).toBe("release")
+  })
+
+  it("keeps four mocked agent presences active on the root playground canvas", () => {
+    const presence = playgroundAgentPresence(
+      new Date("2026-08-21T12:00:00.000Z")
+    )
+
+    expect(presence.canvasId).toBe("feature-lab")
+    expect(presence.activities).toHaveLength(4)
+    expect(presence.activities.map(({ activityId }) => activityId)).toEqual([
+      "Arbor",
+      "Kite",
+      "Mosaic",
+      "Relay"
+    ])
+    expect(presence.activities.every(
+      ({ activeUntil }) => activeUntil === "2026-08-22T12:00:00.000Z"
+    )).toBe(true)
   })
 
   it("resolves the live playground profile from URL, then cookie, then storage", () => {
@@ -181,7 +200,7 @@ describe("Crit feature lab", () => {
       })
       const port = serverPort(http)
       const origin = `http://127.0.0.1:${port}`
-      const [home, ui, mainSource, uiSource, uiStyles, baseTokens, frameCardSource, editorShell] = await Promise.all([
+      const [home, ui, presenceResponse, mainSource, uiSource, uiStyles, baseTokens, frameCardSource, editorShell] = await Promise.all([
         fetch(origin, {
           headers: { Connection: "close" },
           redirect: "manual"
@@ -189,6 +208,9 @@ describe("Crit feature lab", () => {
         fetch(`${origin}/ui`, {
           headers: { Connection: "close" },
           redirect: "manual"
+        }),
+        fetch(`${origin}/__crit/api/canvases/feature-lab/activity`, {
+          headers: { Connection: "close" }
         }),
         readFile(path.resolve("playground/src/main.tsx"), "utf8"),
         readFile(path.resolve("playground/src/ui-lab.tsx"), "utf8"),
@@ -213,6 +235,9 @@ describe("Crit feature lab", () => {
       expect(ui.status).toBe(200)
       expect(ui.headers.get("location")).toBeNull()
       expect(await ui.text()).toContain("Crit feature lab")
+      expect(presenceResponse.status).toBe(200)
+      const playgroundPresence = await presenceResponse.json()
+      expect(playgroundPresence.activities).toHaveLength(4)
       expect(mainSource).toContain("frameRouteUrl()")
       expect(mainSource).toContain('pathname.replace(/\\/+$/, "") === "/ui"')
       expect(uiSource).toContain("Crit UI color assignments")
@@ -266,6 +291,19 @@ describe("Crit feature lab", () => {
       expect(uiSource).toContain("<NoteCard")
       expect(uiSource).toContain("<CanvasToolbar")
       expect(uiSource).toContain("LAB_AGENT_IDENTITIES")
+      expect(uiSource).toContain("function PresenceToolbarSpecimen()")
+      expect(uiSource).toContain("avatarLayouts={avatarLayouts}")
+      expect(uiSource).toContain("avatarGeneration={avatarGeneration}")
+      expect(uiSource).toContain("Avatar count")
+      expect(uiSource).toContain("Avatar offset")
+      expect(uiSource).toContain("Scale-down step")
+      expect(uiSource).toContain("collapsedX: PRESENCE_ANCHOR_X + avatarOffset")
+      expect(uiSource).toContain("collapsedX: PRESENCE_ANCHOR_X + avatarOffset * 2")
+      expect(uiSource).toContain("PRESENCE_AVATAR_SIZE - avatarScaleDown")
+      expect(uiSource).toContain("PRESENCE_AVATAR_SIZE - avatarScaleDown * 2")
+      expect(uiSource).toContain("Regenerate avatars")
+      expect(uiStyles).toContain(".ui-presence-controls")
+      expect(uiStyles).toContain(".ui-presence-control__thumb")
       expect(uiSource).toContain("Agent popovers")
       expect(uiSource).toContain('className="crit-presence__name"')
       expect(uiSource).toContain('className="crit-presence__secondary"')

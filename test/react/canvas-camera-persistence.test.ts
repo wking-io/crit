@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest"
 
 import {
   clearPersistedCanvasCamera,
+  readCanvasCameraPersistenceEnabled,
   readPersistedCanvasCamera,
+  writeCanvasCameraPersistenceEnabled,
   writePersistedCanvasCamera,
   type CanvasCameraStorage
 } from "../../src/react/canvas-camera-persistence.js"
@@ -20,6 +22,16 @@ const memoryStorage = (): CanvasCameraStorage & {
 }
 
 describe("canvas camera persistence", () => {
+  it("remembers views by default and persists an explicit per-Canvas opt-out", () => {
+    const storage = memoryStorage()
+
+    expect(readCanvasCameraPersistenceEnabled(storage, "review/one")).toBe(true)
+    expect(writeCanvasCameraPersistenceEnabled(storage, "review/one", false))
+      .toBe(true)
+    expect(readCanvasCameraPersistenceEnabled(storage, "review/one")).toBe(false)
+    expect(readCanvasCameraPersistenceEnabled(storage, "review/two")).toBe(true)
+  })
+
   it("round-trips a finite camera per Canvas and clears the opt-in", () => {
     const storage = memoryStorage()
     const camera = { x: -320.5, y: 112, zoom: .65 }
