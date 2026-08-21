@@ -49,8 +49,22 @@ export {
   decodeRepresentationRef
 } from "./representation.js"
 export {
+  CanvasProjection,
+  CanvasTitle,
+  decodeCanvasProjection
+} from "./canvas.js"
+export {
+  CanvasChange,
   CanvasCommand,
   CanvasCommandBatch,
+  decodeCanvasChange,
   decodeCanvasCommandBatch,
   RenameCanvasCommand
 } from "./command.js"
+export { CanvasEngine } from "./engine.js"
+export type {
+  CanvasChangeFailure,
+  CanvasChangeResult,
+  CanvasReplayFailure,
+  CanvasReplayResult
+} from "./engine.js"
