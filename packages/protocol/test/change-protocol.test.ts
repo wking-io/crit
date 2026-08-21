@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs"
 
-import { describe, expect, it } from "vitest"
+import { CanvasEngine, decodeCanvasProjection } from "@crit/domain"
+import { assert, describe, expect, it } from "vitest"
 
 import { ChangeProtocol, ProtocolValue } from "../src/index.js"
 
@@ -102,5 +103,24 @@ describe("ChangeProtocol", () => {
     expect(Object.keys(await import("../src/index.js")).sort()).toEqual([
       "ChangeProtocol", "ProtocolValue"
     ])
+  })
+
+  it("feeds decoded accepted changes directly into domain replay", () => {
+    const initial = decodeCanvasProjection({
+      schemaVersion: 1,
+      canvasId: "canvas_a",
+      title: "Old"
+    })
+    const accepted = ChangeProtocol.accepted.decode(fixture("accepted"))
+    assert(accepted.ok)
+
+    expect(CanvasEngine.replay(initial, [accepted.value])).toEqual({
+      _tag: "replayed",
+      projection: {
+        schemaVersion: 1,
+        canvasId: "canvas_a",
+        title: "New"
+      }
+    })
   })
 })

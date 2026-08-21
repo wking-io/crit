@@ -1,0 +1,41 @@
+{
+  "initial": {
+    "schemaVersion": 1,
+    "canvasId": "canvas_checkout",
+    "title": "Checkout"
+  },
+  "changes": [
+    {
+      "canvasId": "canvas_checkout",
+      "changeId": "change_review",
+      "commands": [
+        {
+          "_tag": "rename-canvas",
+          "expectedTitle": "Checkout",
+          "title": "Checkout review"
+        }
+      ]
+    },
+    {
+      "canvasId": "canvas_checkout",
+      "changeId": "change_critique",
+      "commands": [
+        {
+          "_tag": "rename-canvas",
+          "expectedTitle": "Checkout review",
+          "title": "Checkout final"
+        },
+        {
+          "_tag": "rename-canvas",
+          "expectedTitle": "Checkout final",
+          "title": "Checkout critique"
+        }
+      ]
+    }
+  ],
+  "projection": {
+    "schemaVersion": 1,
+    "canvasId": "canvas_checkout",
+    "title": "Checkout critique"
+  }
+}
