@@ -116,7 +116,7 @@ const make = (
       catch: (cause) => storageFailure(operation, id, cause)
     })
 
-  const decodeDocument = (id: string, input: unknown) =>
+  const decodeDocument = (id: string, input: Schema.Json) =>
     Effect.gen(function*() {
       const json = yield* Effect.try({
         try: () => Schema.decodeUnknownSync(Schema.Json)(input),
@@ -177,7 +177,7 @@ const make = (
       Effect.flatMap((records) =>
         Effect.forEach(Array.isArray(records) ? records : [], (record) => {
           const id =
-            Predicate.hasProperty(record, "id") && typeof record.id === "string"
+            Predicate.hasProperty(record, "id") && Predicate.isString(record.id)
               ? record.id
               : "*"
           return decodeDocument(id, record).pipe(

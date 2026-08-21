@@ -1,49 +1,32 @@
-# Comments (internal development)
+# Comments
 
-Comments are a development-gated Crit capability. The Canvas Document still
-stores Comment Threads so unrelated edits round-trip existing records. The
-alpha profile does not expose Comments in the editor, CLI apply surface, HTTP
-apply contract, Frame bridge, or installed agent skill.
-
-Enable Comments only in the internal playground or another composition root
-that passes `DEVELOPMENT_FEATURES`.
+Comments are a stable v1 Canvas capability for people and Agents.
 
 ## Domain
 
-Comment Threads belong to live Frames and contain one opening Comment followed
-by flat Replies. Canvas-core predicates project Comment editing and thread
-resolution capabilities, and the semantic commands enforce those same durable
-invariants.
+A Comment Thread belongs to one Canvas and targets a Frame. A thread contains:
 
-`CommentThreadReview` is a separate per-session module that owns the transient
-create/read/edit/reply/resolve workflow. It reconciles stable identities from
-each optimistic or authoritative Canvas Document and constructs command
-batches, while `CanvasSession` remains responsible for dispatch and
-persistence.
+- A stable ID.
+- Its Frame ID.
+- An optional normalized visual or element anchor.
+- Ordered messages with stable IDs and Actor snapshots.
+- Open or resolved state.
+- Creation and resolution provenance.
 
-## UI and adapters
+Comments are semantic Canvas commands and become canonical only when their containing change is accepted. Clients do not supply trusted Actor identity or timestamps.
 
-Element and Frame comment adapters terminate after producing a normalized
-Comment Anchor or Comment Thread identity. React owns draft text, focus,
-geometry, animation, and iframe readiness; `CommentThreadReview` owns workflow
-state, capability projection, identity and timestamp allocation, and accepted
-or rejected dispatch transitions. Resolved threads are omitted from Frame pins
-but remain in the Canvas Document.
+Workspace policy authorizes commenting and resolution. Canvas creation and thread authorship do not grant special authority. Product policy may allow an author to edit their own message, but identity comparison uses the server-stamped Actor.
 
-The Vite plugin injects the Frame comment bridge independently from the input
-bridge, and only when the resolved feature profile enables Comments. CLI and
-HTTP adapters reject Comment commands with a feature-unavailable failure when
-Comments are disabled.
+## Live and captured Frames
 
-## Commands
+For a live Application Route, the Frame Bridge reports route, revision, selectors, fingerprints, normalized geometry, and anchor health. The UI must show when an anchor is stale or cannot be resolved.
 
-- `AddCommentThread`: `id`, `frameId`, an `anchor`, and an opening message.
-- `ReplyToCommentThread`: thread `id` and a flat `reply` message.
-- `EditComment`: thread `id`, `commentId`, `actorId`, `expectedBody`,
-  replacement `body`, and `editedAt`.
-- `SetCommentThreadResolved`: thread `id`, `actor`, `resolved`, and `at`.
-- `UpdateCommentAnchor`: thread `id`, `actorId`, and replacement `anchor`.
+For an Artifact, the immutable artifact digest identifies the rendered content. Frame-level normalized anchors are supported. DOM-element anchors require a stable DOM map stored with the capture; otherwise the UI degrades them visibly instead of guessing.
 
-Archived snapshot Frames reject Comments. Only a Comment's Author may edit it.
-Only the Canvas Owner or opening Comment Author may resolve, reopen, or
-re-anchor a thread.
+## Agent authorship
+
+An Agent-authored comment names the Agent as author. Its accepted change also records the delegating Person, OAuth client, grant, execution, and optional reported runtime metadata. The UI must not present the delegating Person as the author.
+
+## Verification
+
+Tests cover create, reply, edit, resolve, reopen, anchor degradation, deleted Frames, offline replay, Agent attribution, unauthorized access, and hostile Frame Bridge messages.

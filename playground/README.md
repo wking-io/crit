@@ -1,65 +1,17 @@
-# Crit feature lab
+# Crit playground
 
-From the repository root, run:
+The current playground is the local-only alpha behavior lab. It remains useful while the clean rewrite ports selected interactions, but it is not the target architecture and its persisted state is disposable.
+
+Run the existing behavior reference:
 
 ```sh
 npm run dev:portless
 ```
 
-Open `https://crit.localhost` for the feature-lab Canvas. Portless
-registers the stable hostname and selects the backing port automatically.
-Portless requires Node.js 24 or newer. On first use, macOS may request
-administrator access to bind standard HTTPS port 443; accept that prompt to use
-the hostname without a port.
+Open `https://crit.localhost`. If stable HTTPS cannot bind, use `npm run dev` and the URL printed by Vite.
 
-For a direct Vite server without Portless, use `npm run dev`. It defaults to
-`http://127.0.0.1:5173`; set `CRIT_PLAYGROUND_PORT` if that port is unavailable.
-The editor is source-backed in development: changes under `src/react` update the
-open playground through Vite without a manual package build or server restart.
+Use the playground to observe Canvas camera behavior, Frame and Note geometry, stacking, attachment, review states, snapshots, iframe lifecycle, shortcuts, input relay, and comment anchors. Record accepted behavior as target-system tests.
 
-The playground uses Crit's real Vite plugin, HTTP adapter, filesystem repository,
-snapshot archive, manifest discovery, and standalone editor route. Its three
-playable synth Frames reproduce the Polyphonic Workbench, Performance Deck, and
-Signal Rack designs from the `wking` synth iteration Canvas. All three pages are
-served by the same Vite process. Canvas state persists under
-`playground/.crit`, which is ignored by git.
+Do not use the playground's filesystem Canvas documents, IndexedDB, Git identity, manifest version 1, local HTTP routes, or current CLI output as stable v1 contracts.
 
-`npm run dev` opens the playground with a live **Playground** version selector
-in the editor (Development, Alpha, Release). Development enables Comments;
-Alpha and Release hide them. Release loads the compiled package from `dist`.
-`npm run playground:alpha` and `npm run playground:release` only change the
-selector's default before the first visit. Pair those with `npm run dev:agent`
-or `npm run playground:alpha:agent`.
-
-## Browser checks
-
-- Switch **Playground** from Development to Alpha and verify the comment tool disappears; stored threads remain after switching back.
-- Pan, zoom, and use **Fit**; verify toolbars remain a readable screen size.
-- Right-click empty canvas space; create a Frame or Note and use **Zoom to fit**.
-- Right-click a Frame; verify delete, fullscreen, new-tab, ordering, and **Fit content** actions.
-- Open **Set size to...** and verify all five device presets resize to their displayed dimensions.
-- Narrow a Frame; verify its title hides only after fewer than ten characters fit and its action icons remain.
-- Use the **Frame chrome** DialKit panel to tune the title and per-icon visibility thresholds live.
-- Drag and resize Frames, edit all four statuses, and use their ordering buttons.
-- Power on a synth, play its pads or keyboard shortcuts, and adjust its controls.
-- Edit, move, resize, and reorder Notes.
-- Move the attached Note with its Frame, then drag it away to detach it.
-- Take a snapshot, change the live page, and verify the archived Frame remains.
-- Open the Canvas in two browser windows and verify edits synchronize.
-- Pan a Frame offscreen and verify its iframe pauses without reloading when it returns. Turn **Pause offscreen frames** off in the canvas title menu and verify loaded pages stay painted offscreen.
-
-## Agent checks
-
-Keep the Portless dev server running, then use another terminal:
-
-```sh
-npm run dev:agent -- open feature-lab --json
-npm run dev:agent -- activity feature-lab --id dev-agent --harness Terminal --detail "Testing agent edits" --json
-npm run dev:agent -- apply feature-lab '[{"_tag":"SetFrameStatus","id":"synth-workbench","status":"ready-for-review"}]' --json
-npm run dev:agent -- snapshot feature-lab synth-performance --json
-npm run dev:agent -- activity feature-lab --id dev-agent --clear --json
-```
-
-The browser and CLI operate on the same Canvas Document. `npm run dev:seed`
-rebuilds the CLI and adds the feature Canvas if it has not been seeded yet. The
-seed replaces its Note Author placeholders with the current Git-derived Author.
+The replacement playground will connect to `crit dev`, use logical Representations, and support two isolated replicas plus a disposable Cloudflare environment for collaboration proofs.

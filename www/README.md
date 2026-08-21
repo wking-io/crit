@@ -1,32 +1,7 @@
 # Crit website
 
-`www` is the public Crit site: the landing page **is** the Crit canvas. It is a
-separate Vite app from the playground, built from the same `@riff-refine/crit`
-package so editor UI changes apply here too.
+The current `www` application is a local-only alpha demo and behavior reference. Its IndexedDB persistence and Cloudflare Pages deployment are not part of the target v1.
 
-Visitors can pan and zoom immediately. Adding Frames or Notes requires Sign-in
-(name and email). Mutations stay in the browser via IndexedDB.
+The stable shared UI ships as Workers Static Assets beside the Crit Worker API. Cloudflare Access supplies company identity, Crit applies Workspace authorization, and one Canvas Durable Object supplies canonical Canvas state.
 
-## Local
-
-From the repository root:
-
-```sh
-npm run www:dev
-```
-
-Open `http://127.0.0.1:4173`. Frame pages:
-
-- `/hero`
-- `/features`
-- `/signup`
-
-## Deploy to Cloudflare Pages
-
-```sh
-npm run www:build
-npx wrangler pages deploy www/dist --project-name crit
-```
-
-`www/wrangler.toml` points Pages at `./dist`. The SPA `_redirects` file serves
-`/hero`, `/features`, and `/signup` as the same app so live Frames resolve.
+During the rewrite, keep this app runnable only when it helps compare visible behavior. Do not add target collaboration features or persistence migrations to it. The new React application should be built in the target package graph described in [the architecture](../ARCHITECTURE.md).

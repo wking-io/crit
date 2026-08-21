@@ -1,6 +1,6 @@
 import { Effect } from "effect"
 
-import type { Author, CanvasDocument } from "../core/index.js"
+import type { Author } from "../core/index.js"
 import { CanvasRepositoryCritClient } from "../runtime/canvas-repository-crit-client.js"
 import { CritClientUnavailable, type CritClientServices } from "../session/crit-client.js"
 import {
