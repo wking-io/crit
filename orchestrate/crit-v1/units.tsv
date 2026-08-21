@@ -1,0 +1,6 @@
+id	track	state	branch	pr	head	brief
+P1-01	foundation	verified				briefs/P1-01-package-boundaries.md
+P1-02	foundation	verified				briefs/P1-02-identity.md
+P1-03	foundation	verified				briefs/P1-03-representations.md
+P1-04	foundation	ready				briefs/P1-04-change-protocol.md
+P1-05	foundation	blocked				briefs/P1-05-engine-replay.md

@@ -20,6 +20,9 @@
   },
   "type": "module",
   "sideEffects": false,
+  "workspaces": [
+    "packages/*"
+  ],
   "bin": {
     "crit": "dist/cli.js"
   },
@@ -60,8 +63,10 @@
   },
   "scripts": {
     "build": "npm run generate:glyphs && tsc -p tsconfig.build.json",
+    "build:target": "tsc -b tsconfig.target.json",
     "check:glyphs": "node scripts/generate-glyphs.mjs --check",
     "check:package": "node scripts/check-package.mjs",
+    "check:target-boundaries": "node scripts/check-target-boundaries.mjs",
     "dev": "npm run build --silent && node playground/seed.mjs && vite --config playground/vite.config.ts",
     "dev:agent": "npm run build --silent && cd playground && CRIT_FEATURE_PROFILE=development node ../dist/cli.js",
     "dev:phone": "PORTLESS_LAN=1 PORTLESS_HTTPS=0 PORTLESS_PORT=80 portless",

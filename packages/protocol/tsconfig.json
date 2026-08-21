@@ -1,0 +1,16 @@
+{
+  "extends": "../../tsconfig.target.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist",
+    "tsBuildInfoFile": "dist/tsconfig.tsbuildinfo",
+    "baseUrl": ".",
+    "paths": {
+      "@crit/domain/*": ["../domain/src/*"]
+    }
+  },
+  "include": ["src"],
+  "references": [
+    { "path": "../domain" }
+  ]
+}
