@@ -4,6 +4,9 @@
   "private": true,
   "type": "module",
   "sideEffects": false,
+  "scripts": {
+    "test": "vitest run --config vitest.config.ts"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -12,6 +15,10 @@
   },
   "files": ["dist"],
   "dependencies": {
-    "@crit/domain": "*"
+    "@crit/domain": "*",
+    "effect": "4.0.0-rc.109"
+  },
+  "devDependencies": {
+    "vitest": "4.1.0"
   }
 }
