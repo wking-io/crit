@@ -7,7 +7,7 @@ import {
   emptyCanvasProjection
 } from "@crit/domain"
 import { ProtocolValue, type ProposedCanvasChange } from "@crit/protocol"
-import { Data, Deferred, Effect, Exit, Fiber, Result, Schema } from "effect"
+import { Data, Deferred, Effect, Exit, Fiber, Result, Schema, type Scope } from "effect"
 
 import {
   AuthorityModel,
@@ -24,11 +24,11 @@ export interface AuthorityConformanceOptions {
 
 export type AuthorityConformanceFactory = (
   options?: AuthorityConformanceOptions
-) => Effect.Effect<CanvasAuthority>
+) => Effect.Effect<CanvasAuthority, never, Scope.Scope>
 
 export interface AuthorityConformanceScenario {
   readonly name: string
-  readonly run: Effect.Effect<void, unknown>
+  readonly run: Effect.Effect<void, unknown, Scope.Scope>
 }
 
 export class AuthorityConformanceFailure extends Data.TaggedError(
