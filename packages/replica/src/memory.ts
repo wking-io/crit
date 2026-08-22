@@ -2,8 +2,7 @@ import type { CanvasId } from "@crit/domain"
 import { Effect, Layer, Result, SynchronizedRef } from "effect"
 
 import type { ReplicaState } from "./model.js"
-import { CanvasReplica } from "./model.js"
-import { makeCanvasReplica } from "./service.js"
+import { CanvasReplicaLive } from "./service.js"
 import { ReplicaStore } from "./store.js"
 
 type Registry = ReadonlyMap<CanvasId, SynchronizedRef.SynchronizedRef<ReplicaState | undefined>>
@@ -31,6 +30,4 @@ const store = Effect.gen(function*() {
 })
 
 export const MemoryReplicaStore = Layer.effect(ReplicaStore, store)
-export const MemoryCanvasReplica = {
-  layer: Layer.effect(CanvasReplica, makeCanvasReplica).pipe(Layer.provide(MemoryReplicaStore))
-}
+export const MemoryCanvasReplicaLive = CanvasReplicaLive.pipe(Layer.provide(MemoryReplicaStore))

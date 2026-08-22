@@ -4,7 +4,7 @@ import { ProtocolValue } from "@crit/protocol"
 import { Deferred, Effect, Fiber, Layer, Schema } from "effect"
 import { describe, expect, it } from "vitest"
 
-import { CanvasReplica, MemoryCanvasReplica, ReplicaChangeIds, ReplicaModel } from "../src/index.js"
+import { CanvasReplica, MemoryCanvasReplicaLive, ReplicaChangeIds, ReplicaModel } from "../src/index.js"
 import { ReplicaConformance } from "../src/testing.js"
 
 const ids = [
@@ -25,7 +25,7 @@ const makeLayer = (
     ? baseAuthority
     : Layer.effect(CanvasAuthority, Effect.map(CanvasAuthority, decorate)).pipe(Layer.provide(baseAuthority))
   const dependencies = Layer.merge(authority, idLayer)
-  const replica = MemoryCanvasReplica.layer.pipe(Layer.provide(dependencies))
+  const replica = MemoryCanvasReplicaLive.pipe(Layer.provide(dependencies))
   return Layer.merge(dependencies, replica)
 }
 

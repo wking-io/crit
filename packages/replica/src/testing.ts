@@ -3,8 +3,9 @@ import { Id, IsoTimestamp, PersonAttribution, decodeCanvasCommandBatch, emptyCan
 import { ProtocolValue, type AcceptedCanvasChange, type ChangePage } from "@crit/protocol"
 import { Data, Effect, Schema } from "effect"
 
-import { CanvasReplica, ReplicaModel } from "./model.js"
+import { ReplicaModel } from "./model.js"
 import { ReplicaPolicy } from "./policy.js"
+import { CanvasReplica } from "./service.js"
 
 export class ReplicaConformanceFailure extends Data.TaggedError("ReplicaConformanceFailure")<{
   readonly message: string

@@ -78,13 +78,6 @@ export class ReplicaChangeIds extends Context.Service<ReplicaChangeIds, {
   readonly next: Effect.Effect<typeof ChangeId.Type, ChangeIdGenerationFailure>
 }>()("@crit/replica/ReplicaChangeIds") {}
 
-export class CanvasReplica extends Context.Service<CanvasReplica, {
-  readonly open: (canvasId: typeof CanvasId.Type) => Effect.Effect<ReplicaView, ReplicaOpenFailure>
-  readonly current: (canvasId: typeof CanvasId.Type) => Effect.Effect<ReplicaView, ReplicaNotOpen | ReplicaInvariantFailure>
-  readonly change: (input: ReplicaChange, invocation: VerifiedInvocation) => Effect.Effect<ReplicaChangeReceipt, ReplicaChangeFailure>
-  readonly sync: (canvasId: typeof CanvasId.Type) => Effect.Effect<SyncResult, ReplicaSyncFailure>
-}>()("@crit/replica/CanvasReplica") {}
-
 const PendingRecordSchema = Schema.Struct({
   proposal: ProposedCanvasChangeSchema,
   invocation: VerifiedInvocation,
