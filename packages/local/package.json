@@ -20,6 +20,7 @@
     "@crit/authority": "*",
     "@crit/domain": "*",
     "@crit/protocol": "*",
+    "@crit/replica": "*",
     "@effect/sql-sqlite-node": "4.0.0-rc.109",
     "effect": "4.0.0-rc.109"
   },
