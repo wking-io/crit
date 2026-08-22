@@ -20,7 +20,7 @@ const allowedDependencies = new Map([
   ["frame-bridge", ["protocol"]],
   ["local", ["domain", "protocol", "authority", "replica", "representations"]],
   ["cloudflare", ["domain", "protocol", "authority", "representations"]],
-  ["cli", ["domain", "replica", "representations", "client"]]
+  ["cli", ["domain", "replica", "representations", "client", "local"]]
 ])
 
 const targetNames = new Set(allowedDependencies.keys())

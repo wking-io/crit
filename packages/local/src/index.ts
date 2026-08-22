@@ -5,3 +5,13 @@ export type { SqliteCanvasReplicaOptions } from "./sqlite-replica.js"
 export { LocalDaemon } from "./daemon.js"
 export type { LocalDaemonOptions } from "./daemon.js"
 export { FileSystemArtifactStoreOpenFailure, LocalArtifactStore } from "./artifact-store.js"
+export {
+  LocalDaemonDescriptor,
+  LocalDaemonOwnershipFailure,
+  LocalDevelopment,
+  LocalDevelopmentFailure
+} from "./development.js"
+export type {
+  LocalDevelopmentOptions,
+  LocalDevelopmentService
+} from "./development.js"
