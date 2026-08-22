@@ -3,7 +3,19 @@
   "compilerOptions": {
     "rootDir": "src",
     "outDir": "dist",
-    "tsBuildInfoFile": "dist/tsconfig.tsbuildinfo"
+    "tsBuildInfoFile": "dist/tsconfig.tsbuildinfo",
+    "baseUrl": ".",
+    "paths": {
+      "@crit/authority": ["../authority/src/index.ts"],
+      "@crit/domain": ["../domain/src/index.ts"],
+      "@crit/replica": ["../replica/src/index.ts"],
+      "@crit/replica/http": ["../replica/src/http.ts"]
+    }
   },
-  "include": ["src"]
+  "include": ["src"],
+  "references": [
+    { "path": "../domain" },
+    { "path": "../authority" },
+    { "path": "../replica" }
+  ]
 }
