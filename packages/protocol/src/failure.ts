@@ -1,4 +1,4 @@
-import { Schema } from "effect"
+import { type Result, Schema } from "effect"
 
 const FailureLocation = Schema.Literals(["message", "change", "command"])
 const FailureMessage = Schema.Trimmed.check(Schema.isNonEmpty())
@@ -28,6 +28,4 @@ export const ProtocolFailureSchema = Schema.Union([
 ])
 export type ProtocolFailure = typeof ProtocolFailureSchema.Type
 
-export type DecodeResult<A> =
-  | { readonly ok: true; readonly value: A }
-  | { readonly ok: false; readonly failure: ProtocolFailure }
+export type DecodeResult<A> = Result.Result<A, ProtocolFailure>

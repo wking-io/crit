@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs"
 
 import { CanvasEngine, decodeCanvasProjection } from "@crit/domain"
+import { Result } from "effect"
 import { assert, describe, expect, it } from "vitest"
 
 import { ChangeProtocol, ProtocolValue } from "../src/index.js"
@@ -20,27 +21,27 @@ describe("ChangeProtocol", () => {
   it.each(valid)("round trips %s", (name, codecName) => {
     const codec = ChangeProtocol[codecName]
     const result = codec.decode(fixture(name))
-    expect(result.ok).toBe(true)
-    if (result.ok) {
-      const encoded = codec.encode(result.value)
+    expect(Result.isSuccess(result)).toBe(true)
+    if (Result.isSuccess(result)) {
+      const encoded = codec.encode(result.success)
       expect(encoded).toEqual(fixture(name))
-      expect(codec.decode(encoded).ok).toBe(true)
+      expect(Result.isSuccess(codec.decode(encoded))).toBe(true)
     }
   })
 
   it("preserves complete nested accepted changes", () => {
     const page = ChangeProtocol.page.decode(fixture("page"))
-    expect(page.ok && page.value.changes[0]).toMatchObject({
+    expect(Result.isSuccess(page) && page.success.changes[0]).toMatchObject({
       changeId: "change_a", sequence: 1, cursor: "cursor_a", acceptedAt: "2026-08-21T12:00:00.000Z"
     })
     for (const name of ["receipt-first", "receipt-retry"]) {
       const receipt = ChangeProtocol.receipt.decode(fixture(name))
-      expect(receipt.ok && receipt.value.change.attribution._tag).toBe("person")
+      expect(Result.isSuccess(receipt) && receipt.success.change.attribution._tag).toBe("person")
     }
     const rawPage = fixture("page")
-    expect(ChangeProtocol.accepted.decode(rawPage.changes[0]).ok).toBe(true)
+    expect(Result.isSuccess(ChangeProtocol.accepted.decode(rawPage.changes[0]))).toBe(true)
     for (const name of ["receipt-first", "receipt-retry"]) {
-      expect(ChangeProtocol.accepted.decode(fixture(name).change).ok).toBe(true)
+      expect(Result.isSuccess(ChangeProtocol.accepted.decode(fixture(name).change))).toBe(true)
     }
   })
 
@@ -57,7 +58,7 @@ describe("ChangeProtocol", () => {
     for (const [input, tag] of cases) {
       expect(() => ChangeProtocol.proposed.decode(input)).not.toThrow()
       const result = ChangeProtocol.proposed.decode(input)
-      expect(!result.ok && result.failure._tag).toBe(tag)
+      expect(Result.isFailure(result) && result.failure._tag).toBe(tag)
     }
   })
 
@@ -70,38 +71,38 @@ describe("ChangeProtocol", () => {
     ]
     for (const field of fields) {
       const root = ChangeProtocol.proposed.decode({ ...fixture("proposed"), [field]: "forged" })
-      expect(!root.ok && root.failure).toMatchObject({ _tag: "trusted-field", location: "message" })
+      expect(Result.isFailure(root) && root.failure).toMatchObject({ _tag: "trusted-field", location: "message" })
       const proposed = fixture("proposed")
       proposed.commands[0][field] = "forged"
       const command = ChangeProtocol.proposed.decode(proposed)
-      expect(!command.ok && command.failure).toMatchObject({ _tag: "trusted-field", location: "command" })
+      expect(Result.isFailure(command) && command.failure).toMatchObject({ _tag: "trusted-field", location: "command" })
     }
   })
 
   it("rejects invalid sequence, cursor, empty commands, and nested wire shortcuts", () => {
     for (const sequence of [0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1]) {
-      expect(ChangeProtocol.accepted.decode({ ...fixture("accepted"), sequence }).ok).toBe(false)
+      expect(Result.isFailure(ChangeProtocol.accepted.decode({ ...fixture("accepted"), sequence }))).toBe(true)
     }
     expect(() => ProtocolValue.cursor("opaque")).toThrow()
     expect(() => ProtocolValue.sequence(0)).toThrow()
-    expect(ChangeProtocol.proposed.decode({ ...fixture("proposed"), commands: [] }).ok).toBe(false)
+    expect(Result.isFailure(ChangeProtocol.proposed.decode({ ...fixture("proposed"), commands: [] }))).toBe(true)
     const page = fixture("page")
     page.changes[0] = { changeId: "change_a" }
-    expect(ChangeProtocol.page.decode(page).ok).toBe(false)
-    expect(ChangeProtocol.page.decode({ ...fixture("page"), cursor: null }).ok).toBe(false)
+    expect(Result.isFailure(ChangeProtocol.page.decode(page))).toBe(true)
+    expect(Result.isFailure(ChangeProtocol.page.decode({ ...fixture("page"), cursor: null }))).toBe(true)
     const wrongNestedVersion = fixture("page")
     wrongNestedVersion.changes[0].schemaVersion = 1
     const versionResult = ChangeProtocol.page.decode(wrongNestedVersion)
-    expect(!versionResult.ok && versionResult.failure._tag).toBe("unsupported-version")
+    expect(Result.isFailure(versionResult) && versionResult.failure._tag).toBe("unsupported-version")
     const privateReceipt = fixture("receipt-first")
     privateReceipt.digest = "authority-private"
-    expect(ChangeProtocol.receipt.decode(privateReceipt).ok).toBe(false)
-    expect(ChangeProtocol.accepted.decode({ ...fixture("accepted"), attribution: {} }).ok).toBe(false)
+    expect(Result.isFailure(ChangeProtocol.receipt.decode(privateReceipt))).toBe(true)
+    expect(Result.isFailure(ChangeProtocol.accepted.decode({ ...fixture("accepted"), attribution: {} }))).toBe(true)
   })
 
   it("exposes only semantic protocol values", async () => {
     expect(Object.keys(await import("../src/index.js")).sort()).toEqual([
-      "ChangeProtocol", "ProtocolValue"
+      "ChangeProtocol", "CursorSchema", "ProtocolValue", "SequenceSchema"
     ])
   })
 
@@ -114,9 +115,9 @@ describe("ChangeProtocol", () => {
       issuedIds: { frameIds: [], noteIds: [], threadIds: [], commentIds: [] }
     })
     const accepted = ChangeProtocol.accepted.decode(fixture("accepted"))
-    assert(accepted.ok)
+    assert(Result.isSuccess(accepted))
 
-    expect(CanvasEngine.replay(initial, [accepted.value])).toEqual({
+    expect(CanvasEngine.replay(initial, [accepted.success])).toEqual({
       _tag: "replayed",
       projection: {
         schemaVersion: 2,
@@ -154,8 +155,8 @@ describe("ChangeProtocol", () => {
     ]
     const wire = { kind: "proposed-canvas-change", schemaVersion: 2, changeId: "change_commands", canvasId: "canvas_a", observedCursor: null, commands }
     const result = ChangeProtocol.proposed.decode(wire)
-    expect(result.ok).toBe(true)
-    if (result.ok) expect(ChangeProtocol.proposed.encode(result.value)).toEqual(wire)
+    expect(Result.isSuccess(result)).toBe(true)
+    if (Result.isSuccess(result)) expect(ChangeProtocol.proposed.encode(result.success)).toEqual(wire)
   })
 
   it("classifies v1 command-bearing messages as unsupported", () => {
@@ -164,7 +165,7 @@ describe("ChangeProtocol", () => {
       input.schemaVersion = 1
       const codec = name === "proposed" ? ChangeProtocol.proposed : name === "accepted" ? ChangeProtocol.accepted : name === "page" ? ChangeProtocol.page : ChangeProtocol.receipt
       const result = codec.decode(input)
-      expect(!result.ok && result.failure._tag).toBe("unsupported-version")
+      expect(Result.isFailure(result) && result.failure._tag).toBe("unsupported-version")
     }
   })
 
@@ -178,8 +179,11 @@ describe("ChangeProtocol", () => {
         state: { actor: "npc", source: "checkout", nested: { displayName: "Merchant" } }
       }
     }]
-    expect(ChangeProtocol.proposed.decode(input).ok).toBe(true)
+    expect(Result.isSuccess(ChangeProtocol.proposed.decode(input))).toBe(true)
     input.commands[0].representation.personId = "person_forged"
-    expect(ChangeProtocol.proposed.decode(input)).toMatchObject({ ok: false, failure: { _tag: "trusted-field", location: "command" } })
+    expect(ChangeProtocol.proposed.decode(input)).toMatchObject({
+      _tag: "Failure",
+      failure: { _tag: "trusted-field", location: "command" }
+    })
   })
 })

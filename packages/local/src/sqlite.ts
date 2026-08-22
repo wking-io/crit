@@ -28,7 +28,8 @@ import {
   ProtocolValue,
   type AcceptedCanvasChange,
   type Cursor,
-  type ProposedCanvasChange
+  type ProposedCanvasChange,
+  type ProtocolFailure
 } from "@crit/protocol"
 import { Cause, Data, Effect, Layer, Result, Schedule, Schema } from "effect"
 import * as Reactivity from "effect/unstable/reactivity/Reactivity"
@@ -39,6 +40,10 @@ const schemaVersion = 1
 export class LocalAuthorityOpenFailure extends Data.TaggedError("LocalAuthorityOpenFailure")<{
   readonly path: string
   readonly reason: string
+}> {}
+
+class StoredProtocolDecodeFailure extends Data.TaggedError("StoredProtocolDecodeFailure")<{
+  readonly failure: ProtocolFailure
 }> {}
 
 export interface SqliteCanvasAuthorityOptions {
@@ -82,10 +87,13 @@ const decodeStored = <S extends Schema.ConstraintDecoder<unknown>>(schema: S, va
 const encodeStored = <S extends Schema.ConstraintEncoder<unknown>>(schema: S, value: S["Type"]): string =>
   json(Schema.decodeUnknownSync(Schema.Json)(Schema.encodeUnknownSync(schema)(value)))
 
-const decodeProtocol = <A>(value: string, decode: (input: Schema.Json) => { readonly ok: boolean; readonly value?: A }): A => {
+const decodeProtocol = <A>(
+  value: string,
+  decode: (input: Schema.Json) => Result.Result<A, ProtocolFailure>
+): A => {
   const result = decode(parseJson(value))
-  if (!result.ok || result.value === undefined) throw new Error("stored protocol value is invalid")
-  return result.value
+  if (Result.isFailure(result)) throw new StoredProtocolDecodeFailure({ failure: result.failure })
+  return result.success
 }
 
 type CanvasRecord = {
