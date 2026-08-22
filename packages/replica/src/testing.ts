@@ -1,11 +1,12 @@
 import { AuthorityModel, AuthorityView, CanvasAuthority, PersonInvocation } from "@crit/authority"
 import { Id, IsoTimestamp, PersonAttribution, decodeCanvasCommandBatch, emptyCanvasProjection } from "@crit/domain"
 import { ProtocolValue, type AcceptedCanvasChange, type ChangePage } from "@crit/protocol"
-import { Data, Effect, Schema } from "effect"
+import { Data, Effect, Result, Schema } from "effect"
 
 import { ReplicaModel } from "./model.js"
 import { ReplicaPolicy } from "./policy.js"
 import { CanvasReplica } from "./service.js"
+import { ReplicaStore } from "./store.js"
 
 export class ReplicaConformanceFailure extends Data.TaggedError("ReplicaConformanceFailure")<{
   readonly message: string
@@ -127,3 +128,31 @@ export const ReplicaConformance = {
     yield* requireFact(duplicatePage.state.pending.length === 0, "self-acceptance did not clear pending work")
   })
 }
+
+export const ReplicaStoreConformance = Effect.gen(function*() {
+  const store = yield* ReplicaStore
+  const canvasId = Id.canvas("canvas_replica_store_conformance")
+  const missing = yield* store.get(canvasId)
+  yield* requireFact(missing === undefined, "new store was not empty")
+  const initial = ReplicaPolicy.initialize(AuthorityView.make({
+    canvasId,
+    createdAt: Schema.decodeUnknownSync(IsoTimestamp)("2026-08-22T00:00:00.000Z"),
+    createdBy: PersonAttribution.make({ person: person.principal.person }),
+    cursor: ProtocolValue.cursor("cursor_replica_store_conformance"),
+    projection: emptyCanvasProjection(canvasId, "Stored")
+  }))
+  const created = yield* store.modify(canvasId, (current) => Result.succeed([
+    current === undefined,
+    initial
+  ] as const))
+  yield* requireFact(created, "create transition did not observe an empty store")
+  const retained = yield* store.modify(canvasId, () => Result.fail(new ReplicaConformanceFailure({
+    message: "expected transition failure"
+  }))).pipe(Effect.result)
+  yield* requireFact(Result.isFailure(retained), "failed transition succeeded")
+  const afterFailure = yield* store.get(canvasId)
+  yield* requireFact(afterFailure?.genesisProjection.title === "Stored", "failed transition changed stored state")
+  yield* store.modify(canvasId, () => Result.succeed([undefined, undefined] as const))
+  const deleted = yield* store.get(canvasId)
+  yield* requireFact(deleted === undefined, "delete transition retained state")
+})

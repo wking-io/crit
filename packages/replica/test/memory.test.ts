@@ -5,7 +5,8 @@ import { Deferred, Effect, Fiber, Layer, Schema } from "effect"
 import { describe, expect, it } from "vitest"
 
 import { CanvasReplica, MemoryCanvasReplicaLive, ReplicaChangeIds, ReplicaModel } from "../src/index.js"
-import { ReplicaConformance } from "../src/testing.js"
+import { ReplicaConformance, ReplicaStoreConformance } from "../src/testing.js"
+import { MemoryReplicaStore } from "../src/memory.js"
 
 const ids = [
   Id.change("change_replica_1"), Id.change("change_replica_2"), Id.change("change_replica_3"),
@@ -48,6 +49,9 @@ const addFrame = (frameId: string, title = "Frame") => decodeCanvasCommandBatch(
 }])
 
 describe("MemoryCanvasReplica", () => {
+  it("satisfies ReplicaStore conformance", async () => {
+    await Effect.runPromise(ReplicaStoreConformance.pipe(Effect.provide(MemoryReplicaStore)))
+  })
   it("satisfies the reusable core conformance", async () => {
     await Effect.runPromise(ReplicaConformance.basic.pipe(Effect.provide(makeLayer())))
   })

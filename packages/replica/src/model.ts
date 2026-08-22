@@ -86,7 +86,7 @@ const PendingRecordSchema = Schema.Struct({
 })
 export type PendingRecord = typeof PendingRecordSchema.Type
 
-const ReplicaStateSchema = Schema.Struct({
+export const ReplicaStateSchema = Schema.Struct({
   canvasId: CanvasId,
   genesisCursor: CursorSchema,
   genesisProjection: CanvasProjection,
