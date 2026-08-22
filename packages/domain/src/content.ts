@@ -59,8 +59,7 @@ export const CommentThread = Schema.Struct({
 })
 export type CommentThread = typeof CommentThread.Type
 
-export const CanvasItemRef = Schema.Union([
-  Schema.TaggedStruct("frame", { frameId: FrameId }),
-  Schema.TaggedStruct("note", { noteId: NoteId })
-])
+export const FrameItemRef = Schema.TaggedStruct("frame", { frameId: FrameId })
+export const NoteItemRef = Schema.TaggedStruct("note", { noteId: NoteId })
+export const CanvasItemRef = Schema.Union([FrameItemRef, NoteItemRef])
 export type CanvasItemRef = typeof CanvasItemRef.Type
