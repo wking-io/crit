@@ -1,4 +1,4 @@
-import { Option, Schema, SchemaAST } from "effect"
+import { Option, Result, Schema, SchemaAST } from "effect"
 
 import type {
   AcceptedCanvasChange,
@@ -34,9 +34,9 @@ const fail = (
   tag: ProtocolFailure["_tag"],
   location: ProtocolFailure["location"],
   message: string
-): DecodeResult<never> => ({ ok: false, failure: { _tag: tag, location, message } })
+): DecodeResult<never> => Result.fail({ _tag: tag, location, message })
 
-const decoded = <A>(value: A): DecodeResult<A> => ({ ok: true, value })
+const decoded = <A>(value: A): DecodeResult<A> => Result.succeed(value)
 
 const preflight = (
   input: Schema.Json,
@@ -124,7 +124,7 @@ const toAcceptedWire = (change: AcceptedCanvasChange): typeof AcceptedWire.Type 
 
 const decodeProposed = (input: Schema.Json): DecodeResult<ProposedCanvasChange> => {
   const header = preflight(input, "proposed-canvas-change")
-  if (!header.ok) return header
+  if (Result.isFailure(header)) return Result.fail(header.failure)
   const injection = injectedField(input)
   if (injection !== undefined) {
     return fail("trusted-field", injection, "Client proposal contains an authority-owned field")
@@ -140,7 +140,7 @@ const decodeProposed = (input: Schema.Json): DecodeResult<ProposedCanvasChange> 
 
 const decodeAccepted = (input: Schema.Json): DecodeResult<AcceptedCanvasChange> => {
   const header = preflight(input, "accepted-canvas-change")
-  if (!header.ok) return header
+  if (Result.isFailure(header)) return Result.fail(header.failure)
   const wire = readAcceptedWire(input)
   return Option.isNone(wire)
     ? fail("malformed-message", "change", "Accepted change is malformed")
@@ -149,14 +149,14 @@ const decodeAccepted = (input: Schema.Json): DecodeResult<AcceptedCanvasChange> 
 
 const decodePage = (input: Schema.Json): DecodeResult<ChangePage> => {
   const header = preflight(input, "canvas-change-page")
-  if (!header.ok) return header
+  if (Result.isFailure(header)) return Result.fail(header.failure)
   const root = readRecord(input)
   if (Option.isSome(root) && root.value.changes !== undefined) {
     const changes = readArray(root.value.changes)
     if (Option.isSome(changes)) {
       for (const change of changes.value) {
         const nested = decodeAccepted(change)
-        if (!nested.ok) return nested
+        if (Result.isFailure(nested)) return Result.fail(nested.failure)
       }
     }
   }
@@ -168,11 +168,11 @@ const decodePage = (input: Schema.Json): DecodeResult<ChangePage> => {
 
 const decodeReceipt = (input: Schema.Json): DecodeResult<SubmitChangeReceipt> => {
   const header = preflight(input, "submit-change-receipt")
-  if (!header.ok) return header
+  if (Result.isFailure(header)) return Result.fail(header.failure)
   const root = readRecord(input)
   if (Option.isSome(root) && root.value.change !== undefined) {
     const nested = decodeAccepted(root.value.change)
-    if (!nested.ok) return nested
+    if (Result.isFailure(nested)) return Result.fail(nested.failure)
   }
   const wire = readReceiptWire(input)
   if (Option.isNone(wire)) return fail("malformed-message", "message", "Submit receipt is malformed")
@@ -182,7 +182,7 @@ const decodeReceipt = (input: Schema.Json): DecodeResult<SubmitChangeReceipt> =>
 
 const decodeFailure = (input: Schema.Json): DecodeResult<ProtocolFailure> => {
   const header = preflight(input, "protocol-failure")
-  if (!header.ok) return header
+  if (Result.isFailure(header)) return Result.fail(header.failure)
   const wire = readFailureWire(input)
   return Option.isNone(wire)
     ? fail("malformed-message", "message", "Protocol failure is malformed")

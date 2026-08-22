@@ -13,21 +13,11 @@ import {
 } from "@crit/domain"
 import type {
   ChangePage,
-  Cursor,
   ProposedCanvasChange,
   SubmitChangeReceipt
 } from "@crit/protocol"
-import { ProtocolValue } from "@crit/protocol"
+import { CursorSchema } from "@crit/protocol"
 import { Context, type Effect, Schema } from "effect"
-
-const CursorValue = Schema.declare<Cursor>((input): input is Cursor => {
-  try {
-    ProtocolValue.cursor(input)
-    return true
-  } catch {
-    return false
-  }
-})
 
 export const PageLimit = Schema.Int.check(
   Schema.isGreaterThan(0),
@@ -63,14 +53,14 @@ export const AuthorityView = Schema.TaggedStruct("authority-view", {
   canvasId: CanvasId,
   createdAt: IsoTimestamp,
   createdBy: AcceptedAttribution,
-  cursor: CursorValue,
+  cursor: CursorSchema,
   projection: CanvasProjection
 })
 export type AuthorityView = typeof AuthorityView.Type
 
 export const ChangesAfter = Schema.TaggedStruct("changes-after", {
   canvasId: CanvasId,
-  after: Schema.NullOr(CursorValue),
+  after: Schema.NullOr(CursorSchema),
   limit: PageLimit
 })
 export type ChangesAfter = typeof ChangesAfter.Type
@@ -87,7 +77,7 @@ export type CanvasAlreadyExists = typeof CanvasAlreadyExists.Type
 
 export const CursorNotFound = Schema.TaggedStruct("cursor-not-found", {
   canvasId: CanvasId,
-  cursor: CursorValue
+  cursor: CursorSchema
 })
 export type CursorNotFound = typeof CursorNotFound.Type
 
