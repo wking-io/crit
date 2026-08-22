@@ -16,6 +16,7 @@ import {
   VerifiedInvocation,
   type CanvasAuthority
 } from "./index.js"
+import { detach } from "./ownership.js"
 
 export interface AuthorityConformanceOptions {
   readonly now?: Effect.Effect<typeof IsoTimestamp.Type>
@@ -112,9 +113,7 @@ const isolationScenario = (factory: AuthorityConformanceFactory): AuthorityConfo
     name,
     run: Effect.gen(function*() {
       const authority = yield* factory()
-      const incomingInvocation = Schema.decodeUnknownSync(PersonInvocation)(
-        Schema.encodeSync(PersonInvocation)(person)
-      )
+      const incomingInvocation = detach(person)
       const created = yield* authority.create({
         _tag: "create-canvas", canvasId: canvasA, title: "Authority"
       }, incomingInvocation)

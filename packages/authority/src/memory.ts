@@ -11,7 +11,6 @@ import {
 } from "@crit/domain"
 import {
   type AcceptedCanvasChange,
-  ChangeProtocol,
   type ChangePage,
   type Cursor,
   ProtocolValue,
@@ -30,6 +29,7 @@ import {
   type ChangesAfter,
   type SubmitCanvasChangeFailure
 } from "./model.js"
+import { detach } from "./ownership.js"
 
 const commandBatchEquals = Schema.toEquivalence(CanvasCommandBatch)
 
@@ -64,33 +64,6 @@ export interface MemoryCanvasAuthorityOptions {
 const defaultNow = Clock.currentTimeMillis.pipe(
   Effect.map((millis) => Schema.decodeUnknownSync(IsoTimestamp)(new Date(millis).toISOString()))
 )
-
-const snapshotCreate = (value: CreateCanvas): CreateCanvas =>
-  Schema.decodeUnknownSync(CreateCanvas)(Schema.encodeSync(CreateCanvas)(value))
-
-const snapshotInvocation = (value: VerifiedInvocation): VerifiedInvocation =>
-  Schema.decodeUnknownSync(VerifiedInvocation)(Schema.encodeSync(VerifiedInvocation)(value))
-
-const snapshotView = (value: AuthorityView): AuthorityView =>
-  Schema.decodeUnknownSync(AuthorityView)(Schema.encodeSync(AuthorityView)(value))
-
-const snapshotProposal = (value: ProposedCanvasChange): ProposedCanvasChange => {
-  const decoded = ChangeProtocol.proposed.decode(ChangeProtocol.proposed.encode(value))
-  if (!decoded.ok) throw new Error(`Authority produced an invalid proposal snapshot: ${decoded.failure._tag}`)
-  return decoded.value
-}
-
-const snapshotReceipt = (value: SubmitChangeReceipt): SubmitChangeReceipt => {
-  const decoded = ChangeProtocol.receipt.decode(ChangeProtocol.receipt.encode(value))
-  if (!decoded.ok) throw new Error(`Authority produced an invalid receipt snapshot: ${decoded.failure._tag}`)
-  return decoded.value
-}
-
-const snapshotPage = (value: ChangePage): ChangePage => {
-  const decoded = ChangeProtocol.page.decode(ChangeProtocol.page.encode(value))
-  if (!decoded.ok) throw new Error(`Authority produced an invalid page snapshot: ${decoded.failure._tag}`)
-  return decoded.value
-}
 
 const attribution = (invocation: VerifiedInvocation): AcceptedAttribution => invocation._tag === "person"
   ? PersonAttribution.make({ person: invocation.principal.person })
@@ -207,8 +180,8 @@ export const makeMemoryCanvasAuthority = (
 
   const create: CanvasAuthority["create"] = (command: CreateCanvas, invocation: VerifiedInvocation) =>
     Effect.suspend(() => {
-      const ownedCommand = snapshotCreate(command)
-      const ownedInvocation = snapshotInvocation(invocation)
+      const ownedCommand = detach(command)
+      const ownedInvocation = detach(invocation)
       return SynchronizedRef.modifyEffect(registry, (canvases) => {
         if (canvases.has(ownedCommand.canvasId)) {
           return Effect.fail(AuthorityFailure.canvasAlreadyExists({ canvasId: ownedCommand.canvasId }))
@@ -230,24 +203,24 @@ export const makeMemoryCanvasAuthority = (
             cursorPositions: new Map([[genesisCursor, 0]]),
             retries: new Map()
           })
-          return [snapshotView(view), new Map(canvases).set(ownedCommand.canvasId, state)] as const
+          return [detach(view), new Map(canvases).set(ownedCommand.canvasId, state)] as const
         }))
       })
     })
 
   const open: CanvasAuthority["open"] = (canvasId) => lookup(canvasId).pipe(
     Effect.flatMap(SynchronizedRef.get),
-    Effect.map((state) => snapshotView(state.view))
+    Effect.map((state) => detach(state.view))
   )
 
   const submit: CanvasAuthority["submit"] = (proposal, invocation) => Effect.suspend(() => {
-    const ownedProposal = snapshotProposal(proposal)
-    const ownedInvocation = snapshotInvocation(invocation)
+    const ownedProposal = detach(proposal)
+    const ownedInvocation = detach(invocation)
     return lookup(ownedProposal.canvasId).pipe(
       Effect.flatMap((state) => SynchronizedRef.modifyEffect(state, (current) =>
         transition(current, ownedProposal, ownedInvocation, now))),
       Effect.flatMap((decision) => decision._tag === "Success"
-        ? Effect.succeed(snapshotReceipt(decision.success))
+        ? Effect.succeed(detach(decision.success))
         : Effect.fail(decision.failure))
     )
   })
@@ -271,7 +244,7 @@ export const makeMemoryCanvasAuthority = (
         cursor,
         hasMore: position + changes.length < state.changes.length
       }
-      return Effect.succeed(snapshotPage(page))
+      return Effect.succeed(detach(page))
     })
   )
 
