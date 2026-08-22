@@ -3,8 +3,9 @@ import { Schema } from "effect"
 import { CanvasItemRef, CommentThread, Frame, Note } from "./content.js"
 import { isCanonicalIdOrder } from "./canonical-order.js"
 import { CanvasId, ChangeId, CommentId, CommentThreadId, FrameId, NoteId } from "./ids.js"
+import { NonBlankString } from "./text.js"
 
-export const CanvasTitle = Schema.Trimmed.check(Schema.isNonEmpty())
+export const CanvasTitle = NonBlankString
 export type CanvasTitle = typeof CanvasTitle.Type
 
 const IssuedIds = Schema.Struct({

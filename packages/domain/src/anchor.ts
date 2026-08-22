@@ -2,12 +2,12 @@ import { Schema } from "effect"
 
 import { NormalizedPoint } from "./geometry.js"
 import { ChangeId, FrameId } from "./ids.js"
+import { NonBlankString } from "./text.js"
 
-const nonBlank = Schema.Trimmed.check(Schema.isNonEmpty())
 const LowerTagName = Schema.String.check(Schema.isPattern(/^[a-z][a-z0-9-]*$/))
 const EvidenceKind = Schema.Literals(["id", "test-id", "aria-label", "text"])
 
-export const ElementEvidence = Schema.Struct({ kind: EvidenceKind, value: nonBlank })
+export const ElementEvidence = Schema.Struct({ kind: EvidenceKind, value: NonBlankString })
 export type ElementEvidence = typeof ElementEvidence.Type
 
 const ElementFingerprintFields = Schema.Struct({
@@ -27,7 +27,7 @@ export type ElementFingerprint = typeof ElementFingerprint.Type
 export const ElementAnchor = Schema.TaggedStruct("element", {
   frameId: FrameId,
   representationChangedByChangeId: ChangeId,
-  selector: nonBlank,
+  selector: NonBlankString,
   fingerprint: ElementFingerprint,
   fallback: NormalizedPoint
 })

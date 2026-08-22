@@ -4,8 +4,9 @@ import { CommentAnchor } from "./anchor.js"
 import { Geometry } from "./geometry.js"
 import { ChangeId, CommentId, CommentThreadId, FrameId, NoteId } from "./ids.js"
 import { RepresentationRef } from "./representation.js"
+import { NonBlankString } from "./text.js"
 
-export const AuthoredText = Schema.Trimmed.check(Schema.isNonEmpty())
+export const AuthoredText = NonBlankString
 export type AuthoredText = typeof AuthoredText.Type
 export const ReviewStatus = Schema.Literals(["in-progress", "ready-for-review", "approved", "changes-requested"])
 export type ReviewStatus = typeof ReviewStatus.Type

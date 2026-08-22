@@ -8,11 +8,12 @@ import {
   OAuthClientId,
   PersonId
 } from "./ids.js"
+import { NonBlankString } from "./text.js"
 
-const DisplayName = Schema.Trimmed.check(Schema.isNonEmpty())
-const RuntimeName = Schema.Trimmed.check(Schema.isNonEmpty())
-const RuntimeVersion = Schema.Trimmed.check(Schema.isNonEmpty())
-const ExternalReference = Schema.Trimmed.check(Schema.isNonEmpty())
+const DisplayName = NonBlankString
+const RuntimeName = NonBlankString
+const RuntimeVersion = NonBlankString
+const ExternalReference = NonBlankString
 
 export const PersonSnapshot = Schema.TaggedStruct("person", {
   personId: PersonId,
