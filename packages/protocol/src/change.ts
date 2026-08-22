@@ -43,3 +43,17 @@ export const SubmitChangeReceiptSchema = Schema.Struct({
   change: AcceptedCanvasChangeSchema
 })
 export type SubmitChangeReceipt = typeof SubmitChangeReceiptSchema.Type
+
+const proposedEquivalence = Schema.toEquivalence(ProposedCanvasChangeSchema)
+const acceptedEquivalence = Schema.toEquivalence(AcceptedCanvasChangeSchema)
+
+export const ChangeValue = {
+  proposedEquals: proposedEquivalence,
+  acceptedEquals: acceptedEquivalence,
+  proposalOf: (change: AcceptedCanvasChange): ProposedCanvasChange => ({
+    changeId: change.changeId,
+    canvasId: change.canvasId,
+    observedCursor: change.observedCursor,
+    commands: change.commands
+  })
+}

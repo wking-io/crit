@@ -1,0 +1,156 @@
+import { AuthorityModel, CanvasAuthority } from "@crit/authority"
+import type { CanvasId } from "@crit/domain"
+import { Effect, Result, Semaphore } from "effect"
+
+import {
+  CanvasReplica,
+  ReplicaCanvasNotFound,
+  ReplicaChangeIds,
+  ReplicaDiverged,
+  ReplicaNotOpen,
+  SyncResult,
+  type ReplicaChangeFailure,
+  type ReplicaSyncFailure,
+  type ReplicaState
+} from "./model.js"
+import { ReplicaPolicy } from "./policy.js"
+import { ReplicaStore } from "./store.js"
+
+const pageLimit = AuthorityModel.pageLimit(1_000)
+
+export const makeCanvasReplica = Effect.gen(function*() {
+  const authority = yield* CanvasAuthority
+  const ids = yield* ReplicaChangeIds
+  const store = yield* ReplicaStore
+  const syncLocks = new Map<CanvasId, Semaphore.Semaphore>()
+  const lockFor = (canvasId: CanvasId) => {
+    const existing = syncLocks.get(canvasId)
+    if (existing !== undefined) return existing
+    const created = Semaphore.makeUnsafe(1)
+    syncLocks.set(canvasId, created)
+    return created
+  }
+  const requireState = (canvasId: CanvasId) => store.get(canvasId).pipe(Effect.flatMap((state) => state === undefined
+    ? Effect.fail(new ReplicaNotOpen({ canvasId }))
+    : Effect.succeed(state)))
+  const render = (state: ReplicaState) => {
+    const result = ReplicaPolicy.view(state)
+    return result._tag === "Success" ? Effect.succeed(ReplicaPolicy.detach(result.success)) : Effect.fail(result.failure)
+  }
+  const current: CanvasReplica["Service"]["current"] = (canvasId) => requireState(canvasId).pipe(Effect.flatMap(render))
+  const open: CanvasReplica["Service"]["open"] = (canvasId) => Effect.gen(function*() {
+    const local = yield* store.get(canvasId)
+    if (local !== undefined) return yield* render(local)
+    const authorityView = yield* authority.open(canvasId).pipe(
+      Effect.mapError(() => new ReplicaCanvasNotFound({ canvasId }))
+    )
+    const state = yield* store.modify(canvasId, (latest) => Result.succeed([
+      latest ?? ReplicaPolicy.initialize(ReplicaPolicy.detach(authorityView)),
+      latest ?? ReplicaPolicy.initialize(ReplicaPolicy.detach(authorityView))
+    ] as const))
+    return yield* render(state)
+  })
+  const change: CanvasReplica["Service"]["change"] = (input, invocation) => Effect.suspend(() => {
+    const ownedInput = ReplicaPolicy.detach(input)
+    const ownedInvocation = ReplicaPolicy.detach(invocation)
+    return Effect.gen(function*() {
+      const changeId = yield* ids.next
+      const state = yield* store.modify(ownedInput.canvasId, (current): Result.Result<readonly [ReplicaState, ReplicaState], ReplicaChangeFailure> => {
+        if (current === undefined) return Result.fail(new ReplicaNotOpen({ canvasId: ownedInput.canvasId }))
+        const result = ReplicaPolicy.enqueue(current, ownedInput, ownedInvocation, changeId)
+        return result._tag === "Success"
+          ? Result.succeed([result.success, result.success] as const)
+          : Result.fail(result.failure)
+      })
+      const view = yield* render(state)
+      return { changeId, view }
+    })
+  })
+
+  const pull = (canvasId: CanvasId) => Effect.gen(function*() {
+    let pulled = 0
+    let acknowledged = 0
+    let more = true
+    while (more) {
+      const state = yield* requireState(canvasId)
+      const page = yield* authority.changesAfter(AuthorityModel.changesAfter({
+        canvasId,
+        after: state.acknowledgedCursor,
+        limit: pageLimit
+      })).pipe(Effect.mapError((failure) => failure._tag === "canvas-not-found"
+        ? new ReplicaCanvasNotFound({ canvasId })
+        : new ReplicaDiverged({ canvasId, reason: `authority rejected acknowledged cursor: ${failure.cursor}` })))
+      if (page.hasMore && page.cursor === state.acknowledgedCursor) {
+        return yield* Effect.fail(new ReplicaDiverged({
+          canvasId,
+          reason: "authority page promised more changes without advancing its cursor"
+        }))
+      }
+      const counts = yield* store.modify(canvasId, (current): Result.Result<readonly [{ readonly pulled: number; readonly acknowledged: number }, ReplicaState], ReplicaSyncFailure> => {
+        if (current === undefined) return Result.fail(new ReplicaNotOpen({ canvasId }))
+        const result = ReplicaPolicy.incorporatePage(current, ReplicaPolicy.detach(page))
+        return result._tag === "Success"
+          ? Result.succeed([{ pulled: result.success.pulled, acknowledged: result.success.acknowledged }, result.success.state] as const)
+          : Result.fail(result.failure)
+      })
+      pulled += counts.pulled
+      acknowledged += counts.acknowledged
+      more = page.hasMore
+    }
+    return { pulled, acknowledged }
+  })
+
+  const sync: CanvasReplica["Service"]["sync"] = (canvasId) => lockFor(canvasId).withPermits(1)(Effect.gen(function*() {
+    yield* requireState(canvasId)
+    let pulled = 0
+    let acknowledged = 0
+    let result = yield* pull(canvasId)
+    pulled += result.pulled
+    acknowledged += result.acknowledged
+    for (;;) {
+      const state = yield* requireState(canvasId)
+      const eligible = state.pending.find((record) => record.state._tag === "ready")
+      if (eligible === undefined) break
+      const submitted = yield* authority.submit(ReplicaPolicy.detach(eligible.proposal), ReplicaPolicy.detach(eligible.invocation)).pipe(Effect.result)
+      if (submitted._tag === "Failure") {
+        const failure = submitted.failure
+        if (failure._tag === "change-rejected") {
+          yield* store.modify(canvasId, (current): Result.Result<readonly [undefined, ReplicaState], ReplicaSyncFailure> => {
+            if (current === undefined) return Result.fail(new ReplicaNotOpen({ canvasId }))
+            const next = ReplicaPolicy.rejection(current, failure)
+            return next._tag === "Success"
+              ? Result.succeed([undefined, next.success] as const)
+              : Result.fail(next.failure)
+          })
+          continue
+        }
+        if (failure._tag === "canvas-not-found") return yield* Effect.fail(new ReplicaCanvasNotFound({ canvasId }))
+        return yield* Effect.fail(new ReplicaDiverged({ canvasId, reason: `authority rejected pending identity: ${failure._tag}` }))
+      }
+      yield* store.modify(canvasId, (current): Result.Result<readonly [undefined, ReplicaState], ReplicaSyncFailure> => {
+        if (current === undefined) return Result.fail(new ReplicaNotOpen({ canvasId }))
+        const next = ReplicaPolicy.receipt(current, submitted.success)
+        return next._tag === "Success"
+          ? Result.succeed([undefined, next.success] as const)
+          : Result.fail(next.failure)
+      })
+      result = yield* pull(canvasId)
+      pulled += result.pulled
+      acknowledged += result.acknowledged
+    }
+    result = yield* pull(canvasId)
+    pulled += result.pulled
+    acknowledged += result.acknowledged
+    const state = yield* requireState(canvasId)
+    const view = yield* render(state)
+    return SyncResult.make({
+      canvasId,
+      pulled,
+      acknowledged,
+      conflicted: view.pending.filter((pending) => pending.state._tag === "conflicted").length,
+      blocked: view.pending.filter((pending) => pending.state._tag === "blocked").length,
+      view
+    })
+  }))
+  return { open, current, change, sync }
+})
