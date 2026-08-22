@@ -4,11 +4,26 @@
   "private": true,
   "type": "module",
   "sideEffects": false,
+  "engines": {
+    "node": ">=22.13.0"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     }
   },
-  "files": ["dist"]
+  "files": ["dist"],
+  "dependencies": {
+    "@crit/authority": "*",
+    "@crit/domain": "*",
+    "@crit/protocol": "*",
+    "effect": "4.0.0-rc.109"
+  },
+  "devDependencies": {
+    "vitest": "4.1.0"
+  },
+  "scripts": {
+    "test": "vitest run --config vitest.config.ts"
+  }
 }
