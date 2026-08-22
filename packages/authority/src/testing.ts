@@ -7,7 +7,7 @@ import {
   emptyCanvasProjection
 } from "@crit/domain"
 import { ProtocolValue, type ProposedCanvasChange } from "@crit/protocol"
-import { Deferred, Effect, Exit, Fiber, Result, Schema } from "effect"
+import { Data, Deferred, Effect, Exit, Fiber, Result, Schema } from "effect"
 
 import {
   AuthorityModel,
@@ -31,15 +31,12 @@ export interface AuthorityConformanceScenario {
   readonly run: Effect.Effect<void, unknown>
 }
 
-export class AuthorityConformanceFailure extends Error {
+export class AuthorityConformanceFailure extends Data.TaggedError(
+  "AuthorityConformanceFailure"
+)<{
   readonly scenario: string
-
-  constructor(scenario: string, message: string) {
-    super(message)
-    this.name = "AuthorityConformanceFailure"
-    this.scenario = scenario
-  }
-}
+  readonly message: string
+}> {}
 
 const canvasA = Id.canvas("canvas_conformance_a")
 const canvasB = Id.canvas("canvas_conformance_b")
@@ -96,7 +93,7 @@ const proposal = (
 })
 
 const requireScenario = (scenario: string, condition: boolean, message: string): void => {
-  if (!condition) throw new AuthorityConformanceFailure(scenario, message)
+  if (!condition) throw new AuthorityConformanceFailure({ scenario, message })
 }
 
 const renamedTitle = (proposalValue: ProposedCanvasChange): string | undefined => {
