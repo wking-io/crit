@@ -90,7 +90,7 @@ describe("ChangeProtocol", () => {
     expect(ChangeProtocol.page.decode(page).ok).toBe(false)
     expect(ChangeProtocol.page.decode({ ...fixture("page"), cursor: null }).ok).toBe(false)
     const wrongNestedVersion = fixture("page")
-    wrongNestedVersion.changes[0].schemaVersion = 2
+    wrongNestedVersion.changes[0].schemaVersion = 1
     const versionResult = ChangeProtocol.page.decode(wrongNestedVersion)
     expect(!versionResult.ok && versionResult.failure._tag).toBe("unsupported-version")
     const privateReceipt = fixture("receipt-first")
@@ -107,9 +107,11 @@ describe("ChangeProtocol", () => {
 
   it("feeds decoded accepted changes directly into domain replay", () => {
     const initial = decodeCanvasProjection({
-      schemaVersion: 1,
+      schemaVersion: 2,
       canvasId: "canvas_a",
-      title: "Old"
+      title: "Old",
+      frames: [], notes: [], threads: [], stack: [], stackChangedByChangeId: null,
+      issuedIds: { frameIds: [], noteIds: [], threadIds: [], commentIds: [] }
     })
     const accepted = ChangeProtocol.accepted.decode(fixture("accepted"))
     assert(accepted.ok)
@@ -117,10 +119,67 @@ describe("ChangeProtocol", () => {
     expect(CanvasEngine.replay(initial, [accepted.value])).toEqual({
       _tag: "replayed",
       projection: {
-        schemaVersion: 1,
+        schemaVersion: 2,
         canvasId: "canvas_a",
-        title: "New"
+        title: "New",
+        frames: [], notes: [], threads: [], stack: [], stackChangedByChangeId: null,
+        issuedIds: { frameIds: [], noteIds: [], threadIds: [], commentIds: [] }
       }
     })
+  })
+
+  it("round trips every v2 command tag", () => {
+    const g = { x: 0, y: 0, width: 100, height: 80 }
+    const item = { _tag: "frame", frameId: "frame_a" }
+    const representation = { _tag: "application-route", applicationId: "application_a", route: "/review" }
+    const commands = [
+      { _tag: "rename-canvas", expectedTitle: "Old", title: "New" },
+      { _tag: "add-frame", frameId: "frame_a", title: "Frame", representation, status: "in-progress", geometry: g },
+      { _tag: "set-frame-title", frameId: "frame_a", expectedChangedByChangeId: "change_a", title: "Title" },
+      { _tag: "set-frame-representation", frameId: "frame_a", expectedChangedByChangeId: "change_a", representation },
+      { _tag: "set-frame-status", frameId: "frame_a", expectedChangedByChangeId: "change_a", status: "ready-for-review" },
+      { _tag: "set-frame-geometry", frameId: "frame_a", expectedChangedByChangeId: "change_a", geometry: g },
+      { _tag: "remove-frame", frameId: "frame_a", expectedUpdatedByChangeId: "change_a" },
+      { _tag: "place-canvas-item", item, after: null, expectedStackChangeId: "change_a" },
+      { _tag: "add-note", noteId: "note_a", text: "Note", geometry: g, attachedFrameId: null },
+      { _tag: "edit-note", noteId: "note_a", expectedText: "Note", text: "Edited" },
+      { _tag: "set-note-geometry", noteId: "note_a", expectedChangedByChangeId: "change_a", geometry: g },
+      { _tag: "attach-note", noteId: "note_a", frameId: "frame_a", expectedChangedByChangeId: "change_a" },
+      { _tag: "detach-note", noteId: "note_a", expectedChangedByChangeId: "change_a" },
+      { _tag: "remove-note", noteId: "note_a", expectedUpdatedByChangeId: "change_a" },
+      { _tag: "add-comment-thread", threadId: "thread_a", commentId: "comment_a", body: "First", anchor: { _tag: "frame", frameId: "frame_a", point: { x: 0.5, y: 0.5 } } },
+      { _tag: "reply-to-comment-thread", threadId: "thread_a", commentId: "comment_b", body: "Reply" },
+      { _tag: "edit-comment", threadId: "thread_a", commentId: "comment_a", expectedBody: "First", body: "Edited" },
+      { _tag: "set-comment-thread-resolution", threadId: "thread_a", expectedChangedByChangeId: "change_a", resolved: true }
+    ]
+    const wire = { kind: "proposed-canvas-change", schemaVersion: 2, changeId: "change_commands", canvasId: "canvas_a", observedCursor: null, commands }
+    const result = ChangeProtocol.proposed.decode(wire)
+    expect(result.ok).toBe(true)
+    if (result.ok) expect(ChangeProtocol.proposed.encode(result.value)).toEqual(wire)
+  })
+
+  it("classifies v1 command-bearing messages as unsupported", () => {
+    for (const name of ["proposed", "accepted", "page", "receipt-first"] as const) {
+      const input = fixture(name)
+      input.schemaVersion = 1
+      const codec = name === "proposed" ? ChangeProtocol.proposed : name === "accepted" ? ChangeProtocol.accepted : name === "page" ? ChangeProtocol.page : ChangeProtocol.receipt
+      const result = codec.decode(input)
+      expect(!result.ok && result.failure._tag).toBe("unsupported-version")
+    }
+  })
+
+  it("does not treat application state data as authority-owned protocol fields", () => {
+    const input = fixture("proposed")
+    input.commands = [{
+      _tag: "add-frame", frameId: "frame_a", title: "Frame", status: "in-progress",
+      geometry: { x: 0, y: 0, width: 100, height: 80 },
+      representation: {
+        _tag: "application-route", applicationId: "application_a", route: "/review",
+        state: { actor: "npc", source: "checkout", nested: { displayName: "Merchant" } }
+      }
+    }]
+    expect(ChangeProtocol.proposed.decode(input).ok).toBe(true)
+    input.commands[0].representation.personId = "person_forged"
+    expect(ChangeProtocol.proposed.decode(input)).toMatchObject({ ok: false, failure: { _tag: "trusted-field", location: "command" } })
   })
 })
