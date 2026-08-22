@@ -10,6 +10,7 @@ import {
 } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import { createServer as createHttpServer } from "node:http"
 import { createServer } from "node:net"
 
 import { NodeServices } from "@effect/platform-node"
@@ -21,7 +22,7 @@ import { Context, Effect, Exit, Layer, Option, Result, Scope } from "effect"
 import { FetchHttpClient } from "effect/unstable/http"
 import { describe, expect, it } from "vitest"
 
-import { LocalDevelopment } from "../src/index.js"
+import { inspectLocalDaemon, LocalDevelopment } from "../src/index.js"
 import { LocalInstallation } from "../src/development.js"
 import { decodeStored } from "../src/stored-json.js"
 
@@ -51,7 +52,95 @@ const tokenFor = (dataRoot: string) => localApiToken(
   decodeStored(LocalInstallation, readFileSync(join(dataRoot, "installation.json"), "utf8")).bearerSecret
 )
 
+const malformedStatusServer = (port: number) => Effect.acquireRelease(
+  Effect.promise(() => new Promise<ReturnType<typeof createHttpServer>>((resolve, reject) => {
+    const server = createHttpServer((_request, response) => {
+      response.writeHead(200, { "content-type": "application/json" })
+      response.end("{}")
+    })
+    server.once("error", reject)
+    server.listen(port, "127.0.0.1", () => resolve(server))
+  })),
+  (server) => Effect.promise(() => new Promise<void>((resolve) => server.close(() => resolve())))
+)
+
 describe("LocalDevelopment", () => {
+  it("discovers a running daemon through its authenticated status and then observes shutdown", () =>
+    Effect.runPromise(Effect.scoped(Effect.gen(function*() {
+      const directory = yield* temporaryRoot
+      const dataRoot = join(directory, ".crit", "v1")
+      yield* Effect.scoped(Effect.gen(function*() {
+        yield* build(dataRoot, yield* Effect.scope)
+        const inspection = yield* inspectLocalDaemon({ dataRoot }).pipe(
+          Effect.provide(FetchHttpClient.layer)
+        )
+        expect(inspection.kind).toBe("Running")
+      }))
+      const inspection = yield* inspectLocalDaemon({ dataRoot }).pipe(
+        Effect.provide(FetchHttpClient.layer)
+      )
+      expect(inspection).toEqual({ kind: "Stopped" })
+    })).pipe(Effect.provide(NodeServices.layer))))
+
+  it("classifies a valid leftover descriptor as stale without repairing it", () =>
+    Effect.runPromise(Effect.scoped(Effect.gen(function*() {
+      const directory = yield* temporaryRoot
+      const dataRoot = join(directory, ".crit", "v1")
+      let descriptor = ""
+      yield* Effect.scoped(Effect.gen(function*() {
+        yield* build(dataRoot, yield* Effect.scope)
+        descriptor = readFileSync(join(dataRoot, "daemon.json"), "utf8")
+      }))
+      writeFileSync(join(dataRoot, "daemon.json"), descriptor)
+      const inspection = yield* inspectLocalDaemon({ dataRoot, probeTimeout: "100 millis" })
+      expect(inspection.kind).toBe("StaleDescriptor")
+      expect(readFileSync(join(dataRoot, "daemon.json"), "utf8")).toBe(descriptor)
+    })).pipe(Effect.provide(NodeServices.layer))))
+
+  it("rejects an authenticated daemon whose identity differs from the descriptor", () =>
+    Effect.runPromise(Effect.scoped(Effect.gen(function*() {
+      const directory = yield* temporaryRoot
+      const dataRoot = join(directory, ".crit", "v1")
+      yield* build(dataRoot, yield* Effect.scope)
+      const descriptorPath = join(dataRoot, "daemon.json")
+      const descriptor = JSON.parse(readFileSync(descriptorPath, "utf8"))
+      writeFileSync(descriptorPath, JSON.stringify({
+        ...descriptor,
+        instance: "ffffffffffffffffffffffffffffffff"
+      }))
+      const failure = yield* inspectLocalDaemon({ dataRoot }).pipe(Effect.flip)
+      expect(failure._tag).toBe("LocalDaemonIdentityMismatch")
+      if (failure._tag === "LocalDaemonIdentityMismatch") expect(failure.source).toBe("daemon")
+    })).pipe(Effect.provide(NodeServices.layer))))
+
+  it("reports an HTTP responder with an invalid status body as a protocol failure", () =>
+    Effect.runPromise(Effect.scoped(Effect.gen(function*() {
+      const directory = yield* temporaryRoot
+      const dataRoot = join(directory, ".crit", "v1")
+      let descriptor = ""
+      let port = 0
+      yield* Effect.scoped(Effect.gen(function*() {
+        const development = Context.get(yield* build(dataRoot, yield* Effect.scope), LocalDevelopment)
+        descriptor = readFileSync(join(dataRoot, "daemon.json"), "utf8")
+        port = Number(new URL(development.descriptor.baseUrl).port)
+      }))
+      yield* malformedStatusServer(port)
+      writeFileSync(join(dataRoot, "daemon.json"), descriptor)
+      const failure = yield* inspectLocalDaemon({ dataRoot }).pipe(Effect.flip)
+      expect(failure._tag).toBe("LocalDaemonProtocolFailure")
+    })).pipe(Effect.provide(NodeServices.layer))))
+
+  it("reports malformed installation state without exposing its contents", () =>
+    Effect.runPromise(Effect.scoped(Effect.gen(function*() {
+      const directory = yield* temporaryRoot
+      const dataRoot = join(directory, ".crit", "v1")
+      mkdirSync(dataRoot, { recursive: true })
+      writeFileSync(join(dataRoot, "installation.json"), '{"bearerSecret":"do-not-report"}')
+      const failure = yield* inspectLocalDaemon({ dataRoot }).pipe(Effect.flip)
+      expect(failure._tag).toBe("LocalDaemonStateMalformed")
+      expect(String(failure)).not.toContain("do-not-report")
+    })).pipe(Effect.provide(NodeServices.layer))))
+
   it("persists Canvas state across daemon restarts", () =>
     Effect.runPromise(Effect.scoped(Effect.gen(function*() {
       const directory = yield* temporaryRoot
