@@ -1,8 +1,11 @@
 {
   "initial": {
-    "schemaVersion": 1,
+    "schemaVersion": 2,
     "canvasId": "canvas_checkout",
-    "title": "Checkout"
+    "title": "Checkout",
+    "frames": [], "notes": [], "threads": [], "stack": [],
+    "stackChangedByChangeId": null,
+    "issuedIds": { "frameIds": [], "noteIds": [], "threadIds": [], "commentIds": [] }
   },
   "changes": [
     {
@@ -34,8 +37,11 @@
     }
   ],
   "projection": {
-    "schemaVersion": 1,
+    "schemaVersion": 2,
     "canvasId": "canvas_checkout",
-    "title": "Checkout critique"
+    "title": "Checkout critique",
+    "frames": [], "notes": [], "threads": [], "stack": [],
+    "stackChangedByChangeId": null,
+    "issuedIds": { "frameIds": [], "noteIds": [], "threadIds": [], "commentIds": [] }
   }
 }

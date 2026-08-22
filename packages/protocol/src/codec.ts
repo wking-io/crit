@@ -13,7 +13,7 @@ import {
   PageWire,
   ProposedWire,
   ReceiptWire
-} from "./wire-v1.js"
+} from "./wire.js"
 
 const Header = Schema.Struct({ kind: Schema.String, schemaVersion: Schema.Number })
 const CommandHeader = Schema.Struct({ _tag: Schema.String })
@@ -49,7 +49,7 @@ const preflight = (
   if (header.value.kind !== expectedKind) {
     return fail("message-kind-mismatch", "message", "Message kind does not match this codec")
   }
-  if (header.value.schemaVersion !== 1) {
+  if (header.value.schemaVersion !== (expectedKind === "protocol-failure" ? 1 : 2)) {
     return fail("unsupported-version", "message", "Message schema version is unsupported")
   }
   return decoded(input)
@@ -63,17 +63,28 @@ const trustedFields = new Set([
   "taskId", "displayName"
 ])
 
+const containsTrustedField = (input: Schema.Json): boolean => {
+  const record = readRecord(input)
+  if (Option.isSome(record)) {
+    return Object.entries(record.value).some(([key, value]) =>
+      key !== "state" && (trustedFields.has(key) || containsTrustedField(value))
+    )
+  }
+  const array = readArray(input)
+  return Option.isSome(array) && array.value.some(containsTrustedField)
+}
+
 const injectedField = (input: Schema.Json): ProtocolFailure["location"] | undefined => {
   const root = readRecord(input)
   if (Option.isNone(root)) return undefined
-  if (Object.keys(root.value).some((key) => trustedFields.has(key))) return "message"
+  if (Object.entries(root.value).some(([key, value]) => key !== "commands" && (trustedFields.has(key) || containsTrustedField(value)))) return "message"
   const commands = root.value.commands === undefined
     ? Option.none()
     : readArray(root.value.commands)
   if (Option.isNone(commands)) return undefined
   for (const command of commands.value) {
     const record = readRecord(command)
-    if (Option.isSome(record) && Object.keys(record.value).some((key) => trustedFields.has(key))) {
+    if (Option.isSome(record) && containsTrustedField(command)) {
       return "command"
     }
   }
@@ -87,7 +98,13 @@ const hasUnknownCommandKind = (input: Schema.Json): boolean => {
   if (Option.isNone(commands)) return false
   for (const command of commands.value) {
     const header = readCommandHeader(command)
-    if (Option.isSome(header) && header.value._tag !== "rename-canvas") {
+    if (Option.isSome(header) && !new Set([
+      "rename-canvas", "add-frame", "set-frame-title", "set-frame-representation",
+      "set-frame-status", "set-frame-geometry", "remove-frame", "place-canvas-item",
+      "add-note", "edit-note", "set-note-geometry", "attach-note", "detach-note",
+      "remove-note", "add-comment-thread", "reply-to-comment-thread", "edit-comment",
+      "set-comment-thread-resolution"
+    ]).has(header.value._tag)) {
       return true
     }
   }
@@ -101,7 +118,7 @@ const stripAccepted = (wire: typeof AcceptedWire.Type): AcceptedCanvasChange => 
 
 const toAcceptedWire = (change: AcceptedCanvasChange): typeof AcceptedWire.Type => ({
   kind: "accepted-canvas-change",
-  schemaVersion: 1,
+  schemaVersion: 2,
   ...change
 })
 
@@ -176,18 +193,18 @@ export const ChangeProtocol = {
   proposed: {
     decode: decodeProposed,
     encode: (value: ProposedCanvasChange): Schema.Json =>
-      Schema.encodeSync(ProposedWire)({ kind: "proposed-canvas-change", schemaVersion: 1, ...value })
+      Schema.encodeSync(ProposedWire)({ kind: "proposed-canvas-change", schemaVersion: 2, ...value })
   },
   accepted: {
     decode: decodeAccepted,
     encode: (value: AcceptedCanvasChange): Schema.Json =>
-      Schema.encodeSync(AcceptedWire)({ kind: "accepted-canvas-change", schemaVersion: 1, ...value })
+      Schema.encodeSync(AcceptedWire)({ kind: "accepted-canvas-change", schemaVersion: 2, ...value })
   },
   page: {
     decode: decodePage,
     encode: (value: ChangePage): Schema.Json => Schema.encodeSync(PageWire)({
       kind: "canvas-change-page",
-      schemaVersion: 1,
+      schemaVersion: 2,
       ...value,
       changes: value.changes.map(toAcceptedWire)
     })
@@ -196,9 +213,9 @@ export const ChangeProtocol = {
     decode: decodeReceipt,
     encode: (value: SubmitChangeReceipt): Schema.Json => Schema.encodeSync(ReceiptWire)({
       kind: "submit-change-receipt",
-      schemaVersion: 1,
+      schemaVersion: 2,
       disposition: value.disposition,
-      change: { kind: "accepted-canvas-change", schemaVersion: 1, ...value.change }
+      change: { kind: "accepted-canvas-change", schemaVersion: 2, ...value.change }
     })
   },
   failure: {

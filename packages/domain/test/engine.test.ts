@@ -22,15 +22,19 @@ const decodedFixture = () => {
 }
 
 describe("CanvasProjection", () => {
-  it("strictly decodes its first persisted schema version", () => {
+  it("strictly decodes the current persisted schema version", () => {
     expect(decodeCanvasProjection({
-      schemaVersion: 1,
+      schemaVersion: 2,
       canvasId: "canvas_checkout",
-      title: "Checkout"
+      title: "Checkout",
+      frames: [], notes: [], threads: [], stack: [], stackChangedByChangeId: null,
+      issuedIds: { frameIds: [], noteIds: [], threadIds: [], commentIds: [] }
     })).toEqual({
-      schemaVersion: 1,
+      schemaVersion: 2,
       canvasId: "canvas_checkout",
-      title: "Checkout"
+      title: "Checkout",
+      frames: [], notes: [], threads: [], stack: [], stackChangedByChangeId: null,
+      issuedIds: { frameIds: [], noteIds: [], threadIds: [], commentIds: [] }
     })
 
     for (const input of [
@@ -62,9 +66,11 @@ describe("CanvasEngine.apply", () => {
 
   it("rejects a later stale command without exposing a partial projection", () => {
     const initial = decodeCanvasProjection({
-      schemaVersion: 1,
+      schemaVersion: 2,
       canvasId: "canvas_checkout",
-      title: "Checkout"
+      title: "Checkout",
+      frames: [], notes: [], threads: [], stack: [], stackChangedByChangeId: null,
+      issuedIds: { frameIds: [], noteIds: [], threadIds: [], commentIds: [] }
     })
     const change = decodeCanvasChange({
       canvasId: "canvas_checkout",
@@ -90,9 +96,11 @@ describe("CanvasEngine.apply", () => {
 
   it("accepts a no-op and preserves the same immutable projection", () => {
     const initial = decodeCanvasProjection({
-      schemaVersion: 1,
+      schemaVersion: 2,
       canvasId: "canvas_checkout",
-      title: "Checkout"
+      title: "Checkout",
+      frames: [], notes: [], threads: [], stack: [], stackChangedByChangeId: null,
+      issuedIds: { frameIds: [], noteIds: [], threadIds: [], commentIds: [] }
     })
     const change = decodeCanvasChange({
       canvasId: "canvas_checkout",

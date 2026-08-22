@@ -51,15 +51,36 @@ export {
 export {
   CanvasProjection,
   CanvasTitle,
-  decodeCanvasProjection
+  decodeCanvasProjection,
+  emptyCanvasProjection
 } from "./canvas.js"
+export { Geometry, NormalizedPoint, Point } from "./geometry.js"
+export { CommentAnchor, ElementAnchor, ElementEvidence, ElementFingerprint, FrameAnchor } from "./anchor.js"
+export { AuthoredText, CanvasItemRef, Comment, CommentThread, Frame, Note, ReviewStatus } from "./content.js"
 export {
+  AddCommentThreadCommand,
+  AddFrameCommand,
+  AddNoteCommand,
+  AttachNoteCommand,
   CanvasChange,
   CanvasCommand,
   CanvasCommandBatch,
   decodeCanvasChange,
   decodeCanvasCommandBatch,
-  RenameCanvasCommand
+  DetachNoteCommand,
+  EditCommentCommand,
+  EditNoteCommand,
+  PlaceCanvasItemCommand,
+  RemoveFrameCommand,
+  RemoveNoteCommand,
+  ReplyToCommentThreadCommand,
+  RenameCanvasCommand,
+  SetCommentThreadResolutionCommand,
+  SetFrameGeometryCommand,
+  SetFrameRepresentationCommand,
+  SetFrameStatusCommand,
+  SetFrameTitleCommand,
+  SetNoteGeometryCommand
 } from "./command.js"
 export { CanvasEngine } from "./engine.js"
 export type {
