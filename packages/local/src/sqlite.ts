@@ -2,6 +2,7 @@ import { DatabaseSync, type StatementSync } from "node:sqlite"
 
 import {
   AuthorityFailure,
+  AuthorityClock,
   AuthorityView,
   ChangeRejected,
   CreateCanvas,
@@ -31,7 +32,7 @@ import {
   type ProposedCanvasChange,
   type SubmitChangeReceipt
 } from "@crit/protocol"
-import { Clock, Data, Effect, Result, Schema, Semaphore, type Scope } from "effect"
+import { Data, Effect, Result, Schema, Semaphore, type Scope } from "effect"
 
 const schemaVersion = 1
 
@@ -44,10 +45,6 @@ export interface SqliteCanvasAuthorityOptions {
   readonly path: string
   readonly now?: Effect.Effect<typeof IsoTimestamp.Type>
 }
-
-const defaultNow = Clock.currentTimeMillis.pipe(
-  Effect.map((millis) => Schema.decodeUnknownSync(IsoTimestamp)(new Date(millis).toISOString()))
-)
 
 const setup = (database: DatabaseSync): void => {
   database.exec("PRAGMA foreign_keys = ON")
@@ -230,7 +227,7 @@ export const makeSqliteCanvasAuthority = (
     (opened) => Effect.sync(() => opened.close())
   )
   const writer = yield* Semaphore.make(1)
-  const now = options.now ?? defaultNow
+  const now = options.now ?? AuthorityClock.now
   const canvasById = database.prepare("SELECT * FROM canvases WHERE canvas_id = ?")
   const retryById = database.prepare("SELECT * FROM retry_reservations WHERE canvas_id = ? AND change_id = ?")
   const acceptedBySequence = database.prepare("SELECT * FROM accepted_changes WHERE canvas_id = ? AND sequence = ?")

@@ -21,5 +21,6 @@ export type {
   OpenCanvasFailure,
   SubmitCanvasChangeFailure
 } from "./model.js"
+export { AuthorityClock } from "./clock.js"
 export { makeMemoryCanvasAuthority } from "./memory.js"
 export type { MemoryCanvasAuthorityOptions } from "./memory.js"

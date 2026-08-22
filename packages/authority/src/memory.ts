@@ -17,7 +17,7 @@ import {
   type ProposedCanvasChange,
   type SubmitChangeReceipt
 } from "@crit/protocol"
-import { Clock, Effect, Result, Schema, SynchronizedRef } from "effect"
+import { Effect, Result, Schema, SynchronizedRef } from "effect"
 
 import {
   AuthorityFailure,
@@ -29,6 +29,7 @@ import {
   type ChangesAfter,
   type SubmitCanvasChangeFailure
 } from "./model.js"
+import { AuthorityClock } from "./clock.js"
 import { detach } from "./ownership.js"
 
 const commandBatchEquals = Schema.toEquivalence(CanvasCommandBatch)
@@ -60,10 +61,6 @@ type Registry = ReadonlyMap<CanvasId, SynchronizedRef.SynchronizedRef<CanvasStat
 export interface MemoryCanvasAuthorityOptions {
   readonly now?: Effect.Effect<typeof IsoTimestamp.Type>
 }
-
-const defaultNow = Clock.currentTimeMillis.pipe(
-  Effect.map((millis) => Schema.decodeUnknownSync(IsoTimestamp)(new Date(millis).toISOString()))
-)
 
 const attribution = (invocation: VerifiedInvocation): AcceptedAttribution => invocation._tag === "person"
   ? PersonAttribution.make({ person: invocation.principal.person })
@@ -167,7 +164,7 @@ export const makeMemoryCanvasAuthority = (
   options: MemoryCanvasAuthorityOptions = {}
 ): Effect.Effect<CanvasAuthority> => Effect.gen(function*() {
   const registry = yield* SynchronizedRef.make<Registry>(new Map())
-  const now = options.now ?? defaultNow
+  const now = options.now ?? AuthorityClock.now
 
   const lookup = (canvasId: CanvasId) => SynchronizedRef.get(registry).pipe(
     Effect.flatMap((canvases) => {
