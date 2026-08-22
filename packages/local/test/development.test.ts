@@ -17,7 +17,7 @@ import { AuthorityModel } from "@crit/authority"
 import { LocalCanvasClient } from "@crit/client"
 import { Id } from "@crit/domain"
 import { localApiToken, type LocalApiToken } from "@crit/replica/http"
-import { Context, Effect, Exit, Layer, Result, Scope } from "effect"
+import { Context, Effect, Exit, Layer, Option, Result, Scope } from "effect"
 import { FetchHttpClient } from "effect/unstable/http"
 import { describe, expect, it } from "vitest"
 
@@ -81,6 +81,7 @@ describe("LocalDevelopment", () => {
       yield* Effect.scoped(Effect.gen(function*() {
         const context = yield* build(dataRoot, yield* Effect.scope)
         const development = Context.get(context, LocalDevelopment)
+        expect(Option.isNone(development.browserBootstrapUrl)).toBe(true)
         installationId = development.installationId
         const descriptor = readFileSync(join(dataRoot, "daemon.json"), "utf8")
         expect(descriptor).not.toContain("bearerSecret")
@@ -173,6 +174,25 @@ describe("LocalDevelopment", () => {
     const result = yield* Effect.exit(build(dataRoot, yield* Effect.scope))
     expect(Exit.isFailure(result)).toBe(true)
   }))))
+
+  it("rejects browser origins outside standalone 127.0.0.1 HTTP", () =>
+    Effect.runPromise(Effect.scoped(Effect.gen(function*() {
+      const directory = yield* temporaryRoot
+      const result = yield* Effect.result(Layer.buildWithScope(
+        LocalDevelopment.layer({
+          dataRoot: join(directory, ".crit", "v1"),
+          browserOrigin: "http://localhost:5173"
+        }).pipe(Layer.provide(NodeServices.layer)),
+        yield* Effect.scope
+      ))
+      expect(Result.isFailure(result)).toBe(true)
+      if (Result.isFailure(result)) {
+        expect(result.failure._tag).toBe("LocalDevelopmentFailure")
+        if (result.failure._tag === "LocalDevelopmentFailure") {
+          expect(result.failure.operation).toBe("validate browser origin")
+        }
+      }
+    }))))
 
   it("classifies database startup failures without exposing adapter errors", () =>
     Effect.runPromise(Effect.scoped(Effect.gen(function*() {

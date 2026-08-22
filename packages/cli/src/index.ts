@@ -1,5 +1,5 @@
 import { LocalDevelopment } from "@crit/local"
-import { Console, Context, Effect, Layer } from "effect"
+import { Console, Context, Effect, Layer, Option, Redacted } from "effect"
 import { Command, Flag } from "effect/unstable/cli"
 
 const crit = Command.make("crit-target").pipe(
@@ -12,16 +12,28 @@ const dev = Command.make(
     dataRoot: Flag.string("data-root").pipe(
       Flag.withDescription("Directory for Crit installation and daemon state"),
       Flag.withDefault(".crit/v1")
+    ),
+    browserOrigin: Flag.string("browser-origin").pipe(
+      Flag.withDescription("Loopback origin hosting the Crit browser application"),
+      Flag.optional
     )
   },
-  Effect.fn(function*({ dataRoot }) {
+  Effect.fn(function*({ browserOrigin, dataRoot }) {
     yield* Effect.scoped(Effect.gen(function*() {
+      const developmentLayer = Option.match(browserOrigin, {
+        onNone: () => LocalDevelopment.layer({ dataRoot }),
+        onSome: (origin) => LocalDevelopment.layer({ dataRoot, browserOrigin: origin })
+      })
       const services = yield* Layer.buildWithScope(
-        LocalDevelopment.layer({ dataRoot }),
+        developmentLayer,
         yield* Effect.scope
       )
       const development = Context.get(services, LocalDevelopment)
       yield* Console.log(`Crit daemon listening at ${development.descriptor.baseUrl}`)
+      yield* Option.match(development.browserBootstrapUrl, {
+        onNone: () => Effect.void,
+        onSome: (url) => Console.log(`Open Crit in your browser: ${Redacted.value(url)}`)
+      })
       return yield* Effect.never
     }))
   })

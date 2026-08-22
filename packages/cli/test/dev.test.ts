@@ -18,12 +18,15 @@ afterEach(() => {
 const start = (dataRoot: string) => new Promise<{
   readonly child: ReturnType<typeof spawn>
   readonly baseUrl: string
+  readonly browserBootstrapUrl: string
 }>((resolve, reject) => {
   const child = spawn(process.execPath, [
     join(import.meta.dirname, "..", "dist", "main.js"),
     "dev",
     "--data-root",
-    dataRoot
+    dataRoot,
+    "--browser-origin",
+    "http://127.0.0.1:5173"
   ], { stdio: ["ignore", "pipe", "pipe"] })
   children.push(child)
   let output = ""
@@ -33,10 +36,11 @@ const start = (dataRoot: string) => new Promise<{
   }, 5_000)
   child.stdout.on("data", (chunk: Uint8Array) => {
     output += Buffer.from(chunk).toString("utf8")
-    const match = /Crit daemon listening at (http:\/\/127\.0\.0\.1:\d+)/.exec(output)
-    if (match?.[1] === undefined) return
+    const daemonMatch = /Crit daemon listening at (http:\/\/127\.0\.0\.1:\d+)/.exec(output)
+    const browserMatch = /Open Crit in your browser: (http:\/\/127\.0\.0\.1:\d+\/browser\/[0-9a-f]{32}\/#[-_A-Za-z0-9]+)/.exec(output)
+    if (daemonMatch?.[1] === undefined || browserMatch?.[1] === undefined) return
     clearTimeout(timeout)
-    resolve({ child, baseUrl: match[1] })
+    resolve({ child, baseUrl: daemonMatch[1], browserBootstrapUrl: browserMatch[1] })
   })
   child.stderr.on("data", (chunk: Uint8Array) => {
     output += Buffer.from(chunk).toString("utf8")
@@ -54,6 +58,34 @@ const start = (dataRoot: string) => new Promise<{
 
 const matchReady = (output: string) => output.includes("Crit daemon listening at http://127.0.0.1:")
 
+const startWithoutBrowser = (dataRoot: string) => new Promise<{
+  readonly child: ReturnType<typeof spawn>
+  readonly output: string
+}>((resolve, reject) => {
+  const child = spawn(process.execPath, [
+    join(import.meta.dirname, "..", "dist", "main.js"),
+    "dev",
+    "--data-root",
+    dataRoot
+  ], { stdio: ["ignore", "pipe", "pipe"] })
+  children.push(child)
+  let output = ""
+  const timeout = setTimeout(() => reject(new Error(`Timed out waiting for daemon: ${output}`)), 5_000)
+  child.stdout.on("data", (chunk: Uint8Array) => {
+    output += Buffer.from(chunk).toString("utf8")
+    if (!matchReady(output)) return
+    clearTimeout(timeout)
+    setImmediate(() => resolve({ child, output }))
+  })
+  child.stderr.on("data", (chunk: Uint8Array) => {
+    output += Buffer.from(chunk).toString("utf8")
+  })
+  child.once("error", (cause) => {
+    clearTimeout(timeout)
+    reject(cause)
+  })
+})
+
 const stop = (child: ReturnType<typeof spawn>) => new Promise<void>((resolve, reject) => {
   child.once("error", reject)
   child.once("exit", (code, signal) => {
@@ -67,6 +99,14 @@ const stop = (child: ReturnType<typeof spawn>) => new Promise<void>((resolve, re
 })
 
 describe("built crit-target dev", () => {
+  it("does not mint or print browser bootstrap access without configuration", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "crit-cli-dev-no-browser-"))
+    directories.push(directory)
+    const started = await startWithoutBrowser(join(directory, ".crit", "v1"))
+    expect(started.output).not.toContain("Open Crit in your browser")
+    await stop(started.child)
+  })
+
   it("releases its stable port and descriptor on interrupt", async () => {
     const directory = mkdtempSync(join(tmpdir(), "crit-cli-dev-"))
     directories.push(directory)
@@ -75,11 +115,15 @@ describe("built crit-target dev", () => {
     const descriptorPath = join(dataRoot, "daemon.json")
     expect(existsSync(descriptorPath)).toBe(true)
     expect(readFileSync(descriptorPath, "utf8")).not.toContain("bearerSecret")
+    expect(readFileSync(descriptorPath, "utf8")).not.toContain(
+      new URL(first.browserBootstrapUrl).hash.slice(1)
+    )
     await stop(first.child)
     expect(existsSync(descriptorPath)).toBe(false)
 
     const restarted = await start(dataRoot)
     expect(restarted.baseUrl).toBe(first.baseUrl)
+    expect(restarted.browserBootstrapUrl).not.toBe(first.browserBootstrapUrl)
     await stop(restarted.child)
     expect(existsSync(descriptorPath)).toBe(false)
   })
