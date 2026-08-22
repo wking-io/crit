@@ -10,5 +10,11 @@
       "import": "./dist/index.js"
     }
   },
-  "files": ["dist"]
+  "files": ["dist"],
+  "dependencies": {
+    "@crit/authority": "*",
+    "@crit/domain": "*",
+    "@crit/replica": "*",
+    "effect": "4.0.0-rc.109"
+  }
 }

@@ -13,6 +13,7 @@
       "@crit/protocol": ["../protocol/src/index.ts"],
       "@crit/replica": ["../replica/src/index.ts"],
       "@crit/replica/adapter": ["../replica/src/adapter.ts"],
+      "@crit/replica/http": ["../replica/src/http.ts"],
       "@crit/replica/testing": ["../replica/src/testing.ts"],
       "@crit/representations": ["../representations/src/index.ts"],
       "@crit/representations/adapter": ["../representations/src/adapter.ts"],

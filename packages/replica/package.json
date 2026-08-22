@@ -16,6 +16,10 @@
       "types": "./dist/adapter.d.ts",
       "import": "./dist/adapter.js"
     },
+    "./http": {
+      "types": "./dist/http.d.ts",
+      "import": "./dist/http.js"
+    },
     "./testing": {
       "types": "./dist/testing.d.ts",
       "import": "./dist/testing.js"
