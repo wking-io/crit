@@ -4,7 +4,7 @@ import {
   CanvasAuthority,
   type VerifiedInvocation
 } from "@crit/authority"
-import { Id } from "@crit/domain"
+import { Id, type InstallationId } from "@crit/domain"
 import {
   CanvasReplica,
   ChangeIdGenerationFailure,
@@ -15,6 +15,8 @@ import {
   LocalApiAuthorization,
   LocalApiOriginRejected,
   LocalApiToken,
+  type LocalDaemonInstanceNonce,
+  LocalDaemonStatus,
   LocalApiUnauthorized,
   LocalApiVersionUnsupported,
   LocalCanvasApi,
@@ -45,16 +47,24 @@ export interface LocalDaemonOptions {
   readonly token: LocalApiToken
   readonly allowedOrigins: ReadonlySet<string>
   readonly invocation: VerifiedInvocation
+  readonly instance: LocalDaemonInstanceNonce
+  readonly installationId: InstallationId
   readonly port?: number
 }
 
-const handlers = () => HttpApiBuilder.group(
+const handlers = (options: LocalDaemonOptions) => HttpApiBuilder.group(
   LocalCanvasApi,
   "canvas",
   Effect.fn(function*(group) {
     const authority = yield* CanvasAuthority
     const replica = yield* CanvasReplica
     return group.handleAll({
+      status: () => Effect.succeed(LocalDaemonStatus.make({
+        version: 1,
+        instance: options.instance,
+        installationId: options.installationId,
+        apiVersion: localApiVersion
+      })),
       create: Effect.fn(function*({ payload }) {
         const invocation = yield* AuthenticatedInvocation
         yield* authority.create(payload, invocation)
@@ -277,14 +287,14 @@ const daemonLayer = (
       Layer.provideMerge(authority)
     )
     const bearerRoutes = HttpApiBuilder.layer(LocalCanvasApi).pipe(
-      Layer.provide(handlers()),
+      Layer.provide(handlers(options)),
       Layer.provide(bearerAuthorizationLayer(options))
     )
     const browserCanvasRoutes = HttpRouter.use(Effect.fn(function*(router) {
       const session = yield* BrowserSession
       yield* Layer.build(
         HttpApiBuilder.layer(LocalCanvasApi).pipe(
-          Layer.provide(handlers()),
+          Layer.provide(handlers(options)),
           Layer.provide(browserAuthorizationLayer),
           Layer.provide(Layer.succeed(HttpRouter.HttpRouter, router.prefixed(session.path)))
         )

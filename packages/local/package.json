@@ -18,6 +18,7 @@
   ],
   "dependencies": {
     "@crit/authority": "*",
+    "@crit/client": "*",
     "@crit/domain": "*",
     "@crit/protocol": "*",
     "@crit/replica": "*",

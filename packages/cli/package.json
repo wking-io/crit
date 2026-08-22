@@ -15,7 +15,9 @@
   },
   "files": ["dist"],
   "dependencies": {
+    "@crit/domain": "*",
     "@crit/local": "*",
+    "@crit/replica": "*",
     "@effect/platform-node": "4.0.0-rc.109",
     "effect": "4.0.0-rc.109"
   },

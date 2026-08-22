@@ -15,3 +15,16 @@ export type {
   LocalDevelopmentOptions,
   LocalDevelopmentService
 } from "./development.js"
+export {
+  inspectLocalDaemon,
+  LocalDaemonIdentityMismatch,
+  LocalDaemonProtocolFailure,
+  LocalDaemonStateMalformed,
+  LocalDaemonStateMissing,
+  LocalDaemonStateUnreadable,
+  LocalDaemonStaleReason
+} from "./discovery.js"
+export type {
+  LocalDaemonDiscoveryOptions,
+  LocalDaemonInspection
+} from "./discovery.js"

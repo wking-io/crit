@@ -1,6 +1,10 @@
 import { AuthorityModel } from "@crit/authority"
 import { AuthSubject, Id, InstallationId, PersonPrincipal, PersonSnapshot } from "@crit/domain"
-import { localApiToken, localApiVersion } from "@crit/replica/http"
+import {
+  localApiToken,
+  LocalDaemonInstanceNonce,
+  localApiVersion
+} from "@crit/replica/http"
 import {
   Context,
   Crypto,
@@ -37,13 +41,9 @@ export const LocalInstallation = Schema.Struct({
 })
 export type LocalInstallation = typeof LocalInstallation.Type
 
-const InstanceNonce = Schema.String.check(
-  Schema.isPattern(/^[0-9a-f]{32}$/)
-).pipe(Schema.brand("LocalDaemonInstanceNonce"))
-
 export const LocalDaemonDescriptor = Schema.Struct({
   version: Schema.Literal(1),
-  instance: InstanceNonce,
+  instance: LocalDaemonInstanceNonce,
   baseUrl: Schema.String.check(Schema.isPattern(/^http:\/\/127\.0\.0\.1:[0-9]+$/)),
   apiVersion: Schema.Literal(localApiVersion),
   installationId: InstallationId
@@ -155,7 +155,7 @@ export class LocalDevelopment extends Context.Service<
         Effect.mapError((cause) => fail("secure installation", installationPath, String(cause)))
       )
 
-      const instance = Schema.decodeUnknownSync(InstanceNonce)(
+      const instance = Schema.decodeUnknownSync(LocalDaemonInstanceNonce)(
         Encoding.encodeHex(yield* crypto.randomBytes(16).pipe(
           Effect.mapError((cause) => fail("generate daemon instance", descriptorPath, String(cause)))
         ))
@@ -184,7 +184,9 @@ export class LocalDevelopment extends Context.Service<
         token: localApiToken(installation.bearerSecret),
         allowedOrigins: options.allowedOrigins ?? new Set(),
         invocation,
-        port: installation.port
+        port: installation.port,
+        instance,
+        installationId: installation.installationId
       }
       const daemonLayer = Option.match(browser, {
         onNone: () => LocalDaemon.layer(daemonOptions),

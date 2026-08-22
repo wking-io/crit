@@ -1,5 +1,5 @@
-import { spawn } from "node:child_process"
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs"
+import { spawn, spawnSync } from "node:child_process"
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 
@@ -98,6 +98,13 @@ const stop = (child: ReturnType<typeof spawn>) => new Promise<void>((resolve, re
   child.kill("SIGINT")
 })
 
+const run = (dataRoot: string, args: ReadonlyArray<string>) => spawnSync(process.execPath, [
+  join(import.meta.dirname, "..", "dist", "main.js"),
+  ...args,
+  "--data-root",
+  dataRoot
+], { encoding: "utf8" })
+
 describe("built crit-target dev", () => {
   it("does not mint or print browser bootstrap access without configuration", async () => {
     const directory = mkdtempSync(join(tmpdir(), "crit-cli-dev-no-browser-"))
@@ -114,17 +121,60 @@ describe("built crit-target dev", () => {
     const first = await start(dataRoot)
     const descriptorPath = join(dataRoot, "daemon.json")
     expect(existsSync(descriptorPath)).toBe(true)
+    const firstDescriptor = readFileSync(descriptorPath, "utf8")
     expect(readFileSync(descriptorPath, "utf8")).not.toContain("bearerSecret")
     expect(readFileSync(descriptorPath, "utf8")).not.toContain(
       new URL(first.browserBootstrapUrl).hash.slice(1)
     )
+    const status = run(dataRoot, ["status", "--json"])
+    expect(status.status).toBe(0)
+    expect(JSON.parse(status.stdout)).toMatchObject({ kind: "Running" })
+    const created = run(dataRoot, ["create", "canvas_cli_flow", "--title", "CLI Flow", "--json"])
+    expect(created.status, created.stderr).toBe(0)
+    expect(JSON.parse(created.stdout).projection.title).toBe("CLI Flow")
+    const duplicate = run(dataRoot, ["create", "canvas_cli_flow", "--title", "Duplicate"])
+    expect(duplicate.status).not.toBe(0)
+    expect(duplicate.stderr).toBe("Canvas already exists: canvas_cli_flow\n")
+    const missing = run(dataRoot, ["open", "canvas_cli_missing"])
+    expect(missing.status).not.toBe(0)
+    expect(missing.stderr).toBe("Canvas not found: canvas_cli_missing\n")
+    const opened = run(dataRoot, ["open", "canvas_cli_flow", "--json"])
+    expect(opened.status, opened.stderr).toBe(0)
+    expect(JSON.parse(opened.stdout).projection.canvasId).toBe("canvas_cli_flow")
     await stop(first.child)
     expect(existsSync(descriptorPath)).toBe(false)
+    const stopped = run(dataRoot, ["status"])
+    expect(stopped.status).not.toBe(0)
+    expect(stopped.stdout).toBe("")
+    expect(stopped.stderr).toBe("Crit daemon is stopped\n")
+
+    writeFileSync(descriptorPath, firstDescriptor)
+    const stale = run(dataRoot, ["status"])
+    expect(stale.status).not.toBe(0)
+    expect(stale.stdout).toBe("")
+    expect(stale.stderr).toBe("Crit daemon is unavailable (connection-failed)\n")
+    expect(readFileSync(descriptorPath, "utf8")).toBe(firstDescriptor)
 
     const restarted = await start(dataRoot)
     expect(restarted.baseUrl).toBe(first.baseUrl)
     expect(restarted.browserBootstrapUrl).not.toBe(first.browserBootstrapUrl)
+    const reopened = run(dataRoot, ["open", "canvas_cli_flow", "--json"])
+    expect(reopened.status, reopened.stderr).toBe(0)
+    expect(JSON.parse(reopened.stdout).projection.title).toBe("CLI Flow")
     await stop(restarted.child)
     expect(existsSync(descriptorPath)).toBe(false)
+  })
+
+  it("reports malformed discovery state once without exposing stored secrets", () => {
+    const directory = mkdtempSync(join(tmpdir(), "crit-cli-malformed-"))
+    directories.push(directory)
+    const dataRoot = join(directory, ".crit", "v1")
+    mkdirSync(dataRoot, { recursive: true })
+    writeFileSync(join(dataRoot, "installation.json"), '{"bearerSecret":"do-not-report"}')
+    const status = run(dataRoot, ["status"])
+    expect(status.status).not.toBe(0)
+    expect(status.stdout).toBe("")
+    expect(status.stderr).toBe("Crit daemon state is malformed\n")
+    expect(status.stderr).not.toContain("do-not-report")
   })
 })

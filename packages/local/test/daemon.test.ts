@@ -12,6 +12,7 @@ import {
 import { LocalCanvasClient } from "@crit/client"
 import { Id, decodeCanvasCommandBatch } from "@crit/domain"
 import {
+  LocalDaemonInstanceNonce,
   LocalApiOriginRejected,
   LocalApiUnauthorized,
   localApiToken
@@ -35,6 +36,8 @@ const invocation = Schema.decodeUnknownSync(PersonInvocation)({
     }
   }
 })
+const instance = Schema.decodeUnknownSync(LocalDaemonInstanceNonce)("0123456789abcdef0123456789abcdef")
+const installationId = Id.installation("installation_daemon_test")
 
 const tempDatabasePath = Effect.acquireRelease(
   Effect.sync(() => mkdtempSync(join(tmpdir(), "crit-local-daemon-"))),
@@ -52,7 +55,9 @@ const clientFor = (options: {
     databasePath: options.databasePath,
     token: localApiToken(options.token),
     allowedOrigins: new Set(["http://127.0.0.1:5173"]),
-    invocation
+    invocation,
+    instance,
+    installationId
   }), scope)
   const server = Context.get(serverContext, HttpServer.HttpServer)
   if (server.address._tag !== "TcpAddress") return yield* Effect.die("expected TCP daemon")
@@ -84,6 +89,12 @@ describe("LocalDaemon", () => {
       yield* Effect.scoped(Effect.gen(function*() {
         const token = "daemon-token-with-at-least-32-characters"
         const { baseUrl, client } = yield* clientFor({ databasePath, token })
+        expect(yield* client.status()).toEqual({
+          version: 1,
+          instance,
+          installationId,
+          apiVersion: "1"
+        })
         const rawMissing = yield* Effect.promise(() => fetch(
           `${baseUrl}/api/v1/open/canvas_daemon_raw_missing`,
           { headers: rawHeaders(token) }
@@ -149,6 +160,8 @@ describe("LocalDaemon", () => {
     })
     const failure = yield* client.open(Id.canvas("canvas_auth")).pipe(Effect.flip)
     expect(failure).toEqual(new LocalApiUnauthorized({ message: "Missing or invalid bearer token" }))
+    const statusFailure = yield* client.status().pipe(Effect.flip)
+    expect(statusFailure).toEqual(new LocalApiUnauthorized({ message: "Missing or invalid bearer token" }))
   }))))
 
   it("rejects a present foreign Origin", () => Effect.runPromise(Effect.scoped(Effect.gen(function*() {

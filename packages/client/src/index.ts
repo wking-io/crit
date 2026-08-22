@@ -1,8 +1,8 @@
-import type {
-  CanvasAlreadyExists,
-  CanvasNotFound,
-  ChangeRejected,
-  CreateCanvas
+import {
+  CreateCanvas,
+  type CanvasAlreadyExists,
+  type CanvasNotFound,
+  type ChangeRejected
 } from "@crit/authority"
 import type { CanvasId } from "@crit/domain"
 import type {
@@ -13,6 +13,7 @@ import type {
 } from "@crit/replica"
 import {
   LocalApiAuthorization,
+  type LocalDaemonStatus,
   LocalApiOriginRejected,
   type LocalApiToken,
   LocalApiUnauthorized,
@@ -39,12 +40,16 @@ type TransportFailure =
   | Schema.SchemaError
 
 export type CreateFailure = TransportFailure | CanvasAlreadyExists
+export type StatusFailure = TransportFailure
 export type OpenFailure = TransportFailure | CanvasNotFound
 export type ChangeFailure = TransportFailure | CanvasNotFound | ChangeRejected
 export type SyncFailure = TransportFailure | CanvasNotFound
 
+export type CreateCanvasInput = Omit<CreateCanvas, "_tag">
+
 export interface LocalCanvasClientService {
-  readonly create: (input: CreateCanvas) => Effect.Effect<ReplicaView, CreateFailure>
+  readonly status: () => Effect.Effect<LocalDaemonStatus, StatusFailure>
+  readonly create: (input: CreateCanvasInput) => Effect.Effect<ReplicaView, CreateFailure>
   readonly open: (canvasId: CanvasId) => Effect.Effect<ReplicaView, OpenFailure>
   readonly change: (input: ReplicaChange) => Effect.Effect<ReplicaChangeReceipt, ChangeFailure>
   readonly sync: (canvasId: CanvasId) => Effect.Effect<SyncResult, SyncFailure>
@@ -67,7 +72,8 @@ export class LocalCanvasClient extends Context.Service<
         ))
       })
       return LocalCanvasClient.of({
-        create: (input) => http.create({ payload: input }),
+        status: () => http.status(),
+        create: (input) => http.create({ payload: CreateCanvas.make(input) }),
         open: (canvasId) => http.open({ params: { canvasId } }),
         change: (input) => http.change({ payload: input }),
         sync: (canvasId) => http.sync({ params: { canvasId } })

@@ -5,7 +5,7 @@ import {
   CreateCanvas,
   VerifiedInvocation
 } from "@crit/authority"
-import { CanvasId } from "@crit/domain"
+import { CanvasId, InstallationId } from "@crit/domain"
 import { Context, Schema } from "effect"
 import {
   HttpApi,
@@ -21,6 +21,19 @@ import { ReplicaChange, ReplicaChangeReceipt, ReplicaView, SyncResult } from "./
 export const localApiVersion = "1"
 export const localApiVersionHeader = "x-crit-api-version"
 export const localApiPathPrefix = `/api/v${localApiVersion}`
+
+export const LocalDaemonInstanceNonce = Schema.String.check(
+  Schema.isPattern(/^[0-9a-f]{32}$/)
+).pipe(Schema.brand("LocalDaemonInstanceNonce"))
+export type LocalDaemonInstanceNonce = typeof LocalDaemonInstanceNonce.Type
+
+export const LocalDaemonStatus = Schema.Struct({
+  version: Schema.Literal(1),
+  instance: LocalDaemonInstanceNonce,
+  installationId: InstallationId,
+  apiVersion: Schema.Literal(localApiVersion)
+})
+export type LocalDaemonStatus = typeof LocalDaemonStatus.Type
 
 const SecretToken = Schema.String.check(Schema.isMinLength(32)).pipe(Schema.brand("LocalApiToken"))
 export const LocalApiToken = Schema.RedactedFromValue(SecretToken, {
@@ -67,6 +80,9 @@ export class LocalApiAuthorization extends HttpApiMiddleware.Service<LocalApiAut
 
 export class LocalCanvasApiGroup extends HttpApiGroup.make("canvas", { topLevel: true })
   .add(
+    HttpApiEndpoint.get("status", "/status", {
+      success: LocalDaemonStatus
+    }),
     HttpApiEndpoint.post("create", "/create", {
       payload: CreateCanvas,
       success: ReplicaView,

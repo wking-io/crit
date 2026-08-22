@@ -7,11 +7,15 @@
     "types": ["node"],
     "baseUrl": ".",
     "paths": {
-      "@crit/local": ["../local/src/index.ts"]
+      "@crit/domain": ["../domain/src/index.ts"],
+      "@crit/local": ["../local/src/index.ts"],
+      "@crit/replica": ["../replica/src/index.ts"]
     }
   },
   "include": ["src"],
   "references": [
+    { "path": "../domain" },
+    { "path": "../replica" },
     { "path": "../local" }
   ]
 }
