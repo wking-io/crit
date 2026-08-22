@@ -13,7 +13,10 @@
       "@crit/protocol": ["../protocol/src/index.ts"],
       "@crit/replica": ["../replica/src/index.ts"],
       "@crit/replica/adapter": ["../replica/src/adapter.ts"],
-      "@crit/replica/testing": ["../replica/src/testing.ts"]
+      "@crit/replica/testing": ["../replica/src/testing.ts"],
+      "@crit/representations": ["../representations/src/index.ts"],
+      "@crit/representations/adapter": ["../representations/src/adapter.ts"],
+      "@crit/representations/testing": ["../representations/src/testing.ts"]
     }
   },
   "include": ["src"],
@@ -21,6 +24,7 @@
     { "path": "../authority" },
     { "path": "../domain" },
     { "path": "../protocol" },
-    { "path": "../replica" }
+    { "path": "../replica" },
+    { "path": "../representations" }
   ]
 }
