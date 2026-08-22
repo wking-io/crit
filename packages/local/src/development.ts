@@ -1,10 +1,22 @@
 import { AuthorityModel } from "@crit/authority"
 import { AuthSubject, Id, InstallationId, PersonPrincipal, PersonSnapshot } from "@crit/domain"
 import { localApiToken, localApiVersion } from "@crit/replica/http"
-import { Context, Crypto, Effect, Encoding, FileSystem, Layer, Path, Schema } from "effect"
+import {
+  Context,
+  Crypto,
+  Effect,
+  Encoding,
+  FileSystem,
+  Layer,
+  Option,
+  Path,
+  Redacted,
+  Schema
+} from "effect"
 import { HttpServer } from "effect/unstable/http"
 
-import { LocalDaemon } from "./daemon.js"
+import { localDaemonWithBrowser, LocalDaemon } from "./daemon.js"
+import { BrowserOrigin, BrowserSession } from "./browser-session.js"
 import { decodeStored, encodeStored } from "./stored-json.js"
 
 const InstallationSecret = Schema.String.check(
@@ -51,11 +63,13 @@ export class LocalDaemonOwnershipFailure extends Schema.TaggedError<LocalDaemonO
 export interface LocalDevelopmentOptions {
   readonly dataRoot: string
   readonly allowedOrigins?: ReadonlySet<string>
+  readonly browserOrigin?: string
 }
 
 export interface LocalDevelopmentService {
   readonly descriptor: LocalDaemonDescriptor
   readonly installationId: InstallationId
+  readonly browserBootstrapUrl: Option.Option<Redacted.Redacted<string>>
 }
 
 const AddressInUseFailure = Schema.Struct({
@@ -147,13 +161,36 @@ export class LocalDevelopment extends Context.Service<
         ))
       )
       const invocation = AuthorityModel.personInvocation({ principal: installation.principal })
-      const daemonContext = yield* Layer.buildWithScope(LocalDaemon.layer({
+      const browserOrigin = yield* options.browserOrigin === undefined
+        ? Effect.succeed(Option.none())
+        : Effect.try({
+          try: () => Option.some(Schema.decodeUnknownSync(BrowserOrigin)(options.browserOrigin)),
+          catch: (cause) => fail("validate browser origin", "browserOrigin", String(cause))
+        })
+      const daemonScope = yield* Effect.scope
+      const browser = yield* Option.match(browserOrigin, {
+        onNone: () => Effect.succeed(Option.none()),
+        onSome: (origin) => Layer.buildWithScope(BrowserSession.layer({
+          baseUrl: `http://127.0.0.1:${installation.port}`,
+          instance,
+          browserOrigin: origin,
+          invocation
+        }), daemonScope).pipe(
+          Effect.map((context) => Option.some(Context.get(context, BrowserSession)))
+        )
+      })
+      const daemonOptions = {
         databasePath,
         token: localApiToken(installation.bearerSecret),
         allowedOrigins: options.allowedOrigins ?? new Set(),
         invocation,
         port: installation.port
-      }), yield* Effect.scope).pipe(
+      }
+      const daemonLayer = Option.match(browser, {
+        onNone: () => LocalDaemon.layer(daemonOptions),
+        onSome: (session) => localDaemonWithBrowser(daemonOptions, session)
+      })
+      const daemonContext = yield* Layer.buildWithScope(daemonLayer, daemonScope).pipe(
         Effect.mapError((cause) => {
           if (Schema.is(AddressInUseFailure)(cause)) {
             return new LocalDaemonOwnershipFailure({
@@ -198,7 +235,8 @@ export class LocalDevelopment extends Context.Service<
       ))
       return LocalDevelopment.of({
         descriptor,
-        installationId: installation.installationId
+        installationId: installation.installationId,
+        browserBootstrapUrl: Option.map(browser, (session) => session.bootstrapUrl)
       })
     })
   )
