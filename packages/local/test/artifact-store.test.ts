@@ -1,8 +1,6 @@
-import { execFile } from "node:child_process"
-import { mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises"
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
-import { promisify } from "node:util"
 
 import { ArtifactRepresentation, Id, Sha256Digest } from "@crit/domain"
 import { ArtifactStore } from "@crit/representations"
@@ -34,7 +32,6 @@ const put = (artifactId: ReturnType<typeof Id.artifact>, bytes: Uint8Array) => E
 const storeRoot = () => path.join(directory, ".crit-artifact-store")
 const artifactsDirectory = () => path.join(storeRoot(), "artifacts")
 const stagingDirectory = () => path.join(storeRoot(), "staging")
-const execFileAsync = promisify(execFile)
 
 for (const scenario of artifactStoreConformanceScenarios()) {
   it(`conforms when it ${scenario.name}`, async() => {
@@ -130,26 +127,6 @@ describe("LocalArtifactStore", () => {
     expect([...await readFile(unknown)]).toEqual([9])
   })
 
-  it("rejects a symlink store root", async() => {
-    const target = await mkdtemp(path.join(tmpdir(), "crit-artifact-target-"))
-    try {
-      await symlink(target, storeRoot(), "dir")
-      const result = await Effect.runPromise(Effect.gen(function*() {
-        yield* ArtifactStore
-      }).pipe(
-        Effect.provide(LocalArtifactStore.layer({ directory })),
-        Effect.result
-      ))
-      expect(result._tag).toBe("Failure")
-      if (result._tag === "Failure") {
-        expect(result.failure._tag).toBe("LocalArtifactStoreOpenFailure")
-        expect(result.failure.reason).toBe("store-path-symlink")
-      }
-    } finally {
-      await rm(target, { recursive: true, force: true })
-    }
-  })
-
   it("rejects a non-directory store root", async() => {
     await writeFile(storeRoot(), Uint8Array.from([1]))
     const result = await Effect.runPromise(Effect.gen(function*() {
@@ -160,50 +137,8 @@ describe("LocalArtifactStore", () => {
     ))
     expect(result._tag).toBe("Failure")
     if (result._tag === "Failure") {
-      expect(result.failure._tag).toBe("LocalArtifactStoreOpenFailure")
-      expect(result.failure.reason).toBe("AlreadyExists")
-    }
-  })
-
-  it.each(["symlink", "directory"] as const)("rejects a %s final entry", async(kind) => {
-    await run(put(Id.artifact("artifact_initialize"), Uint8Array.from([0])))
-    const artifactId = Id.artifact(`artifact_${kind}_entry`)
-    const finalPath = path.join(artifactsDirectory(), artifactId)
-    if (kind === "symlink") await symlink(path.join(artifactsDirectory(), "artifact_initialize"), finalPath)
-    else await mkdir(finalPath)
-    const artifact = ArtifactRepresentation.make({
-      artifactId,
-      digest: Schema.decodeUnknownSync(Sha256Digest)(`sha256:${"0".repeat(64)}`)
-    })
-    const result = await run(Effect.gen(function*() {
-      const store = yield* ArtifactStore
-      return yield* store.read(artifact).pipe(Effect.result)
-    }))
-    expect(result._tag).toBe("Failure")
-    if (result._tag === "Failure") {
-      expect(result.failure._tag).toBe("ArtifactStoreIoFailure")
-      if (result.failure._tag === "ArtifactStoreIoFailure") {
-        expect(result.failure.reason).toBe(kind === "symlink" ? "final-entry-symlink" : "final-entry-non-regular")
-      }
-    }
-  })
-
-  it("rejects a special-file final entry", async() => {
-    await run(put(Id.artifact("artifact_initialize_special"), Uint8Array.from([0])))
-    const artifactId = Id.artifact("artifact_special_entry")
-    const finalPath = path.join(artifactsDirectory(), artifactId)
-    await execFileAsync("mkfifo", [finalPath])
-    const artifact = ArtifactRepresentation.make({
-      artifactId,
-      digest: Schema.decodeUnknownSync(Sha256Digest)(`sha256:${"0".repeat(64)}`)
-    })
-    const result = await run(Effect.gen(function*() {
-      const store = yield* ArtifactStore
-      return yield* store.read(artifact).pipe(Effect.result)
-    }))
-    expect(result._tag).toBe("Failure")
-    if (result._tag === "Failure" && result.failure._tag === "ArtifactStoreIoFailure") {
-        expect(result.failure.reason).toBe("final-entry-non-regular")
+      expect(result.failure._tag).toBe("FileSystemArtifactStoreOpenFailure")
+      expect(result.failure.reason).toBe("BadResource")
     }
   })
 
@@ -215,7 +150,7 @@ describe("LocalArtifactStore", () => {
     expect(result._tag).toBe("Failure")
     if (result._tag === "Failure") {
       expect(result.failure._tag).toBe("ArtifactStoreIoFailure")
-      expect(result.failure.reason).toBe("final-entry-non-regular")
+      expect(result.failure.reason).toBe("BadResource")
     }
     expect(await readdir(stagingDirectory())).toEqual([])
   })

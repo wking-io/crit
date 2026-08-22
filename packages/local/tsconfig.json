@@ -15,6 +15,7 @@
       "@crit/replica/adapter": ["../replica/src/adapter.ts"],
       "@crit/replica/testing": ["../replica/src/testing.ts"],
       "@crit/representations": ["../representations/src/index.ts"],
+      "@crit/representations/adapter": ["../representations/src/adapter.ts"],
       "@crit/representations/testing": ["../representations/src/testing.ts"]
     }
   },
