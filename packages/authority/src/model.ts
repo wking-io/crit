@@ -18,8 +18,7 @@ import type {
   SubmitChangeReceipt
 } from "@crit/protocol"
 import { ProtocolValue } from "@crit/protocol"
-import type { Effect } from "effect"
-import { Schema } from "effect"
+import { Context, type Effect, Schema } from "effect"
 
 const CursorValue = Schema.declare<Cursor>((input): input is Cursor => {
   try {
@@ -110,7 +109,7 @@ export type OpenCanvasFailure = CanvasNotFound
 export type SubmitCanvasChangeFailure = CanvasNotFound | CursorNotFound | ChangeIdReused | ChangeRejected
 export type ChangesAfterFailure = CanvasNotFound | CursorNotFound
 
-export interface CanvasAuthority {
+export class CanvasAuthority extends Context.Service<CanvasAuthority, {
   readonly create: (
     command: CreateCanvas,
     invocation: VerifiedInvocation
@@ -125,7 +124,7 @@ export interface CanvasAuthority {
   readonly changesAfter: (
     query: ChangesAfter
   ) => Effect.Effect<ChangePage, ChangesAfterFailure>
-}
+}>()("@crit/authority/CanvasAuthority") {}
 
 export const AuthorityModel = {
   createCanvas: CreateCanvas.make,

@@ -1,51 +1,19 @@
-import {
-  type AcceptedAttribution,
-  CanvasCommandBatch,
-  CanvasEngine,
-  type CanvasId,
-  type ChangeId,
-  AgentAttribution,
-  IsoTimestamp,
-  PersonAttribution,
-  emptyCanvasProjection
-} from "@crit/domain"
-import {
-  type AcceptedCanvasChange,
-  type ChangePage,
-  type Cursor,
-  ProtocolValue,
-  type ProposedCanvasChange,
-  type SubmitChangeReceipt
-} from "@crit/protocol"
-import { Clock, Effect, Result, Schema, SynchronizedRef } from "effect"
+import type { CanvasId, ChangeId } from "@crit/domain"
+import type { AcceptedCanvasChange, Cursor } from "@crit/protocol"
+import { Effect, Layer, Result, SynchronizedRef } from "effect"
 
+import { AuthorityClock } from "./clock.js"
 import {
   AuthorityFailure,
   AuthorityView,
-  ChangeRejected,
-  CreateCanvas,
-  VerifiedInvocation,
-  type CanvasAuthority,
-  type ChangesAfter,
-  type SubmitCanvasChangeFailure
+  CanvasAuthority,
+  type ChangesAfter
 } from "./model.js"
-import { detach } from "./ownership.js"
-
-const commandBatchEquals = Schema.toEquivalence(CanvasCommandBatch)
-
-interface RetryIdentity {
-  readonly proposal: ProposedCanvasChange
-  readonly authorizationSubject: VerifiedInvocation["principal"]["subject"]
-}
-
-type RetryOutcome = Result.Result<SubmitChangeReceipt, ChangeRejected>
-
-interface RetryRecord {
-  readonly identity: RetryIdentity
-  readonly outcome: RetryOutcome
-}
-
-type SubmitDecision = Result.Result<SubmitChangeReceipt, SubmitCanvasChangeFailure>
+import {
+  AuthorityPolicy,
+  type RetryRecord,
+  type SubmitDecision
+} from "./policy.js"
 
 interface CanvasState {
   readonly view: AuthorityView
@@ -57,117 +25,9 @@ interface CanvasState {
 
 type Registry = ReadonlyMap<CanvasId, SynchronizedRef.SynchronizedRef<CanvasState>>
 
-export interface MemoryCanvasAuthorityOptions {
-  readonly now?: Effect.Effect<typeof IsoTimestamp.Type>
-}
-
-const defaultNow = Clock.currentTimeMillis.pipe(
-  Effect.map((millis) => Schema.decodeUnknownSync(IsoTimestamp)(new Date(millis).toISOString()))
-)
-
-const attribution = (invocation: VerifiedInvocation): AcceptedAttribution => invocation._tag === "person"
-  ? PersonAttribution.make({ person: invocation.principal.person })
-  : agentAttribution(invocation)
-
-const agentAttribution = (invocation: Extract<VerifiedInvocation, { readonly _tag: "agent" }>) => {
-  const fields = {
-    agent: invocation.principal.agent,
-    delegatedBy: invocation.principal.delegatedBy,
-    oauthClientId: invocation.principal.oauthClientId,
-    grantId: invocation.principal.grantId,
-    executionId: invocation.executionId
-  }
-  return invocation.reportedRuntime === undefined
-    ? AgentAttribution.make(fields)
-    : AgentAttribution.make({ ...fields, reportedRuntime: invocation.reportedRuntime })
-}
-
-const cursorAt = (canvasId: CanvasId, position: number): Cursor =>
-  ProtocolValue.cursor(`cursor_${canvasId}_${position}`)
-
-const retryEquals = (left: RetryIdentity, right: RetryIdentity): boolean =>
-  left.proposal.changeId === right.proposal.changeId &&
-  left.proposal.canvasId === right.proposal.canvasId &&
-  left.proposal.observedCursor === right.proposal.observedCursor &&
-  commandBatchEquals(left.proposal.commands, right.proposal.commands) &&
-  left.authorizationSubject === right.authorizationSubject
-
-const failCursor = (canvasId: CanvasId, cursor: Cursor) =>
-  Effect.fail(AuthorityFailure.cursorNotFound({ canvasId, cursor }))
-
-const transition = (
-  state: CanvasState,
-  proposal: ProposedCanvasChange,
-  invocation: VerifiedInvocation,
-  now: Effect.Effect<typeof IsoTimestamp.Type>
-): Effect.Effect<readonly [SubmitDecision, CanvasState]> => {
-  const identity = { proposal, authorizationSubject: invocation.principal.subject }
-  const prior = state.retries.get(proposal.changeId)
-  if (prior !== undefined) {
-    if (!retryEquals(prior.identity, identity)) {
-      return Effect.succeed([Result.fail(
-        AuthorityFailure.changeIdReused({ canvasId: proposal.canvasId, changeId: proposal.changeId })
-      ), state])
-    }
-    return prior.outcome._tag === "Success"
-      ? Effect.succeed([Result.succeed({
-          disposition: "identical-retry",
-          change: prior.outcome.success.change
-        }), state])
-      : Effect.succeed([Result.fail(prior.outcome.failure), state])
-  }
-  if (proposal.observedCursor !== null && state.cursorPositions.get(proposal.observedCursor) === undefined) {
-    return Effect.succeed([Result.fail(
-      AuthorityFailure.cursorNotFound({ canvasId: proposal.canvasId, cursor: proposal.observedCursor })
-    ), state])
-  }
-  const result = CanvasEngine.apply(state.view.projection, proposal)
-  if (result._tag === "rejected") {
-    const failure = AuthorityFailure.changeRejected({
-      canvasId: proposal.canvasId,
-      changeId: proposal.changeId,
-      failure: result.failure
-    })
-    const retries = new Map(state.retries).set(proposal.changeId, {
-      identity,
-      outcome: Result.fail(failure)
-    })
-    return Effect.succeed([Result.fail(failure), { ...state, retries }])
-  }
-  return now.pipe(Effect.map((acceptedAt) => {
-    const sequence = ProtocolValue.sequence(state.changes.length + 1)
-    const cursor = cursorAt(proposal.canvasId, sequence)
-    const change: AcceptedCanvasChange = {
-      ...proposal,
-      sequence,
-      cursor,
-      acceptedAt,
-      attribution: attribution(invocation)
-    }
-    const receipt: SubmitChangeReceipt = { disposition: "first-acceptance", change }
-    const retries = new Map(state.retries).set(proposal.changeId, {
-      identity,
-      outcome: Result.succeed(receipt)
-    })
-    return [Result.succeed(receipt), {
-      view: AuthorityView.make({
-        ...state.view,
-        cursor,
-        projection: result.projection
-      }),
-      genesisCursor: state.genesisCursor,
-      changes: [...state.changes, change],
-      cursorPositions: new Map(state.cursorPositions).set(cursor, sequence),
-      retries
-    }] as const
-  }))
-}
-
-export const makeMemoryCanvasAuthority = (
-  options: MemoryCanvasAuthorityOptions = {}
-): Effect.Effect<CanvasAuthority> => Effect.gen(function*() {
+const make = Effect.gen(function*() {
+  const clock = yield* AuthorityClock
   const registry = yield* SynchronizedRef.make<Registry>(new Map())
-  const now = options.now ?? defaultNow
 
   const lookup = (canvasId: CanvasId) => SynchronizedRef.get(registry).pipe(
     Effect.flatMap((canvases) => {
@@ -178,75 +38,112 @@ export const makeMemoryCanvasAuthority = (
     })
   )
 
-  const create: CanvasAuthority["create"] = (command: CreateCanvas, invocation: VerifiedInvocation) =>
-    Effect.suspend(() => {
-      const ownedCommand = detach(command)
-      const ownedInvocation = detach(invocation)
-      return SynchronizedRef.modifyEffect(registry, (canvases) => {
-        if (canvases.has(ownedCommand.canvasId)) {
-          return Effect.fail(AuthorityFailure.canvasAlreadyExists({ canvasId: ownedCommand.canvasId }))
-        }
-        return now.pipe(Effect.map((createdAt) => {
-          const genesisCursor = cursorAt(ownedCommand.canvasId, 0)
-          const projection = emptyCanvasProjection(ownedCommand.canvasId, ownedCommand.title)
-          const view = AuthorityView.make({
-            canvasId: ownedCommand.canvasId,
-            createdAt,
-            createdBy: attribution(ownedInvocation),
-            cursor: genesisCursor,
-            projection
-          })
-          const state = SynchronizedRef.makeUnsafe<CanvasState>({
-            view,
-            genesisCursor,
-            changes: [],
-            cursorPositions: new Map([[genesisCursor, 0]]),
-            retries: new Map()
-          })
-          return [detach(view), new Map(canvases).set(ownedCommand.canvasId, state)] as const
-        }))
-      })
+  const create: CanvasAuthority["Service"]["create"] = (command, invocation) => Effect.suspend(() => {
+    const ownedCommand = AuthorityPolicy.detach(command)
+    const ownedInvocation = AuthorityPolicy.detach(invocation)
+    return SynchronizedRef.modifyEffect(registry, (canvases) => {
+      if (canvases.has(ownedCommand.canvasId)) {
+        return Effect.fail(AuthorityFailure.canvasAlreadyExists({ canvasId: ownedCommand.canvasId }))
+      }
+      return clock.now.pipe(Effect.map((createdAt) => {
+        const view = AuthorityPolicy.createCanvas({
+          command: ownedCommand,
+          invocation: ownedInvocation,
+          createdAt
+        })
+        const state = SynchronizedRef.makeUnsafe<CanvasState>({
+          view,
+          genesisCursor: view.cursor,
+          changes: [],
+          cursorPositions: new Map([[view.cursor, 0]]),
+          retries: new Map()
+        })
+        return [AuthorityPolicy.detach(view), new Map(canvases).set(ownedCommand.canvasId, state)] as const
+      }))
     })
+  })
 
-  const open: CanvasAuthority["open"] = (canvasId) => lookup(canvasId).pipe(
+  const open: CanvasAuthority["Service"]["open"] = (canvasId) => lookup(canvasId).pipe(
     Effect.flatMap(SynchronizedRef.get),
-    Effect.map((state) => detach(state.view))
+    Effect.map((state) => AuthorityPolicy.detach(state.view))
   )
 
-  const submit: CanvasAuthority["submit"] = (proposal, invocation) => Effect.suspend(() => {
-    const ownedProposal = detach(proposal)
-    const ownedInvocation = detach(invocation)
+  const submit: CanvasAuthority["Service"]["submit"] = (proposal, invocation) => Effect.suspend(() => {
+    const ownedProposal = AuthorityPolicy.detach(proposal)
+    const ownedInvocation = AuthorityPolicy.detach(invocation)
     return lookup(ownedProposal.canvasId).pipe(
-      Effect.flatMap((state) => SynchronizedRef.modifyEffect(state, (current) =>
-        transition(current, ownedProposal, ownedInvocation, now))),
-      Effect.flatMap((decision) => decision._tag === "Success"
-        ? Effect.succeed(detach(decision.success))
-        : Effect.fail(decision.failure))
+      Effect.flatMap((state) => SynchronizedRef.modifyEffect(state, (current) => {
+        const retry = AuthorityPolicy.evaluateRetry({
+          proposal: ownedProposal,
+          invocation: ownedInvocation,
+          prior: current.retries.get(ownedProposal.changeId)
+        })
+        if (retry._tag === "decided") return Effect.succeed([retry.decision, current] as const)
+        const fresh = AuthorityPolicy.evaluateFresh({
+          proposal: ownedProposal,
+          invocation: ownedInvocation,
+          projection: current.view.projection,
+          observedCursorKnown: ownedProposal.observedCursor === null ||
+            current.cursorPositions.has(ownedProposal.observedCursor)
+        })
+        if (fresh._tag === "decided") return Effect.succeed([fresh.decision, current] as const)
+        if (fresh._tag === "rejected") {
+          return Effect.succeed([fresh.decision, {
+            ...current,
+            retries: new Map(current.retries).set(ownedProposal.changeId, fresh.retry)
+          }] as const)
+        }
+        return clock.now.pipe(Effect.map((acceptedAt): readonly [SubmitDecision, CanvasState] => {
+          const accepted = AuthorityPolicy.completeAcceptance({
+            candidate: fresh.candidate,
+            acceptedAt,
+            position: current.changes.length + 1
+          })
+          return [Result.succeed(accepted.receipt), {
+            view: AuthorityView.make({
+              ...current.view,
+              cursor: accepted.receipt.change.cursor,
+              projection: accepted.projection
+            }),
+            genesisCursor: current.genesisCursor,
+            changes: [...current.changes, accepted.receipt.change],
+            cursorPositions: new Map(current.cursorPositions).set(
+              accepted.receipt.change.cursor,
+              accepted.receipt.change.sequence
+            ),
+            retries: new Map(current.retries).set(ownedProposal.changeId, accepted.retry)
+          }]
+        }))
+      })),
+      Effect.flatMap(AuthorityPolicy.decisionEffect)
     )
   })
 
-  const changesAfter: CanvasAuthority["changesAfter"] = (query: ChangesAfter) => lookup(query.canvasId).pipe(
+  const changesAfter: CanvasAuthority["Service"]["changesAfter"] = (query: ChangesAfter) => lookup(query.canvasId).pipe(
     Effect.flatMap(SynchronizedRef.get),
     Effect.flatMap((state) => {
-      const requestedCursor = query.after
       let position = 0
-      if (requestedCursor !== null) {
-        const knownPosition = state.cursorPositions.get(requestedCursor)
-        if (knownPosition === undefined) return failCursor(query.canvasId, requestedCursor)
+      if (query.after !== null) {
+        const knownPosition = state.cursorPositions.get(query.after)
+        if (knownPosition === undefined) {
+          return Effect.fail(AuthorityFailure.cursorNotFound({ canvasId: query.canvasId, cursor: query.after }))
+        }
         position = knownPosition
       }
       const changes = state.changes.slice(position, position + query.limit)
-      const cursor = changes.at(-1)?.cursor ?? requestedCursor ?? state.genesisCursor
-      const page: ChangePage = {
-        canvasId: query.canvasId,
-        after: query.after,
-        changes,
-        cursor,
-        hasMore: position + changes.length < state.changes.length
-      }
-      return Effect.succeed(detach(page))
+      return Effect.succeed(AuthorityPolicy.detach(AuthorityPolicy.makeChangePage({
+        query,
+        genesisCursor: state.genesisCursor,
+        position,
+        total: state.changes.length,
+        changes
+      })))
     })
   )
 
   return { create, open, submit, changesAfter }
 })
+
+export const MemoryCanvasAuthority = {
+  layer: Layer.effect(CanvasAuthority, make)
+}

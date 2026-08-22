@@ -3,6 +3,7 @@ export {
   AuthorityFailure,
   AuthorityModel,
   AuthorityView,
+  CanvasAuthority,
   CanvasAlreadyExists,
   CanvasNotFound,
   ChangeIdReused,
@@ -15,11 +16,10 @@ export {
   VerifiedInvocation
 } from "./model.js"
 export type {
-  CanvasAuthority,
   ChangesAfterFailure,
   CreateCanvasFailure,
   OpenCanvasFailure,
   SubmitCanvasChangeFailure
 } from "./model.js"
-export { makeMemoryCanvasAuthority } from "./memory.js"
-export type { MemoryCanvasAuthorityOptions } from "./memory.js"
+export { AuthorityClock, AuthorityClockLive, authorityClockLayer } from "./clock.js"
+export { MemoryCanvasAuthority } from "./memory.js"
