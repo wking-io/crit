@@ -41,29 +41,39 @@ const projectionFailure = (projection: typeof CanvasProjectionFields.Type) => {
     new Set(commentIds).size !== commentIds.length) {
     return "Entity and issued ID collections must be sorted and unique"
   }
-  if (!frameIds.every((id) => projection.issuedIds.frameIds.includes(id)) ||
-      !noteIds.every((id) => projection.issuedIds.noteIds.includes(id)) ||
-      !threadIds.every((id) => projection.issuedIds.threadIds.includes(id)) ||
-      !commentIds.every((id) => projection.issuedIds.commentIds.includes(id))) {
+  const issuedFrameIds = new Set(projection.issuedIds.frameIds)
+  const issuedNoteIds = new Set(projection.issuedIds.noteIds)
+  const issuedThreadIds = new Set(projection.issuedIds.threadIds)
+  const issuedCommentIds = new Set(projection.issuedIds.commentIds)
+  if (!frameIds.every((id) => issuedFrameIds.has(id)) ||
+      !noteIds.every((id) => issuedNoteIds.has(id)) ||
+      !threadIds.every((id) => issuedThreadIds.has(id)) ||
+      !commentIds.every((id) => issuedCommentIds.has(id))) {
     return "Every active ID must have been issued"
   }
-  const activeItems = [...frameIds.map((id) => `frame:${id}`), ...noteIds.map((id) => `note:${id}`)].sort()
-  const stackItems = projection.stack.map(itemKey)
-  if (new Set(stackItems).size !== stackItems.length ||
-      activeItems.length !== stackItems.length ||
-      !activeItems.every((id) => stackItems.includes(id))) {
+  const activeItems = new Set<string>()
+  for (const id of frameIds) activeItems.add(`frame:${id}`)
+  for (const id of noteIds) activeItems.add(`note:${id}`)
+  const stackItems = new Set<string>()
+  for (const item of projection.stack) {
+    const key = itemKey(item)
+    if (!activeItems.has(key) || stackItems.has(key)) {
+      return "Stack must contain each active Frame and Note exactly once"
+    }
+    stackItems.add(key)
+  }
+  if (activeItems.size !== stackItems.size) {
     return "Stack must contain each active Frame and Note exactly once"
   }
   if (projection.stack.length > 0 && projection.stackChangedByChangeId === null) {
     return "A non-empty stack must have change provenance"
   }
-  const frameById = new Map(projection.frames.map((frame) => [frame.frameId, frame]))
-  if (projection.notes.some((note) => note.attachedFrameId !== null && !frameById.has(note.attachedFrameId))) {
+  const activeFrameIds = new Set(frameIds)
+  if (projection.notes.some((note) => note.attachedFrameId !== null && !activeFrameIds.has(note.attachedFrameId))) {
     return "A Note attachment must reference an active Frame"
   }
   for (const thread of projection.threads) {
-    const frame = frameById.get(thread.anchor.frameId)
-    if (frame === undefined) return "A comment anchor must reference an active Frame"
+    if (!activeFrameIds.has(thread.anchor.frameId)) return "A comment anchor must reference an active Frame"
   }
   return undefined
 }
