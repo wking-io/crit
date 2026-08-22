@@ -1,10 +1,10 @@
 import { readFileSync } from "node:fs"
 
-import { CanvasEngine, decodeCanvasProjection } from "@crit/domain"
+import { CanvasEngine, Id, decodeCanvasProjection } from "@crit/domain"
 import { Result } from "effect"
 import { assert, describe, expect, it } from "vitest"
 
-import { ChangeProtocol, ProtocolValue } from "../src/index.js"
+import { ChangeProtocol, ChangeValue, ProtocolValue } from "../src/index.js"
 
 const fixture = (name: string) => JSON.parse(
   readFileSync(new URL(`fixtures/${name}.json`, import.meta.url), "utf8")
@@ -102,8 +102,24 @@ describe("ChangeProtocol", () => {
 
   it("exposes only semantic protocol values", async () => {
     expect(Object.keys(await import("../src/index.js")).sort()).toEqual([
-      "ChangeProtocol", "CursorSchema", "ProtocolValue", "SequenceSchema"
+      "AcceptedCanvasChangeSchema", "ChangePageSchema", "ChangeProtocol", "ChangeValue", "CursorSchema",
+      "ProposedCanvasChangeSchema", "ProtocolValue", "SequenceSchema", "SubmitChangeReceiptSchema"
     ])
+  })
+
+  it("owns change equality and accepted-to-proposed conversion", () => {
+    const proposed = ChangeProtocol.proposed.decode(fixture("proposed"))
+    const accepted = ChangeProtocol.accepted.decode(fixture("accepted"))
+    assert(Result.isSuccess(proposed))
+    assert(Result.isSuccess(accepted))
+    expect(ChangeValue.proposedEquals(proposed.success, ChangeValue.proposalOf(accepted.success))).toBe(true)
+    const acceptedProposal = ChangeValue.proposalOf(accepted.success)
+    expect(ChangeValue.proposedEquals(acceptedProposal, { ...acceptedProposal })).toBe(true)
+    expect(ChangeValue.proposedEquals(acceptedProposal, {
+      ...acceptedProposal,
+      changeId: Id.change("change_different")
+    })).toBe(false)
+    expect(ChangeValue.acceptedEquals(accepted.success, { ...accepted.success })).toBe(true)
   })
 
   it("feeds decoded accepted changes directly into domain replay", () => {

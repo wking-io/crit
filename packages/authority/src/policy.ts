@@ -1,7 +1,6 @@
 import {
   type AcceptedAttribution,
   AgentAttribution,
-  CanvasCommandBatch,
   CanvasEngine,
   type CanvasId,
   type CanvasProjection,
@@ -11,15 +10,14 @@ import {
 } from "@crit/domain"
 import {
   type AcceptedCanvasChange,
+  ChangeValue,
   type ChangePage,
   type Cursor,
   ProtocolValue,
   type ProposedCanvasChange,
   type SubmitChangeReceipt
 } from "@crit/protocol"
-import { Data, Effect, Result, Schema } from "effect"
-
-declare const structuredClone: <A>(value: A) => A
+import { Data, Effect, Result } from "effect"
 
 import {
   AuthorityFailure,
@@ -63,8 +61,6 @@ export type FreshEvaluation = Data.TaggedEnum<{
 }>
 export const FreshEvaluation = Data.taggedEnum<FreshEvaluation>()
 
-const commandBatchEquals = Schema.toEquivalence(CanvasCommandBatch)
-
 const attribution = (invocation: VerifiedInvocation): AcceptedAttribution => invocation._tag === "person"
   ? PersonAttribution.make({ person: invocation.principal.person })
   : AgentAttribution.make(invocation.reportedRuntime === undefined ? {
@@ -91,10 +87,7 @@ const retryIdentity = (proposal: ProposedCanvasChange, invocation: VerifiedInvoc
 })
 
 const sameRetryIdentity = (left: RetryIdentity, right: RetryIdentity): boolean =>
-  left.proposal.changeId === right.proposal.changeId &&
-  left.proposal.canvasId === right.proposal.canvasId &&
-  left.proposal.observedCursor === right.proposal.observedCursor &&
-  commandBatchEquals(left.proposal.commands, right.proposal.commands) &&
+  ChangeValue.proposedEquals(left.proposal, right.proposal) &&
   left.authorizationSubject === right.authorizationSubject
 
 const createCanvas = (args: {
@@ -206,10 +199,8 @@ const makeChangePage = (args: {
 const decisionEffect = (
   decision: SubmitDecision
 ): Effect.Effect<SubmitChangeReceipt, SubmitCanvasChangeFailure> => decision._tag === "Success"
-  ? Effect.succeed(detach(decision.success))
+  ? Effect.succeed(ProtocolValue.detach(decision.success))
   : Effect.fail(decision.failure)
-
-const detach = <A>(value: A): A => structuredClone(value)
 
 export const AuthorityPolicy = {
   createCanvas,
@@ -218,5 +209,5 @@ export const AuthorityPolicy = {
   completeAcceptance,
   makeChangePage,
   decisionEffect,
-  detach
+  detach: ProtocolValue.detach
 }

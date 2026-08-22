@@ -1,4 +1,11 @@
 export { ChangeProtocol } from "./codec.js"
+export {
+  AcceptedCanvasChangeSchema,
+  ChangeValue,
+  ChangePageSchema,
+  ProposedCanvasChangeSchema,
+  SubmitChangeReceiptSchema
+} from "./change.js"
 export { CursorSchema, ProtocolValue, SequenceSchema } from "./value.js"
 export type { Cursor, Sequence } from "./value.js"
 export type {

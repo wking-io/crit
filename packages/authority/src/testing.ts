@@ -17,8 +17,6 @@ import {
   VerifiedInvocation
 } from "./index.js"
 
-declare const structuredClone: <A>(value: A) => A
-
 export interface AuthorityConformanceOptions {
   readonly now?: Effect.Effect<typeof IsoTimestamp.Type>
 }
@@ -118,7 +116,7 @@ const isolationScenario = (factory: AuthorityConformanceFactory): AuthorityConfo
     name,
     run: provideAuthority(factory, undefined, Effect.gen(function*() {
       const authority = yield* CanvasAuthority
-      const incomingInvocation = structuredClone(person)
+      const incomingInvocation = ProtocolValue.detach(person)
       const created = yield* authority.create({
         _tag: "create-canvas", canvasId: canvasA, title: "Authority"
       }, incomingInvocation)

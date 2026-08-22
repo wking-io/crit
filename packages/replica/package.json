@@ -4,11 +4,27 @@
   "private": true,
   "type": "module",
   "sideEffects": false,
+  "scripts": {
+    "test": "vitest run --config vitest.config.ts"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./testing": {
+      "types": "./dist/testing.d.ts",
+      "import": "./dist/testing.js"
     }
   },
-  "files": ["dist"]
+  "files": ["dist"],
+  "dependencies": {
+    "@crit/authority": "*",
+    "@crit/domain": "*",
+    "@crit/protocol": "*",
+    "effect": "4.0.0-rc.109"
+  },
+  "devDependencies": {
+    "vitest": "4.1.0"
+  }
 }

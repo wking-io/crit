@@ -12,6 +12,7 @@ import {
 } from "@crit/authority"
 import { authorityConformanceScenarios } from "@crit/authority/testing"
 import { CanvasEngine, Id, IsoTimestamp, decodeCanvasCommandBatch, emptyCanvasProjection } from "@crit/domain"
+import { ProtocolValue } from "@crit/protocol"
 import { Context, Deferred, Effect, Exit, Fiber, Layer, Schema } from "effect"
 import { describe, expect, it } from "vitest"
 
@@ -162,7 +163,7 @@ describe("SQLite CanvasAuthority", () => {
       const authority = yield* buildSqliteAuthority({ path, now })
       const canvasId = Id.canvas("canvas_owned")
       yield* authority.create(create(canvasId), person)
-      const incomingPerson = structuredClone(person)
+      const incomingPerson = ProtocolValue.detach(person)
       const incoming = {
         canvasId,
         changeId: Id.change("change_owned"),
