@@ -3,13 +3,19 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { DatabaseSync } from "node:sqlite"
 
-import { AuthorityModel, PersonInvocation } from "@crit/authority"
+import {
+  AuthorityClockLive,
+  AuthorityModel,
+  CanvasAuthority,
+  PersonInvocation,
+  authorityClockLayer
+} from "@crit/authority"
 import { authorityConformanceScenarios } from "@crit/authority/testing"
 import { CanvasEngine, Id, IsoTimestamp, decodeCanvasCommandBatch, emptyCanvasProjection } from "@crit/domain"
-import { Deferred, Effect, Exit, Fiber, Schema } from "effect"
+import { Context, Deferred, Effect, Exit, Fiber, Layer, Schema } from "effect"
 import { describe, expect, it } from "vitest"
 
-import { makeSqliteCanvasAuthority } from "../src/index.js"
+import { SqliteCanvasAuthority } from "../src/index.js"
 
 const person = Schema.decodeUnknownSync(PersonInvocation)({
   _tag: "person",
@@ -29,11 +35,24 @@ const tempDatabasePath = Effect.acquireRelease(
   (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true }))
 ).pipe(Effect.map((directory) => join(directory, "authority.sqlite")))
 
+const sqliteLayer = (path: string, now?: Parameters<typeof authorityClockLayer>[0]) =>
+  SqliteCanvasAuthority.layer({ path }).pipe(Layer.provide(
+    now === undefined ? AuthorityClockLive : authorityClockLayer(now)
+  ))
+
+const buildSqliteAuthority = (options: {
+  readonly path: string
+  readonly now?: Parameters<typeof authorityClockLayer>[0]
+}) => Effect.gen(function*() {
+  const scope = yield* Effect.scope
+  const context = yield* Layer.buildWithScope(sqliteLayer(options.path, options.now), scope)
+  return Context.get(context, CanvasAuthority)
+})
+
 describe("SQLite CanvasAuthority", () => {
-  for (const scenario of authorityConformanceScenarios((options) => Effect.gen(function*() {
-    const path = yield* tempDatabasePath
-    return yield* makeSqliteCanvasAuthority({ path, ...options })
-  }))) {
+  for (const scenario of authorityConformanceScenarios((options) => Layer.unwrap(
+    tempDatabasePath.pipe(Effect.map((path) => sqliteLayer(path, options?.now)))
+  ))) {
     it(scenario.name, () => Effect.runPromise(Effect.scoped(scenario.run)))
   }
 
@@ -41,7 +60,7 @@ describe("SQLite CanvasAuthority", () => {
     await Effect.runPromise(Effect.scoped(Effect.gen(function*() {
       const path = yield* tempDatabasePath
       const original = yield* Effect.scoped(Effect.gen(function*() {
-      const authority = yield* makeSqliteCanvasAuthority({ path })
+      const authority = yield* buildSqliteAuthority({ path })
       const canvasId = Id.canvas("canvas_restart")
       yield* authority.create(create(canvasId), person)
       const accepted = yield* authority.submit({
@@ -55,7 +74,7 @@ describe("SQLite CanvasAuthority", () => {
       return { accepted, rejected }
       }))
       yield* Effect.scoped(Effect.gen(function*() {
-      const authority = yield* makeSqliteCanvasAuthority({ path })
+      const authority = yield* buildSqliteAuthority({ path })
       const canvasId = Id.canvas("canvas_restart")
       const acceptedProposal = {
         canvasId, changeId: Id.change("change_restart_accepted"), observedCursor: null,
@@ -95,7 +114,7 @@ describe("SQLite CanvasAuthority", () => {
   it("treats representation state key order as the same retry", async () => {
     await Effect.runPromise(Effect.scoped(Effect.gen(function*() {
       const path = yield* tempDatabasePath
-      const authority = yield* makeSqliteCanvasAuthority({ path })
+      const authority = yield* buildSqliteAuthority({ path })
       const canvasId = Id.canvas("canvas_semantic")
       yield* authority.create(create(canvasId), person)
       const base = {
@@ -140,7 +159,7 @@ describe("SQLite CanvasAuthority", () => {
           ? Deferred.succeed(entered, undefined).pipe(Effect.andThen(Deferred.await(release)), Effect.as(timestamp))
           : Effect.succeed(timestamp)
       })
-      const authority = yield* makeSqliteCanvasAuthority({ path, now })
+      const authority = yield* buildSqliteAuthority({ path, now })
       const canvasId = Id.canvas("canvas_owned")
       yield* authority.create(create(canvasId), person)
       const incomingPerson = structuredClone(person)
@@ -168,8 +187,8 @@ describe("SQLite CanvasAuthority", () => {
   it("keeps sequences gap-free across independent handles", async () => {
     await Effect.runPromise(Effect.scoped(Effect.gen(function*() {
       const path = yield* tempDatabasePath
-      const left = yield* makeSqliteCanvasAuthority({ path })
-      const right = yield* makeSqliteCanvasAuthority({ path })
+      const left = yield* buildSqliteAuthority({ path })
+      const right = yield* buildSqliteAuthority({ path })
       const canvasId = Id.canvas("canvas_handles")
       yield* left.create(create(canvasId), person)
       const submit = (index: number, authority: typeof left) => authority.submit({
@@ -192,7 +211,7 @@ describe("SQLite CanvasAuthority", () => {
   it("yields while another connection holds the writer lock", async () => {
     await Effect.runPromise(Effect.scoped(Effect.gen(function*() {
       const path = yield* tempDatabasePath
-      const authority = yield* makeSqliteCanvasAuthority({ path })
+      const authority = yield* buildSqliteAuthority({ path })
       const canvasId = Id.canvas("canvas_lock")
       yield* authority.create(create(canvasId), person)
       const lock = new DatabaseSync(path)
@@ -221,7 +240,7 @@ describe("SQLite CanvasAuthority", () => {
   it("rolls back the ledger when checkpoint update fails", async () => {
     await Effect.runPromise(Effect.scoped(Effect.gen(function*() {
       const path = yield* tempDatabasePath
-      const authority = yield* makeSqliteCanvasAuthority({ path })
+      const authority = yield* buildSqliteAuthority({ path })
       const canvasId = Id.canvas("canvas_rollback")
       yield* authority.create(create(canvasId), person)
       const fault = new DatabaseSync(path)
@@ -255,7 +274,7 @@ describe("SQLite CanvasAuthority", () => {
     const database = new DatabaseSync(path)
     database.exec("PRAGMA user_version = 2")
     database.close()
-    const result = yield* Effect.result(Effect.scoped(makeSqliteCanvasAuthority({ path })))
+    const result = yield* Effect.result(Effect.scoped(buildSqliteAuthority({ path })))
     expect(result._tag).toBe("Failure")
     if (result._tag === "Failure") {
       expect(result.failure._tag).toBe("LocalAuthorityOpenFailure")
@@ -267,7 +286,7 @@ describe("SQLite CanvasAuthority", () => {
   it("enforces relational integrity", async () => {
     await Effect.runPromise(Effect.scoped(Effect.gen(function*() {
       const path = yield* tempDatabasePath
-      const authority = yield* makeSqliteCanvasAuthority({ path })
+      const authority = yield* buildSqliteAuthority({ path })
       const canvasId = Id.canvas("canvas_integrity")
       yield* authority.create(create(canvasId), person)
       yield* Effect.result(authority.submit({
@@ -291,7 +310,7 @@ describe("SQLite CanvasAuthority", () => {
     await Effect.runPromise(Effect.scoped(Effect.gen(function*() {
     const path = yield* tempDatabasePath
     yield* Effect.scoped(Effect.gen(function*() {
-      const authority = yield* makeSqliteCanvasAuthority({ path })
+      const authority = yield* buildSqliteAuthority({ path })
       const canvasId = Id.canvas("canvas_corrupt")
       yield* authority.create(create(canvasId), person)
       yield* authority.submit({
@@ -303,7 +322,7 @@ describe("SQLite CanvasAuthority", () => {
     database.prepare("UPDATE canvases SET current_cursor = ?").run("cursor_corrupt_head")
     database.close()
     const exit = yield* Effect.exit(Effect.scoped(Effect.gen(function*() {
-      const authority = yield* makeSqliteCanvasAuthority({ path })
+      const authority = yield* buildSqliteAuthority({ path })
       yield* authority.open(Id.canvas("canvas_corrupt"))
     })))
     expect(Exit.isFailure(exit)).toBe(true)

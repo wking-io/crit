@@ -1,37 +1,36 @@
 import * as SqliteClient from "@effect/sql-sqlite-node/SqliteClient"
 import {
-  AuthorityClock,
   AuthorityFailure,
+  AuthorityClock,
   AuthorityView,
+  CanvasAuthority,
   ChangeRejected,
-  CreateCanvas,
-  VerifiedInvocation,
-  type CanvasAuthority,
-  type ChangesAfter,
-  type SubmitCanvasChangeFailure
+  type CreateCanvas,
+  type VerifiedInvocation,
+  type ChangesAfter
 } from "@crit/authority"
 import {
+  AuthorityPolicy,
+  type FreshEvaluation,
+  type RetryRecord,
+  type SubmitDecision
+} from "@crit/authority/adapter"
+import {
   AcceptedAttribution,
-  AgentAttribution,
-  CanvasCommandBatch,
-  CanvasEngine,
+  AuthSubject,
   CanvasId,
   CanvasProjection,
   ChangeId,
   IsoTimestamp,
-  PersonAttribution,
-  emptyCanvasProjection
 } from "@crit/domain"
 import {
   ChangeProtocol,
   ProtocolValue,
   type AcceptedCanvasChange,
-  type ChangePage,
   type Cursor,
-  type ProposedCanvasChange,
-  type SubmitChangeReceipt
+  type ProposedCanvasChange
 } from "@crit/protocol"
-import { Cause, Data, Effect, Result, Schedule, Schema, type Scope } from "effect"
+import { Cause, Data, Effect, Layer, Result, Schedule, Schema } from "effect"
 import * as Reactivity from "effect/unstable/reactivity/Reactivity"
 import type { SqlError } from "effect/unstable/sql/SqlError"
 
@@ -44,7 +43,6 @@ export class LocalAuthorityOpenFailure extends Data.TaggedError("LocalAuthorityO
 
 export interface SqliteCanvasAuthorityOptions {
   readonly path: string
-  readonly now?: Effect.Effect<typeof IsoTimestamp.Type>
 }
 
 const JsonText = Schema.String
@@ -90,32 +88,6 @@ const decodeProtocol = <A>(value: string, decode: (input: Schema.Json) => { read
   return result.value
 }
 
-const attribution = (invocation: VerifiedInvocation): AcceptedAttribution => invocation._tag === "person"
-  ? PersonAttribution.make({ person: invocation.principal.person })
-  : AgentAttribution.make(invocation.reportedRuntime === undefined ? {
-      agent: invocation.principal.agent,
-      delegatedBy: invocation.principal.delegatedBy,
-      oauthClientId: invocation.principal.oauthClientId,
-      grantId: invocation.principal.grantId,
-      executionId: invocation.executionId
-    } : {
-      agent: invocation.principal.agent,
-      delegatedBy: invocation.principal.delegatedBy,
-      oauthClientId: invocation.principal.oauthClientId,
-      grantId: invocation.principal.grantId,
-      executionId: invocation.executionId,
-      reportedRuntime: invocation.reportedRuntime
-    })
-
-const cursorAt = (canvasId: typeof CanvasId.Type, sequence: number): Cursor =>
-  ProtocolValue.cursor(`cursor_${canvasId}_${sequence}`)
-
-const commandBatchEquals = Schema.toEquivalence(CanvasCommandBatch)
-const sameProposal = (left: ProposedCanvasChange, right: ProposedCanvasChange): boolean =>
-  left.changeId === right.changeId && left.canvasId === right.canvasId &&
-  left.observedCursor === right.observedCursor && commandBatchEquals(left.commands, right.commands)
-
-type SubmitDecision = Result.Result<SubmitChangeReceipt, SubmitCanvasChangeFailure>
 type CanvasRecord = {
   readonly row: typeof CanvasRow.Type
   readonly genesisCursor: Cursor
@@ -123,7 +95,10 @@ type CanvasRecord = {
 }
 type Evaluation = Data.TaggedEnum<{
   readonly decision: { readonly decision: SubmitDecision }
-  readonly engine: { readonly canvas: CanvasRecord; readonly result: ReturnType<typeof CanvasEngine.apply> }
+  readonly fresh: {
+    readonly canvas: CanvasRecord
+    readonly evaluation: Exclude<FreshEvaluation, { readonly _tag: "decided" }>
+  }
 }>
 const Evaluation = Data.taggedEnum<Evaluation>()
 
@@ -180,9 +155,10 @@ const readAccepted = (stored: typeof AcceptedRow.Type): AcceptedCanvasChange => 
   return change
 }
 
-export const makeSqliteCanvasAuthority = (
+const make = (
   options: SqliteCanvasAuthorityOptions
-): Effect.Effect<CanvasAuthority, LocalAuthorityOpenFailure, Scope.Scope> => Effect.gen(function*() {
+) => Effect.gen(function*() {
+  const clock = yield* AuthorityClock
   const sql = yield* SqliteClient.make({ filename: options.path, busyTimeout: 0 }).pipe(
     Effect.provide(Reactivity.layer),
     Effect.catchCause((cause) => Effect.fail(new LocalAuthorityOpenFailure({
@@ -194,8 +170,6 @@ export const makeSqliteCanvasAuthority = (
     path: options.path,
     reason: Cause.pretty(cause)
   }))))
-  const now = options.now ?? AuthorityClock.now
-
   const transaction = <A, R>(body: Effect.Effect<A, SqlError, R>): Effect.Effect<A, SqlError, R> =>
     sql.withTransaction(body).pipe(Effect.retry({
       schedule: Schedule.spaced("2 millis"),
@@ -229,10 +203,9 @@ export const makeSqliteCanvasAuthority = (
       }) }
     })
 
-  const retryDecision = (
+  const readRetry = (
     proposal: ProposedCanvasChange,
-    invocation: VerifiedInvocation
-  ): Effect.Effect<SubmitDecision | undefined, SqlError> => Effect.gen(function*() {
+  ): Effect.Effect<RetryRecord | undefined, SqlError> => Effect.gen(function*() {
     const rows = yield* sql<typeof RetryRow.Encoded>`SELECT * FROM retry_reservations
       WHERE canvas_id = ${proposal.canvasId} AND change_id = ${proposal.changeId}`
     if (rows.length === 0) return undefined
@@ -241,137 +214,136 @@ export const makeSqliteCanvasAuthority = (
     if (row.canvas_id !== proposal.canvasId || row.change_id !== proposal.changeId) {
       throw new Error("stored retry facts disagree")
     }
-    if (!sameProposal(prior, proposal) || row.authorization_subject !== invocation.principal.subject) {
-      return Result.fail(AuthorityFailure.changeIdReused({ canvasId: proposal.canvasId, changeId: proposal.changeId }))
+    const identity = {
+      proposal: prior,
+      authorizationSubject: Schema.decodeUnknownSync(AuthSubject)(row.authorization_subject)
     }
     if (row.accepted_sequence !== null) {
       const acceptedRows = yield* sql<typeof AcceptedRow.Encoded>`SELECT * FROM accepted_changes
         WHERE canvas_id = ${row.canvas_id} AND sequence = ${row.accepted_sequence}`
       if (acceptedRows.length === 0) throw new Error("accepted retry target is missing")
       const stored = Schema.decodeUnknownSync(AcceptedRow, { onExcessProperty: "error" })(acceptedRows[0])
-      return Result.succeed({ disposition: "identical-retry", change: readAccepted(stored) })
+      return { identity, outcome: Result.succeed(readAccepted(stored)) }
     }
     if (row.rejected_failure_json === null) throw new Error("stored retry outcome is missing")
-    return Result.fail(decodeStored(ChangeRejected, row.rejected_failure_json))
+    return { identity, outcome: Result.fail(decodeStored(ChangeRejected, row.rejected_failure_json)) }
   })
 
   const evaluate = (
     proposal: ProposedCanvasChange,
     invocation: VerifiedInvocation
   ): Effect.Effect<Evaluation, SqlError> => Effect.gen(function*() {
-    const retry = yield* retryDecision(proposal, invocation)
-    if (retry !== undefined) return Evaluation.decision({ decision: retry })
+    const retry = AuthorityPolicy.evaluateRetry({
+      proposal,
+      invocation,
+      prior: yield* readRetry(proposal)
+    })
+    if (retry._tag === "decided") return Evaluation.decision({ decision: retry.decision })
     const canvas = yield* readCanvas(proposal.canvasId)
     if (canvas === undefined) return Evaluation.decision({ decision: Result.fail(
       AuthorityFailure.canvasNotFound({ canvasId: proposal.canvasId })
     ) })
-    if (proposal.observedCursor !== null) {
-      const knownRows = proposal.observedCursor === canvas.genesisCursor ? [FoundRow.make({ found: 1 })] : yield* sql<typeof FoundRow.Encoded>`
+    let observedCursorKnown = proposal.observedCursor === null || proposal.observedCursor === canvas.genesisCursor
+    if (!observedCursorKnown && proposal.observedCursor !== null) {
+      const knownRows = yield* sql<typeof FoundRow.Encoded>`
         SELECT 1 AS found FROM accepted_changes
         WHERE canvas_id = ${proposal.canvasId} AND cursor = ${proposal.observedCursor}`
-      if (knownRows.length === 0) return Evaluation.decision({ decision: Result.fail(
-        AuthorityFailure.cursorNotFound({ canvasId: proposal.canvasId, cursor: proposal.observedCursor })
-      ) })
+      observedCursorKnown = knownRows.length > 0
     }
-    return Evaluation.engine({ canvas, result: CanvasEngine.apply(canvas.view.projection, proposal) })
+    const fresh = AuthorityPolicy.evaluateFresh({
+      proposal,
+      invocation,
+      projection: canvas.view.projection,
+      observedCursorKnown
+    })
+    if (fresh._tag === "decided") return Evaluation.decision({ decision: fresh.decision })
+    return Evaluation.fresh({ canvas, evaluation: fresh })
   })
 
-  const create: CanvasAuthority["create"] = (command: CreateCanvas, invocation: VerifiedInvocation) => Effect.suspend(() => {
-    const ownedCommand = structuredClone(command)
-    const ownedInvocation = structuredClone(invocation)
+  const create: CanvasAuthority["Service"]["create"] = (command: CreateCanvas, invocation: VerifiedInvocation) => Effect.suspend(() => {
+    const ownedCommand = AuthorityPolicy.detach(command)
+    const ownedInvocation = AuthorityPolicy.detach(invocation)
     return Effect.gen(function*() {
       if ((yield* readCanvas(ownedCommand.canvasId).pipe(Effect.orDie)) !== undefined) {
         return yield* Effect.fail(AuthorityFailure.canvasAlreadyExists({ canvasId: ownedCommand.canvasId }))
       }
-      const createdAt = yield* now
-      const projection = emptyCanvasProjection(ownedCommand.canvasId, ownedCommand.title)
-      const genesisCursor = cursorAt(ownedCommand.canvasId, 0)
+      const createdAt = yield* clock.now
+      const view = AuthorityPolicy.createCanvas({
+        command: ownedCommand,
+        invocation: ownedInvocation,
+        createdAt
+      })
       const decision = yield* transaction(Effect.gen(function*() {
         if ((yield* readCanvas(ownedCommand.canvasId)) !== undefined) {
           return Result.fail(AuthorityFailure.canvasAlreadyExists({ canvasId: ownedCommand.canvasId }))
         }
-        const createdBy = attribution(ownedInvocation)
         yield* sql`INSERT INTO canvases
           (canvas_id, created_at, created_by_json, genesis_cursor, current_cursor, current_sequence, projection_json)
-          VALUES (${ownedCommand.canvasId}, ${createdAt}, ${encodeStored(AcceptedAttribution, createdBy)},
-            ${genesisCursor}, ${genesisCursor}, 0, ${encodeStored(CanvasProjection, projection)})`
-        return Result.succeed(AuthorityView.make({
-          canvasId: ownedCommand.canvasId,
-          createdAt,
-          createdBy,
-          cursor: genesisCursor,
-          projection
-        }))
+          VALUES (${ownedCommand.canvasId}, ${createdAt}, ${encodeStored(AcceptedAttribution, view.createdBy)},
+            ${view.cursor}, ${view.cursor}, 0, ${encodeStored(CanvasProjection, view.projection)})`
+        return Result.succeed(view)
       })).pipe(Effect.orDie)
       return yield* decision._tag === "Success" ? Effect.succeed(decision.success) : Effect.fail(decision.failure)
     })
   })
 
-  const open: CanvasAuthority["open"] = (canvasId) => readCanvas(canvasId).pipe(
+  const open: CanvasAuthority["Service"]["open"] = (canvasId) => readCanvas(canvasId).pipe(
     Effect.orDie,
     Effect.flatMap((canvas) => canvas === undefined
       ? Effect.fail(AuthorityFailure.canvasNotFound({ canvasId }))
-      : Effect.succeed(structuredClone(canvas.view)))
+      : Effect.succeed(AuthorityPolicy.detach(canvas.view)))
   )
 
-  const submit: CanvasAuthority["submit"] = (proposal, invocation) => Effect.suspend(() => {
-    const ownedProposal = structuredClone(proposal)
-    const ownedInvocation = structuredClone(invocation)
+  const submit: CanvasAuthority["Service"]["submit"] = (proposal, invocation) => Effect.suspend(() => {
+    const ownedProposal = AuthorityPolicy.detach(proposal)
+    const ownedInvocation = AuthorityPolicy.detach(invocation)
     return Effect.gen(function*() {
       const preflight = yield* evaluate(ownedProposal, ownedInvocation).pipe(Effect.orDie)
       if (preflight._tag === "decision") {
-        return yield* preflight.decision._tag === "Success"
-          ? Effect.succeed(structuredClone(preflight.decision.success))
-          : Effect.fail(preflight.decision.failure)
+        return yield* AuthorityPolicy.decisionEffect(preflight.decision)
       }
-      const acceptedAt = preflight.result._tag === "applied" ? yield* now : undefined
+      const acceptedAt = preflight.evaluation._tag === "acceptance" ? yield* clock.now : undefined
       const decision = yield* transaction(Effect.gen(function*() {
         const durable = yield* evaluate(ownedProposal, ownedInvocation)
         if (durable._tag === "decision") return durable.decision
-        if (durable.result._tag === "rejected") {
-          const failure = AuthorityFailure.changeRejected({
-            canvasId: ownedProposal.canvasId,
-            changeId: ownedProposal.changeId,
-            failure: durable.result.failure
-          })
+        if (durable.evaluation._tag === "rejected") {
+          const rejected = durable.evaluation.retry.outcome
+          if (rejected._tag === "Success") throw new Error("rejected retry contains an accepted change")
+          const failure = rejected.failure
           yield* sql`INSERT INTO retry_reservations
             (canvas_id, change_id, proposal_json, authorization_subject, accepted_sequence, rejected_failure_json)
             VALUES (${ownedProposal.canvasId}, ${ownedProposal.changeId},
-              ${json(ChangeProtocol.proposed.encode(ownedProposal))}, ${ownedInvocation.principal.subject},
+              ${json(ChangeProtocol.proposed.encode(durable.evaluation.retry.identity.proposal))},
+              ${durable.evaluation.retry.identity.authorizationSubject},
               NULL, ${encodeStored(ChangeRejected, failure)})`
           return Result.fail(failure)
         }
         if (acceptedAt === undefined) throw new Error("durable acceptance was not clocked")
-        const sequence = durable.canvas.row.current_sequence + 1
-        const cursor = cursorAt(ownedProposal.canvasId, sequence)
-        const change: AcceptedCanvasChange = {
-          ...ownedProposal,
-          sequence: ProtocolValue.sequence(sequence),
-          cursor,
+        const accepted = AuthorityPolicy.completeAcceptance({
+          candidate: durable.evaluation.candidate,
           acceptedAt,
-          attribution: attribution(ownedInvocation)
-        }
+          position: durable.canvas.row.current_sequence + 1
+        })
+        const change = accepted.receipt.change
         yield* sql`INSERT INTO accepted_changes
           (canvas_id, sequence, change_id, cursor, change_json)
-          VALUES (${ownedProposal.canvasId}, ${sequence}, ${ownedProposal.changeId}, ${cursor},
+          VALUES (${ownedProposal.canvasId}, ${change.sequence}, ${ownedProposal.changeId}, ${change.cursor},
             ${json(ChangeProtocol.accepted.encode(change))})`
         yield* sql`INSERT INTO retry_reservations
           (canvas_id, change_id, proposal_json, authorization_subject, accepted_sequence, rejected_failure_json)
           VALUES (${ownedProposal.canvasId}, ${ownedProposal.changeId},
-            ${json(ChangeProtocol.proposed.encode(ownedProposal))}, ${ownedInvocation.principal.subject}, ${sequence}, NULL)`
-        yield* sql`UPDATE canvases SET current_cursor = ${cursor}, current_sequence = ${sequence},
-          projection_json = ${encodeStored(CanvasProjection, durable.result.projection)}
+            ${json(ChangeProtocol.proposed.encode(accepted.retry.identity.proposal))},
+            ${accepted.retry.identity.authorizationSubject}, ${change.sequence}, NULL)`
+        yield* sql`UPDATE canvases SET current_cursor = ${change.cursor}, current_sequence = ${change.sequence},
+          projection_json = ${encodeStored(CanvasProjection, accepted.projection)}
           WHERE canvas_id = ${ownedProposal.canvasId}`
-        const receipt: SubmitChangeReceipt = { disposition: "first-acceptance", change }
-        return Result.succeed(receipt)
+        return Result.succeed(accepted.receipt)
       })).pipe(Effect.orDie)
-      return yield* decision._tag === "Success"
-        ? Effect.succeed(structuredClone(decision.success))
-        : Effect.fail(decision.failure)
+      return yield* AuthorityPolicy.decisionEffect(decision).pipe(Effect.map(AuthorityPolicy.detach))
     })
   })
 
-  const changesAfter: CanvasAuthority["changesAfter"] = (query: ChangesAfter) => Effect.gen(function*() {
+  const changesAfter: CanvasAuthority["Service"]["changesAfter"] = (query: ChangesAfter) => Effect.gen(function*() {
     const canvas = yield* readCanvas(query.canvasId)
     if (canvas === undefined) return yield* Effect.fail(AuthorityFailure.canvasNotFound({ canvasId: query.canvasId }))
     let position = 0
@@ -391,15 +363,18 @@ export const makeSqliteCanvasAuthority = (
     const changes = rows.map((row) => readAccepted(
       Schema.decodeUnknownSync(AcceptedRow, { onExcessProperty: "error" })(row)
     ))
-    const cursor = changes.at(-1)?.cursor ?? query.after ?? canvas.genesisCursor
-    return structuredClone({
-      canvasId: query.canvasId,
-      after: query.after,
+    return AuthorityPolicy.detach(AuthorityPolicy.makeChangePage({
+      query,
+      genesisCursor: canvas.genesisCursor,
+      position,
+      total: canvas.row.current_sequence,
       changes,
-      cursor,
-      hasMore: position + changes.length < canvas.row.current_sequence
-    } satisfies ChangePage)
+    }))
   }).pipe(Effect.catchTag("SqlError", Effect.die))
 
   return { create, open, submit, changesAfter }
 })
+
+export const SqliteCanvasAuthority = {
+  layer: (options: SqliteCanvasAuthorityOptions) => Layer.effect(CanvasAuthority, make(options))
+}

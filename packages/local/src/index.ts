@@ -1,2 +1,2 @@
-export { LocalAuthorityOpenFailure, makeSqliteCanvasAuthority } from "./sqlite.js"
+export { LocalAuthorityOpenFailure, SqliteCanvasAuthority } from "./sqlite.js"
 export type { SqliteCanvasAuthorityOptions } from "./sqlite.js"

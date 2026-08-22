@@ -7,16 +7,17 @@ import {
   emptyCanvasProjection
 } from "@crit/domain"
 import { ProtocolValue, type ProposedCanvasChange } from "@crit/protocol"
-import { Data, Deferred, Effect, Exit, Fiber, Result, Schema, type Scope } from "effect"
+import { Context, Data, Deferred, Effect, Exit, Fiber, Layer, Result, Schema, type Scope } from "effect"
 
 import {
   AuthorityModel,
   AgentInvocation,
+  CanvasAuthority,
   PersonInvocation,
-  VerifiedInvocation,
-  type CanvasAuthority
+  VerifiedInvocation
 } from "./index.js"
-import { detach } from "./ownership.js"
+
+declare const structuredClone: <A>(value: A) => A
 
 export interface AuthorityConformanceOptions {
   readonly now?: Effect.Effect<typeof IsoTimestamp.Type>
@@ -24,7 +25,14 @@ export interface AuthorityConformanceOptions {
 
 export type AuthorityConformanceFactory = (
   options?: AuthorityConformanceOptions
-) => Effect.Effect<CanvasAuthority, never, Scope.Scope>
+) => Layer.Layer<CanvasAuthority, never, Scope.Scope>
+
+const makeAuthority = (factory: AuthorityConformanceFactory, options?: AuthorityConformanceOptions) =>
+  Effect.gen(function*() {
+    const scope = yield* Effect.scope
+    const context = yield* Layer.buildWithScope(factory(options), scope)
+    return Context.get(context, CanvasAuthority)
+  })
 
 export interface AuthorityConformanceScenario {
   readonly name: string
@@ -68,7 +76,7 @@ const agent = Schema.decodeUnknownSync(AgentInvocation)({
   }
 })
 
-const create = (authority: CanvasAuthority, canvasId = canvasA) => authority.create({
+const create = (authority: CanvasAuthority["Service"], canvasId = canvasA) => authority.create({
   _tag: "create-canvas",
   canvasId,
   title: "Authority"
@@ -109,8 +117,8 @@ const isolationScenario = (factory: AuthorityConformanceFactory): AuthorityConfo
   return {
     name,
     run: Effect.gen(function*() {
-      const authority = yield* factory()
-      const incomingInvocation = detach(person)
+      const authority = yield* makeAuthority(factory)
+      const incomingInvocation = structuredClone(person)
       const created = yield* authority.create({
         _tag: "create-canvas", canvasId: canvasA, title: "Authority"
       }, incomingInvocation)
@@ -147,7 +155,7 @@ const scopedIdentityScenario = (factory: AuthorityConformanceFactory): Authority
   return {
     name,
     run: Effect.gen(function*() {
-      const authority = yield* factory()
+      const authority = yield* makeAuthority(factory)
       const left = yield* create(authority)
       yield* create(authority, canvasB)
       const commands = rename("Authority", "Review")
@@ -174,7 +182,7 @@ const rejectedRetryScenario = (factory: AuthorityConformanceFactory): AuthorityC
   return {
     name,
     run: Effect.gen(function*() {
-      const authority = yield* factory()
+      const authority = yield* makeAuthority(factory)
       yield* create(authority)
       const rejected = proposal("change_conformance_rejected", rename("Wrong", "Review"))
       const first = yield* Effect.result(authority.submit(rejected, person))
@@ -200,7 +208,7 @@ const failedCreateClockScenario = (factory: AuthorityConformanceFactory): Author
         reads += 1
         return reads === 1 ? Effect.die("clock failed") : Effect.succeed(timestamp)
       })
-      const authority = yield* factory({ now })
+      const authority = yield* makeAuthority(factory, { now })
       const failed = yield* Effect.exit(create(authority))
       requireScenario(name, Exit.isFailure(failed), "first creation did not fail with the clock defect")
       const created = yield* create(authority)
@@ -223,7 +231,7 @@ const interruptedSubmitScenario = (factory: AuthorityConformanceFactory): Author
           ? Deferred.succeed(enteredClock, undefined).pipe(Effect.andThen(Effect.never))
           : Effect.succeed(timestamp)
       })
-      const authority = yield* factory({ now })
+      const authority = yield* makeAuthority(factory, { now })
       yield* create(authority)
       const submitted = proposal("change_conformance_interrupted", rename("Authority", "Review"))
       const fiber = yield* Effect.forkChild(authority.submit(submitted, person))
@@ -240,14 +248,14 @@ const ledgerScenario = (factory: AuthorityConformanceFactory): AuthorityConforma
   return {
     name,
     run: Effect.gen(function*() {
-      const raced = yield* factory()
+      const raced = yield* makeAuthority(factory)
       const creations = yield* Effect.all(
         Array.from({ length: 8 }, () => Effect.result(create(raced))),
         { concurrency: "unbounded" }
       )
       requireScenario(name, creations.filter(Result.isSuccess).length === 1, "create race had multiple winners")
 
-      const authority = yield* factory()
+      const authority = yield* makeAuthority(factory)
       yield* create(authority)
       const submissions = Array.from({ length: 6 }, (_, index) => authority.submit(proposal(
         `change_conformance_note_${index}`,
@@ -286,7 +294,7 @@ const lifecycleScenario = (factory: AuthorityConformanceFactory): AuthorityConfo
   return {
     name,
     run: Effect.gen(function*() {
-      const authority = yield* factory()
+      const authority = yield* makeAuthority(factory)
       const missingProposal = proposal("change_conformance_missing", rename("Authority", "Review"))
       requireScenario(name, (yield* failureTag(authority.open(canvasA))) === "canvas-not-found", "open did not report missing Canvas")
       requireScenario(name, (yield* failureTag(authority.submit(missingProposal, person))) === "canvas-not-found", "submit did not report missing Canvas")
@@ -311,7 +319,7 @@ const acceptedRetryScenario = (factory: AuthorityConformanceFactory): AuthorityC
   return {
     name,
     run: Effect.gen(function*() {
-      const authority = yield* factory()
+      const authority = yield* makeAuthority(factory)
       const view = yield* create(authority)
       const original = proposal("change_conformance_retry", rename("Authority", "Review"), canvasA, view.cursor)
       const first = yield* authority.submit(original, agent)
@@ -355,7 +363,7 @@ const cursorPagingScenario = (factory: AuthorityConformanceFactory): AuthorityCo
   return {
     name,
     run: Effect.gen(function*() {
-      const authority = yield* factory()
+      const authority = yield* makeAuthority(factory)
       const genesis = yield* create(authority)
       const other = yield* create(authority, canvasB)
       const first = yield* authority.submit(proposal("change_conformance_old_a", rename("Authority", "Review"), canvasA, genesis.cursor), person)
@@ -387,7 +395,7 @@ const atomicConflictScenario = (factory: AuthorityConformanceFactory): Authority
         reads += 1
         return value
       })
-      const authority = yield* factory({ now })
+      const authority = yield* makeAuthority(factory, { now })
       const genesis = yield* create(authority)
       const conflict: ProposedCanvasChange = {
         changeId: Id.change("change_conformance_atomic"),
