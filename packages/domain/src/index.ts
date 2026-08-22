@@ -82,7 +82,7 @@ export {
   SetFrameTitleCommand,
   SetNoteGeometryCommand
 } from "./command.js"
-export { CanvasEngine } from "./engine.js"
+export { CanvasChangeFailureSchema, CanvasEngine } from "./engine.js"
 export type {
   CanvasChangeFailure,
   CanvasChangeResult,

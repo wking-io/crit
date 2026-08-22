@@ -18,7 +18,7 @@ const IdAlreadyIssued = Schema.TaggedStruct("id-already-issued", { commandIndex:
 const PreconditionFailed = Schema.TaggedStruct("precondition-failed", { commandIndex: CommandIndex, field: Schema.String, expected: PreconditionValue, actual: PreconditionValue })
 const InvalidReference = Schema.TaggedStruct("invalid-reference", { commandIndex: CommandIndex, field: Schema.String, id: Schema.String })
 const DerivedGeometryInvalid = Schema.TaggedStruct("derived-geometry-invalid", { commandIndex: CommandIndex, noteId: NoteId })
-const CanvasChangeFailureSchema = Schema.Union([CanvasMismatch, CanvasTitleMismatch, EntityNotFound, IdAlreadyIssued, PreconditionFailed, InvalidReference, DerivedGeometryInvalid])
+export const CanvasChangeFailureSchema = Schema.Union([CanvasMismatch, CanvasTitleMismatch, EntityNotFound, IdAlreadyIssued, PreconditionFailed, InvalidReference, DerivedGeometryInvalid])
 export type CanvasChangeFailure = typeof CanvasChangeFailureSchema.Type
 
 const CanvasProjectionValue = Schema.declare<CanvasProjection>(Schema.is(CanvasProjection))
