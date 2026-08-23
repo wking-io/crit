@@ -1,6 +1,7 @@
 import { Schema } from "effect"
 
 export const FRAME_INPUT_BRIDGE_SOURCE = "@crit/frame-bridge/input"
+export const FRAME_INPUT_BRIDGE_SCHEMA_VERSION = 1 as const
 
 export const FrameInputIntentSchema = Schema.Union([
   Schema.Struct({
@@ -38,7 +39,12 @@ export type FrameInputIntent = typeof FrameInputIntentSchema.Type
 
 export const FrameInputBridgeMessageSchema = Schema.Struct({
   source: Schema.Literal(FRAME_INPUT_BRIDGE_SOURCE),
-  schemaVersion: Schema.Literal(1),
+  schemaVersion: Schema.Literal(FRAME_INPUT_BRIDGE_SCHEMA_VERSION),
   intent: FrameInputIntentSchema
 })
 export type FrameInputBridgeMessage = typeof FrameInputBridgeMessageSchema.Type
+
+export const decodeFrameInputBridgeMessage = Schema.decodeUnknownOption(
+  FrameInputBridgeMessageSchema,
+  { onExcessProperty: "error" }
+)

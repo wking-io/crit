@@ -1,8 +1,12 @@
-import { FRAME_INPUT_BRIDGE_SOURCE } from "@crit/protocol"
+import {
+  FRAME_INPUT_BRIDGE_SCHEMA_VERSION,
+  FRAME_INPUT_BRIDGE_SOURCE
+} from "@crit/protocol"
 import { describe, expect, it } from "vitest"
 
 import {
   connectCanvasInput,
+  connectSameOriginFrameInput,
   createFrameInputRelay,
   offsetFrameInputIntent
 } from "../src/input-relay.js"
@@ -21,10 +25,14 @@ const wheel = {
 }
 
 const canvasInputWindow = (target: EventTarget): Window => {
+  // SAFETY: This fixture supplies every Window member read by connectCanvasInput
+  // and inherits the real EventTarget listener implementation.
   return target as Window
 }
 
 const canvasInputRoot = (target: EventTarget): HTMLElement => {
+  // SAFETY: This fixture supplies getBoundingClientRect, the only HTMLElement
+  // member read by connectCanvasInput, and inherits real event dispatch.
   return target as HTMLElement
 }
 
@@ -33,18 +41,25 @@ const bridgedInputFrame = (contentWindow: Window): HTMLIFrameElement => {
     contentWindow,
     getBoundingClientRect: () => ({ left: 100, top: 200 })
   }
+  // SAFETY: This fixture supplies every HTMLIFrameElement member read by the
+  // bridged and same-origin input adapters.
   return frame as HTMLIFrameElement
+}
+
+const gestureHost = () => {
+  const target = new EventTarget()
+  Object.defineProperties(target, {
+    GestureEvent: { value: class GestureEvent extends Event {} },
+    navigator: {
+      value: { maxTouchPoints: 0, platform: "MacIntel", userAgent: "" }
+    }
+  })
+  return target
 }
 
 describe("Frame input relay", () => {
   it("snapshots non-enumerable WheelEvent fields at the Canvas adapter", () => {
-    const target = new EventTarget()
-    Object.defineProperties(target, {
-      GestureEvent: { value: class GestureEvent extends Event {} },
-      navigator: {
-        value: { maxTouchPoints: 0, platform: "MacIntel", userAgent: "" }
-      }
-    })
+    const target = gestureHost()
     const root = new EventTarget()
     Object.defineProperty(root, "getBoundingClientRect", {
       value: () => ({ bottom: 600, left: 0, right: 800, top: 0 })
@@ -270,12 +285,96 @@ describe("Frame input relay", () => {
     }])
   })
 
-  it("serializes the private intent envelope without reflective type checks", () => {
+  it("serializes a closed factory that matches the host relay", () => {
     expect(() => new Function(critFrameInputBridgeScript)).not.toThrow()
+    const factorySource = createFrameInputRelay.toString()
+    expect(factorySource).not.toMatch(/\bimport\b|\brequire\b/)
+    expect(factorySource).not.toContain("Predicate")
+    expect(factorySource).not.toContain("FrameInputBridgeMessageSchema")
+    const serialized = new Function(`return (${factorySource})()`)()
+    const live = createFrameInputRelay()
+    expect(serialized.wheel(wheel)).toEqual(live.wheel(wheel))
+    expect(serialized.select({ metaKey: true })).toEqual(live.select({ metaKey: true }))
+    expect(serialized.hotkey({
+      code: "KeyV",
+      ctrlKey: false,
+      input: false,
+      key: "v",
+      metaKey: false
+    })).toEqual(live.hotkey({
+      code: "KeyV",
+      ctrlKey: false,
+      input: false,
+      key: "v",
+      metaKey: false
+    }))
+    expect(critFrameInputBridgeScript).toContain(
+      `const schemaVersion = ${FRAME_INPUT_BRIDGE_SCHEMA_VERSION}`
+    )
     expect(critFrameInputBridgeScript).toContain(
       'postMessage({ source, schemaVersion, intent }, "*")'
     )
     expect(critFrameInputBridgeScript).not.toContain("typeof")
     expect(critFrameInputBridgeScript).not.toContain("instanceof HTMLElement")
+  })
+
+  it("offsets same-origin Frame wheel and hotkey intents onto the Canvas", () => {
+    const target = gestureHost()
+    const intents: Array<unknown> = []
+    const disconnect = connectSameOriginFrameInput({
+      target: canvasInputWindow(target),
+      frameElement: bridgedInputFrame(canvasInputWindow(target)),
+      onIntent: (intent) => intents.push(intent)
+    })
+    const event = new Event("wheel", { cancelable: true })
+    Object.defineProperties(event, {
+      clientX: { value: 20 },
+      clientY: { value: 30 },
+      ctrlKey: { value: false },
+      deltaX: { value: 4 },
+      deltaY: { value: 8 },
+      metaKey: { value: false }
+    })
+    const key = new Event("keydown", { cancelable: true })
+    Object.defineProperties(key, {
+      code: { value: "KeyV" },
+      ctrlKey: { value: false },
+      key: { value: "v" },
+      metaKey: { value: false }
+    })
+
+    target.dispatchEvent(event)
+    target.dispatchEvent(key)
+    disconnect()
+
+    expect(intents).toEqual([
+      { type: "wheel", ...wheel, clientX: 120, clientY: 230 },
+      { type: "tool", tool: "select" }
+    ])
+  })
+
+  it("does not steal a same-origin wheel the Frame already handled", () => {
+    const target = gestureHost()
+    const intents: Array<unknown> = []
+    const disconnect = connectSameOriginFrameInput({
+      target: canvasInputWindow(target),
+      frameElement: bridgedInputFrame(canvasInputWindow(target)),
+      onIntent: (intent) => intents.push(intent)
+    })
+    const event = new Event("wheel", { cancelable: true })
+    Object.defineProperties(event, {
+      clientX: { value: 20 },
+      clientY: { value: 30 },
+      ctrlKey: { value: false },
+      deltaX: { value: 4 },
+      deltaY: { value: 8 },
+      metaKey: { value: false }
+    })
+    event.preventDefault()
+
+    target.dispatchEvent(event)
+    disconnect()
+
+    expect(intents).toEqual([])
   })
 })

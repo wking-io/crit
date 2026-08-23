@@ -1,8 +1,9 @@
-import { Option, Schema } from "effect"
+import { Option } from "effect"
 
 import {
+  FRAME_INPUT_BRIDGE_SCHEMA_VERSION,
   FRAME_INPUT_BRIDGE_SOURCE,
-  FrameInputBridgeMessageSchema,
+  decodeFrameInputBridgeMessage,
   type FrameInputIntent
 } from "@crit/protocol"
 
@@ -19,10 +20,6 @@ export {
   type FrameWheelDecision
 } from "./input-relay.js"
 export type { FrameInputIntent } from "@crit/protocol"
-
-const decodeFrameInputBridgeMessage = Schema.decodeUnknownOption(
-  FrameInputBridgeMessageSchema
-)
 
 export const connectBridgedFrameInput = (input: {
   readonly target: Window
@@ -48,7 +45,7 @@ export const critFrameInputBridgeScript = String.raw`
 (() => {
   if (window.parent === window) return
   const source = "${FRAME_INPUT_BRIDGE_SOURCE}"
-  const schemaVersion = 1
+  const schemaVersion = ${FRAME_INPUT_BRIDGE_SCHEMA_VERSION}
   const relay = (${createFrameInputRelay.toString()})()
   const send = (intent) => window.parent.postMessage({ source, schemaVersion, intent }, "*")
   const isSelectorTarget = (target) => target !== null && "matches" in target
