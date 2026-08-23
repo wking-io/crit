@@ -4,6 +4,7 @@ import {
   FRAME_INPUT_BRIDGE_SCHEMA_VERSION,
   FRAME_INPUT_BRIDGE_SOURCE,
   decodeFrameInputBridgeMessage,
+  type FrameBridgeOrigin,
   type FrameInputIntent
 } from "@crit/protocol"
 
@@ -11,6 +12,7 @@ import {
   createFrameInputRelay,
   offsetFrameInputIntent
 } from "./input-relay.js"
+import { isTrustedFrameBridgeEvent } from "./origin.js"
 
 export {
   createFrameInputRelay,
@@ -25,7 +27,12 @@ export {
   type BridgedCommentFrame,
   type FrameCommentMessageTarget
 } from "./comment-bridge.js"
+export {
+  frameBridgeOriginFromHref,
+  isTrustedFrameBridgeEvent
+} from "./origin.js"
 export type {
+  FrameBridgeOrigin,
   FrameCommentDownEvent,
   FrameCommentPin,
   FrameCommentUpEvent,
@@ -35,10 +42,14 @@ export type {
 export const connectBridgedFrameInput = (input: {
   readonly target: Window
   readonly frameElement: HTMLIFrameElement
+  readonly frameOrigin: FrameBridgeOrigin
   readonly onIntent: (intent: FrameInputIntent) => void
 }) => {
   const relayMessage = (event: MessageEvent) => {
-    if (event.source !== input.frameElement.contentWindow) return
+    if (!isTrustedFrameBridgeEvent(event, {
+      origin: input.frameOrigin,
+      source: input.frameElement.contentWindow
+    })) return
     const decoded = decodeFrameInputBridgeMessage(event.data)
     if (Option.isNone(decoded)) return
     input.onIntent(
@@ -52,13 +63,16 @@ export const connectBridgedFrameInput = (input: {
   return () => input.target.removeEventListener("message", relayMessage)
 }
 
-export const critFrameInputBridgeScript = String.raw`
+export const critFrameInputBridgeScript = (input: {
+  readonly parentOrigin: FrameBridgeOrigin
+}) => String.raw`
 (() => {
   if (window.parent === window) return
+  const parentOrigin = ${JSON.stringify(input.parentOrigin)}
   const source = "${FRAME_INPUT_BRIDGE_SOURCE}"
   const schemaVersion = ${FRAME_INPUT_BRIDGE_SCHEMA_VERSION}
   const relay = (${createFrameInputRelay.toString()})()
-  const send = (intent) => window.parent.postMessage({ source, schemaVersion, intent }, "*")
+  const send = (intent) => window.parent.postMessage({ source, schemaVersion, intent }, parentOrigin)
   const isSelectorTarget = (target) => target !== null && "matches" in target
   window.addEventListener("keydown", (event) => {
     const target = event.target

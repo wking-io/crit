@@ -4,14 +4,18 @@ import {
   FRAME_COMMENT_BRIDGE_SCHEMA_VERSION,
   FRAME_COMMENT_BRIDGE_SOURCE,
   decodeFrameCommentUpMessage,
+  type FrameBridgeOrigin,
   type FrameCommentDownEvent,
   type FrameCommentDownMessage,
   type FrameCommentUpEvent
 } from "@crit/protocol"
 
+import { isTrustedFrameBridgeEvent } from "./origin.js"
+
 const COMMENT_PIN_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" fill-opacity=".3" d="M8 1.6a5.3 5.3 0 0 1 5.3 5.3c0 4-3.9 7.1-5.3 7.5-1.4-.4-5.3-3.5-5.3-7.5A5.3 5.3 0 0 1 8 1.6Z"/><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width=".9" d="M8 14.4c4-3.4 5.3-4.6 5.3-7.5C13.3 3.9 10.9 1.6 8 1.6S2.7 3.9 2.7 6.9c0 2.9 1.3 4.1 5.3 7.5Z"/></svg>`
 
 type FrameCommentMessageEvent = {
+  readonly origin: string
   readonly source: unknown
   readonly data: unknown
 }
@@ -36,10 +40,14 @@ export interface BridgedCommentFrame {
 export const connectBridgedFrameComments = (input: {
   readonly target: FrameCommentMessageTarget
   readonly frameElement: BridgedCommentFrame
+  readonly frameOrigin: FrameBridgeOrigin
   readonly onEvent: (event: FrameCommentUpEvent) => void
 }) => {
   const receive = (event: FrameCommentMessageEvent) => {
-    if (event.source !== input.frameElement.contentWindow) return
+    if (!isTrustedFrameBridgeEvent(event, {
+      origin: input.frameOrigin,
+      source: input.frameElement.contentWindow
+    })) return
     const decoded = decodeFrameCommentUpMessage(event.data)
     if (Option.isNone(decoded)) return
     input.onEvent(decoded.value.event)
@@ -57,17 +65,20 @@ export const connectBridgedFrameComments = (input: {
           color: value.color,
           pins: value.pins
         }
-      }, "*"),
+      }, input.frameOrigin),
     disconnect: () => input.target.removeEventListener("message", receive)
   }
 }
 
-export const critFrameCommentBridgeScript = String.raw`
+export const critFrameCommentBridgeScript = (input: {
+  readonly parentOrigin: FrameBridgeOrigin
+}) => String.raw`
 (() => {
   if (window.parent === window) return
+  const parentOrigin = ${JSON.stringify(input.parentOrigin)}
   const source = "${FRAME_COMMENT_BRIDGE_SOURCE}"
   const schemaVersion = ${FRAME_COMMENT_BRIDGE_SCHEMA_VERSION}
-  const send = (event) => window.parent.postMessage({ source, schemaVersion, event }, "*")
+  const send = (event) => window.parent.postMessage({ source, schemaVersion, event }, parentOrigin)
   const acknowledgeReady = () => send({ type: "ready" })
   const layer = document.createElement("div")
   layer.dataset.critCommentLayer = ""
@@ -218,7 +229,7 @@ export const critFrameCommentBridgeScript = String.raw`
   }
   addEventListener("message", (event) => {
     const message = event.data
-    if (event.source !== window.parent || !message || message.source !== source || message.schemaVersion !== schemaVersion || !message.event || message.event.type !== "configure") return
+    if (event.source !== window.parent || event.origin !== parentOrigin || !message || message.source !== source || message.schemaVersion !== schemaVersion || !message.event || message.event.type !== "configure") return
     const configure = message.event
     enabled = configure.enabled === true
     color = configure.color == null ? color : String(configure.color)

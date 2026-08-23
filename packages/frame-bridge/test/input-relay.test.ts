@@ -1,7 +1,9 @@
 import {
   FRAME_INPUT_BRIDGE_SCHEMA_VERSION,
-  FRAME_INPUT_BRIDGE_SOURCE
+  FRAME_INPUT_BRIDGE_SOURCE,
+  FrameBridgeOrigin
 } from "@crit/protocol"
+import { Option, Schema } from "effect"
 import { describe, expect, it } from "vitest"
 
 import {
@@ -12,8 +14,12 @@ import {
 } from "../src/input-relay.js"
 import {
   connectBridgedFrameInput,
-  critFrameInputBridgeScript
+  critFrameInputBridgeScript,
+  frameBridgeOriginFromHref
 } from "../src/index.js"
+
+const frameOrigin = Schema.decodeUnknownSync(FrameBridgeOrigin)("https://shop.example")
+const parentOrigin = Schema.decodeUnknownSync(FrameBridgeOrigin)("https://app.example")
 
 const wheel = {
   clientX: 20,
@@ -223,18 +229,21 @@ describe("Frame input relay", () => {
     const disconnect = connectBridgedFrameInput({
       target: canvasInputWindow(target),
       frameElement: bridgedInputFrame(frameWindow),
+      frameOrigin,
       onIntent: (intent) => intents.push(intent)
     })
     const dispatch = (event: MessageEvent) => target.dispatchEvent(event)
 
     dispatch(
       new MessageEvent("message", {
+        origin: frameOrigin,
         source: frameWindow,
         data: { source: FRAME_INPUT_BRIDGE_SOURCE, type: "wheel", ...wheel }
       })
     )
     dispatch(
       new MessageEvent("message", {
+        origin: frameOrigin,
         source: frameWindow,
         data: {
           source: FRAME_INPUT_BRIDGE_SOURCE,
@@ -245,6 +254,7 @@ describe("Frame input relay", () => {
     )
     dispatch(
       new MessageEvent("message", {
+        origin: frameOrigin,
         source: canvasInputWindow(frameChannel.port2),
         data: {
           source: FRAME_INPUT_BRIDGE_SOURCE,
@@ -255,6 +265,18 @@ describe("Frame input relay", () => {
     )
     dispatch(
       new MessageEvent("message", {
+        origin: "https://evil.example",
+        source: frameWindow,
+        data: {
+          source: FRAME_INPUT_BRIDGE_SOURCE,
+          schemaVersion: 1,
+          intent: { type: "delete" }
+        }
+      })
+    )
+    dispatch(
+      new MessageEvent("message", {
+        origin: frameOrigin,
         source: frameWindow,
         data: {
           source: FRAME_INPUT_BRIDGE_SOURCE,
@@ -268,6 +290,7 @@ describe("Frame input relay", () => {
     frameChannel.port2.close()
     dispatch(
       new MessageEvent("message", {
+        origin: frameOrigin,
         source: frameWindow,
         data: {
           source: FRAME_INPUT_BRIDGE_SOURCE,
@@ -286,7 +309,8 @@ describe("Frame input relay", () => {
   })
 
   it("serializes a closed factory that matches the host relay", () => {
-    expect(() => new Function(critFrameInputBridgeScript)).not.toThrow()
+    const script = critFrameInputBridgeScript({ parentOrigin })
+    expect(() => new Function(script)).not.toThrow()
     const factorySource = createFrameInputRelay.toString()
     expect(factorySource).not.toMatch(/\bimport\b|\brequire\b/)
     expect(factorySource).not.toContain("Predicate")
@@ -308,14 +332,23 @@ describe("Frame input relay", () => {
       key: "v",
       metaKey: false
     }))
-    expect(critFrameInputBridgeScript).toContain(
+    expect(script).toContain(
       `const schemaVersion = ${FRAME_INPUT_BRIDGE_SCHEMA_VERSION}`
     )
-    expect(critFrameInputBridgeScript).toContain(
-      'postMessage({ source, schemaVersion, intent }, "*")'
+    expect(script).toContain(`const parentOrigin = ${JSON.stringify(parentOrigin)}`)
+    expect(script).toContain(
+      "postMessage({ source, schemaVersion, intent }, parentOrigin)"
     )
-    expect(critFrameInputBridgeScript).not.toContain("typeof")
-    expect(critFrameInputBridgeScript).not.toContain("instanceof HTMLElement")
+    expect(script).not.toContain(', "*"')
+    expect(script).not.toContain("typeof")
+    expect(script).not.toContain("instanceof HTMLElement")
+  })
+
+  it("reads an event.origin from a Frame href", () => {
+    expect(frameBridgeOriginFromHref("https://shop.example/checkout")).toEqual(
+      Option.some(frameOrigin)
+    )
+    expect(Option.isNone(frameBridgeOriginFromHref("not a url"))).toBe(true)
   })
 
   it("offsets same-origin Frame wheel and hotkey intents onto the Canvas", () => {
