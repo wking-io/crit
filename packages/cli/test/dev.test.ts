@@ -1,12 +1,16 @@
 import { spawn, spawnSync } from "node:child_process"
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { createServer } from "node:http"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 
-import { afterEach, describe, expect, it } from "vitest"
+import { Schema } from "effect"
+import { afterEach, describe, expect, it, onTestFinished } from "vitest"
 
 const directories: Array<string> = []
 const children: Array<ReturnType<typeof spawn>> = []
+const TcpAddress = Schema.Struct({ port: Schema.Number })
+const InstallationSecret = Schema.Struct({ bearerSecret: Schema.String })
 
 afterEach(() => {
   for (const child of children.splice(0)) child.kill("SIGKILL")
@@ -58,7 +62,7 @@ const start = (dataRoot: string) => new Promise<{
 
 const matchReady = (output: string) => output.includes("Crit daemon listening at http://127.0.0.1:")
 
-const startWithoutBrowser = (dataRoot: string) => new Promise<{
+const startWithoutBrowser = (dataRoot: string, environment?: NodeJS.ProcessEnv) => new Promise<{
   readonly child: ReturnType<typeof spawn>
   readonly output: string
 }>((resolve, reject) => {
@@ -67,7 +71,7 @@ const startWithoutBrowser = (dataRoot: string) => new Promise<{
     "dev",
     "--data-root",
     dataRoot
-  ], { stdio: ["ignore", "pipe", "pipe"] })
+  ], { stdio: ["ignore", "pipe", "pipe"], env: environment })
   children.push(child)
   let output = ""
   const timeout = setTimeout(() => reject(new Error(`Timed out waiting for daemon: ${output}`)), 5_000)
@@ -105,7 +109,82 @@ const run = (dataRoot: string, args: ReadonlyArray<string>) => spawnSync(process
   dataRoot
 ], { encoding: "utf8" })
 
+const runAsync = (dataRoot: string, args: ReadonlyArray<string>, environment: NodeJS.ProcessEnv) =>
+  new Promise<{ readonly code: number | null; readonly stdout: string; readonly stderr: string }>((resolve, reject) => {
+    const child = spawn(process.execPath, [
+      join(import.meta.dirname, "..", "dist", "main.js"),
+      ...args,
+      "--data-root",
+      dataRoot
+    ], { stdio: ["ignore", "pipe", "pipe"], env: environment })
+    let stdout = ""
+    let stderr = ""
+    child.stdout.on("data", (chunk: Uint8Array) => {
+      stdout += Buffer.from(chunk).toString("utf8")
+    })
+    child.stderr.on("data", (chunk: Uint8Array) => {
+      stderr += Buffer.from(chunk).toString("utf8")
+    })
+    child.once("error", reject)
+    child.once("exit", (code) => resolve({ code, stdout, stderr }))
+  })
+
 describe("built crit-target dev", () => {
+  it("exports Effect traces and flushes on exit", async () => {
+    const payloads: Array<{ readonly path: string; readonly body: string }> = []
+    const collector = createServer((request, response) => {
+      let body = ""
+      request.setEncoding("utf8")
+      request.on("data", (chunk: string) => {
+        body += chunk
+      })
+      request.on("end", () => {
+        payloads.push({ path: request.url ?? "", body })
+        response.writeHead(200).end()
+      })
+    })
+    await new Promise<void>((resolve, reject) => {
+      collector.once("error", reject)
+      collector.listen(0, "127.0.0.1", resolve)
+    })
+    const closeCollector = () => new Promise<void>((resolve, reject) => {
+      if (!collector.listening) return resolve()
+      collector.close((cause) => cause === undefined ? resolve() : reject(cause))
+    })
+    onTestFinished(closeCollector)
+    const address = Schema.decodeUnknownSync(TcpAddress)(collector.address())
+    const directory = mkdtempSync(join(tmpdir(), "crit-cli-otlp-private-canary-"))
+    directories.push(directory)
+    const dataRoot = join(directory, ".crit", "v1")
+    const environment = {
+      ...process.env,
+      OTEL_EXPORTER_OTLP_ENDPOINT: `http://127.0.0.1:${address.port}`,
+      OTEL_TRACES_EXPORTER: "otlp",
+      OTEL_SERVICE_VERSION: "test-version"
+    }
+    const started = await startWithoutBrowser(dataRoot, environment)
+    const status = await runAsync(dataRoot, ["status"], environment)
+    expect(status.code, status.stderr).toBe(0)
+    const missing = await runAsync(dataRoot, ["open", "canvas_private_canary"], environment)
+    expect(missing.code).not.toBe(0)
+    await stop(started.child)
+    await closeCollector()
+
+    expect(payloads.some(({ path }) => path === "/v1/traces")).toBe(true)
+    expect(payloads.every(({ path }) => path === "/v1/traces")).toBe(true)
+    const serialized = JSON.stringify(payloads)
+    expect(serialized).toContain("http.client GET")
+    expect(serialized).toContain("http.server GET")
+    expect(serialized).toContain("crit.replica.open")
+    expect(serialized).toContain("sql.execute")
+    expect(serialized).toContain("test-version")
+    expect(payloads.some(({ body }) => body.includes('"code":2'))).toBe(true)
+    const installation = Schema.decodeUnknownSync(InstallationSecret)(
+      JSON.parse(readFileSync(join(dataRoot, "installation.json"), "utf8"))
+    )
+    expect(serialized).not.toContain(installation.bearerSecret)
+  })
+
   it("does not mint or print browser bootstrap access without configuration", async () => {
     const directory = mkdtempSync(join(tmpdir(), "crit-cli-dev-no-browser-"))
     directories.push(directory)

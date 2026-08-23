@@ -235,6 +235,12 @@ export class LocalDevelopment extends Context.Service<
           : Effect.void),
         Effect.ignore
       ))
+      yield* Effect.logInfo("Local daemon started").pipe(
+        Effect.annotateLogs({ "crit.event": "daemon-started" })
+      )
+      yield* Effect.addFinalizer(() => Effect.logInfo("Local daemon stopped").pipe(
+        Effect.annotateLogs({ "crit.event": "daemon-stopped" })
+      ))
       return LocalDevelopment.of({
         descriptor,
         installationId: installation.installationId,

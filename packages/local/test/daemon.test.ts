@@ -18,7 +18,7 @@ import {
   localApiToken
 } from "@crit/replica/http"
 import { ReplicaModel } from "@crit/replica"
-import { Context, Effect, Layer, Schema } from "effect"
+import { Context, Effect, Layer, Option, Schema, Tracer } from "effect"
 import { FetchHttpClient, HttpServer } from "effect/unstable/http"
 import { describe, expect, it } from "vitest"
 
@@ -82,6 +82,75 @@ const rawHeaders = (token: string, version = "1") => ({
 })
 
 describe("LocalDaemon", () => {
+  it("propagates Effect HTTP context into domain and SQL spans", () => {
+    const spans: Array<Tracer.NativeSpan> = []
+    const tracer = Tracer.make({
+      span(options) {
+        const span = new Tracer.NativeSpan(options)
+        spans.push(span)
+        return span
+      }
+    })
+    const token = "private-token-canary-with-at-least-32-characters"
+    const canvasId = Id.canvas("canvas_private_canary")
+    const program = Effect.scoped(Effect.gen(function*() {
+      const databasePath = yield* tempDatabasePath
+      const { client } = yield* clientFor({ databasePath, token })
+      yield* client.create(AuthorityModel.createCanvas({ canvasId, title: "Private title canary" }))
+    })).pipe(Effect.provideService(Tracer.Tracer, tracer))
+
+    return Effect.runPromise(program).then(() => {
+      const clientSpan = spans.find((span) => span.name === "http.client POST")
+      const serverSpan = spans.find((span) => span.name === "http.server POST")
+      const authoritySpan = spans.find((span) => span.name === "crit.authority.create")
+      const replicaSpan = spans.find((span) => span.name === "crit.replica.open")
+      expect(clientSpan?.kind).toBe("client")
+      expect(serverSpan?.kind).toBe("server")
+      expect(serverSpan?.traceId).toBe(clientSpan?.traceId)
+      expect(Option.getOrUndefined(serverSpan?.parent ?? Option.none())?.spanId).toBe(clientSpan?.spanId)
+      expect(authoritySpan?.traceId).toBe(clientSpan?.traceId)
+      expect(replicaSpan?.traceId).toBe(clientSpan?.traceId)
+      expect(spans.some((span) => span.name === "sql.execute")).toBe(true)
+      const serialized = JSON.stringify(spans.map((span) => ({
+        name: span.name,
+        attributes: [...span.attributes],
+        traceId: span.traceId,
+        spanId: span.spanId
+      })))
+      expect(serialized).not.toContain(token)
+      expect(serialized).not.toContain("Private title canary")
+    })
+  })
+
+  it("accepts Effect's standard B3 context", () => {
+    const spans: Array<Tracer.NativeSpan> = []
+    const tracer = Tracer.make({
+      span(options) {
+        const span = new Tracer.NativeSpan(options)
+        spans.push(span)
+        return span
+      }
+    })
+    const token = "b3-token-canary-with-at-least-32-characters"
+    const program = Effect.scoped(Effect.gen(function*() {
+      const databasePath = yield* tempDatabasePath
+      const { baseUrl } = yield* clientFor({ databasePath, token })
+      const response = yield* Effect.promise(() => fetch(`${baseUrl}/api/v1/status`, {
+        headers: {
+          ...rawHeaders(token),
+          b3: "463ac35c9f6413ad48485a3953bb6124-a2fb4a1d1a96d312-1"
+        }
+      }))
+      expect(response.status).toBe(200)
+    })).pipe(Effect.provideService(Tracer.Tracer, tracer))
+
+    return Effect.runPromise(program).then(() => {
+      const serverSpan = spans.find((span) => span.name === "http.server GET")
+      expect(serverSpan?.traceId).toBe("463ac35c9f6413ad48485a3953bb6124")
+      expect(Option.getOrUndefined(serverSpan?.parent ?? Option.none())?.spanId).toBe("a2fb4a1d1a96d312")
+    })
+  })
+
   it("persists create, change, and sync through a real loopback server", () =>
     Effect.runPromise(Effect.scoped(Effect.gen(function*() {
       const databasePath = yield* tempDatabasePath

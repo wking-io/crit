@@ -65,7 +65,7 @@ const handlers = (options: LocalDaemonOptions) => HttpApiBuilder.group(
         installationId: options.installationId,
         apiVersion: localApiVersion
       })),
-      create: Effect.fn(function*({ payload }) {
+      create: Effect.fn("crit.authority.create")(function*({ payload }) {
         const invocation = yield* AuthenticatedInvocation
         yield* authority.create(payload, invocation)
         return yield* replica.open(payload.canvasId).pipe(Effect.orDie)

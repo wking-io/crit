@@ -49,7 +49,10 @@ const makeCanvasReplica = Effect.gen(function*() {
     const result = ReplicaPolicy.view(state)
     return result._tag === "Success" ? Effect.succeed(ReplicaPolicy.detach(result.success)) : Effect.fail(result.failure)
   }
-  const current: CanvasReplicaService["current"] = (canvasId) => requireState(canvasId).pipe(Effect.flatMap(render))
+  const current: CanvasReplicaService["current"] = (canvasId) => requireState(canvasId).pipe(
+    Effect.flatMap(render),
+    Effect.withSpan("crit.replica.current", { attributes: { "crit.canvas.id": canvasId } })
+  )
   const open: CanvasReplicaService["open"] = (canvasId) => Effect.gen(function*() {
     const local = yield* store.get(canvasId)
     if (local !== undefined) return yield* render(local)
@@ -61,7 +64,7 @@ const makeCanvasReplica = Effect.gen(function*() {
       latest ?? ReplicaPolicy.initialize(ReplicaPolicy.detach(authorityView))
     ] as const))
     return yield* render(state)
-  })
+  }).pipe(Effect.withSpan("crit.replica.open", { attributes: { "crit.canvas.id": canvasId } }))
   const change: CanvasReplicaService["change"] = (input, invocation) => Effect.suspend(() => {
     const ownedInput = ReplicaPolicy.detach(input)
     const ownedInvocation = ReplicaPolicy.detach(invocation)
@@ -77,7 +80,7 @@ const makeCanvasReplica = Effect.gen(function*() {
       const view = yield* render(state)
       return { changeId, view }
     })
-  })
+  }).pipe(Effect.withSpan("crit.replica.change", { attributes: { "crit.canvas.id": input.canvasId } }))
 
   const pull = (canvasId: CanvasId) => Effect.gen(function*() {
     let pulled = 0
@@ -163,7 +166,7 @@ const makeCanvasReplica = Effect.gen(function*() {
       blocked: view.pending.filter((pending) => pending.state._tag === "blocked").length,
       view
     })
-  }))
+  })).pipe(Effect.withSpan("crit.replica.sync", { attributes: { "crit.canvas.id": canvasId } }))
   return { open, current, change, sync }
 })
 
