@@ -1,12 +1,12 @@
 import {
   ApplicationRouteRepresentation,
   ArtifactRepresentation,
+  DomainValue,
   HttpUrl,
   WebUrlRepresentation,
   type ApplicationId,
   type RepresentationRef,
 } from "@crit/domain"
-import { ProtocolValue } from "@crit/protocol"
 import { Context, Data, Effect, Layer, Match, Option, Result, Schema } from "effect"
 
 import {
@@ -117,7 +117,7 @@ const makeRuntime = Effect.gen(function*() {
   const artifacts = yield* ArtifactStore
 
   const resolveApplication = (input: ApplicationRouteRepresentation) => {
-    const representation = ProtocolValue.detach(input)
+    const representation = DomainValue.detach(input)
     return bindings.get(representation.applicationId).pipe(Effect.map(Option.match({
       onNone: (): RenderPlan => ApplicationUnavailableRenderPlan.make({
         reason: "application-unbound",
@@ -131,7 +131,7 @@ const makeRuntime = Effect.gen(function*() {
   }
 
   const resolveArtifact = (input: ArtifactRepresentation) => {
-    const representation = ProtocolValue.detach(input)
+    const representation = DomainValue.detach(input)
     return artifacts.read(representation).pipe(
       Effect.map((bytes): RenderPlan => ArtifactBytesRenderPlan.make({
         representation,
@@ -153,7 +153,7 @@ const makeRuntime = Effect.gen(function*() {
   const resolve = Match.type<RepresentationRef>().pipe(Match.tagsExhaustive({
     "application-route": resolveApplication,
     "web-url": (input): Effect.Effect<RenderPlan> => {
-      const representation = ProtocolValue.detach(input)
+      const representation = DomainValue.detach(input)
       return Effect.succeed(IframeRenderPlan.make({
         representation,
         url: representation.url

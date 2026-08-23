@@ -1,6 +1,7 @@
 import {
   CanvasEngine,
   CanvasProjection,
+  DomainValue,
   Id,
   IsoTimestamp,
   decodeCanvasCommandBatch,
@@ -116,7 +117,7 @@ const isolationScenario = (factory: AuthorityConformanceFactory): AuthorityConfo
     name,
     run: provideAuthority(factory, undefined, Effect.gen(function*() {
       const authority = yield* CanvasAuthority
-      const incomingInvocation = ProtocolValue.detach(person)
+      const incomingInvocation = DomainValue.detach(person)
       const created = yield* authority.create({
         _tag: "create-canvas", canvasId: canvasA, title: "Authority"
       }, incomingInvocation)

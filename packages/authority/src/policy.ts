@@ -4,6 +4,7 @@ import {
   CanvasEngine,
   type CanvasId,
   type CanvasProjection,
+  DomainValue,
   type IsoTimestamp,
   PersonAttribution,
   emptyCanvasProjection
@@ -199,7 +200,7 @@ const makeChangePage = (args: {
 const decisionEffect = (
   decision: SubmitDecision
 ): Effect.Effect<SubmitChangeReceipt, SubmitCanvasChangeFailure> => decision._tag === "Success"
-  ? Effect.succeed(ProtocolValue.detach(decision.success))
+  ? Effect.succeed(DomainValue.detach(decision.success))
   : Effect.fail(decision.failure)
 
 export const AuthorityPolicy = {
@@ -208,6 +209,5 @@ export const AuthorityPolicy = {
   evaluateFresh,
   completeAcceptance,
   makeChangePage,
-  decisionEffect,
-  detach: ProtocolValue.detach
+  decisionEffect
 }

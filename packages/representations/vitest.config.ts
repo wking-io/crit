@@ -6,8 +6,7 @@ const packageRoot = fileURLToPath(new URL(".", import.meta.url))
 export default defineConfig({
   resolve: {
     alias: {
-      "@crit/domain": fileURLToPath(new URL("../domain/src/index.ts", import.meta.url)),
-      "@crit/protocol": fileURLToPath(new URL("../protocol/src/index.ts", import.meta.url))
+      "@crit/domain": fileURLToPath(new URL("../domain/src/index.ts", import.meta.url))
     }
   },
   test: { include: [`${packageRoot}test/**/*.test.ts`] }

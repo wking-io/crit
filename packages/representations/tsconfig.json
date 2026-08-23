@@ -6,13 +6,11 @@
     "tsBuildInfoFile": "dist/tsconfig.tsbuildinfo",
     "baseUrl": ".",
     "paths": {
-      "@crit/domain": ["../domain/src/index.ts"],
-      "@crit/protocol": ["../protocol/src/index.ts"]
+      "@crit/domain": ["../domain/src/index.ts"]
     }
   },
   "include": ["src"],
   "references": [
-    { "path": "../domain" },
-    { "path": "../protocol" }
+    { "path": "../domain" }
   ]
 }

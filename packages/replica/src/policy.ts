@@ -2,7 +2,6 @@ import { type AuthorityView, type ChangeRejected } from "@crit/authority"
 import { CanvasEngine, ChangeId } from "@crit/domain"
 import {
   ChangeValue,
-  ProtocolValue,
   type ChangePage,
   type ProposedCanvasChange,
   type SubmitChangeReceipt
@@ -163,7 +162,6 @@ const rejection = (state: ReplicaState, value: ChangeRejected) => {
 }
 
 export const ReplicaPolicy = {
-  detach: ProtocolValue.detach,
   initialize,
   enqueue,
   incorporatePage,
