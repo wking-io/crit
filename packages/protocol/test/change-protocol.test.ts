@@ -103,8 +103,11 @@ describe("ChangeProtocol", () => {
   it("exposes only semantic protocol values", async () => {
     expect(Object.keys(await import("../src/index.js")).sort()).toEqual([
       "AcceptedCanvasChangeSchema", "ChangePageSchema", "ChangeProtocol", "ChangeValue", "CritProjectManifestV2",
-      "CursorSchema", "ProposedCanvasChangeSchema", "ProtocolValue", "ReplicaChangedSchema", "SequenceSchema",
-      "SubmitChangeReceiptSchema", "decodeCritProjectManifestV2", "encodeCritProjectManifestV2"
+      "CursorSchema", "FRAME_INPUT_BRIDGE_SCHEMA_VERSION", "FRAME_INPUT_BRIDGE_SOURCE",
+      "FrameInputBridgeMessageSchema", "FrameInputIntentSchema",
+      "ProposedCanvasChangeSchema", "ProtocolValue", "ReplicaChangedSchema", "SequenceSchema",
+      "SubmitChangeReceiptSchema", "decodeCritProjectManifestV2", "decodeFrameInputBridgeMessage",
+      "encodeCritProjectManifestV2"
     ])
   })
 

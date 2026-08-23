@@ -22,3 +22,14 @@ export type {
   SubmitChangeReceipt
 } from "./change.js"
 export type { DecodeResult, ProtocolFailure } from "./failure.js"
+export {
+  FRAME_INPUT_BRIDGE_SCHEMA_VERSION,
+  FRAME_INPUT_BRIDGE_SOURCE,
+  FrameInputBridgeMessageSchema,
+  FrameInputIntentSchema,
+  decodeFrameInputBridgeMessage
+} from "./bridge.js"
+export type {
+  FrameInputBridgeMessage,
+  FrameInputIntent
+} from "./bridge.js"
