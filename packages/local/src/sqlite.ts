@@ -1,4 +1,3 @@
-import * as SqliteClient from "@effect/sql-sqlite-node/SqliteClient"
 import {
   AuthorityFailure,
   AuthorityClock,
@@ -31,16 +30,13 @@ import {
   type ProposedCanvasChange,
   type ProtocolFailure
 } from "@crit/protocol"
-import { Cause, Data, Effect, Layer, Result, Schedule, Schema } from "effect"
-import * as Reactivity from "effect/unstable/reactivity/Reactivity"
+import { Data, Effect, Layer, Result, Schema } from "effect"
 import type { SqlError } from "effect/unstable/sql/SqlError"
 
-const schemaVersion = 1
+import { LocalDatabaseOpenFailure, makeDatabase, retryTransaction } from "./database.js"
+import { decodeStored, encodeStored } from "./stored-json.js"
 
-export class LocalAuthorityOpenFailure extends Data.TaggedError("LocalAuthorityOpenFailure")<{
-  readonly path: string
-  readonly reason: string
-}> {}
+export { LocalDatabaseOpenFailure }
 
 class StoredProtocolDecodeFailure extends Data.TaggedError("StoredProtocolDecodeFailure")<{
   readonly failure: ProtocolFailure
@@ -75,17 +71,12 @@ const RetryRow = Schema.Struct({
   accepted_sequence: Schema.NullOr(Schema.Int.check(Schema.isGreaterThan(0))),
   rejected_failure_json: Schema.NullOr(JsonText)
 })
-const UserVersionRow = Schema.Struct({ user_version: Schema.Number })
 const CursorRow = Schema.Struct({ cursor: Schema.String })
 const FoundRow = Schema.Struct({ found: Schema.Number })
 const SequenceRow = Schema.Struct({ sequence: Schema.Number })
 
 const json = (value: Schema.Json): string => JSON.stringify(value)
 const parseJson = (value: string): Schema.Json => Schema.decodeUnknownSync(Schema.Json)(JSON.parse(value))
-const decodeStored = <S extends Schema.ConstraintDecoder<unknown>>(schema: S, value: string): S["Type"] =>
-  Schema.decodeUnknownSync(schema, { onExcessProperty: "error" })(parseJson(value))
-const encodeStored = <S extends Schema.ConstraintEncoder<unknown>>(schema: S, value: S["Type"]): string =>
-  json(Schema.decodeUnknownSync(Schema.Json)(Schema.encodeUnknownSync(schema)(value)))
 
 const decodeProtocol = <A>(
   value: string,
@@ -110,50 +101,6 @@ type Evaluation = Data.TaggedEnum<{
 }>
 const Evaluation = Data.taggedEnum<Evaluation>()
 
-const setup = (sql: SqliteClient.SqliteClient): Effect.Effect<void, SqlError> => Effect.gen(function*() {
-  yield* sql.unsafe("PRAGMA foreign_keys = ON")
-  const versions = yield* sql.unsafe<typeof UserVersionRow.Encoded>("PRAGMA user_version")
-  const current = Schema.decodeUnknownSync(UserVersionRow)(versions[0]).user_version
-  if (current > schemaVersion) throw new Error(`database schema version ${current} is newer than ${schemaVersion}`)
-  if (current !== 0) return
-  yield* sql.withTransaction(Effect.gen(function*() {
-    yield* sql.unsafe(`CREATE TABLE canvases (
-      canvas_id TEXT PRIMARY KEY,
-      created_at TEXT NOT NULL,
-      created_by_json TEXT NOT NULL CHECK (json_valid(created_by_json)),
-      genesis_cursor TEXT NOT NULL UNIQUE,
-      current_cursor TEXT NOT NULL UNIQUE,
-      current_sequence INTEGER NOT NULL CHECK (current_sequence >= 0),
-      projection_json TEXT NOT NULL CHECK (json_valid(projection_json))
-    ) STRICT`)
-    yield* sql.unsafe(`CREATE TABLE accepted_changes (
-      canvas_id TEXT NOT NULL,
-      sequence INTEGER NOT NULL CHECK (sequence > 0),
-      change_id TEXT NOT NULL,
-      cursor TEXT NOT NULL UNIQUE,
-      change_json TEXT NOT NULL CHECK (json_valid(change_json)),
-      PRIMARY KEY (canvas_id, sequence),
-      UNIQUE (canvas_id, change_id),
-      UNIQUE (canvas_id, sequence, change_id),
-      FOREIGN KEY (canvas_id) REFERENCES canvases(canvas_id)
-    ) STRICT`)
-    yield* sql.unsafe(`CREATE TABLE retry_reservations (
-      canvas_id TEXT NOT NULL,
-      change_id TEXT NOT NULL,
-      proposal_json TEXT NOT NULL CHECK (json_valid(proposal_json)),
-      authorization_subject TEXT NOT NULL,
-      accepted_sequence INTEGER,
-      rejected_failure_json TEXT CHECK (rejected_failure_json IS NULL OR json_valid(rejected_failure_json)),
-      PRIMARY KEY (canvas_id, change_id),
-      CHECK ((accepted_sequence IS NOT NULL) <> (rejected_failure_json IS NOT NULL)),
-      FOREIGN KEY (canvas_id) REFERENCES canvases(canvas_id),
-      FOREIGN KEY (canvas_id, accepted_sequence, change_id)
-        REFERENCES accepted_changes(canvas_id, sequence, change_id)
-    ) STRICT`)
-    yield* sql.unsafe(`PRAGMA user_version = ${schemaVersion}`)
-  }))
-})
-
 const readAccepted = (stored: typeof AcceptedRow.Type): AcceptedCanvasChange => {
   const change = decodeProtocol(stored.change_json, ChangeProtocol.accepted.decode)
   if (change.canvasId !== stored.canvas_id || change.changeId !== stored.change_id ||
@@ -167,22 +114,9 @@ const make = (
   options: SqliteCanvasAuthorityOptions
 ) => Effect.gen(function*() {
   const clock = yield* AuthorityClock
-  const sql = yield* SqliteClient.make({ filename: options.path, busyTimeout: 0 }).pipe(
-    Effect.provide(Reactivity.layer),
-    Effect.catchCause((cause) => Effect.fail(new LocalAuthorityOpenFailure({
-      path: options.path,
-      reason: Cause.pretty(cause)
-    })))
-  )
-  yield* setup(sql).pipe(Effect.catchCause((cause) => Effect.fail(new LocalAuthorityOpenFailure({
-    path: options.path,
-    reason: Cause.pretty(cause)
-  }))))
+  const sql = yield* makeDatabase(options)
   const transaction = <A, R>(body: Effect.Effect<A, SqlError, R>): Effect.Effect<A, SqlError, R> =>
-    sql.withTransaction(body).pipe(Effect.retry({
-      schedule: Schedule.spaced("2 millis"),
-      while: (error) => error.reason._tag === "LockTimeoutError"
-    }))
+    retryTransaction(sql, body)
 
   const readCanvas = (canvasId: typeof CanvasId.Type): Effect.Effect<CanvasRecord | undefined, SqlError> =>
     Effect.gen(function*() {

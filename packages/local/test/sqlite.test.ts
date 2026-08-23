@@ -278,7 +278,7 @@ describe("SQLite CanvasAuthority", () => {
     const result = yield* Effect.result(Effect.scoped(buildSqliteAuthority({ path })))
     expect(result._tag).toBe("Failure")
     if (result._tag === "Failure") {
-      expect(result.failure._tag).toBe("LocalAuthorityOpenFailure")
+      expect(result.failure._tag).toBe("LocalDatabaseOpenFailure")
       expect(result.failure.reason).toContain("newer than")
     }
     })))

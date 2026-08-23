@@ -1,7 +1,6 @@
 export {
   AcceptedUnconfirmed,
   Blocked,
-  CanvasReplica,
   ChangeIdAlreadyPresent,
   ChangeIdGenerationFailure,
   Conflicted,
@@ -26,4 +25,6 @@ export type {
   ReplicaOpenFailure,
   ReplicaSyncFailure
 } from "./model.js"
-export { MemoryCanvasReplica } from "./memory.js"
+export { MemoryCanvasReplicaLive } from "./memory.js"
+export { CanvasReplica } from "./service.js"
+export type { CanvasReplicaService } from "./service.js"

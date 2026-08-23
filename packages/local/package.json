@@ -18,8 +18,12 @@
   ],
   "dependencies": {
     "@crit/authority": "*",
+    "@crit/client": "*",
     "@crit/domain": "*",
     "@crit/protocol": "*",
+    "@crit/replica": "*",
+    "@crit/representations": "*",
+    "@effect/platform-node": "4.0.0-rc.109",
     "@effect/sql-sqlite-node": "4.0.0-rc.109",
     "effect": "4.0.0-rc.109"
   },

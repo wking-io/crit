@@ -15,12 +15,12 @@ const allowedDependencies = new Map([
   ["authority", ["domain", "protocol"]],
   ["replica", ["domain", "protocol", "authority"]],
   ["representations", ["domain"]],
-  ["client", ["domain", "protocol", "authority"]],
+  ["client", ["domain", "protocol", "authority", "replica"]],
   ["react", ["domain", "replica", "representations"]],
   ["frame-bridge", ["protocol"]],
-  ["local", ["domain", "protocol", "authority", "replica", "representations"]],
+  ["local", ["domain", "protocol", "authority", "replica", "representations", "client"]],
   ["cloudflare", ["domain", "protocol", "authority", "representations"]],
-  ["cli", ["domain", "replica", "representations", "client"]]
+  ["cli", ["domain", "replica", "representations", "client", "local"]]
 ])
 
 const targetNames = new Set(allowedDependencies.keys())

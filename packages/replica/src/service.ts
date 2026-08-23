@@ -1,16 +1,21 @@
 import { AuthorityModel, CanvasAuthority } from "@crit/authority"
+import type { VerifiedInvocation } from "@crit/authority"
 import type { CanvasId } from "@crit/domain"
-import { Effect, Result, Semaphore } from "effect"
+import { Context, Effect, Layer, Result, Semaphore } from "effect"
 
 import {
-  CanvasReplica,
   ReplicaCanvasNotFound,
+  type ReplicaChange,
+  type ReplicaChangeReceipt,
   ReplicaChangeIds,
   ReplicaDiverged,
+  type ReplicaOpenFailure,
   ReplicaNotOpen,
-  SyncResult,
   type ReplicaChangeFailure,
   type ReplicaSyncFailure,
+  type ReplicaView,
+  SyncResult,
+  type ReplicaInvariantFailure,
   type ReplicaState
 } from "./model.js"
 import { ReplicaPolicy } from "./policy.js"
@@ -18,7 +23,14 @@ import { ReplicaStore } from "./store.js"
 
 const pageLimit = AuthorityModel.pageLimit(1_000)
 
-export const makeCanvasReplica = Effect.gen(function*() {
+export interface CanvasReplicaService {
+  readonly open: (canvasId: CanvasId) => Effect.Effect<ReplicaView, ReplicaOpenFailure>
+  readonly current: (canvasId: CanvasId) => Effect.Effect<ReplicaView, ReplicaNotOpen | ReplicaInvariantFailure>
+  readonly change: (input: ReplicaChange, invocation: VerifiedInvocation) => Effect.Effect<ReplicaChangeReceipt, ReplicaChangeFailure>
+  readonly sync: (canvasId: CanvasId) => Effect.Effect<SyncResult, ReplicaSyncFailure>
+}
+
+const makeCanvasReplica = Effect.gen(function*() {
   const authority = yield* CanvasAuthority
   const ids = yield* ReplicaChangeIds
   const store = yield* ReplicaStore
@@ -37,8 +49,11 @@ export const makeCanvasReplica = Effect.gen(function*() {
     const result = ReplicaPolicy.view(state)
     return result._tag === "Success" ? Effect.succeed(ReplicaPolicy.detach(result.success)) : Effect.fail(result.failure)
   }
-  const current: CanvasReplica["Service"]["current"] = (canvasId) => requireState(canvasId).pipe(Effect.flatMap(render))
-  const open: CanvasReplica["Service"]["open"] = (canvasId) => Effect.gen(function*() {
+  const current: CanvasReplicaService["current"] = (canvasId) => requireState(canvasId).pipe(
+    Effect.flatMap(render),
+    Effect.withSpan("crit.replica.current", { attributes: { "crit.canvas.id": canvasId } })
+  )
+  const open: CanvasReplicaService["open"] = (canvasId) => Effect.gen(function*() {
     const local = yield* store.get(canvasId)
     if (local !== undefined) return yield* render(local)
     const authorityView = yield* authority.open(canvasId).pipe(
@@ -49,8 +64,8 @@ export const makeCanvasReplica = Effect.gen(function*() {
       latest ?? ReplicaPolicy.initialize(ReplicaPolicy.detach(authorityView))
     ] as const))
     return yield* render(state)
-  })
-  const change: CanvasReplica["Service"]["change"] = (input, invocation) => Effect.suspend(() => {
+  }).pipe(Effect.withSpan("crit.replica.open", { attributes: { "crit.canvas.id": canvasId } }))
+  const change: CanvasReplicaService["change"] = (input, invocation) => Effect.suspend(() => {
     const ownedInput = ReplicaPolicy.detach(input)
     const ownedInvocation = ReplicaPolicy.detach(invocation)
     return Effect.gen(function*() {
@@ -65,7 +80,7 @@ export const makeCanvasReplica = Effect.gen(function*() {
       const view = yield* render(state)
       return { changeId, view }
     })
-  })
+  }).pipe(Effect.withSpan("crit.replica.change", { attributes: { "crit.canvas.id": input.canvasId } }))
 
   const pull = (canvasId: CanvasId) => Effect.gen(function*() {
     let pulled = 0
@@ -100,7 +115,7 @@ export const makeCanvasReplica = Effect.gen(function*() {
     return { pulled, acknowledged }
   })
 
-  const sync: CanvasReplica["Service"]["sync"] = (canvasId) => lockFor(canvasId).withPermits(1)(Effect.gen(function*() {
+  const sync: CanvasReplicaService["sync"] = (canvasId) => lockFor(canvasId).withPermits(1)(Effect.gen(function*() {
     yield* requireState(canvasId)
     let pulled = 0
     let acknowledged = 0
@@ -151,6 +166,13 @@ export const makeCanvasReplica = Effect.gen(function*() {
       blocked: view.pending.filter((pending) => pending.state._tag === "blocked").length,
       view
     })
-  }))
+  })).pipe(Effect.withSpan("crit.replica.sync", { attributes: { "crit.canvas.id": canvasId } }))
   return { open, current, change, sync }
 })
+
+export class CanvasReplica extends Context.Service<CanvasReplica, CanvasReplicaService>()(
+  "@crit/replica/CanvasReplica",
+  { make: makeCanvasReplica }
+) {}
+
+export const CanvasReplicaLive = Layer.effect(CanvasReplica, CanvasReplica.make)
