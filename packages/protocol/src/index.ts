@@ -41,7 +41,6 @@ export {
   decodeFrameInputBridgeMessage
 } from "./bridge.js"
 export type {
-  FrameBridgeOrigin,
   FrameCommentDownEvent,
   FrameCommentDownMessage,
   FrameCommentElementRef,
