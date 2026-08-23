@@ -2,10 +2,17 @@ import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promis
 import { tmpdir } from "node:os"
 import path from "node:path"
 
-import { ArtifactRepresentation, Id, Sha256Digest } from "@crit/domain"
-import { ArtifactStore } from "@crit/representations"
-import { artifactStoreConformanceScenarios } from "@crit/representations/testing"
-import { Effect, Schema } from "effect"
+import { ArtifactRepresentation, HttpUrl, Id, Sha256Digest } from "@crit/domain"
+import {
+  ApplicationBaseUrl,
+  ApplicationBindings,
+  ArtifactStore
+} from "@crit/representations"
+import {
+  artifactStoreConformanceScenarios,
+  runRepresentationRuntimeConformance
+} from "@crit/representations/testing"
+import { Effect, Layer, Option, Schema } from "effect"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 
 import { LocalArtifactStore } from "../src/artifact-store.js"
@@ -38,6 +45,27 @@ for (const scenario of artifactStoreConformanceScenarios()) {
     await run(scenario.run)
   })
 }
+
+it("resolves representations through the real local artifact store", async() => {
+  const applicationId = Id.application("application_local_conformance")
+  const baseUrl = Schema.decodeUnknownSync(ApplicationBaseUrl)("http://localhost:5173/")
+  const bindings = Layer.succeed(ApplicationBindings, ApplicationBindings.of({
+    get: (requestedId) => Effect.succeed(
+      requestedId === applicationId ? Option.some(baseUrl) : Option.none()
+    )
+  }))
+  await Effect.runPromise(runRepresentationRuntimeConformance({
+    artifactStoreLayer: LocalArtifactStore.layer({ directory }),
+    applicationBindingsLayer: bindings,
+    expected: {
+      applicationId,
+      baseUrl,
+      renderedUrl: Schema.decodeUnknownSync(HttpUrl)(
+        "http://localhost:5173/products/%E2%9C%93?view=grid"
+      )
+    }
+  }))
+})
 
 describe("LocalArtifactStore", () => {
   it("persists across layer restarts and rejects a later conflict", async() => {
