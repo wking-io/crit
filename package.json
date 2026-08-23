@@ -81,9 +81,10 @@
     "generate:glyphs": "node scripts/generate-glyphs.mjs",
     "import:glyph": "node scripts/import-nucleo-glyph.mjs",
     "lint": "oxlint",
+    "doctor": "npm --workspace @crit/react run doctor",
     "test": "vitest run",
     "typecheck": "npm run check:glyphs && tsc -p tsconfig.json --noEmit",
-    "verify": "npm run lint && npm run typecheck && npm test && npm run check:package",
+    "verify": "npm run lint && npm run typecheck && npm test && npm run check:package && npm run doctor",
     "www:build": "vite build --config www/vite.config.ts",
     "www:deploy": "npm run www:build && npx wrangler pages deploy www/dist --project-name crit",
     "www:dev": "vite --config www/vite.config.ts"
