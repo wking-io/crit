@@ -26,14 +26,6 @@ export const sessionPreferenceKey = (args: {
 }): string =>
   `crit:session:${encodeURIComponent(args.canvasId)}:${encodeURIComponent(args.name)}`
 
-const readJson = (source: string): unknown => {
-  try {
-    return JSON.parse(source)
-  } catch {
-    return undefined
-  }
-}
-
 export const readSessionPreference = <S extends Schema.ConstraintDecoder<unknown>>(args: {
   readonly storage: BrowserSessionStorage
   readonly key: string
@@ -46,7 +38,7 @@ export const readSessionPreference = <S extends Schema.ConstraintDecoder<unknown
     return undefined
   }
   if (source === null) return undefined
-  const envelope = Schema.decodeUnknownOption(SessionEnvelope)(readJson(source))
+  const envelope = Schema.decodeUnknownOption(Schema.fromJsonString(SessionEnvelope))(source)
   if (Option.isNone(envelope)) return undefined
   return Option.getOrUndefined(
     Schema.decodeUnknownOption(args.schema)(envelope.value.value)
