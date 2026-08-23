@@ -10,6 +10,7 @@ import {
   FrameRenderer,
   type FrameRepresentationResolver
 } from "./frame-renderer.js"
+import { framesById, notesById } from "./projection-index.js"
 
 export interface CanvasBoardProps {
   readonly projection: CanvasProjection
@@ -34,10 +35,8 @@ export function CanvasBoard({
   projection,
   resolver
 }: CanvasBoardProps): ReactElement {
-  const frames = new Map(
-    projection.frames.map((frame) => [frame.frameId, frame])
-  )
-  const notes = new Map(projection.notes.map((note) => [note.noteId, note]))
+  const frames = framesById(projection.frames)
+  const notes = notesById(projection.notes)
 
   return (
     <section
