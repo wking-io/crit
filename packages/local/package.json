@@ -28,6 +28,8 @@
     "effect": "4.0.0-rc.109"
   },
   "devDependencies": {
+    "@types/ws": "8.18.1",
+    "ws": "8.21.3",
     "vitest": "4.1.0"
   },
   "scripts": {

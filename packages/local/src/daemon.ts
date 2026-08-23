@@ -4,7 +4,7 @@ import {
   CanvasAuthority,
   type VerifiedInvocation
 } from "@crit/authority"
-import { Id, type InstallationId } from "@crit/domain"
+import { CanvasId, Id, type InstallationId } from "@crit/domain"
 import {
   CanvasReplica,
   ChangeIdGenerationFailure,
@@ -20,11 +20,15 @@ import {
   LocalApiUnauthorized,
   LocalApiVersionUnsupported,
   LocalCanvasApi,
+  LocalReplicaSocketHello,
+  LocalReplicaSocketReady,
+  localReplicaNotificationsPath,
+  localReplicaSocketCloseCode,
   localApiVersion,
   localApiVersionHeader
 } from "@crit/replica/http"
 import { NodeHttpServer } from "@effect/platform-node"
-import { Crypto, Effect, FileSystem, Layer, Redacted, Schema } from "effect"
+import { Crypto, Effect, Fiber, FileSystem, Layer, Pull, Queue, Redacted, Schema, Stream } from "effect"
 import {
   HttpMiddleware,
   HttpRouter,
@@ -32,6 +36,7 @@ import {
   HttpServerResponse
 } from "effect/unstable/http"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
+import * as Socket from "effect/unstable/socket/Socket"
 import { createServer } from "node:http"
 
 import {
@@ -113,14 +118,26 @@ const handlers = (options: LocalDaemonOptions) => HttpApiBuilder.group(
   })
 )
 
+const bearerRequestAuthority = (
+  request: HttpServerRequest.HttpServerRequest,
+  options: LocalDaemonOptions,
+  credential: string | undefined
+) => {
+  if (credential !== Redacted.value(options.token)) return "credential"
+  const origin = request.headers.origin
+  if (origin !== undefined && !options.allowedOrigins.has(origin)) return "origin"
+  return undefined
+}
+
 const bearerAuthorizationLayer = (options: LocalDaemonOptions) => Layer.succeed(
   LocalApiAuthorization,
   LocalApiAuthorization.of({
     bearer: Effect.fn(function*(httpEffect, { credential }) {
-      if (Redacted.value(credential) !== Redacted.value(options.token)) {
+      const request = yield* HttpServerRequest.HttpServerRequest
+      const authorityFailure = bearerRequestAuthority(request, options, Redacted.value(credential))
+      if (authorityFailure === "credential") {
         return yield* new LocalApiUnauthorized({ message: "Missing or invalid bearer token" })
       }
-      const request = yield* HttpServerRequest.HttpServerRequest
       const requestedVersion = request.headers[localApiVersionHeader]
       if (requestedVersion !== localApiVersion) {
         return yield* new LocalApiVersionUnsupported({
@@ -128,9 +145,8 @@ const bearerAuthorizationLayer = (options: LocalDaemonOptions) => Layer.succeed(
           supportedVersion: localApiVersion
         })
       }
-      const origin = request.headers.origin
-      if (origin !== undefined && !options.allowedOrigins.has(origin)) {
-        return yield* new LocalApiOriginRejected({ origin })
+      if (authorityFailure === "origin") {
+        return yield* new LocalApiOriginRejected({ origin: request.headers.origin ?? "missing" })
       }
       return yield* Effect.provideService(
         httpEffect,
@@ -162,6 +178,100 @@ const requestAuthority = (
   if (requireOrigin && origin === undefined) return "origin"
   return undefined
 }
+
+const isWebSocketUpgrade = (request: HttpServerRequest.HttpServerRequest) =>
+  request.headers.upgrade?.toLowerCase() === "websocket"
+
+const notificationSocket = (
+  replica: CanvasReplica["Service"],
+  canvasId: CanvasId,
+  bearerOptions: LocalDaemonOptions | undefined
+) => Effect.gen(function*() {
+  const request = yield* HttpServerRequest.HttpServerRequest
+  const upgraded = yield* Effect.result(request.upgrade)
+  if (upgraded._tag === "Failure") return HttpServerResponse.empty({ status: 400 })
+  const socket = upgraded.success
+  const write = yield* socket.writer
+  const firstFrame = yield* Queue.bounded<string>(1)
+  let awaitingFirstFrame = true
+  const socketFiber = yield* socket.runString((message) => {
+    if (!awaitingFirstFrame) return undefined
+    awaitingFirstFrame = false
+    return Queue.offer(firstFrame, message)
+  }).pipe(Effect.forkScoped)
+  if (bearerOptions !== undefined) {
+    const candidate = yield* Queue.take(firstFrame).pipe(Effect.timeoutOption("2 seconds"))
+    if (candidate._tag === "None" || new TextEncoder().encode(candidate.value).byteLength > 512) {
+      yield* write(new Socket.CloseEvent(localReplicaSocketCloseCode.unauthorized, "authentication required"))
+      return HttpServerResponse.empty()
+    }
+    const hello = Schema.decodeUnknownOption(Schema.fromJsonString(LocalReplicaSocketHello))(candidate.value)
+    if (hello._tag === "None" || bearerRequestAuthority(request, bearerOptions, hello.value.bearer) !== undefined) {
+      yield* write(new Socket.CloseEvent(localReplicaSocketCloseCode.unauthorized, "authentication rejected"))
+      return HttpServerResponse.empty()
+    }
+  }
+  const subscribed = yield* Effect.result(replica.subscribe(canvasId))
+  if (subscribed._tag === "Failure") {
+    yield* write(new Socket.CloseEvent(localReplicaSocketCloseCode.replicaNotOpen, "canvas is not open"))
+    return HttpServerResponse.empty()
+  }
+  const pull = yield* Stream.toPull(subscribed.success)
+  yield* write(JSON.stringify(LocalReplicaSocketReady.make({
+    kind: "subscription-ready",
+    schemaVersion: 1,
+    canvasId
+  })))
+  const send = Effect.forever(pull.pipe(
+    Effect.flatMap((events) => Effect.forEach(events, (event) => write(JSON.stringify(event)), {
+      discard: true
+    }))
+  )).pipe(Pull.catchDone(() => Effect.void))
+  yield* Effect.raceFirst(
+    Fiber.await(socketFiber),
+    send
+  ).pipe(Effect.catch(() => Effect.void))
+  return HttpServerResponse.empty()
+})
+
+const bearerNotificationRoutes = (options: LocalDaemonOptions) => HttpRouter.use(Effect.fn(function*(router) {
+  const replica = yield* CanvasReplica
+  yield* router.add("GET", localReplicaNotificationsPath, (request) => Effect.gen(function*() {
+    if (!isWebSocketUpgrade(request)) return HttpServerResponse.empty({ status: 400 })
+    const origin = request.headers.origin
+    if (origin !== undefined && !options.allowedOrigins.has(origin)) {
+      return HttpServerResponse.empty({ status: 403 })
+    }
+    const route = yield* HttpRouter.RouteContext
+    const decoded = Schema.decodeUnknownOption(CanvasId)(route.params.canvasId)
+    if (decoded._tag === "None") return HttpServerResponse.empty({ status: 400 })
+    return yield* notificationSocket(replica, decoded.value, options).pipe(
+      Effect.catch(() => Effect.succeed(HttpServerResponse.empty()))
+    )
+  }))
+}))
+
+const browserNotificationRoutes = HttpRouter.use(Effect.fn(function*(router) {
+  const browser = yield* BrowserSession
+  const replica = yield* CanvasReplica
+  const path: `/${string}` = `${browser.path}${localReplicaNotificationsPath.slice(1)}`
+  yield* router.add("GET", path, (request) => Effect.gen(function*() {
+    if (!isWebSocketUpgrade(request)) return HttpServerResponse.empty({ status: 400 })
+    if (requestAuthority(request, browser, browser.browserOrigin, true) !== undefined) {
+      return HttpServerResponse.empty({ status: 403 })
+    }
+    const session = request.cookies[browser.cookieName]
+    if (session === undefined || !(yield* browser.authorize(session))) {
+      return HttpServerResponse.empty({ status: 401 })
+    }
+    const route = yield* HttpRouter.RouteContext
+    const decoded = Schema.decodeUnknownOption(CanvasId)(route.params.canvasId)
+    if (decoded._tag === "None") return HttpServerResponse.empty({ status: 400 })
+    return yield* notificationSocket(replica, decoded.value, undefined).pipe(
+      Effect.catch(() => Effect.succeed(HttpServerResponse.empty()))
+    )
+  }))
+}))
 
 const browserAuthorizationLayer = Layer.effect(
   LocalApiAuthorization,
@@ -302,14 +412,18 @@ const daemonLayer = (
     }))
     const routeDefinitions = browser === undefined
       ? bearerRoutes
-      : Layer.mergeAll(bearerRoutes, browserBootstrapRoutes, browserCanvasRoutes).pipe(
+      : Layer.mergeAll(bearerRoutes, bearerNotificationRoutes(options), browserBootstrapRoutes, browserCanvasRoutes, browserNotificationRoutes).pipe(
         Layer.provide(Layer.succeed(BrowserSession, browser))
       )
-    const routes = routeDefinitions.pipe(Layer.provide(services))
+    const allRoutes = browser === undefined
+      ? Layer.merge(bearerRoutes, bearerNotificationRoutes(options))
+      : routeDefinitions
+    const routes = allRoutes.pipe(Layer.provide(services))
     return HttpRouter.serve(routes).pipe(
       Layer.provideMerge(NodeHttpServer.layer(createServer, {
         host: "127.0.0.1",
-        port: options.port ?? 0
+        port: options.port ?? 0,
+        websocket: { maxPayload: 512 }
       }))
     )
 }

@@ -1,7 +1,8 @@
 import { AuthorityModel, CanvasAuthority } from "@crit/authority"
 import type { VerifiedInvocation } from "@crit/authority"
 import type { CanvasId } from "@crit/domain"
-import { Context, Effect, Layer, Result, Semaphore } from "effect"
+import { ReplicaChangedSchema, type ReplicaChanged } from "@crit/protocol"
+import { Context, Effect, Layer, PubSub, Result, Scope, Semaphore, Stream, SynchronizedRef } from "effect"
 
 import {
   ReplicaCanvasNotFound,
@@ -28,12 +29,38 @@ export interface CanvasReplicaService {
   readonly current: (canvasId: CanvasId) => Effect.Effect<ReplicaView, ReplicaNotOpen | ReplicaInvariantFailure>
   readonly change: (input: ReplicaChange, invocation: VerifiedInvocation) => Effect.Effect<ReplicaChangeReceipt, ReplicaChangeFailure>
   readonly sync: (canvasId: CanvasId) => Effect.Effect<SyncResult, ReplicaSyncFailure>
+  readonly subscribe: (canvasId: CanvasId) => Effect.Effect<Stream.Stream<ReplicaChanged>, ReplicaNotOpen, Scope.Scope>
 }
 
 const makeCanvasReplica = Effect.gen(function*() {
   const authority = yield* CanvasAuthority
   const ids = yield* ReplicaChangeIds
   const store = yield* ReplicaStore
+  const subscriptions = yield* SynchronizedRef.make<ReadonlyMap<CanvasId, PubSub.PubSub<ReplicaChanged>>>(new Map())
+  const notificationsFor = (canvasId: CanvasId) => SynchronizedRef.modifyEffect(
+    subscriptions,
+    (current) => {
+      const existing = current.get(canvasId)
+      if (existing !== undefined) return Effect.succeed([existing, current] as const)
+      return PubSub.sliding<ReplicaChanged>(1).pipe(
+        Effect.map((created) => [created, new Map(current).set(canvasId, created)] as const)
+      )
+    }
+  )
+  const publish = (canvasId: CanvasId) => notificationsFor(canvasId).pipe(
+    Effect.flatMap((pubsub) => PubSub.publish(pubsub, ReplicaChangedSchema.make({
+      kind: "replica-changed",
+      schemaVersion: 1,
+      canvasId
+    }))),
+    Effect.asVoid
+  )
+  const modify = <A, E>(
+    canvasId: CanvasId,
+    transition: (state: ReplicaState | undefined) => Result.Result<readonly [A, ReplicaState | undefined], E>
+  ): Effect.Effect<A, E> => store.modify<A, E>(canvasId, transition).pipe(
+    Effect.tap(() => publish(canvasId))
+  )
   const syncLocks = new Map<CanvasId, Semaphore.Semaphore>()
   const lockFor = (canvasId: CanvasId) => {
     const existing = syncLocks.get(canvasId)
@@ -59,7 +86,7 @@ const makeCanvasReplica = Effect.gen(function*() {
     const authorityView = yield* authority.open(canvasId).pipe(
       Effect.mapError(() => new ReplicaCanvasNotFound({ canvasId }))
     )
-    const state = yield* store.modify(canvasId, (latest) => Result.succeed([
+    const state = yield* modify<ReplicaState, never>(canvasId, (latest) => Result.succeed([
       latest ?? ReplicaPolicy.initialize(ReplicaPolicy.detach(authorityView)),
       latest ?? ReplicaPolicy.initialize(ReplicaPolicy.detach(authorityView))
     ] as const))
@@ -70,7 +97,7 @@ const makeCanvasReplica = Effect.gen(function*() {
     const ownedInvocation = ReplicaPolicy.detach(invocation)
     return Effect.gen(function*() {
       const changeId = yield* ids.next
-      const state = yield* store.modify(ownedInput.canvasId, (current): Result.Result<readonly [ReplicaState, ReplicaState], ReplicaChangeFailure> => {
+      const state = yield* modify<ReplicaState, ReplicaChangeFailure>(ownedInput.canvasId, (current): Result.Result<readonly [ReplicaState, ReplicaState], ReplicaChangeFailure> => {
         if (current === undefined) return Result.fail(new ReplicaNotOpen({ canvasId: ownedInput.canvasId }))
         const result = ReplicaPolicy.enqueue(current, ownedInput, ownedInvocation, changeId)
         return result._tag === "Success"
@@ -101,7 +128,7 @@ const makeCanvasReplica = Effect.gen(function*() {
           reason: "authority page promised more changes without advancing its cursor"
         }))
       }
-      const counts = yield* store.modify(canvasId, (current): Result.Result<readonly [{ readonly pulled: number; readonly acknowledged: number }, ReplicaState], ReplicaSyncFailure> => {
+      const counts = yield* modify<{ readonly pulled: number; readonly acknowledged: number }, ReplicaSyncFailure>(canvasId, (current): Result.Result<readonly [{ readonly pulled: number; readonly acknowledged: number }, ReplicaState], ReplicaSyncFailure> => {
         if (current === undefined) return Result.fail(new ReplicaNotOpen({ canvasId }))
         const result = ReplicaPolicy.incorporatePage(current, ReplicaPolicy.detach(page))
         return result._tag === "Success"
@@ -130,7 +157,7 @@ const makeCanvasReplica = Effect.gen(function*() {
       if (submitted._tag === "Failure") {
         const failure = submitted.failure
         if (failure._tag === "change-rejected") {
-          yield* store.modify(canvasId, (current): Result.Result<readonly [undefined, ReplicaState], ReplicaSyncFailure> => {
+          yield* modify<undefined, ReplicaSyncFailure>(canvasId, (current): Result.Result<readonly [undefined, ReplicaState], ReplicaSyncFailure> => {
             if (current === undefined) return Result.fail(new ReplicaNotOpen({ canvasId }))
             const next = ReplicaPolicy.rejection(current, failure)
             return next._tag === "Success"
@@ -142,7 +169,7 @@ const makeCanvasReplica = Effect.gen(function*() {
         if (failure._tag === "canvas-not-found") return yield* Effect.fail(new ReplicaCanvasNotFound({ canvasId }))
         return yield* Effect.fail(new ReplicaDiverged({ canvasId, reason: `authority rejected pending identity: ${failure._tag}` }))
       }
-      yield* store.modify(canvasId, (current): Result.Result<readonly [undefined, ReplicaState], ReplicaSyncFailure> => {
+      yield* modify<undefined, ReplicaSyncFailure>(canvasId, (current): Result.Result<readonly [undefined, ReplicaState], ReplicaSyncFailure> => {
         if (current === undefined) return Result.fail(new ReplicaNotOpen({ canvasId }))
         const next = ReplicaPolicy.receipt(current, submitted.success)
         return next._tag === "Success"
@@ -167,7 +194,12 @@ const makeCanvasReplica = Effect.gen(function*() {
       view
     })
   })).pipe(Effect.withSpan("crit.replica.sync", { attributes: { "crit.canvas.id": canvasId } }))
-  return { open, current, change, sync }
+  const subscribe: CanvasReplicaService["subscribe"] = (canvasId) => requireState(canvasId).pipe(
+    Effect.andThen(notificationsFor(canvasId)),
+    Effect.flatMap(PubSub.subscribe),
+    Effect.map((subscription) => Stream.fromEffectRepeat(PubSub.take(subscription)))
+  )
+  return { open, current, change, sync, subscribe }
 })
 
 export class CanvasReplica extends Context.Service<CanvasReplica, CanvasReplicaService>()(

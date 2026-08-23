@@ -14,6 +14,7 @@
   "dependencies": {
     "@crit/authority": "*",
     "@crit/domain": "*",
+    "@crit/protocol": "*",
     "@crit/replica": "*",
     "effect": "4.0.0-rc.109"
   }

@@ -3,9 +3,14 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 
 import { NodeServices } from "@effect/platform-node"
-import { localApiVersionHeader } from "@crit/replica/http"
-import { Context, Effect, Layer, Option, Redacted, Scope } from "effect"
+import {
+  localApiVersionHeader,
+  LocalReplicaSocketServerFrame,
+  type LocalReplicaSocketServerFrame as LocalReplicaSocketServerFrameType
+} from "@crit/replica/http"
+import { Context, Effect, Layer, Option, Redacted, Schema, Scope } from "effect"
 import { describe, expect, it } from "vitest"
+import { WebSocket } from "ws"
 
 import { LocalDevelopment } from "../src/index.js"
 import { LocalInstallation } from "../src/development.js"
@@ -46,6 +51,43 @@ const bootstrap = async (bootstrapUrl: string) => {
 }
 
 const cookiePair = (response: Response) => response.headers.get("set-cookie")?.split(";", 1)[0]
+
+const connectBrowserSocket = (url: string, cookie: string, origin: string) => new Promise<{
+  readonly socket: WebSocket
+  readonly next: () => Promise<LocalReplicaSocketServerFrameType>
+}>((resolve, reject) => {
+  const socket = new WebSocket(url, { headers: { cookie, origin } })
+  const frames: LocalReplicaSocketServerFrameType[] = []
+  const waiters: Array<(frame: LocalReplicaSocketServerFrameType) => void> = []
+  socket.on("message", (data) => {
+    const frame = Schema.decodeUnknownSync(LocalReplicaSocketServerFrame)(JSON.parse(data.toString()))
+    const waiter = waiters.shift()
+    if (waiter === undefined) frames.push(frame)
+    else waiter(frame)
+  })
+  const next = () => {
+    const frame = frames.shift()
+    return frame === undefined
+      ? new Promise<LocalReplicaSocketServerFrameType>((nextResolve) => waiters.push(nextResolve))
+      : Promise.resolve(frame)
+  }
+  socket.once("open", () => resolve({ socket, next }))
+  socket.once("error", reject)
+})
+
+const rejectedSocketStatus = (url: string, cookie: string, origin?: string) => new Promise<number | undefined>((resolve, reject) => {
+  const headers = origin === undefined ? { cookie } : { cookie, origin }
+  const socket = new WebSocket(url, { headers })
+  socket.once("unexpected-response", (_request, response) => {
+    resolve(response.statusCode)
+    socket.terminate()
+  })
+  socket.once("open", () => {
+    socket.close()
+    reject(new Error("expected WebSocket handshake rejection"))
+  })
+  socket.once("error", () => undefined)
+})
 
 const createCanvas = (args: {
   readonly baseUrl: string
@@ -102,6 +144,41 @@ describe("browser session HTTP protocol", () => {
         origin: browserOrigin
       }))
       expect(created.status).toBe(200)
+      const socketUrl = `${development.descriptor.baseUrl.replace("http://", "ws://")}/browser/${development.descriptor.instance}/api/v1/subscribe/canvas_browser_session`
+      const connection = yield* Effect.promise(() => connectBrowserSocket(socketUrl, cookie ?? "", browserOrigin))
+      expect(yield* Effect.promise(connection.next)).toEqual({
+        kind: "subscription-ready",
+        schemaVersion: 1,
+        canvasId: "canvas_browser_session"
+      })
+      const changed = yield* Effect.promise(() => fetch(
+        `${development.descriptor.baseUrl}/browser/${development.descriptor.instance}/api/v1/change`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            cookie: cookie ?? "",
+            origin: browserOrigin,
+            "x-crit-api-version": "1"
+          },
+          body: JSON.stringify({
+            _tag: "replica-change",
+            canvasId: "canvas_browser_session",
+            commands: [{
+              _tag: "rename-canvas",
+              expectedTitle: "Browser session",
+              title: "Browser changed"
+            }]
+          })
+        }
+      ))
+      expect(changed.status).toBe(200)
+      expect(yield* Effect.promise(connection.next)).toEqual({
+        kind: "replica-changed",
+        schemaVersion: 1,
+        canvasId: "canvas_browser_session"
+      })
+      connection.socket.close()
       expect(created.headers.get("access-control-allow-origin")).toBe(browserOrigin)
       expect(created.headers.get("access-control-allow-credentials")).toBe("true")
       expect(created.headers.get("access-control-allow-origin")).not.toBe("*")
@@ -204,6 +281,23 @@ describe("browser session HTTP protocol", () => {
       expect((yield* Effect.promise(() => request({ cookie: "crit_session_wrong=wrong" }))).status).toBe(401)
       expect((yield* Effect.promise(() => request({ cookie: undefined }))).status).toBe(401)
       expect((yield* Effect.promise(() => request({ origin: undefined }))).status).toBe(403)
+      const socketPath = `${development.descriptor.baseUrl}/browser/${development.descriptor.instance}/api/v1/subscribe/canvas_missing`
+      const webSocketPath = socketPath.replace("http://", "ws://")
+      expect(yield* Effect.promise(() => rejectedSocketStatus(
+        webSocketPath,
+        cookie ?? "",
+        "http://neighbor.example"
+      ))).toBe(403)
+      expect(yield* Effect.promise(() => rejectedSocketStatus(
+        webSocketPath,
+        "crit_session_wrong=wrong",
+        browserOrigin
+      ))).toBe(401)
+      expect(yield* Effect.promise(() => rejectedSocketStatus(
+        webSocketPath,
+        cookie ?? ""
+      ))).toBe(403)
+      expect((yield* Effect.promise(() => fetch(socketPath))).status).toBe(400)
       const wrongVersion = yield* Effect.promise(() => fetch(
         `${development.descriptor.baseUrl}/browser/${development.descriptor.instance}/api/v1/open/canvas_missing`,
         {
