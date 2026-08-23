@@ -1,10 +1,11 @@
 import { Id } from "@crit/domain"
-import { Effect, Result, Schema } from "effect"
+import { Effect, Layer, Result, Schema } from "effect"
 import { KeyValueStore } from "effect/unstable/persistence"
 import { afterEach, describe, expect, it } from "vitest"
 
 import {
   CanvasCamera,
+  SessionStorageUnavailable,
   getCanvasCameraSession,
   getSessionPreference,
   layerMemory,
@@ -176,6 +177,35 @@ describe("canvas camera session", () => {
       return yield* getCanvasCameraSession({ canvasId: canvasA })
     }))
     expect(cleared).toBeUndefined()
+  })
+
+  it("fails the sessionStorage layer with a tagged error when access is blocked", async() => {
+    const view = globalThis.document.defaultView
+    expect(view).toBeDefined()
+    if (view === undefined) return
+    const original = view.sessionStorage
+    Object.defineProperty(view, "sessionStorage", {
+      configurable: true,
+      get: () => {
+        throw new DOMException("blocked")
+      }
+    })
+    try {
+      const result = await Effect.runPromise(
+        Effect.scoped(Layer.build(layerSessionStorage)).pipe(Effect.result)
+      )
+      expect(Result.isFailure(result)).toBe(true)
+      if (!Result.isFailure(result)) return
+      expect(result.failure).toBeInstanceOf(SessionStorageUnavailable)
+      if (!(result.failure instanceof SessionStorageUnavailable)) return
+      expect(result.failure.reason).toBe("blocked")
+    } finally {
+      Object.defineProperty(view, "sessionStorage", {
+        configurable: true,
+        enumerable: true,
+        value: original
+      })
+    }
   })
 
   it("uses sessionStorage when the host provides that layer", async() => {

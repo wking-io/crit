@@ -1,6 +1,10 @@
 import type { CanvasId } from "@crit/domain"
-import { Effect, Option, Schema } from "effect"
+import { Data, Effect, Layer, Option, Schema } from "effect"
 import { KeyValueStore } from "effect/unstable/persistence"
+
+export class SessionStorageUnavailable extends Data.TaggedError("SessionStorageUnavailable")<{
+  readonly reason: "missing" | "blocked"
+}> {}
 
 const SESSION_PREFIX = "crit:session:"
 
@@ -31,15 +35,21 @@ export const layerMemory = KeyValueStore.layerMemory
 
 export const layerStorage = KeyValueStore.layerStorage
 
-export const layerSessionStorage = KeyValueStore.layerStorage(() => {
-  try {
-    const storage = globalThis.document?.defaultView?.sessionStorage
-    if (storage !== undefined) return storage
-  } catch {
-    // sessionStorage can throw in some privacy modes.
-  }
-  throw new Error("sessionStorage is unavailable")
-})
+const readSessionStorage = Effect.try({
+  try: () => globalThis.document?.defaultView?.sessionStorage,
+  catch: () => new SessionStorageUnavailable({ reason: "blocked" })
+}).pipe(Effect.flatMap((storage) =>
+  storage === undefined
+    ? Effect.fail(new SessionStorageUnavailable({ reason: "missing" }))
+    : Effect.succeed(storage)
+))
+
+export const layerSessionStorage: Layer.Layer<
+  KeyValueStore.KeyValueStore,
+  SessionStorageUnavailable
+> = Layer.unwrap(
+  Effect.map(readSessionStorage, (storage) => KeyValueStore.layerStorage(() => storage))
+)
 
 export const getSessionPreference = <S extends Schema.ConstraintDecoder<unknown>>(args: {
   readonly canvasId: CanvasId

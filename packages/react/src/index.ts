@@ -1,4 +1,5 @@
 export {
+  SessionStorageUnavailable,
   getSessionPreference,
   layerMemory,
   layerSessionStorage,
