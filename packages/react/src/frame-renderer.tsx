@@ -98,12 +98,16 @@ const ResolvedFrame = ({
   readonly plan: RenderPlan
   readonly title: Frame["title"]
 }): ReactElement => Match.value(plan).pipe(Match.tagsExhaustive({
-  iframe: (iframe) => <iframe
-    className={className}
-    referrerPolicy="no-referrer"
-    src={iframe.url}
-    title={title}
-  />,
+  iframe: (iframe) => (
+    // Live review Frames stay unsandboxed so the reviewed page can run.
+    // react-doctor-disable-next-line react-doctor/iframe-missing-sandbox
+    <iframe
+      className={className}
+      referrerPolicy="no-referrer"
+      src={iframe.url}
+      title={title}
+    />
+  ),
   "artifact-bytes": (artifact) => <ArtifactDownload
     className={className}
     plan={artifact}

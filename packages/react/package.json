@@ -12,6 +12,7 @@
   },
   "files": ["dist"],
   "scripts": {
+    "doctor": "react-doctor --blocking warning --no-telemetry",
     "test": "vitest run --config vitest.config.ts"
   },
   "dependencies": {
@@ -29,6 +30,7 @@
     "@types/react-dom": "19.2.3",
     "jsdom": "^26.1.0",
     "react": "19.2.8",
+    "react-doctor": "^0.9.12",
     "react-dom": "19.2.8",
     "vitest": "4.1.0"
   }
