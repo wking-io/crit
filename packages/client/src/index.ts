@@ -41,6 +41,12 @@ import { FetchHttpClient, HttpClient, HttpClientError, HttpClientRequest, HttpCl
 import { HttpApiClient, HttpApiMiddleware } from "effect/unstable/httpapi"
 import * as Socket from "effect/unstable/socket/Socket"
 
+export {
+  LocalBrowserConnection,
+  LocalBrowserConnectionDescriptor,
+  LocalBrowserConnectionInvalid
+} from "./browser-connection.js"
+
 export type LocalClientOptions =
   | {
     readonly _tag: "bearer"
