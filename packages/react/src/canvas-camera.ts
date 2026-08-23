@@ -19,7 +19,8 @@ const CanvasCameraValue = Schema.Struct({
 export type CanvasCamera = typeof CanvasCameraValue.Type
 
 export const CanvasCamera = {
-  make: Schema.decodeUnknownSync(CanvasCameraValue)
+  make: Schema.decodeUnknownSync(CanvasCameraValue),
+  schema: CanvasCameraValue
 }
 
 export const canvasCameraStyle = (camera: CanvasCamera): CSSProperties => ({
