@@ -10,6 +10,7 @@ import {
   FRAME_COMMENT_BRIDGE_SOURCE,
   FRAME_INPUT_BRIDGE_SCHEMA_VERSION,
   FRAME_INPUT_BRIDGE_SOURCE,
+  FrameBridgeOrigin,
   FrameCommentDownMessageSchema,
   FrameCommentUpEventSchema,
   FrameCommentUpMessageSchema,
@@ -253,5 +254,27 @@ describe("Frame comment bridge protocol", () => {
         pins: []
       }
     }))).toBe(true)
+  })
+})
+
+const decodeOrigin = Schema.decodeUnknownOption(FrameBridgeOrigin)
+
+describe("Frame bridge origin", () => {
+  it.each([
+    "https://review.example",
+    "http://127.0.0.1:5173"
+  ])("accepts %s", (value) => {
+    expect(Option.isSome(decodeOrigin(value))).toBe(true)
+  })
+
+  it.each([
+    ["trailing slash", "https://review.example/"],
+    ["path", "https://review.example/path"],
+    ["opaque null", "null"],
+    ["credentials", "https://user:pass@review.example"],
+    ["non-http", "ftp://review.example"],
+    ["default https port", "https://review.example:443"]
+  ])("rejects %s", (_label, value) => {
+    expect(Option.isNone(decodeOrigin(value))).toBe(true)
   })
 })

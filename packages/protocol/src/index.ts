@@ -27,6 +27,7 @@ export {
   FRAME_COMMENT_BRIDGE_SOURCE,
   FRAME_INPUT_BRIDGE_SCHEMA_VERSION,
   FRAME_INPUT_BRIDGE_SOURCE,
+  FrameBridgeOrigin,
   FrameCommentDownEventSchema,
   FrameCommentDownMessageSchema,
   FrameCommentElementRefSchema,
@@ -40,6 +41,7 @@ export {
   decodeFrameInputBridgeMessage
 } from "./bridge.js"
 export type {
+  FrameBridgeOrigin,
   FrameCommentDownEvent,
   FrameCommentDownMessage,
   FrameCommentElementRef,
