@@ -10,5 +10,16 @@
       "import": "./dist/index.js"
     }
   },
-  "files": ["dist"]
+  "files": ["dist"],
+  "scripts": {
+    "test": "vitest run --config vitest.config.ts"
+  },
+  "dependencies": {
+    "@crit/protocol": "*",
+    "effect": "4.0.0-rc.109"
+  },
+  "devDependencies": {
+    "jsdom": "^26.1.0",
+    "vitest": "4.1.0"
+  }
 }
