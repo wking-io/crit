@@ -10,5 +10,25 @@
       "import": "./dist/index.js"
     }
   },
-  "files": ["dist"]
+  "files": ["dist"],
+  "scripts": {
+    "test": "vitest run --config vitest.config.ts"
+  },
+  "dependencies": {
+    "@crit/domain": "*",
+    "@crit/representations": "*",
+    "@tanstack/react-query": "^5.102.1",
+    "effect": "4.0.0-rc.109"
+  },
+  "peerDependencies": {
+    "react": ">=18 <20"
+  },
+  "devDependencies": {
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "jsdom": "^26.1.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "vitest": "4.1.0"
+  }
 }
