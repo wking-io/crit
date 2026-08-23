@@ -8,6 +8,7 @@
     "paths": {
       "@crit/authority": ["../authority/src/index.ts"],
       "@crit/domain": ["../domain/src/index.ts"],
+      "@crit/protocol": ["../protocol/src/index.ts"],
       "@crit/replica": ["../replica/src/index.ts"],
       "@crit/replica/http": ["../replica/src/http.ts"]
     }
@@ -16,6 +17,7 @@
   "references": [
     { "path": "../domain" },
     { "path": "../authority" },
+    { "path": "../protocol" },
     { "path": "../replica" }
   ]
 }

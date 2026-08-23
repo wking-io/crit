@@ -5,12 +5,14 @@ import {
   type ChangeRejected
 } from "@crit/authority"
 import type { CanvasId } from "@crit/domain"
+import type { ReplicaChanged } from "@crit/protocol"
 import type {
   ReplicaChange,
   ReplicaChangeReceipt,
   ReplicaView,
   SyncResult
 } from "@crit/replica"
+import { ReplicaNotOpen } from "@crit/replica"
 import {
   LocalApiAuthorization,
   type LocalDaemonStatus,
@@ -19,12 +21,16 @@ import {
   LocalApiUnauthorized,
   LocalApiVersionUnsupported,
   LocalCanvasApi,
+  LocalReplicaSocketHello,
+  LocalReplicaSocketServerFrame,
   localApiVersion,
-  localApiVersionHeader
+  localApiVersionHeader,
+  localReplicaSocketCloseCode
 } from "@crit/replica/http"
-import { Context, Effect, flow, Layer, type Schema } from "effect"
+import { Context, Deferred, Effect, Exit, flow, Layer, Queue, Redacted, Ref, Schema, Scope, Stream, type Take } from "effect"
 import { HttpClient, HttpClientError, HttpClientRequest } from "effect/unstable/http"
 import { HttpApiClient, HttpApiMiddleware } from "effect/unstable/httpapi"
+import * as Socket from "effect/unstable/socket/Socket"
 
 export interface LocalCanvasClientOptions {
   readonly baseUrl: string
@@ -44,6 +50,17 @@ export type StatusFailure = TransportFailure
 export type OpenFailure = TransportFailure | CanvasNotFound
 export type ChangeFailure = TransportFailure | CanvasNotFound | ChangeRejected
 export type SyncFailure = TransportFailure | CanvasNotFound
+export class LocalSubscriptionProtocolError extends Schema.TaggedError<LocalSubscriptionProtocolError>()(
+  "LocalSubscriptionProtocolError",
+  { message: Schema.String }
+) {}
+
+export type SubscriptionFailure =
+  | Socket.SocketError
+  | Schema.SchemaError
+  | LocalApiUnauthorized
+  | ReplicaNotOpen
+  | LocalSubscriptionProtocolError
 
 export type CreateCanvasInput = Omit<CreateCanvas, "_tag">
 
@@ -53,7 +70,83 @@ export interface LocalCanvasClientService {
   readonly open: (canvasId: CanvasId) => Effect.Effect<ReplicaView, OpenFailure>
   readonly change: (input: ReplicaChange) => Effect.Effect<ReplicaChangeReceipt, ChangeFailure>
   readonly sync: (canvasId: CanvasId) => Effect.Effect<SyncResult, SyncFailure>
+  readonly subscribe: (canvasId: CanvasId) => Effect.Effect<
+    Stream.Stream<ReplicaChanged, SubscriptionFailure>,
+    SubscriptionFailure,
+    Socket.WebSocketConstructor | Scope.Scope
+  >
 }
+
+const notificationUrl = (baseUrl: string, canvasId: CanvasId) => {
+  const socketBase = baseUrl.startsWith("https://")
+    ? `wss://${baseUrl.slice("https://".length)}`
+    : `ws://${baseUrl.slice("http://".length)}`
+  return `${socketBase.replace(/\/$/, "")}/api/v${localApiVersion}/subscribe/${encodeURIComponent(canvasId)}`
+}
+
+const mapSocketFailure = (canvasId: CanvasId, failure: Socket.SocketError) => {
+  if (failure.reason._tag !== "SocketCloseError") return failure
+  if (failure.reason.code === localReplicaSocketCloseCode.unauthorized) {
+    return new LocalApiUnauthorized({ message: "Missing or invalid bearer token" })
+  }
+  if (failure.reason.code === localReplicaSocketCloseCode.replicaNotOpen) return new ReplicaNotOpen({ canvasId })
+  return failure
+}
+
+const subscribe = (
+  options: LocalCanvasClientOptions,
+  canvasId: CanvasId
+): Effect.Effect<
+  Stream.Stream<ReplicaChanged, SubscriptionFailure>,
+  SubscriptionFailure,
+  Socket.WebSocketConstructor | Scope.Scope
+> => Effect.gen(function*() {
+  const socket = yield* Socket.makeWebSocket(notificationUrl(options.baseUrl, canvasId), {
+    closeCodeIsError: (code) => code !== 1000
+  })
+  const write = yield* socket.writer
+  const opened = yield* Deferred.make<void, SubscriptionFailure>()
+  const messages = yield* Queue.sliding<Take.Take<ReplicaChanged, SubscriptionFailure>>(1)
+  const ready = yield* Ref.make(false)
+  const decode = Schema.decodeUnknownEffect(Schema.fromJsonString(LocalReplicaSocketServerFrame))
+  const hello = JSON.stringify(LocalReplicaSocketHello.make({
+    kind: "authenticate",
+    schemaVersion: 1,
+    bearer: Redacted.value(options.token)
+  }))
+  yield* write(hello).pipe(Effect.forkScoped)
+  yield* socket.runString<unknown, SubscriptionFailure>(
+    (message) => decode(message).pipe(Effect.flatMap((frame) => Effect.gen(function*() {
+      if (frame.kind === "subscription-ready") {
+        if (frame.canvasId !== canvasId) {
+          return yield* new LocalSubscriptionProtocolError({ message: "Subscription ready frame named another Canvas" })
+        }
+        yield* Ref.set(ready, true)
+        yield* Deferred.succeed(opened, undefined)
+        return
+      }
+      if (!(yield* Ref.get(ready))) {
+        return yield* new LocalSubscriptionProtocolError({ message: "Replica change arrived before subscription readiness" })
+      }
+      yield* Queue.offer(messages, [frame])
+    })))
+  ).pipe(
+    Effect.mapError((failure) => Socket.isSocketError(failure) ? mapSocketFailure(canvasId, failure) : failure),
+    Effect.matchEffect({
+      onFailure: (failure) => Deferred.fail(opened, failure).pipe(
+        Effect.andThen(Queue.offer(messages, Exit.fail(failure)))
+      ),
+      onSuccess: () => Deferred.fail(opened, new LocalSubscriptionProtocolError({
+        message: "Socket closed before subscription readiness"
+      })).pipe(
+        Effect.andThen(Queue.offer(messages, Exit.void))
+      )
+    }),
+    Effect.forkScoped
+  )
+  yield* Deferred.await(opened)
+  return Stream.fromQueue(messages).pipe(Stream.flattenTake)
+})
 
 export class LocalCanvasClient extends Context.Service<
   LocalCanvasClient,
@@ -76,7 +169,8 @@ export class LocalCanvasClient extends Context.Service<
         create: (input) => http.create({ payload: CreateCanvas.make(input) }),
         open: (canvasId) => http.open({ params: { canvasId } }),
         change: (input) => http.change({ payload: input }),
-        sync: (canvasId) => http.sync({ params: { canvasId } })
+        sync: (canvasId) => http.sync({ params: { canvasId } }),
+        subscribe: (canvasId) => subscribe(options, canvasId)
       })
     })).pipe(
       Layer.provide(HttpApiMiddleware.layerClient(

@@ -18,8 +18,9 @@ import {
   localApiToken
 } from "@crit/replica/http"
 import { ReplicaModel } from "@crit/replica"
-import { Context, Effect, Layer, Option, Schema, Tracer } from "effect"
+import { Context, Effect, Fiber, Layer, Option, Schema, Stream, Tracer } from "effect"
 import { FetchHttpClient, HttpServer } from "effect/unstable/http"
+import * as Socket from "effect/unstable/socket/Socket"
 import { describe, expect, it } from "vitest"
 
 import { LocalDaemon, SqliteCanvasAuthority } from "../src/index.js"
@@ -173,41 +174,61 @@ describe("LocalDaemon", () => {
         expect(missing).toEqual(AuthorityFailure.canvasNotFound({
           canvasId: Id.canvas("canvas_daemon_missing")
         }))
+        const missingSubscription = yield* client.subscribe(Id.canvas("canvas_daemon_missing")).pipe(
+          Effect.provide(Socket.layerWebSocketConstructorGlobal),
+          Effect.result
+        )
+        expect(missingSubscription).toMatchObject({
+          _tag: "Failure",
+          failure: { _tag: "ReplicaNotOpen", canvasId: "canvas_daemon_missing" }
+        })
         const created = yield* client.create(AuthorityModel.createCanvas({ canvasId, title: "Original" }))
         expect(created.projection.title).toBe("Original")
-        const duplicate = yield* Effect.promise(() => fetch(`${baseUrl}/api/v1/create`, {
-          method: "POST",
-          headers: rawHeaders(token),
-          body: JSON.stringify({ _tag: "create-canvas", canvasId, title: "Original" })
-        }))
-        expect(duplicate.status).toBe(409)
-        const rejectedChange = yield* Effect.promise(() => fetch(`${baseUrl}/api/v1/change`, {
-          method: "POST",
-          headers: rawHeaders(token),
-          body: JSON.stringify({
-            _tag: "replica-change",
+        yield* Effect.scoped(Effect.gen(function*() {
+          const notifications = yield* client.subscribe(canvasId).pipe(
+            Effect.provide(Socket.layerWebSocketConstructorGlobal)
+          )
+          const notification = yield* notifications.pipe(Stream.runHead, Effect.forkChild)
+          const duplicate = yield* Effect.promise(() => fetch(`${baseUrl}/api/v1/create`, {
+            method: "POST",
+            headers: rawHeaders(token),
+            body: JSON.stringify({ _tag: "create-canvas", canvasId, title: "Original" })
+          }))
+          expect(duplicate.status).toBe(409)
+          const rejectedChange = yield* Effect.promise(() => fetch(`${baseUrl}/api/v1/change`, {
+            method: "POST",
+            headers: rawHeaders(token),
+            body: JSON.stringify({
+              _tag: "replica-change",
+              canvasId,
+              commands: [{
+                _tag: "rename-canvas",
+                expectedTitle: "Wrong",
+                title: "Rejected"
+              }]
+            })
+          }))
+          expect(rejectedChange.status).toBe(409)
+          const changed = yield* client.change(ReplicaModel.change({
             canvasId,
-            commands: [{
+            commands: decodeCanvasCommandBatch([{
               _tag: "rename-canvas",
-              expectedTitle: "Wrong",
-              title: "Rejected"
-            }]
-          })
+              expectedTitle: "Original",
+              title: "Changed"
+            }])
+          }))
+          expect(changed.view.projection.title).toBe("Changed")
+          expect(changed.view.pending).toHaveLength(1)
+          expect(yield* Fiber.join(notification)).toEqual(Option.some({
+            kind: "replica-changed",
+            schemaVersion: 1,
+            canvasId
+          }))
         }))
-        expect(rejectedChange.status).toBe(409)
-        const changed = yield* client.change(ReplicaModel.change({
-          canvasId,
-          commands: decodeCanvasCommandBatch([{
-            _tag: "rename-canvas",
-            expectedTitle: "Original",
-            title: "Changed"
-          }])
-        }))
-        expect(changed.view.projection.title).toBe("Changed")
-        expect(changed.view.pending).toHaveLength(1)
         const synced = yield* client.sync(canvasId)
         expect(synced.view.projection.title).toBe("Changed")
         expect(synced.view.pending).toHaveLength(0)
+        expect((yield* client.open(canvasId)).projection.title).toBe("Changed")
       }))
       yield* Effect.scoped(Effect.gen(function*() {
         const { client: restarted } = yield* clientFor({
@@ -222,7 +243,7 @@ describe("LocalDaemon", () => {
 
   it("rejects invalid bearer credentials", () => Effect.runPromise(Effect.scoped(Effect.gen(function*() {
     const databasePath = yield* tempDatabasePath
-    const { client } = yield* clientFor({
+    const { baseUrl, client } = yield* clientFor({
       databasePath,
       token: "correct-token-with-at-least-32-characters",
       clientToken: "wrong-token-with-at-least-32-characters"
@@ -231,6 +252,15 @@ describe("LocalDaemon", () => {
     expect(failure).toEqual(new LocalApiUnauthorized({ message: "Missing or invalid bearer token" }))
     const statusFailure = yield* client.status().pipe(Effect.flip)
     expect(statusFailure).toEqual(new LocalApiUnauthorized({ message: "Missing or invalid bearer token" }))
+    const socketFailure = yield* client.subscribe(Id.canvas("canvas_auth")).pipe(
+      Effect.provide(Socket.layerWebSocketConstructorGlobal),
+      Effect.flip
+    )
+    expect(socketFailure).toEqual(new LocalApiUnauthorized({ message: "Missing or invalid bearer token" }))
+    const rejectedSocket = yield* Effect.promise(() => fetch(
+      `${baseUrl}/api/v1/subscribe/canvas_auth`
+    ))
+    expect(rejectedSocket.status).toBe(400)
   }))))
 
   it("rejects a present foreign Origin", () => Effect.runPromise(Effect.scoped(Effect.gen(function*() {

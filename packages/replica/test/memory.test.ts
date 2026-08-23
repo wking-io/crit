@@ -1,7 +1,7 @@
-import { AuthorityClockLive, AuthorityModel, CanvasAuthority, MemoryCanvasAuthority, PersonInvocation } from "@crit/authority"
+import { AuthorityClockLive, AuthorityFailure, AuthorityModel, CanvasAuthority, MemoryCanvasAuthority, PersonInvocation } from "@crit/authority"
 import { Id, decodeCanvasCommandBatch } from "@crit/domain"
 import { ProtocolValue } from "@crit/protocol"
-import { Deferred, Effect, Fiber, Layer, Schema } from "effect"
+import { Deferred, Effect, Fiber, Layer, Option, Schema, Stream } from "effect"
 import { describe, expect, it } from "vitest"
 
 import { CanvasReplica, MemoryCanvasReplicaLive, ReplicaChangeIds, ReplicaModel } from "../src/index.js"
@@ -74,6 +74,50 @@ describe("MemoryCanvasReplica", () => {
     }).pipe(Effect.provide(makeLayer())))
   })
 
+  it("coalesces mutation hints per Canvas and stays silent for rejected changes", async () => {
+    const program = Effect.gen(function*() {
+      const authority = yield* CanvasAuthority
+      const replica = yield* CanvasReplica
+      const canvasA = Id.canvas("canvas_notifications_a")
+      const canvasB = Id.canvas("canvas_notifications_b")
+      yield* authority.create(AuthorityModel.createCanvas({ canvasId: canvasA, title: "A" }), person)
+      yield* authority.create(AuthorityModel.createCanvas({ canvasId: canvasB, title: "B" }), person)
+      yield* replica.open(canvasA)
+      yield* replica.open(canvasB)
+      const notificationsA = yield* replica.subscribe(canvasA)
+      const notificationsB = yield* replica.subscribe(canvasB)
+      const pullA = yield* Stream.toPull(notificationsA)
+      const pullB = yield* Stream.toPull(notificationsB)
+      yield* replica.change(ReplicaModel.change({
+        canvasId: canvasA,
+        commands: decodeCanvasCommandBatch([{ _tag: "rename-canvas", expectedTitle: "A", title: "A1" }])
+      }), person)
+      yield* replica.change(ReplicaModel.change({
+        canvasId: canvasA,
+        commands: decodeCanvasCommandBatch([{ _tag: "rename-canvas", expectedTitle: "A1", title: "A2" }])
+      }), person)
+      expect(yield* pullA).toEqual([{ kind: "replica-changed", schemaVersion: 1, canvasId: canvasA }])
+      expect(Option.isNone(yield* pullB.pipe(Effect.timeoutOption("10 millis")))).toBe(true)
+
+      const rejectedNotifications = yield* replica.subscribe(canvasB)
+      const rejectedPull = yield* Stream.toPull(rejectedNotifications)
+      yield* replica.change(ReplicaModel.change({
+        canvasId: canvasB,
+        commands: decodeCanvasCommandBatch([{ _tag: "rename-canvas", expectedTitle: "wrong", title: "B2" }])
+      }), person).pipe(Effect.result)
+      expect(Option.isNone(yield* rejectedPull.pipe(Effect.timeoutOption("10 millis")))).toBe(true)
+    }).pipe(Effect.provide(makeLayer()))
+    await Effect.runPromise(Effect.scoped(program))
+  })
+
+  it("rejects subscriptions for unopened Canvas IDs", async () => {
+    const result = await Effect.runPromise(Effect.scoped(Effect.gen(function*() {
+      const replica = yield* CanvasReplica
+      return yield* replica.subscribe(Id.canvas("canvas_notifications_unopened")).pipe(Effect.result)
+    }).pipe(Effect.provide(makeLayer()))))
+    expect(result).toMatchObject({ _tag: "Failure", failure: { _tag: "ReplicaNotOpen" } })
+  })
+
   it("owns input and invocation before a suspended ID allocation", async () => {
     await Effect.runPromise(Effect.gen(function*() {
       const gate = yield* Deferred.make<ReturnType<typeof Id.change>>()
@@ -144,6 +188,38 @@ describe("MemoryCanvasReplica", () => {
       changesAfter: (query) => Effect.sync(() => events.push("pull")).pipe(Effect.andThen(authority.changesAfter(query))),
       submit: (proposal, invocation) => Effect.sync(() => events.push("submit")).pipe(Effect.andThen(authority.submit(proposal, invocation)))
     })))))
+  })
+
+  it("publishes commits completed before a later sync failure", async () => {
+    let pulls = 0
+    const program = Effect.gen(function*() {
+      const authority = yield* CanvasAuthority
+      const replica = yield* CanvasReplica
+      const canvasId = Id.canvas("canvas_replica_partial_sync")
+      const genesis = yield* authority.create(AuthorityModel.createCanvas({ canvasId, title: "Original" }), person)
+      yield* replica.open(canvasId)
+      yield* authority.submit({
+        canvasId,
+        changeId: Id.change("change_replica_partial_sync_remote"),
+        observedCursor: genesis.cursor,
+        commands: decodeCanvasCommandBatch([{ _tag: "rename-canvas", expectedTitle: "Original", title: "Remote" }])
+      }, person)
+      const notifications = yield* replica.subscribe(canvasId)
+      const pull = yield* Stream.toPull(notifications)
+      const result = yield* replica.sync(canvasId).pipe(Effect.result)
+      expect(result).toMatchObject({ _tag: "Failure", failure: { _tag: "ReplicaDiverged" } })
+      expect(yield* pull).toEqual([{ kind: "replica-changed", schemaVersion: 1, canvasId }])
+      expect((yield* replica.current(canvasId)).projection.title).toBe("Remote")
+    }).pipe(Effect.provide(makeLayer(undefined, (authority) => ({
+      ...authority,
+      changesAfter: (query) => pulls++ === 0
+        ? authority.changesAfter(query).pipe(Effect.map((page) => ({ ...page, hasMore: true })))
+        : Effect.fail(AuthorityFailure.cursorNotFound({
+          canvasId: query.canvasId,
+          cursor: query.after ?? ProtocolValue.cursor("cursor_partial_sync_missing")
+        }))
+    }))))
+    await Effect.runPromise(Effect.scoped(program))
   })
 
   it("fails a hasMore page that makes no cursor progress", async () => {

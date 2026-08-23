@@ -6,6 +6,7 @@ import {
   VerifiedInvocation
 } from "@crit/authority"
 import { CanvasId, InstallationId } from "@crit/domain"
+import { ReplicaChangedSchema } from "@crit/protocol"
 import { Context, Schema } from "effect"
 import {
   HttpApi,
@@ -21,6 +22,31 @@ import { ReplicaChange, ReplicaChangeReceipt, ReplicaView, SyncResult } from "./
 export const localApiVersion = "1"
 export const localApiVersionHeader = "x-crit-api-version"
 export const localApiPathPrefix = `/api/v${localApiVersion}`
+export const localReplicaNotificationsPath = `${localApiPathPrefix}/subscribe/:canvasId`
+export const localReplicaSocketCloseCode = {
+  unauthorized: 4401,
+  replicaNotOpen: 4404
+}
+
+export const LocalReplicaSocketHello = Schema.Struct({
+  kind: Schema.Literal("authenticate"),
+  schemaVersion: Schema.Literal(1),
+  bearer: Schema.String.check(Schema.isMinLength(32), Schema.isMaxLength(256))
+})
+export type LocalReplicaSocketHello = typeof LocalReplicaSocketHello.Type
+
+export const LocalReplicaSocketReady = Schema.Struct({
+  kind: Schema.Literal("subscription-ready"),
+  schemaVersion: Schema.Literal(1),
+  canvasId: CanvasId
+})
+export type LocalReplicaSocketReady = typeof LocalReplicaSocketReady.Type
+
+export const LocalReplicaSocketServerFrame = Schema.Union([
+  LocalReplicaSocketReady,
+  ReplicaChangedSchema
+])
+export type LocalReplicaSocketServerFrame = typeof LocalReplicaSocketServerFrame.Type
 
 export const LocalDaemonInstanceNonce = Schema.String.check(
   Schema.isPattern(/^[0-9a-f]{32}$/)
@@ -35,7 +61,10 @@ export const LocalDaemonStatus = Schema.Struct({
 })
 export type LocalDaemonStatus = typeof LocalDaemonStatus.Type
 
-const SecretToken = Schema.String.check(Schema.isMinLength(32)).pipe(Schema.brand("LocalApiToken"))
+const SecretToken = Schema.String.check(
+  Schema.isMinLength(32),
+  Schema.isMaxLength(256)
+).pipe(Schema.brand("LocalApiToken"))
 export const LocalApiToken = Schema.RedactedFromValue(SecretToken, {
   label: "Crit daemon token",
   disallowEncode: true
