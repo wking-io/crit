@@ -2,10 +2,11 @@ import {
   ApplicationRouteRepresentation,
   ArtifactRepresentation,
   HttpUrl,
-  WebUrlRepresentation,
   type ApplicationId,
   type RepresentationRef,
+  type WebUrlRepresentation,
 } from "@crit/domain"
+import { ProtocolValue } from "@crit/protocol"
 import { Context, Data, Effect, Layer, Match, Option, Result, Schema } from "effect"
 
 import {
@@ -102,25 +103,12 @@ const applicationUrl = (
   `${baseUrl}${representation.route.slice(1)}`
 )
 
-const ApplicationRouteJson = Schema.fromJsonString(ApplicationRouteRepresentation)
-const WebUrlJson = Schema.fromJsonString(WebUrlRepresentation)
-const ArtifactJson = Schema.fromJsonString(ArtifactRepresentation)
-
-const detachApplicationRoute = (representation: ApplicationRouteRepresentation) =>
-  Schema.decodeUnknownSync(ApplicationRouteJson)(
-    Schema.encodeSync(ApplicationRouteJson)(representation)
-  )
-const detachWebUrl = (representation: WebUrlRepresentation) =>
-  Schema.decodeUnknownSync(WebUrlJson)(Schema.encodeSync(WebUrlJson)(representation))
-const detachArtifact = (representation: ArtifactRepresentation) =>
-  Schema.decodeUnknownSync(ArtifactJson)(Schema.encodeSync(ArtifactJson)(representation))
-
 const makeRuntime = Effect.gen(function*() {
   const bindings = yield* ApplicationBindings
   const artifacts = yield* ArtifactStore
 
   const resolveApplication = (input: ApplicationRouteRepresentation) => {
-    const representation = detachApplicationRoute(input)
+    const representation = ProtocolValue.detach(input)
     return bindings.get(representation.applicationId).pipe(Effect.map(Option.match({
       onNone: (): RenderPlan => ({
         _tag: "unavailable",
@@ -136,7 +124,7 @@ const makeRuntime = Effect.gen(function*() {
   }
 
   const resolveArtifact = (input: ArtifactRepresentation) => {
-    const representation = detachArtifact(input)
+    const representation = ProtocolValue.detach(input)
     return artifacts.read(representation).pipe(
       Effect.map((bytes): RenderPlan => ({
         _tag: "artifact-bytes",
@@ -161,7 +149,7 @@ const makeRuntime = Effect.gen(function*() {
   const resolve = Match.type<RepresentationRef>().pipe(Match.tagsExhaustive({
     "application-route": resolveApplication,
     "web-url": (input): Effect.Effect<RenderPlan> => {
-      const representation = detachWebUrl(input)
+      const representation = ProtocolValue.detach(input)
       return Effect.succeed({
         _tag: "iframe",
         representation,

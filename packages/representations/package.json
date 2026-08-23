@@ -24,6 +24,7 @@
   "files": ["dist"],
   "dependencies": {
     "@crit/domain": "*",
+    "@crit/protocol": "*",
     "effect": "4.0.0-rc.109"
   },
   "devDependencies": {
