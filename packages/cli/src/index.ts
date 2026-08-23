@@ -8,6 +8,9 @@ import {
   LocalDaemonStateMissing,
   LocalDaemonStateUnreadable,
   LocalDevelopment,
+  LocalProjectManifest,
+  ProjectManifestInitialization,
+  type ProjectManifestFailure,
   type LocalDaemonInspection
 } from "@crit/local"
 import { ReplicaView } from "@crit/replica"
@@ -74,9 +77,41 @@ const printView = (view: typeof ReplicaView.Type, asJson: boolean) => asJson
   ? Console.log(JSON.stringify(Schema.encodeSync(ReplicaView)(view)))
   : Console.log(`${view.projection.canvasId}  ${view.projection.title}`)
 
+const formatProjectManifestFailure = Match.typeTags<ProjectManifestFailure, string>()({
+  ProjectManifestInvalid: ({ path, reason }) => `Crit project manifest is invalid: ${path} (${reason})`,
+  ProjectManifestIoFailure: ({ operation, path, reason }) =>
+    `Unable to ${operation} Crit project manifest at ${path} (${reason})`
+})
+
 const crit = Command.make("crit-target").pipe(
   Command.withDescription("Crit local development tools")
 )
+
+const init = Command.make(
+  "init",
+  {
+    root: Flag.directory("root", { mustExist: true }).pipe(Flag.withDefault(".")),
+    json
+  },
+  ({ json: asJson, root }) => Effect.gen(function*() {
+    const result = yield* Effect.gen(function*() {
+      const projectManifest = yield* LocalProjectManifest
+      return yield* projectManifest.initialize
+    }).pipe(
+      Effect.provide(LocalProjectManifest.layer({ root })),
+      Effect.mapError((failure) => new CliOperationalFailure({
+        message: formatProjectManifestFailure(failure)
+      }))
+    )
+    if (asJson) {
+      return yield* Console.log(JSON.stringify(
+        Schema.encodeSync(ProjectManifestInitialization)(result)
+      ))
+    }
+    yield* Console.log(`${result._tag}  ${result.path}`)
+    yield* Console.log(`Application  ${result.manifest.applicationId}`)
+  })
+).pipe(Command.withDescription("Initialize Crit project identity"))
 
 const dev = Command.make(
   "dev",
@@ -161,6 +196,6 @@ const open = Command.make("open", {
   yield* printView(view, asJson)
 })).pipe(Command.withDescription("Open a Canvas through the local daemon"))
 
-export const command = crit.pipe(Command.withSubcommands([dev, status, create, open]))
+export const command = crit.pipe(Command.withSubcommands([init, dev, status, create, open]))
 
 export const main = Command.run(command, { version: "0.0.0" })

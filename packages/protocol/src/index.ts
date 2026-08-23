@@ -10,6 +10,11 @@ export { CursorSchema, ProtocolValue, SequenceSchema } from "./value.js"
 export type { Cursor, Sequence } from "./value.js"
 export { ReplicaChangedSchema } from "./notification.js"
 export type { ReplicaChanged } from "./notification.js"
+export {
+  CritProjectManifestV2,
+  decodeCritProjectManifestV2,
+  encodeCritProjectManifestV2
+} from "./manifest.js"
 export type {
   AcceptedCanvasChange,
   ChangePage,

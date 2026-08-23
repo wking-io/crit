@@ -16,6 +16,19 @@ export type {
   LocalDevelopmentService
 } from "./development.js"
 export {
+  critProjectManifestFile,
+  LocalProjectManifest,
+  ProjectManifestCreated,
+  ProjectManifestInitialization,
+  ProjectManifestInvalid,
+  ProjectManifestIoFailure,
+  ProjectManifestUnchanged
+} from "./project-manifest.js"
+export type {
+  LocalProjectManifestService,
+  ProjectManifestFailure
+} from "./project-manifest.js"
+export {
   inspectLocalDaemon,
   LocalDaemonIdentityMismatch,
   LocalDaemonProtocolFailure,
