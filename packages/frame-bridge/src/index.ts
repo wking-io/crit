@@ -19,7 +19,16 @@ export {
   offsetFrameInputIntent,
   type FrameWheelDecision
 } from "./input-relay.js"
-export type { FrameInputIntent } from "@crit/protocol"
+export {
+  connectBridgedFrameComments,
+  critFrameCommentBridgeScript
+} from "./comment-bridge.js"
+export type {
+  FrameCommentDownEvent,
+  FrameCommentPin,
+  FrameCommentUpEvent,
+  FrameInputIntent
+} from "@crit/protocol"
 
 export const connectBridgedFrameInput = (input: {
   readonly target: Window
