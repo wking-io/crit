@@ -5,17 +5,40 @@ import {
   FRAME_COMMENT_BRIDGE_SOURCE,
   decodeFrameCommentUpMessage,
   type FrameCommentDownEvent,
+  type FrameCommentDownMessage,
   type FrameCommentUpEvent
 } from "@crit/protocol"
 
 const COMMENT_PIN_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" fill-opacity=".3" d="M8 1.6a5.3 5.3 0 0 1 5.3 5.3c0 4-3.9 7.1-5.3 7.5-1.4-.4-5.3-3.5-5.3-7.5A5.3 5.3 0 0 1 8 1.6Z"/><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width=".9" d="M8 14.4c4-3.4 5.3-4.6 5.3-7.5C13.3 3.9 10.9 1.6 8 1.6S2.7 3.9 2.7 6.9c0 2.9 1.3 4.1 5.3 7.5Z"/></svg>`
 
+type FrameCommentMessageEvent = {
+  readonly source: unknown
+  readonly data: unknown
+}
+
+export interface FrameCommentMessageTarget {
+  addEventListener(
+    type: "message",
+    listener: (event: FrameCommentMessageEvent) => void
+  ): void
+  removeEventListener(
+    type: "message",
+    listener: (event: FrameCommentMessageEvent) => void
+  ): void
+}
+
+export interface BridgedCommentFrame {
+  readonly contentWindow: {
+    postMessage(message: FrameCommentDownMessage, targetOrigin: string): void
+  } | null
+}
+
 export const connectBridgedFrameComments = (input: {
-  readonly target: Window
-  readonly frameElement: HTMLIFrameElement
+  readonly target: FrameCommentMessageTarget
+  readonly frameElement: BridgedCommentFrame
   readonly onEvent: (event: FrameCommentUpEvent) => void
 }) => {
-  const receive = (event: MessageEvent) => {
+  const receive = (event: FrameCommentMessageEvent) => {
     if (event.source !== input.frameElement.contentWindow) return
     const decoded = decodeFrameCommentUpMessage(event.data)
     if (Option.isNone(decoded)) return
@@ -45,6 +68,7 @@ export const critFrameCommentBridgeScript = String.raw`
   const source = "${FRAME_COMMENT_BRIDGE_SOURCE}"
   const schemaVersion = ${FRAME_COMMENT_BRIDGE_SCHEMA_VERSION}
   const send = (event) => window.parent.postMessage({ source, schemaVersion, event }, "*")
+  const acknowledgeReady = () => send({ type: "ready" })
   const layer = document.createElement("div")
   layer.dataset.critCommentLayer = ""
   Object.assign(layer.style, { inset: "0", pointerEvents: "none", position: "fixed", zIndex: "2147483647" })
@@ -202,8 +226,7 @@ export const critFrameCommentBridgeScript = String.raw`
     activeId = configure.activeId == null ? null : String(configure.activeId)
     if (!enabled) hovered = null
     syncPins()
-    // Ready on load can race a cached frame. Configure is the handshake.
-    send({ type: "ready" })
+    acknowledgeReady()
   })
   addEventListener("pointermove", (event) => { if (!enabled || !isElementTarget(event.target) || event.target.closest("[data-crit-comment-layer]")) return; hovered = event.target; queue() }, true)
   addEventListener("pointerleave", () => { hovered = null; queue() }, true)
@@ -218,6 +241,6 @@ export const critFrameCommentBridgeScript = String.raw`
   addEventListener("resize", queue, { passive: true })
   new MutationObserver((records) => { if (records.some((record) => !isElementTarget(record.target) || !record.target.closest("[data-crit-comment-layer]"))) queue() }).observe(document.documentElement, { attributes: true, childList: true, subtree: true })
   if (window.ResizeObserver) new ResizeObserver(queue).observe(document.documentElement)
-  send({ type: "ready" })
+  acknowledgeReady()
 })()
 `

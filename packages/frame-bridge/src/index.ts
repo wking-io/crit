@@ -21,7 +21,9 @@ export {
 } from "./input-relay.js"
 export {
   connectBridgedFrameComments,
-  critFrameCommentBridgeScript
+  critFrameCommentBridgeScript,
+  type BridgedCommentFrame,
+  type FrameCommentMessageTarget
 } from "./comment-bridge.js"
 export type {
   FrameCommentDownEvent,
