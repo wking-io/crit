@@ -6,6 +6,10 @@ import {
   localApiVersion
 } from "@crit/replica/http"
 import {
+  ApplicationBindings,
+  RepresentationRuntimeLive
+} from "@crit/representations"
+import {
   Context,
   Crypto,
   Effect,
@@ -20,6 +24,11 @@ import {
 import { HttpServer } from "effect/unstable/http"
 
 import { localDaemonWithBrowser, LocalDaemon } from "./daemon.js"
+import { LocalArtifactStore } from "./artifact-store.js"
+import {
+  LocalProjectApplicationBindings,
+  type LocalProjectApplicationBindingsOptions
+} from "./application-bindings.js"
 import { BrowserOrigin, BrowserSession } from "./browser-session.js"
 import { decodeStored, encodeStored } from "./stored-json.js"
 
@@ -64,6 +73,7 @@ export interface LocalDevelopmentOptions {
   readonly dataRoot: string
   readonly allowedOrigins?: ReadonlySet<string>
   readonly browserOrigin?: string
+  readonly application?: LocalProjectApplicationBindingsOptions
 }
 
 export interface LocalDevelopmentService {
@@ -99,6 +109,20 @@ export class LocalDevelopment extends Context.Service<
 
       const fail = (operation: string, target: string, reason: string) =>
         new LocalDevelopmentFailure({ operation, path: target, reason })
+      const daemonScope = yield* Effect.scope
+      const applicationBindings = options.application === undefined
+        ? ApplicationBindings.of({ get: () => Effect.succeed(Option.none()) })
+        : yield* Layer.buildWithScope(
+          LocalProjectApplicationBindings.layer(options.application),
+          daemonScope
+        ).pipe(
+          Effect.map((context) => Context.get(context, ApplicationBindings)),
+          Effect.mapError((cause) => fail(
+            "bind application",
+            options.application?.root ?? "application",
+            Schema.is(TaggedFailure)(cause) ? cause._tag : "Application binding failed"
+          ))
+        )
       const readInstallation = fs.readFileString(installationPath).pipe(
         Effect.mapError((cause) => fail("read installation", installationPath, String(cause))),
         Effect.flatMap((value) => Effect.try({
@@ -167,7 +191,6 @@ export class LocalDevelopment extends Context.Service<
           try: () => Option.some(Schema.decodeUnknownSync(BrowserOrigin)(options.browserOrigin)),
           catch: (cause) => fail("validate browser origin", "browserOrigin", String(cause))
         })
-      const daemonScope = yield* Effect.scope
       const browser = yield* Option.match(browserOrigin, {
         onNone: () => Effect.succeed(Option.none()),
         onSome: (origin) => Layer.buildWithScope(BrowserSession.layer({
@@ -192,7 +215,14 @@ export class LocalDevelopment extends Context.Service<
         onNone: () => LocalDaemon.layer(daemonOptions),
         onSome: (session) => localDaemonWithBrowser(daemonOptions, session)
       })
-      const daemonContext = yield* Layer.buildWithScope(daemonLayer, daemonScope).pipe(
+      const representationRuntime = RepresentationRuntimeLive.pipe(
+        Layer.provide(LocalArtifactStore.layer({ directory: options.dataRoot })),
+        Layer.provide(Layer.succeed(ApplicationBindings, applicationBindings))
+      )
+      const daemonContext = yield* Layer.buildWithScope(
+        daemonLayer.pipe(Layer.provide(representationRuntime)),
+        daemonScope
+      ).pipe(
         Effect.mapError((cause) => {
           if (Schema.is(AddressInUseFailure)(cause)) {
             return new LocalDaemonOwnershipFailure({

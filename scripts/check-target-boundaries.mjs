@@ -15,7 +15,7 @@ const allowedDependencies = new Map([
   ["authority", ["domain", "protocol"]],
   ["replica", ["domain", "protocol", "authority"]],
   ["representations", ["domain"]],
-  ["client", ["domain", "protocol", "authority", "replica"]],
+  ["client", ["domain", "protocol", "authority", "replica", "representations"]],
   ["react", ["domain", "replica", "representations"]],
   ["frame-bridge", ["protocol"]],
   ["local", ["domain", "protocol", "authority", "replica", "representations", "client"]],

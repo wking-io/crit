@@ -15,6 +15,7 @@ import {
 } from "@crit/local"
 import { ReplicaView } from "@crit/replica"
 import { LocalApiUnauthorized, LocalApiVersionUnsupported } from "@crit/replica/http"
+import { ApplicationBaseUrl } from "@crit/representations"
 import { Console, Context, Effect, Layer, Match, Option, Redacted, Schema, type Effect as EffectType } from "effect"
 import { Argument, Command, Flag } from "effect/unstable/cli"
 
@@ -117,16 +118,35 @@ const dev = Command.make(
   "dev",
   {
     dataRoot,
+    root: Flag.directory("root", { mustExist: true }).pipe(
+      Flag.withDescription("Project root containing the Crit manifest"),
+      Flag.withDefault(".")
+    ),
+    applicationOrigin: Flag.string("application-origin").pipe(
+      Flag.withDescription("Canonical base URL of the project application"),
+      Flag.optional
+    ),
     browserOrigin: Flag.string("browser-origin").pipe(
       Flag.withDescription("Loopback origin hosting the Crit browser application"),
       Flag.optional
     )
   },
-  Effect.fn(function*({ browserOrigin, dataRoot: root }) {
+  Effect.fn(function*({ applicationOrigin, browserOrigin, dataRoot: root, root: projectRoot }) {
+    const application = yield* Option.match(applicationOrigin, {
+      onNone: () => Effect.succeed(undefined),
+      onSome: (origin) => decode(ApplicationBaseUrl, origin, "application origin").pipe(
+        Effect.map((baseUrl) => ({ root: projectRoot, baseUrl }))
+      )
+    })
     yield* Effect.scoped(Effect.gen(function*() {
+      const applicationOptions = application === undefined ? {} : { application }
       const developmentLayer = Option.match(browserOrigin, {
-        onNone: () => LocalDevelopment.layer({ dataRoot: root }),
-        onSome: (origin) => LocalDevelopment.layer({ dataRoot: root, browserOrigin: origin })
+        onNone: () => LocalDevelopment.layer({ dataRoot: root, ...applicationOptions }),
+        onSome: (origin) => LocalDevelopment.layer({
+          dataRoot: root,
+          ...applicationOptions,
+          browserOrigin: origin
+        })
       })
       const services = yield* Layer.buildWithScope(developmentLayer, yield* Effect.scope)
       const development = Context.get(services, LocalDevelopment)

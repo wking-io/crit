@@ -10,7 +10,8 @@
       "@crit/domain": ["../domain/src/index.ts"],
       "@crit/protocol": ["../protocol/src/index.ts"],
       "@crit/replica": ["../replica/src/index.ts"],
-      "@crit/replica/http": ["../replica/src/http.ts"]
+      "@crit/replica/http": ["../replica/src/http.ts"],
+      "@crit/representations": ["../representations/src/index.ts"]
     }
   },
   "include": ["src"],
@@ -18,6 +19,7 @@
     { "path": "../domain" },
     { "path": "../authority" },
     { "path": "../protocol" },
-    { "path": "../replica" }
+    { "path": "../replica" },
+    { "path": "../representations" }
   ]
 }

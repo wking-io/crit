@@ -64,6 +64,7 @@ const matchReady = (output: string) => output.includes("Crit daemon listening at
 
 const startWithoutBrowser = (dataRoot: string, environment?: NodeJS.ProcessEnv) => new Promise<{
   readonly child: ReturnType<typeof spawn>
+  readonly baseUrl: string
   readonly output: string
 }>((resolve, reject) => {
   const child = spawn(process.execPath, [
@@ -78,8 +79,10 @@ const startWithoutBrowser = (dataRoot: string, environment?: NodeJS.ProcessEnv) 
   child.stdout.on("data", (chunk: Uint8Array) => {
     output += Buffer.from(chunk).toString("utf8")
     if (!matchReady(output)) return
+    const match = /Crit daemon listening at (http:\/\/127\.0\.0\.1:\d+)/.exec(output)
+    if (match?.[1] === undefined) return
     clearTimeout(timeout)
-    setImmediate(() => resolve({ child, output }))
+    setImmediate(() => resolve({ child, baseUrl: match[1], output }))
   })
   child.stderr.on("data", (chunk: Uint8Array) => {
     output += Buffer.from(chunk).toString("utf8")
@@ -88,6 +91,39 @@ const startWithoutBrowser = (dataRoot: string, environment?: NodeJS.ProcessEnv) 
     clearTimeout(timeout)
     reject(cause)
   })
+})
+
+const startWithApplication = (dataRoot: string, root: string, applicationOrigin: string) => new Promise<{
+  readonly child: ReturnType<typeof spawn>
+  readonly baseUrl: string
+}>((resolve, reject) => {
+  const child = spawn(process.execPath, [
+    join(import.meta.dirname, "..", "dist", "main.js"),
+    "dev",
+    "--data-root",
+    dataRoot,
+    "--root",
+    root,
+    "--application-origin",
+    applicationOrigin
+  ], { stdio: ["ignore", "pipe", "pipe"] })
+  children.push(child)
+  let output = ""
+  const timeout = setTimeout(() => reject(new Error(`Timed out waiting for daemon: ${output}`)), 5_000)
+  child.stdout.on("data", (chunk: Uint8Array) => {
+    output += Buffer.from(chunk).toString("utf8")
+    const match = /Crit daemon listening at (http:\/\/127\.0\.0\.1:\d+)/.exec(output)
+    if (match?.[1] === undefined) return
+    clearTimeout(timeout)
+    resolve({ child, baseUrl: match[1] })
+  })
+  child.stderr.on("data", (chunk: Uint8Array) => {
+    output += Buffer.from(chunk).toString("utf8")
+  })
+  child.once("error", reject)
+  child.once("exit", (code, signal) => reject(
+    new Error(`Daemon exited before readiness with code=${code} signal=${signal}: ${output}`)
+  ))
 })
 
 const stop = (child: ReturnType<typeof spawn>) => new Promise<void>((resolve, reject) => {
@@ -130,6 +166,76 @@ const runAsync = (dataRoot: string, args: ReadonlyArray<string>, environment: No
   })
 
 describe("built crit-target dev", () => {
+  it("binds the initialized project application through the real transport", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "crit-cli-application-"))
+    directories.push(directory)
+    const dataRoot = join(directory, ".crit", "v1")
+    const initialized = spawnSync(process.execPath, [
+      join(import.meta.dirname, "..", "dist", "main.js"),
+      "init",
+      "--root",
+      directory,
+      "--json"
+    ], { encoding: "utf8" })
+    expect(initialized.status, initialized.stderr).toBe(0)
+    const applicationId = JSON.parse(initialized.stdout).manifest.applicationId
+    const started = await startWithApplication(dataRoot, directory, "http://127.0.0.1:5173/")
+    const installation = Schema.decodeUnknownSync(InstallationSecret)(
+      JSON.parse(readFileSync(join(dataRoot, "installation.json"), "utf8"))
+    )
+    const response = await fetch(`${started.baseUrl}/api/v1/representations/resolve`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${installation.bearerSecret}`,
+        "content-type": "application/json",
+        "x-crit-api-version": "1"
+      },
+      body: JSON.stringify({
+        _tag: "resolve-representation",
+        schemaVersion: 1,
+        representation: { _tag: "application-route", applicationId, route: "/products" }
+      })
+    })
+    expect(response.status).toBe(200)
+    expect(await response.json()).toMatchObject({
+      _tag: "iframe",
+      url: "http://127.0.0.1:5173/products"
+    })
+    await stop(started.child)
+  })
+
+  it("rejects an invalid application origin before creating daemon state", () => {
+    const directory = mkdtempSync(join(tmpdir(), "crit-cli-invalid-application-"))
+    directories.push(directory)
+    const dataRoot = join(directory, ".crit", "v1")
+    const result = run(dataRoot, [
+      "dev",
+      "--root",
+      directory,
+      "--application-origin",
+      "http://127.0.0.1:5173"
+    ])
+    expect(result.status).not.toBe(0)
+    expect(result.stderr).toContain("Invalid application origin")
+    expect(existsSync(dataRoot)).toBe(false)
+  })
+
+  it("rejects a missing project manifest before creating daemon state", () => {
+    const directory = mkdtempSync(join(tmpdir(), "crit-cli-missing-manifest-"))
+    directories.push(directory)
+    const dataRoot = join(directory, ".crit", "v1")
+    const result = run(dataRoot, [
+      "dev",
+      "--root",
+      directory,
+      "--application-origin",
+      "http://127.0.0.1:5173/"
+    ])
+    expect(result.status).not.toBe(0)
+    expect(result.stderr).toContain("LocalDevelopmentFailure")
+    expect(existsSync(dataRoot)).toBe(false)
+  })
+
   it("exports Effect traces and flushes on exit", async () => {
     const payloads: Array<{ readonly path: string; readonly body: string }> = []
     const collector = createServer((request, response) => {

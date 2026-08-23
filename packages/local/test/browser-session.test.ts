@@ -3,12 +3,15 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 
 import { NodeServices } from "@effect/platform-node"
+import { LocalRepresentationClient } from "@crit/client"
+import { WebUrlRepresentation } from "@crit/domain"
 import {
   localApiVersionHeader,
   LocalReplicaSocketServerFrame,
   type LocalReplicaSocketServerFrame as LocalReplicaSocketServerFrameType
 } from "@crit/replica/http"
 import { Context, Effect, Layer, Option, Redacted, Schema, Scope } from "effect"
+import { FetchHttpClient } from "effect/unstable/http"
 import { describe, expect, it } from "vitest"
 import { WebSocket } from "ws"
 
@@ -113,6 +116,30 @@ const createCanvas = (args: {
   })
 }
 
+const resolveRepresentation = (args: {
+  readonly baseUrl: string
+  readonly instance: string
+  readonly cookie?: string
+  readonly origin?: string
+  readonly version?: string
+}) => {
+  const headers = new Headers({
+    "content-type": "application/json",
+    "x-crit-api-version": args.version ?? "1"
+  })
+  if (args.cookie !== undefined) headers.set("cookie", args.cookie)
+  if (args.origin !== undefined) headers.set("origin", args.origin)
+  return fetch(`${args.baseUrl}/browser/${args.instance}/api/v1/representations/resolve`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      _tag: "resolve-representation",
+      schemaVersion: 1,
+      representation: { _tag: "web-url", url: "https://example.com/browser" }
+    })
+  })
+}
+
 describe("browser session HTTP protocol", () => {
   it("exchanges a fragment capability once and delegates to the Canvas API", () =>
     Effect.runPromise(Effect.scoped(Effect.gen(function*() {
@@ -137,6 +164,38 @@ describe("browser session HTTP protocol", () => {
       expect(result.response.headers.get("set-cookie")).toContain(
         `Path=/browser/${development.descriptor.instance}/`
       )
+      const resolved = yield* Effect.promise(() => resolveRepresentation({
+        baseUrl: development.descriptor.baseUrl,
+        instance: development.descriptor.instance,
+        cookie,
+        origin: browserOrigin
+      }))
+      expect(resolved.status).toBe(200)
+      expect(yield* Effect.promise(() => resolved.json())).toMatchObject({
+        _tag: "iframe",
+        url: "https://example.com/browser"
+      })
+      const browserClientContext = yield* Layer.buildWithScope(
+        LocalRepresentationClient.layer({
+          _tag: "browser-session",
+          baseUrl: development.descriptor.baseUrl,
+          browserPath: `/browser/${development.descriptor.instance}/`,
+          origin: browserOrigin
+        }).pipe(
+          Layer.provide(FetchHttpClient.layer),
+          Layer.provide(Layer.succeed(FetchHttpClient.Fetch, (input, init) => {
+            expect(init?.credentials).toBe("include")
+            const headers = new Headers(init?.headers)
+            headers.set("cookie", cookie ?? "")
+            return fetch(input, { ...init, headers })
+          }))
+        ),
+        yield* Effect.scope
+      )
+      const browserPlan = yield* Context.get(browserClientContext, LocalRepresentationClient).resolve(
+        WebUrlRepresentation.make({ url: "https://example.com/browser-client" })
+      )
+      expect(browserPlan).toMatchObject({ _tag: "iframe", url: "https://example.com/browser-client" })
       const created = yield* Effect.promise(() => createCanvas({
         baseUrl: development.descriptor.baseUrl,
         instance: development.descriptor.instance,
@@ -281,6 +340,31 @@ describe("browser session HTTP protocol", () => {
       expect((yield* Effect.promise(() => request({ cookie: "crit_session_wrong=wrong" }))).status).toBe(401)
       expect((yield* Effect.promise(() => request({ cookie: undefined }))).status).toBe(401)
       expect((yield* Effect.promise(() => request({ origin: undefined }))).status).toBe(403)
+      const representationRequest = (overrides: Partial<Parameters<typeof resolveRepresentation>[0]>) =>
+        resolveRepresentation({
+          baseUrl: development.descriptor.baseUrl,
+          instance: development.descriptor.instance,
+          cookie,
+          origin: browserOrigin,
+          ...overrides
+        })
+      const wrongSession = yield* Effect.promise(() => representationRequest({
+        cookie: "crit_session_wrong=wrong"
+      }))
+      expect(wrongSession.status).toBe(401)
+      expect(wrongSession.headers.get("access-control-allow-origin")).toBe(browserOrigin)
+      expect((yield* Effect.promise(() => representationRequest({ cookie: undefined }))).status).toBe(401)
+      const wrongOrigin = yield* Effect.promise(() => representationRequest({
+        origin: "http://neighbor.example"
+      }))
+      expect(wrongOrigin.status).toBe(403)
+      expect(wrongOrigin.headers.get("access-control-allow-origin")).toBeNull()
+      const missingOrigin = yield* Effect.promise(() => representationRequest({ origin: undefined }))
+      expect(missingOrigin.status).toBe(403)
+      expect(missingOrigin.headers.get("access-control-allow-origin")).toBeNull()
+      const wrongRepresentationVersion = yield* Effect.promise(() => representationRequest({ version: "2" }))
+      expect(wrongRepresentationVersion.status).toBe(426)
+      expect(wrongRepresentationVersion.headers.get("access-control-allow-origin")).toBe(browserOrigin)
       const socketPath = `${development.descriptor.baseUrl}/browser/${development.descriptor.instance}/api/v1/subscribe/canvas_missing`
       const webSocketPath = socketPath.replace("http://", "ws://")
       expect(yield* Effect.promise(() => rejectedSocketStatus(
