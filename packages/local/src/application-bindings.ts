@@ -1,4 +1,3 @@
-import { DomainValue } from "@crit/domain"
 import {
   ApplicationBindings,
   type ApplicationBaseUrl
@@ -25,14 +24,12 @@ export const LocalProjectApplicationBindings = {
   > => Layer.effect(ApplicationBindings, Effect.gen(function*() {
     const projectManifest = yield* LocalProjectManifest
     const manifest = yield* projectManifest.read
-    const binding = DomainValue.detach({
-      applicationId: manifest.applicationId,
-      baseUrl: options.baseUrl
-    })
+    const applicationId = manifest.applicationId
+    const baseUrl = options.baseUrl
     return ApplicationBindings.of({
-      get: (applicationId) => Effect.succeed(
-        applicationId === binding.applicationId
-          ? Option.some(binding.baseUrl)
+      get: (requestedApplicationId) => Effect.succeed(
+        requestedApplicationId === applicationId
+          ? Option.some(baseUrl)
           : Option.none()
       )
     })

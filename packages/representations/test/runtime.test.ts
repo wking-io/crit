@@ -183,15 +183,18 @@ describe("RepresentationRuntime", () => {
     expect(artifactReads).toBe(0)
   })
 
-  it("copies bytes even when an artifact adapter returns its own buffer", async() => {
-    const shared = Uint8Array.from([5, 8, 13])
+  it("transfers detached artifact bytes without copying", async() => {
+    let transferred: Uint8Array | undefined
     const artifact = ArtifactRepresentation.make({
       artifactId: Id.artifact("artifact_runtime_shared"),
       digest
     })
     const artifacts = Layer.succeed(ArtifactStore, ArtifactStore.of({
       put: () => Effect.succeed(artifact),
-      read: () => Effect.succeed(shared)
+      read: () => Effect.sync(() => {
+        transferred = Uint8Array.from([5, 8, 13])
+        return transferred
+      })
     }))
     const bindings = Layer.succeed(ApplicationBindings, ApplicationBindings.of({
       get: () => Effect.succeed(Option.none())
@@ -205,8 +208,8 @@ describe("RepresentationRuntime", () => {
     }).pipe(Effect.provide(runtime)))
     expect(plan._tag).toBe("artifact-bytes")
     if (plan._tag !== "artifact-bytes") return
-    plan.bytes[0] = 21
-    expect([...shared]).toEqual([5, 8, 13])
+    expect(transferred).toBeDefined()
+    expect(plan.bytes).toBe(transferred)
   })
 
   it("keeps binding lookup and artifact I/O failures typed", async() => {

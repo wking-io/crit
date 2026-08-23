@@ -234,7 +234,7 @@ const make = (
     Effect.orDie,
     Effect.flatMap((canvas) => canvas === undefined
       ? Effect.fail(AuthorityFailure.canvasNotFound({ canvasId }))
-      : Effect.succeed(DomainValue.detach(canvas.view)))
+      : Effect.succeed(canvas.view))
   )
 
   const submit: CanvasAuthority["Service"]["submit"] = (proposal, invocation) => Effect.suspend(() => {
@@ -282,7 +282,7 @@ const make = (
           WHERE canvas_id = ${ownedProposal.canvasId}`
         return Result.succeed(accepted.receipt)
       })).pipe(Effect.orDie)
-      return yield* AuthorityPolicy.decisionEffect(decision).pipe(Effect.map(DomainValue.detach))
+      return yield* AuthorityPolicy.decisionEffect(decision)
     })
   })
 
@@ -306,13 +306,13 @@ const make = (
     const changes = rows.map((row) => readAccepted(
       Schema.decodeUnknownSync(AcceptedRow, { onExcessProperty: "error" })(row)
     ))
-    return DomainValue.detach(AuthorityPolicy.makeChangePage({
+    return AuthorityPolicy.makeChangePage({
       query,
       genesisCursor: canvas.genesisCursor,
       position,
       total: canvas.row.current_sequence,
       changes,
-    }))
+    })
   }).pipe(Effect.catchTag("SqlError", Effect.die))
 
   return { create, open, submit, changesAfter }
