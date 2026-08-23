@@ -98,9 +98,10 @@ const clientFor = (options: {
   const clientContext = yield* Layer.buildWithScope(
     Layer.merge(
       LocalCanvasClient.layer({
-      baseUrl: `http://127.0.0.1:${server.address.port}`,
-      token: localApiToken(options.clientToken ?? options.token),
-      origin: options.origin
+        _tag: "bearer",
+        baseUrl: `http://127.0.0.1:${server.address.port}`,
+        token: localApiToken(options.clientToken ?? options.token),
+        origin: options.origin
       }),
       LocalRepresentationClient.layer({
         _tag: "bearer",

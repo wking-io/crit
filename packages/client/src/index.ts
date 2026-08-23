@@ -41,11 +41,18 @@ import { FetchHttpClient, HttpClient, HttpClientError, HttpClientRequest, HttpCl
 import { HttpApiClient, HttpApiMiddleware } from "effect/unstable/httpapi"
 import * as Socket from "effect/unstable/socket/Socket"
 
-export interface LocalCanvasClientOptions {
-  readonly baseUrl: string
-  readonly token: LocalApiToken
-  readonly origin?: string
-}
+export type LocalClientOptions =
+  | {
+    readonly _tag: "bearer"
+    readonly baseUrl: string
+    readonly token: LocalApiToken
+    readonly origin?: string
+  }
+  | {
+    readonly _tag: "browser-session"
+    readonly baseUrl: string
+    readonly browserPath: `/${string}/`
+  }
 
 type TransportFailure =
   | LocalApiUnauthorized
@@ -100,34 +107,30 @@ export interface LocalRepresentationClientService {
   ) => Effect.Effect<RenderPlan, LocalRepresentationClientFailure>
 }
 
-export type LocalRepresentationClientOptions = {
-  readonly baseUrl: string
-} & (
-  | {
-    readonly _tag: "bearer"
-    readonly token: LocalApiToken
-    readonly origin?: string
-  }
-  | {
-    readonly _tag: "browser-session"
-    readonly browserPath: `/${string}/`
-    readonly origin: string
-  }
-)
+const localPath = (options: LocalClientOptions, path: `/${string}`) => options._tag === "bearer"
+  ? path
+  : `${options.browserPath}${path.slice(1)}`
+
+const localUrl = (options: LocalClientOptions, path: `/${string}`) =>
+  `${options.baseUrl.replace(/\/$/, "")}${localPath(options, path)}`
+
+const withBrowserCredentials = <A, E, R>(
+  options: LocalClientOptions,
+  effect: Effect.Effect<A, E, R>
+) => options._tag === "browser-session"
+  ? Effect.provideService(effect, FetchHttpClient.RequestInit, { credentials: "include" })
+  : effect
 
 const representationRequest = (
-  options: LocalRepresentationClientOptions,
+  options: LocalClientOptions,
   representation: RepresentationRef
 ) => {
-  const path = options._tag === "bearer"
-    ? localRepresentationResolvePath
-    : `${options.browserPath}${localRepresentationResolvePath.slice(1)}`
-  const request = HttpClientRequest.post(`${options.baseUrl.replace(/\/$/, "")}${path}`).pipe(
+  const request = HttpClientRequest.post(localUrl(options, localRepresentationResolvePath)).pipe(
     HttpClientRequest.setHeader(localApiVersionHeader, localApiVersion),
     options._tag === "bearer" ? HttpClientRequest.bearerToken(options.token) : (request) => request,
-    options.origin === undefined
-      ? (request) => request
-      : HttpClientRequest.setHeader("origin", options.origin)
+    options._tag === "bearer" && options.origin !== undefined
+      ? HttpClientRequest.setHeader("origin", options.origin)
+      : (request) => request
   )
   return HttpClientRequest.bodyJsonUnsafe(request, LocalRepresentationResolveRequest.make({
     _tag: "resolve-representation",
@@ -161,15 +164,14 @@ export class LocalRepresentationClient extends Context.Service<
   LocalRepresentationClient,
   LocalRepresentationClientService
 >()("@crit/client/LocalRepresentationClient") {
-  static readonly layer = (options: LocalRepresentationClientOptions) => Layer.effect(
+  static readonly layer = (options: LocalClientOptions) => Layer.effect(
     LocalRepresentationClient,
     Effect.gen(function*() {
       const http = yield* HttpClient.HttpClient
-      const execute = (representation: RepresentationRef) => http.execute(
-        representationRequest(options, representation)
-      ).pipe(options._tag === "browser-session"
-        ? Effect.provideService(FetchHttpClient.RequestInit, { credentials: "include" })
-        : (effect) => effect)
+      const execute = (representation: RepresentationRef) => withBrowserCredentials(
+        options,
+        http.execute(representationRequest(options, representation))
+      )
       const resolve = (representation: RepresentationRef) => execute(representation).pipe(
         Effect.flatMap((response) => {
           if (response.status === 200 && response.headers["content-type"]?.startsWith("application/octet-stream")) {
@@ -189,11 +191,11 @@ export class LocalRepresentationClient extends Context.Service<
   )
 }
 
-const notificationUrl = (baseUrl: string, canvasId: CanvasId) => {
-  const socketBase = baseUrl.startsWith("https://")
-    ? `wss://${baseUrl.slice("https://".length)}`
-    : `ws://${baseUrl.slice("http://".length)}`
-  return `${socketBase.replace(/\/$/, "")}/api/v${localApiVersion}/subscribe/${encodeURIComponent(canvasId)}`
+const notificationUrl = (options: LocalClientOptions, canvasId: CanvasId) => {
+  const httpUrl = localUrl(options, `/api/v${localApiVersion}/subscribe/${encodeURIComponent(canvasId)}`)
+  return httpUrl.startsWith("https://")
+    ? `wss://${httpUrl.slice("https://".length)}`
+    : `ws://${httpUrl.slice("http://".length)}`
 }
 
 const mapSocketFailure = (canvasId: CanvasId, failure: Socket.SocketError) => {
@@ -206,27 +208,29 @@ const mapSocketFailure = (canvasId: CanvasId, failure: Socket.SocketError) => {
 }
 
 const subscribe = (
-  options: LocalCanvasClientOptions,
+  options: LocalClientOptions,
   canvasId: CanvasId
 ): Effect.Effect<
   Stream.Stream<ReplicaChanged, SubscriptionFailure>,
   SubscriptionFailure,
   Socket.WebSocketConstructor | Scope.Scope
 > => Effect.gen(function*() {
-  const socket = yield* Socket.makeWebSocket(notificationUrl(options.baseUrl, canvasId), {
+  const socket = yield* Socket.makeWebSocket(notificationUrl(options, canvasId), {
     closeCodeIsError: (code) => code !== 1000
   })
-  const write = yield* socket.writer
   const opened = yield* Deferred.make<void, SubscriptionFailure>()
   const messages = yield* Queue.sliding<Take.Take<ReplicaChanged, SubscriptionFailure>>(1)
   const ready = yield* Ref.make(false)
   const decode = Schema.decodeUnknownEffect(Schema.fromJsonString(LocalReplicaSocketServerFrame))
-  const hello = JSON.stringify(LocalReplicaSocketHello.make({
-    kind: "authenticate",
-    schemaVersion: 1,
-    bearer: Redacted.value(options.token)
-  }))
-  yield* write(hello).pipe(Effect.forkScoped)
+  if (options._tag === "bearer") {
+    const write = yield* socket.writer
+    const hello = JSON.stringify(LocalReplicaSocketHello.make({
+      kind: "authenticate",
+      schemaVersion: 1,
+      bearer: Redacted.value(options.token)
+    }))
+    yield* write(hello).pipe(Effect.forkScoped)
+  }
   yield* socket.runString<unknown, SubscriptionFailure>(
     (message) => decode(message).pipe(Effect.flatMap((frame) => Effect.gen(function*() {
       if (frame.kind === "subscription-ready") {
@@ -264,30 +268,32 @@ export class LocalCanvasClient extends Context.Service<
   LocalCanvasClient,
   LocalCanvasClientService
 >()("@crit/client/LocalCanvasClient") {
-  static readonly layer = (options: LocalCanvasClientOptions) => {
-    const origin = options.origin
+  static readonly layer = (options: LocalClientOptions) => {
+    const origin = options._tag === "bearer" ? options.origin : undefined
     return Layer.effect(LocalCanvasClient, Effect.gen(function*() {
       const http = yield* HttpApiClient.make(LocalCanvasApi, {
         transformClient: HttpClient.mapRequest(flow(
-          HttpClientRequest.prependUrl(options.baseUrl),
+          HttpClientRequest.prependUrl(localUrl(options, "/").replace(/\/$/, "")),
           (request) => HttpClientRequest.setHeader(request, localApiVersionHeader, localApiVersion),
-          origin === undefined
-            ? (request) => request
-            : (request) => HttpClientRequest.setHeader(request, "origin", origin)
+          origin !== undefined
+            ? (request) => HttpClientRequest.setHeader(request, "origin", origin)
+            : (request) => request
         ))
       })
       return LocalCanvasClient.of({
-        status: () => http.status(),
-        create: (input) => http.create({ payload: CreateCanvas.make(input) }),
-        open: (canvasId) => http.open({ params: { canvasId } }),
-        change: (input) => http.change({ payload: input }),
-        sync: (canvasId) => http.sync({ params: { canvasId } }),
+        status: () => withBrowserCredentials(options, http.status()),
+        create: (input) => withBrowserCredentials(options, http.create({ payload: CreateCanvas.make(input) })),
+        open: (canvasId) => withBrowserCredentials(options, http.open({ params: { canvasId } })),
+        change: (input) => withBrowserCredentials(options, http.change({ payload: input })),
+        sync: (canvasId) => withBrowserCredentials(options, http.sync({ params: { canvasId } })),
         subscribe: (canvasId) => subscribe(options, canvasId)
       })
     })).pipe(
       Layer.provide(HttpApiMiddleware.layerClient(
         LocalApiAuthorization,
-        ({ next, request }) => next(HttpClientRequest.bearerToken(request, options.token))
+        ({ next, request }) => next(options._tag === "bearer"
+          ? HttpClientRequest.bearerToken(request, options.token)
+          : request)
       ))
     )
   }

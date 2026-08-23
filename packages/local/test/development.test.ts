@@ -42,6 +42,7 @@ const clientFor = (
   scope: Scope.Scope
 ) => Layer.buildWithScope(
   LocalCanvasClient.layer({
+    _tag: "bearer",
     baseUrl: development.descriptor.baseUrl,
     token
   }).pipe(Layer.provide(FetchHttpClient.layer)),

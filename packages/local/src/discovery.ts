@@ -115,6 +115,7 @@ export const inspectLocalDaemon = (options: LocalDaemonDiscoveryOptions) => Effe
 
   const clientContext = yield* Layer.buildWithScope(
     LocalCanvasClient.layer({
+      _tag: "bearer",
       baseUrl: descriptor.baseUrl,
       token: localApiToken(installation.bearerSecret)
     }).pipe(Layer.provide(FetchHttpClient.layer)),
