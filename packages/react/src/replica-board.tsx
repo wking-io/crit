@@ -3,12 +3,14 @@ import type { ReplicaView } from "@crit/replica"
 import { Match } from "effect"
 import type { ReactElement } from "react"
 
+import type { CanvasCamera } from "./canvas-camera.js"
 import { CanvasBoard } from "./canvas-board.js"
 import type { FrameRepresentationResolver } from "./frame-renderer.js"
 
 export interface ReplicaBoardProps {
   readonly view: ReplicaView
   readonly resolver: FrameRepresentationResolver
+  readonly camera?: CanvasCamera
   readonly className?: string
 }
 
@@ -85,6 +87,7 @@ const statusTone = (status: ReplicaBoardStatus): "status" | "alert" =>
     : "status"
 
 export function ReplicaBoard({
+  camera,
   className,
   resolver,
   view
@@ -104,7 +107,15 @@ export function ReplicaBoard({
           )
           : null}
       </section>
-      <CanvasBoard projection={view.projection} resolver={resolver} />
+      {camera === undefined
+        ? <CanvasBoard projection={view.projection} resolver={resolver} />
+        : (
+          <CanvasBoard
+            camera={camera}
+            projection={view.projection}
+            resolver={resolver}
+          />
+        )}
     </div>
   )
 }
