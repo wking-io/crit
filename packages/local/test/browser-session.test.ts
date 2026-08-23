@@ -3,15 +3,14 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 
 import { NodeServices } from "@effect/platform-node"
-import { LocalRepresentationClient } from "@crit/client"
-import { WebUrlRepresentation } from "@crit/domain"
-import {
-  localApiVersionHeader,
-  LocalReplicaSocketServerFrame,
-  type LocalReplicaSocketServerFrame as LocalReplicaSocketServerFrameType
-} from "@crit/replica/http"
-import { Context, Effect, Layer, Option, Redacted, Schema, Scope } from "effect"
+import { AuthorityModel } from "@crit/authority"
+import { LocalCanvasClient, LocalRepresentationClient } from "@crit/client"
+import { Id, WebUrlRepresentation, decodeCanvasCommandBatch } from "@crit/domain"
+import { ReplicaModel } from "@crit/replica"
+import { localApiVersionHeader } from "@crit/replica/http"
+import { Context, Effect, Fiber, Layer, Option, Redacted, Scope, Stream } from "effect"
 import { FetchHttpClient } from "effect/unstable/http"
+import * as Socket from "effect/unstable/socket/Socket"
 import { describe, expect, it } from "vitest"
 import { WebSocket } from "ws"
 
@@ -54,29 +53,6 @@ const bootstrap = async (bootstrapUrl: string) => {
 }
 
 const cookiePair = (response: Response) => response.headers.get("set-cookie")?.split(";", 1)[0]
-
-const connectBrowserSocket = (url: string, cookie: string, origin: string) => new Promise<{
-  readonly socket: WebSocket
-  readonly next: () => Promise<LocalReplicaSocketServerFrameType>
-}>((resolve, reject) => {
-  const socket = new WebSocket(url, { headers: { cookie, origin } })
-  const frames: LocalReplicaSocketServerFrameType[] = []
-  const waiters: Array<(frame: LocalReplicaSocketServerFrameType) => void> = []
-  socket.on("message", (data) => {
-    const frame = Schema.decodeUnknownSync(LocalReplicaSocketServerFrame)(JSON.parse(data.toString()))
-    const waiter = waiters.shift()
-    if (waiter === undefined) frames.push(frame)
-    else waiter(frame)
-  })
-  const next = () => {
-    const frame = frames.shift()
-    return frame === undefined
-      ? new Promise<LocalReplicaSocketServerFrameType>((nextResolve) => waiters.push(nextResolve))
-      : Promise.resolve(frame)
-  }
-  socket.once("open", () => resolve({ socket, next }))
-  socket.once("error", reject)
-})
 
 const rejectedSocketStatus = (url: string, cookie: string, origin?: string) => new Promise<number | undefined>((resolve, reject) => {
   const headers = origin === undefined ? { cookie } : { cookie, origin }
@@ -164,6 +140,19 @@ describe("browser session HTTP protocol", () => {
       expect(result.response.headers.get("set-cookie")).toContain(
         `Path=/browser/${development.descriptor.instance}/`
       )
+      let requestCount = 0
+      const sentSocketMessages: WebSocket.Data[] = []
+      class BrowserWebSocket extends WebSocket {
+        constructor(url: string, protocols?: string | string[]) {
+          super(url, protocols ?? [], { headers: { cookie: cookie ?? "", origin: browserOrigin } })
+        }
+
+        override send(data: WebSocket.Data, cb?: (error?: Error) => void): void {
+          sentSocketMessages.push(data)
+          super.send(data, cb)
+        }
+      }
+      const browserPath = `/browser/${development.descriptor.instance}/` satisfies `/${string}/`
       const resolved = yield* Effect.promise(() => resolveRepresentation({
         baseUrl: development.descriptor.baseUrl,
         instance: development.descriptor.instance,
@@ -176,71 +165,81 @@ describe("browser session HTTP protocol", () => {
         url: "https://example.com/browser"
       })
       const browserClientContext = yield* Layer.buildWithScope(
-        LocalRepresentationClient.layer({
-          _tag: "browser-session",
-          baseUrl: development.descriptor.baseUrl,
-          browserPath: `/browser/${development.descriptor.instance}/`,
-          origin: browserOrigin
-        }).pipe(
+        Layer.merge(
+          LocalCanvasClient.layer({
+            _tag: "browser-session",
+            baseUrl: development.descriptor.baseUrl,
+            browserPath
+          }),
+          LocalRepresentationClient.layer({
+            _tag: "browser-session",
+            baseUrl: development.descriptor.baseUrl,
+            browserPath
+          })
+        ).pipe(
           Layer.provide(FetchHttpClient.layer),
           Layer.provide(Layer.succeed(FetchHttpClient.Fetch, (input, init) => {
             expect(init?.credentials).toBe("include")
             const headers = new Headers(init?.headers)
+            expect(headers.has("authorization")).toBe(false)
+            requestCount += 1
             headers.set("cookie", cookie ?? "")
+            headers.set("origin", browserOrigin)
             return fetch(input, { ...init, headers })
           }))
         ),
         yield* Effect.scope
       )
+      const browserClient = Context.get(browserClientContext, LocalCanvasClient)
+      expect(yield* browserClient.status()).toMatchObject({ apiVersion: "1" })
       const browserPlan = yield* Context.get(browserClientContext, LocalRepresentationClient).resolve(
         WebUrlRepresentation.make({ url: "https://example.com/browser-client" })
       )
       expect(browserPlan).toMatchObject({ _tag: "iframe", url: "https://example.com/browser-client" })
-      const created = yield* Effect.promise(() => createCanvas({
+      const canvasId = Id.canvas("canvas_browser_session")
+      const browserView = yield* browserClient.create(AuthorityModel.createCanvas({
+        canvasId,
+        title: "Browser session"
+      }))
+      expect(browserView.projection.title).toBe("Browser session")
+      expect((yield* browserClient.open(canvasId)).projection.title).toBe("Browser session")
+      yield* Effect.scoped(Effect.gen(function*() {
+        const notifications = yield* browserClient.subscribe(canvasId).pipe(
+          Effect.provideService(Socket.WebSocketConstructor, (url, protocols) =>
+            new BrowserWebSocket(url, protocols))
+        )
+        const notification = yield* notifications.pipe(Stream.runHead, Effect.forkChild)
+        const changed = yield* browserClient.change(ReplicaModel.change({
+          canvasId,
+          commands: decodeCanvasCommandBatch([{
+            _tag: "rename-canvas",
+            expectedTitle: "Browser session",
+            title: "Browser changed"
+          }])
+        }))
+        expect(changed.view.projection.title).toBe("Browser changed")
+        expect(yield* Fiber.join(notification)).toEqual(Option.some({
+          kind: "replica-changed",
+          schemaVersion: 1,
+          canvasId
+        }))
+      }))
+      const synced = yield* browserClient.sync(canvasId)
+      expect(synced.view.projection.title).toBe("Browser changed")
+      expect(synced.view.pending).toHaveLength(0)
+      expect(sentSocketMessages).toEqual([])
+      expect(requestCount).toBe(6)
+      const corsCreated = yield* Effect.promise(() => createCanvas({
         baseUrl: development.descriptor.baseUrl,
         instance: development.descriptor.instance,
         cookie,
-        origin: browserOrigin
+        origin: browserOrigin,
+        canvasId: "canvas_browser_cors"
       }))
-      expect(created.status).toBe(200)
-      const socketUrl = `${development.descriptor.baseUrl.replace("http://", "ws://")}/browser/${development.descriptor.instance}/api/v1/subscribe/canvas_browser_session`
-      const connection = yield* Effect.promise(() => connectBrowserSocket(socketUrl, cookie ?? "", browserOrigin))
-      expect(yield* Effect.promise(connection.next)).toEqual({
-        kind: "subscription-ready",
-        schemaVersion: 1,
-        canvasId: "canvas_browser_session"
-      })
-      const changed = yield* Effect.promise(() => fetch(
-        `${development.descriptor.baseUrl}/browser/${development.descriptor.instance}/api/v1/change`,
-        {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-            cookie: cookie ?? "",
-            origin: browserOrigin,
-            "x-crit-api-version": "1"
-          },
-          body: JSON.stringify({
-            _tag: "replica-change",
-            canvasId: "canvas_browser_session",
-            commands: [{
-              _tag: "rename-canvas",
-              expectedTitle: "Browser session",
-              title: "Browser changed"
-            }]
-          })
-        }
-      ))
-      expect(changed.status).toBe(200)
-      expect(yield* Effect.promise(connection.next)).toEqual({
-        kind: "replica-changed",
-        schemaVersion: 1,
-        canvasId: "canvas_browser_session"
-      })
-      connection.socket.close()
-      expect(created.headers.get("access-control-allow-origin")).toBe(browserOrigin)
-      expect(created.headers.get("access-control-allow-credentials")).toBe("true")
-      expect(created.headers.get("access-control-allow-origin")).not.toBe("*")
+      expect(corsCreated.status).toBe(200)
+      expect(corsCreated.headers.get("access-control-allow-origin")).toBe(browserOrigin)
+      expect(corsCreated.headers.get("access-control-allow-credentials")).toBe("true")
+      expect(corsCreated.headers.get("access-control-allow-origin")).not.toBe("*")
       const installation = decodeStored(
         LocalInstallation,
         readFileSync(join(dataRoot, "installation.json"), "utf8")
