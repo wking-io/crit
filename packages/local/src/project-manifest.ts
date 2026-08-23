@@ -1,4 +1,4 @@
-import { ApplicationId, DomainValue } from "@crit/domain"
+import { ApplicationId } from "@crit/domain"
 import {
   CritProjectManifestV2,
   decodeCritProjectManifestV2,
@@ -130,7 +130,7 @@ export class LocalProjectManifest extends Context.Service<
         return yield* Effect.fail(invalid("Manifest exceeds the 1024-byte limit"))
       }
       const manifest = yield* decode(new TextDecoder().decode(buffer.subarray(0, total)))
-      return Option.some(DomainValue.detach(manifest))
+      return Option.some(manifest)
     }))
     const read = readExisting.pipe(Effect.flatMap(Option.match({
       onNone: () => Effect.fail(ioFailure("inspect", manifestPath, "NotFound")),

@@ -86,10 +86,11 @@ const makeCanvasReplica = Effect.gen(function*() {
     const authorityView = yield* authority.open(canvasId).pipe(
       Effect.mapError(() => new ReplicaCanvasNotFound({ canvasId }))
     )
-    const state = yield* modify<ReplicaState, never>(canvasId, (latest) => Result.succeed([
-      latest ?? ReplicaPolicy.initialize(DomainValue.detach(authorityView)),
-      latest ?? ReplicaPolicy.initialize(DomainValue.detach(authorityView))
-    ] as const))
+    const state = yield* modify<ReplicaState, never>(canvasId, (latest) => {
+      if (latest !== undefined) return Result.succeed([latest, latest] as const)
+      const initialized = ReplicaPolicy.initialize(authorityView)
+      return Result.succeed([initialized, initialized] as const)
+    })
     return yield* render(state)
   }).pipe(Effect.withSpan("crit.replica.open", { attributes: { "crit.canvas.id": canvasId } }))
   const change: CanvasReplicaService["change"] = (input, invocation) => Effect.suspend(() => {
@@ -130,7 +131,7 @@ const makeCanvasReplica = Effect.gen(function*() {
       }
       const counts = yield* modify<{ readonly pulled: number; readonly acknowledged: number }, ReplicaSyncFailure>(canvasId, (current): Result.Result<readonly [{ readonly pulled: number; readonly acknowledged: number }, ReplicaState], ReplicaSyncFailure> => {
         if (current === undefined) return Result.fail(new ReplicaNotOpen({ canvasId }))
-        const result = ReplicaPolicy.incorporatePage(current, DomainValue.detach(page))
+        const result = ReplicaPolicy.incorporatePage(current, page)
         return result._tag === "Success"
           ? Result.succeed([{ pulled: result.success.pulled, acknowledged: result.success.acknowledged }, result.success.state] as const)
           : Result.fail(result.failure)
@@ -153,7 +154,7 @@ const makeCanvasReplica = Effect.gen(function*() {
       const state = yield* requireState(canvasId)
       const eligible = state.pending.find((record) => record.state._tag === "ready")
       if (eligible === undefined) break
-      const submitted = yield* authority.submit(DomainValue.detach(eligible.proposal), DomainValue.detach(eligible.invocation)).pipe(Effect.result)
+      const submitted = yield* authority.submit(eligible.proposal, eligible.invocation).pipe(Effect.result)
       if (submitted._tag === "Failure") {
         const failure = submitted.failure
         if (failure._tag === "change-rejected") {

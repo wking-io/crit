@@ -131,11 +131,14 @@ const makeRuntime = Effect.gen(function*() {
   }
 
   const resolveArtifact = (input: ArtifactRepresentation) => {
-    const representation = DomainValue.detach(input)
+    const representation = ArtifactRepresentation.make({
+      artifactId: input.artifactId,
+      digest: input.digest
+    })
     return artifacts.read(representation).pipe(
       Effect.map((bytes): RenderPlan => ArtifactBytesRenderPlan.make({
         representation,
-        bytes: Uint8Array.from(bytes)
+        bytes
       })),
       Effect.catchTags({
         ArtifactNotFound: (): Effect.Effect<RenderPlan> => Effect.succeed(ArtifactUnavailableRenderPlan.make({
@@ -153,7 +156,7 @@ const makeRuntime = Effect.gen(function*() {
   const resolve = Match.type<RepresentationRef>().pipe(Match.tagsExhaustive({
     "application-route": resolveApplication,
     "web-url": (input): Effect.Effect<RenderPlan> => {
-      const representation = DomainValue.detach(input)
+      const representation = WebUrlRepresentation.make({ url: input.url })
       return Effect.succeed(IframeRenderPlan.make({
         representation,
         url: representation.url
