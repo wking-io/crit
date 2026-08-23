@@ -1,0 +1,28 @@
+{
+  "source": "@crit/frame-bridge/comments",
+  "schemaVersion": 1,
+  "event": {
+    "type": "configure",
+    "activeId": "thread_review",
+    "enabled": true,
+    "color": "rebeccapurple",
+    "pins": [
+      {
+        "id": "thread_review",
+        "anchor": {
+          "kind": "element",
+          "documentUrl": "https://shop.example/checkout",
+          "selector": "#buy",
+          "fingerprint": {
+            "tagName": "button",
+            "evidence": [
+              { "kind": "id", "value": "buy" },
+              { "kind": "text", "value": "Buy now" }
+            ]
+          },
+          "point": { "x": 0.5, "y": 0.25 }
+        }
+      }
+    ]
+  }
+}

@@ -1,3 +1,9 @@
+import {
+  CommentThreadId,
+  ElementFingerprint,
+  HttpUrl,
+  NormalizedPoint
+} from "@crit/domain"
 import { Schema } from "effect"
 
 export const FRAME_INPUT_BRIDGE_SOURCE = "@crit/frame-bridge/input"
@@ -46,5 +52,71 @@ export type FrameInputBridgeMessage = typeof FrameInputBridgeMessageSchema.Type
 
 export const decodeFrameInputBridgeMessage = Schema.decodeUnknownOption(
   FrameInputBridgeMessageSchema,
+  { onExcessProperty: "error" }
+)
+
+export const FRAME_COMMENT_BRIDGE_SOURCE = "@crit/frame-bridge/comments"
+export const FRAME_COMMENT_BRIDGE_SCHEMA_VERSION = 1 as const
+
+const NonBlankString = Schema.Trimmed.check(Schema.isNonEmpty())
+
+export const FrameCommentElementRefSchema = Schema.Struct({
+  kind: Schema.Literal("element"),
+  documentUrl: HttpUrl,
+  selector: NonBlankString,
+  fingerprint: ElementFingerprint,
+  point: NormalizedPoint
+})
+export type FrameCommentElementRef = typeof FrameCommentElementRefSchema.Type
+
+export const FrameCommentPinSchema = Schema.Struct({
+  id: CommentThreadId,
+  anchor: FrameCommentElementRefSchema
+})
+export type FrameCommentPin = typeof FrameCommentPinSchema.Type
+
+export const FrameCommentUpEventSchema = Schema.Union([
+  Schema.Struct({ type: Schema.Literal("ready") }),
+  Schema.Struct({
+    type: Schema.Literal("select"),
+    anchor: FrameCommentElementRefSchema
+  }),
+  Schema.Struct({
+    type: Schema.Literal("open"),
+    id: CommentThreadId
+  })
+])
+export type FrameCommentUpEvent = typeof FrameCommentUpEventSchema.Type
+
+export const FrameCommentDownEventSchema = Schema.Struct({
+  type: Schema.Literal("configure"),
+  activeId: Schema.NullOr(CommentThreadId),
+  enabled: Schema.Boolean,
+  color: Schema.String,
+  pins: Schema.Array(FrameCommentPinSchema)
+})
+export type FrameCommentDownEvent = typeof FrameCommentDownEventSchema.Type
+
+export const FrameCommentUpMessageSchema = Schema.Struct({
+  source: Schema.Literal(FRAME_COMMENT_BRIDGE_SOURCE),
+  schemaVersion: Schema.Literal(FRAME_COMMENT_BRIDGE_SCHEMA_VERSION),
+  event: FrameCommentUpEventSchema
+})
+export type FrameCommentUpMessage = typeof FrameCommentUpMessageSchema.Type
+
+export const FrameCommentDownMessageSchema = Schema.Struct({
+  source: Schema.Literal(FRAME_COMMENT_BRIDGE_SOURCE),
+  schemaVersion: Schema.Literal(FRAME_COMMENT_BRIDGE_SCHEMA_VERSION),
+  event: FrameCommentDownEventSchema
+})
+export type FrameCommentDownMessage = typeof FrameCommentDownMessageSchema.Type
+
+export const decodeFrameCommentUpMessage = Schema.decodeUnknownOption(
+  FrameCommentUpMessageSchema,
+  { onExcessProperty: "error" }
+)
+
+export const decodeFrameCommentDownMessage = Schema.decodeUnknownOption(
+  FrameCommentDownMessageSchema,
   { onExcessProperty: "error" }
 )
