@@ -1,0 +1,13 @@
+{
+  "source": "@crit/frame-bridge/input",
+  "schemaVersion": 1,
+  "intent": {
+    "type": "wheel",
+    "clientX": 20,
+    "clientY": 30,
+    "ctrlKey": false,
+    "metaKey": false,
+    "deltaX": 4,
+    "deltaY": 8
+  }
+}
