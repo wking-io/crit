@@ -13,11 +13,15 @@ export {
   ApplicationBaseUrl,
   ApplicationBindingLookupFailure,
   ApplicationBindings,
+  ApplicationUnavailableRenderPlan,
+  ArtifactBytesRenderPlan,
+  ArtifactUnavailableRenderPlan,
+  IframeRenderPlan,
+  RenderPlan,
   RepresentationRuntime,
   RepresentationRuntimeLive
 } from "./runtime.js"
 export type {
-  RenderPlan,
   RepresentationRuntimeFailure,
   RepresentationRuntimeService
 } from "./runtime.js"

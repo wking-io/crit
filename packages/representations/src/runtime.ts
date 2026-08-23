@@ -2,9 +2,9 @@ import {
   ApplicationRouteRepresentation,
   ArtifactRepresentation,
   HttpUrl,
+  WebUrlRepresentation,
   type ApplicationId,
   type RepresentationRef,
-  type WebUrlRepresentation,
 } from "@crit/domain"
 import { ProtocolValue } from "@crit/protocol"
 import { Context, Data, Effect, Layer, Match, Option, Result, Schema } from "effect"
@@ -59,27 +59,36 @@ export class ApplicationBindings extends Context.Service<ApplicationBindings, {
   ) => Effect.Effect<Option.Option<ApplicationBaseUrl>, ApplicationBindingLookupFailure>
 }>()("@crit/representations/ApplicationBindings") {}
 
-export type RenderPlan =
-  | {
-    readonly _tag: "iframe"
-    readonly representation: ApplicationRouteRepresentation | WebUrlRepresentation
-    readonly url: HttpUrl
-  }
-  | {
-    readonly _tag: "artifact-bytes"
-    readonly representation: ArtifactRepresentation
-    readonly bytes: Uint8Array
-  }
-  | {
-    readonly _tag: "unavailable"
-    readonly reason: "application-unbound"
-    readonly representation: ApplicationRouteRepresentation
-  }
-  | {
-    readonly _tag: "unavailable"
-    readonly reason: "artifact-not-found" | "artifact-corrupt"
-    readonly representation: ArtifactRepresentation
-  }
+export const IframeRenderPlan = Schema.TaggedStruct("iframe", {
+  representation: Schema.Union([
+    ApplicationRouteRepresentation,
+    WebUrlRepresentation
+  ]),
+  url: HttpUrl
+})
+
+export const ArtifactBytesRenderPlan = Schema.TaggedStruct("artifact-bytes", {
+  representation: ArtifactRepresentation,
+  bytes: Schema.Uint8Array
+})
+
+export const ApplicationUnavailableRenderPlan = Schema.TaggedStruct("unavailable", {
+  reason: Schema.Literal("application-unbound"),
+  representation: ApplicationRouteRepresentation
+})
+
+export const ArtifactUnavailableRenderPlan = Schema.TaggedStruct("unavailable", {
+  reason: Schema.Literals(["artifact-not-found", "artifact-corrupt"]),
+  representation: ArtifactRepresentation
+})
+
+export const RenderPlan = Schema.Union([
+  IframeRenderPlan,
+  ArtifactBytesRenderPlan,
+  ApplicationUnavailableRenderPlan,
+  ArtifactUnavailableRenderPlan
+])
+export type RenderPlan = typeof RenderPlan.Type
 
 export type RepresentationRuntimeFailure =
   | ApplicationBindingLookupFailure
@@ -110,13 +119,11 @@ const makeRuntime = Effect.gen(function*() {
   const resolveApplication = (input: ApplicationRouteRepresentation) => {
     const representation = ProtocolValue.detach(input)
     return bindings.get(representation.applicationId).pipe(Effect.map(Option.match({
-      onNone: (): RenderPlan => ({
-        _tag: "unavailable",
+      onNone: (): RenderPlan => ApplicationUnavailableRenderPlan.make({
         reason: "application-unbound",
         representation
       }),
-      onSome: (baseUrl): RenderPlan => ({
-        _tag: "iframe",
+      onSome: (baseUrl): RenderPlan => IframeRenderPlan.make({
         representation,
         url: applicationUrl(baseUrl, representation)
       })
@@ -126,22 +133,19 @@ const makeRuntime = Effect.gen(function*() {
   const resolveArtifact = (input: ArtifactRepresentation) => {
     const representation = ProtocolValue.detach(input)
     return artifacts.read(representation).pipe(
-      Effect.map((bytes): RenderPlan => ({
-        _tag: "artifact-bytes",
+      Effect.map((bytes): RenderPlan => ArtifactBytesRenderPlan.make({
         representation,
         bytes: Uint8Array.from(bytes)
       })),
       Effect.catchTags({
-        ArtifactNotFound: (): Effect.Effect<RenderPlan> => Effect.succeed({
-          _tag: "unavailable",
+        ArtifactNotFound: (): Effect.Effect<RenderPlan> => Effect.succeed(ArtifactUnavailableRenderPlan.make({
           reason: "artifact-not-found",
           representation
-        }),
-        ArtifactCorrupt: (): Effect.Effect<RenderPlan> => Effect.succeed({
-          _tag: "unavailable",
+        })),
+        ArtifactCorrupt: (): Effect.Effect<RenderPlan> => Effect.succeed(ArtifactUnavailableRenderPlan.make({
           reason: "artifact-corrupt",
           representation
-        })
+        }))
       })
     )
   }
@@ -150,11 +154,10 @@ const makeRuntime = Effect.gen(function*() {
     "application-route": resolveApplication,
     "web-url": (input): Effect.Effect<RenderPlan> => {
       const representation = ProtocolValue.detach(input)
-      return Effect.succeed({
-        _tag: "iframe",
+      return Effect.succeed(IframeRenderPlan.make({
         representation,
         url: representation.url
-      })
+      }))
     },
     artifact: resolveArtifact
   }))
