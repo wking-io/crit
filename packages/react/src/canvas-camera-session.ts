@@ -1,44 +1,36 @@
 import type { CanvasId } from "@crit/domain"
 
 import {
-  clearSessionPreference,
-  readSessionPreference,
-  sessionPreferenceKey,
-  writeSessionPreference,
-  type BrowserSessionStorage
+  getSessionPreference,
+  removeSessionPreference,
+  setSessionPreference
 } from "./browser-session.js"
 import { CanvasCamera } from "./canvas-camera.js"
 
-const cameraKey = (canvasId: CanvasId) =>
-  sessionPreferenceKey({ canvasId, name: "camera" })
-
-export const readCanvasCameraSession = (args: {
-  readonly storage: BrowserSessionStorage
+export const getCanvasCameraSession = (args: {
   readonly canvasId: CanvasId
-}): ReturnType<typeof CanvasCamera.make> | undefined =>
-  readSessionPreference({
-    key: cameraKey(args.canvasId),
-    schema: CanvasCamera.schema,
-    storage: args.storage
+}) =>
+  getSessionPreference({
+    canvasId: args.canvasId,
+    name: "camera",
+    schema: CanvasCamera.schema
   })
 
-export const writeCanvasCameraSession = (args: {
-  readonly storage: BrowserSessionStorage
+export const setCanvasCameraSession = (args: {
   readonly canvasId: CanvasId
-  readonly camera: CanvasCamera
-}): boolean =>
-  writeSessionPreference({
-    key: cameraKey(args.canvasId),
+  readonly camera: ReturnType<typeof CanvasCamera.make>
+}) =>
+  setSessionPreference({
+    canvasId: args.canvasId,
+    name: "camera",
     schema: CanvasCamera.schema,
-    storage: args.storage,
     value: args.camera
   })
 
-export const clearCanvasCameraSession = (args: {
-  readonly storage: BrowserSessionStorage
+export const removeCanvasCameraSession = (args: {
   readonly canvasId: CanvasId
-}): boolean =>
-  clearSessionPreference({
-    key: cameraKey(args.canvasId),
-    storage: args.storage
+}) =>
+  removeSessionPreference({
+    canvasId: args.canvasId,
+    name: "camera"
   })

@@ -1,16 +1,17 @@
 export {
-  browserSessionStorage,
-  clearSessionPreference,
-  readSessionPreference,
+  getSessionPreference,
+  layerMemory,
+  layerSessionStorage,
+  layerStorage,
+  removeSessionPreference,
   sessionPreferenceKey,
-  writeSessionPreference
+  setSessionPreference
 } from "./browser-session.js"
-export type { BrowserSessionStorage } from "./browser-session.js"
 export { CanvasCamera } from "./canvas-camera.js"
 export {
-  clearCanvasCameraSession,
-  readCanvasCameraSession,
-  writeCanvasCameraSession
+  getCanvasCameraSession,
+  removeCanvasCameraSession,
+  setCanvasCameraSession
 } from "./canvas-camera-session.js"
 export { CanvasBoard } from "./canvas-board.js"
 export type { CanvasBoardProps } from "./canvas-board.js"
