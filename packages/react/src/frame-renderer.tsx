@@ -1,14 +1,12 @@
 import {
-  RepresentationRef as RepresentationRefSchema,
   type Frame,
   type RepresentationRef
 } from "@crit/domain"
 import type { RenderPlan } from "@crit/representations"
-import { Effect, Fiber, Match, Schema } from "effect"
+import { useQuery } from "@tanstack/react-query"
+import { Effect, Match } from "effect"
 import {
   useEffect,
-  useReducer,
-  useRef,
   useState,
   type ReactElement
 } from "react"
@@ -30,48 +28,16 @@ export interface FrameRendererProps {
   readonly className?: string
 }
 
-type RenderState =
-  | {
-    readonly _tag: "resolving"
-    readonly representation: RepresentationRef
-    readonly revision: Frame["representationChangedByChangeId"]
-    readonly generation: number
-    readonly resolver: FrameRepresentationResolver
-  }
-  | {
-    readonly _tag: "resolved"
-    readonly representation: RepresentationRef
-    readonly revision: Frame["representationChangedByChangeId"]
-    readonly generation: number
-    readonly resolver: FrameRepresentationResolver
-    readonly plan: RenderPlan
-  }
-  | {
-    readonly _tag: "failed"
-    readonly representation: RepresentationRef
-    readonly revision: Frame["representationChangedByChangeId"]
-    readonly generation: number
-    readonly resolver: FrameRepresentationResolver
-  }
+let nextResolverId = 0
+const resolverIds = new WeakMap<FrameRepresentationResolver, number>()
 
-type RenderAction = RenderState
-
-const transition = (state: RenderState, action: RenderAction): RenderState => {
-  if (
-    action._tag !== "resolving" &&
-    (
-      state.revision !== action.revision ||
-      state.representation !== action.representation ||
-      state.generation !== action.generation ||
-      state.resolver !== action.resolver
-    )
-  ) {
-    return state
-  }
-  return action
+const resolverId = (resolver: FrameRepresentationResolver) => {
+  const existing = resolverIds.get(resolver)
+  if (existing !== undefined) return existing
+  nextResolverId += 1
+  resolverIds.set(resolver, nextResolverId)
+  return nextResolverId
 }
-
-const representationsEqual = Schema.toEquivalence(RepresentationRefSchema)
 
 const unavailableCopy = (
   title: Frame["title"],
@@ -153,68 +119,29 @@ export function FrameRenderer({
   frame,
   resolver
 }: FrameRendererProps): ReactElement {
-  const generation = useRef(0)
-  const stableRepresentation = useRef(frame.representation)
-  if (!representationsEqual(stableRepresentation.current, frame.representation)) {
-    stableRepresentation.current = frame.representation
-  }
-  const representation = stableRepresentation.current
-  const [state, dispatch] = useReducer(transition, {
-    _tag: "resolving",
-    representation,
-    revision: frame.representationChangedByChangeId,
-    generation: generation.current,
-    resolver
+  const query = useQuery({
+    queryKey: [
+      "crit",
+      "frame-render-plan",
+      resolverId(resolver),
+      frame.representationChangedByChangeId,
+      frame.representation
+    ],
+    queryFn: ({ signal }) => Effect.runPromise(
+      resolver.resolve(frame.representation),
+      { signal }
+    ),
+    retry: false,
+    staleTime: Number.POSITIVE_INFINITY
   })
 
-  useEffect(() => {
-    generation.current += 1
-    const requestGeneration = generation.current
-    const revision = frame.representationChangedByChangeId
-    dispatch({
-      _tag: "resolving",
-      representation,
-      revision,
-      generation: requestGeneration,
-      resolver
-    })
-    const fiber = Effect.runFork(resolver.resolve(representation).pipe(Effect.match({
-      onFailure: () => dispatch({
-        _tag: "failed",
-        representation,
-        revision,
-        generation: requestGeneration,
-        resolver
-      }),
-      onSuccess: (plan) => dispatch({
-        _tag: "resolved",
-        representation,
-        revision,
-        generation: requestGeneration,
-        resolver,
-        plan
-      })
-    })))
-    return () => {
-      Effect.runFork(Fiber.interrupt(fiber))
-    }
-  }, [
-    frame.representationChangedByChangeId,
-    representation,
-    resolver
-  ])
-
-  if (
-    state.revision !== frame.representationChangedByChangeId ||
-    state.representation !== representation ||
-    state.resolver !== resolver
-  ) {
+  if (query.isPending) {
     return <div className={className} role="status">Loading {frame.title}.</div>
   }
 
-  return Match.value(state).pipe(Match.tagsExhaustive({
-    resolving: () => <div className={className} role="status">Loading {frame.title}.</div>,
-    resolved: ({ plan }) => <ResolvedFrame className={className} plan={plan} title={frame.title} />,
-    failed: () => <div className={className} role="alert">Could not load {frame.title}.</div>
-  }))
+  if (query.isError) {
+    return <div className={className} role="alert">Could not load {frame.title}.</div>
+  }
+
+  return <ResolvedFrame className={className} plan={query.data} title={frame.title} />
 }

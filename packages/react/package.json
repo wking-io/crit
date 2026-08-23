@@ -17,6 +17,7 @@
   "dependencies": {
     "@crit/domain": "*",
     "@crit/representations": "*",
+    "@tanstack/react-query": "^5.102.1",
     "effect": "4.0.0-rc.109"
   },
   "peerDependencies": {

@@ -11,8 +11,13 @@ import {
   IframeRenderPlan,
   type RenderPlan
 } from "@crit/representations"
+import {
+  notifyManager,
+  QueryClient,
+  QueryClientProvider
+} from "@tanstack/react-query"
 import { Effect } from "effect"
-import { StrictMode, act } from "react"
+import { StrictMode, act, type ReactElement } from "react"
 import { flushSync } from "react-dom"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
@@ -24,6 +29,8 @@ import {
 } from "../src/index.js"
 
 Object.defineProperty(globalThis, "IS_REACT_ACT_ENVIRONMENT", { value: true })
+notifyManager.setNotifyFunction((callback) => act(callback))
+notifyManager.setScheduler(queueMicrotask)
 
 const representation = WebUrlRepresentation.make({ url: "https://example.com/checkout" })
 const frame = (
@@ -40,16 +47,26 @@ const iframePlan = (url: string): RenderPlan => IframeRenderPlan.make({
 })
 
 let container: HTMLDivElement
+let queryClient: QueryClient
 let root: Root
+
+const render = (element: ReactElement) => root.render(
+  <QueryClientProvider client={queryClient}>{element}</QueryClientProvider>
+)
+const waitFor = (assertion: () => void) => act(async() => vi.waitFor(assertion))
 
 beforeEach(() => {
   container = document.createElement("div")
   document.body.append(container)
   root = createRoot(container)
+  queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } }
+  })
 })
 
 afterEach(async() => {
   await act(async() => root.unmount())
+  queryClient.clear()
   container.remove()
   vi.restoreAllMocks()
 })
@@ -63,10 +80,13 @@ describe("FrameRenderer", () => {
       })
     }
 
-    await act(async() => root.render(<FrameRenderer frame={frame("change_frame_loading")} resolver={resolver} />))
+    await act(async() => render(<FrameRenderer frame={frame("change_frame_loading")} resolver={resolver} />))
     expect(container.textContent).toBe("Loading Checkout.")
 
-    await act(async() => complete?.(iframePlan("https://example.com/ready")))
+    await act(async() => {
+      complete?.(iframePlan("https://example.com/ready"))
+    })
+    await waitFor(() => expect(container.querySelector("iframe")).not.toBeNull())
     const iframe = container.querySelector("iframe")
     expect(iframe?.getAttribute("src")).toBe("https://example.com/ready")
     expect(iframe?.getAttribute("title")).toBe("Checkout")
@@ -97,8 +117,10 @@ describe("FrameRenderer", () => {
       : ArtifactUnavailableRenderPlan.make({ reason, representation: artifact })
     const resolver: FrameRepresentationResolver = { resolve: () => Effect.succeed(plan) }
 
-    await act(async() => root.render(<FrameRenderer frame={frame("change_frame_unavailable")} resolver={resolver} />))
-    expect(container.querySelector('[role="status"]')?.textContent).toContain(expected)
+    await act(async() => render(<FrameRenderer frame={frame("change_frame_unavailable")} resolver={resolver} />))
+    await waitFor(() => expect(
+      container.querySelector('[role="status"]')?.textContent
+    ).toContain(expected))
     expect(container.querySelector("iframe")).toBeNull()
   })
 
@@ -106,8 +128,10 @@ describe("FrameRenderer", () => {
     const resolver: FrameRepresentationResolver = {
       resolve: () => Effect.fail("private resolver failure")
     }
-    await act(async() => root.render(<FrameRenderer frame={frame("change_frame_failure")} resolver={resolver} />))
-    expect(container.querySelector('[role="alert"]')?.textContent).toBe("Could not load Checkout.")
+    await act(async() => render(<FrameRenderer frame={frame("change_frame_failure")} resolver={resolver} />))
+    await waitFor(() => expect(
+      container.querySelector('[role="alert"]')?.textContent
+    ).toBe("Could not load Checkout."))
     expect(container.textContent).not.toContain("private resolver failure")
   })
 
@@ -131,31 +155,39 @@ describe("FrameRenderer", () => {
       WebUrlRepresentation.make({ url: "https://example.com/second" })
     )
 
-    await act(async() => root.render(<FrameRenderer frame={first} resolver={resolver} />))
-    await act(async() => root.render(<FrameRenderer frame={second} resolver={resolver} />))
-    await act(async() => completions.get("https://example.com/second")?.(iframePlan("https://example.com/second")))
-    await act(async() => completions.get("https://example.com/first")?.(iframePlan("https://example.com/first")))
-    expect(container.querySelector("iframe")?.getAttribute("src")).toBe("https://example.com/second")
+    await act(async() => render(<FrameRenderer frame={first} resolver={resolver} />))
+    await act(async() => render(<FrameRenderer frame={second} resolver={resolver} />))
+    await act(async() => {
+      completions.get("https://example.com/second")?.(iframePlan("https://example.com/second"))
+    })
+    await act(async() => {
+      completions.get("https://example.com/first")?.(iframePlan("https://example.com/first"))
+    })
+    await waitFor(() => expect(
+      container.querySelector("iframe")?.getAttribute("src")
+    ).toBe("https://example.com/second"))
 
     const equivalentSecond = frame(
       "change_frame_second",
       WebUrlRepresentation.make({ url: "https://example.com/second" })
     )
-    await act(async() => root.render(<FrameRenderer frame={equivalentSecond} resolver={resolver} />))
+    await act(async() => render(<FrameRenderer frame={equivalentSecond} resolver={resolver} />))
     expect(resolves).toBe(2)
 
     const changedWithoutNewRevision = frame(
       "change_frame_second",
       WebUrlRepresentation.make({ url: "https://example.com/third" })
     )
-    await act(async() => root.render(
+    await act(async() => render(
       <FrameRenderer frame={changedWithoutNewRevision} resolver={resolver} />
     ))
-    await act(async() => completions.get("https://example.com/third")?.(
-      iframePlan("https://example.com/third")
-    ))
+    await act(async() => {
+      completions.get("https://example.com/third")?.(iframePlan("https://example.com/third"))
+    })
     expect(resolves).toBe(3)
-    expect(container.querySelector("iframe")?.getAttribute("src")).toBe("https://example.com/third")
+    await waitFor(() => expect(
+      container.querySelector("iframe")?.getAttribute("src")
+    ).toBe("https://example.com/third"))
   })
 
   it("hides a resolved plan immediately when the resolver changes", async() => {
@@ -165,10 +197,12 @@ describe("FrameRenderer", () => {
     const second: FrameRepresentationResolver = { resolve: () => Effect.never }
     const currentFrame = frame("change_frame_resolver")
 
-    await act(async() => root.render(<FrameRenderer frame={currentFrame} resolver={first} />))
-    expect(container.querySelector("iframe")?.getAttribute("src")).toBe("https://example.com/first-resolver")
+    await act(async() => render(<FrameRenderer frame={currentFrame} resolver={first} />))
+    await waitFor(() => expect(
+      container.querySelector("iframe")?.getAttribute("src")
+    ).toBe("https://example.com/first-resolver"))
 
-    flushSync(() => root.render(<FrameRenderer frame={currentFrame} resolver={second} />))
+    flushSync(() => render(<FrameRenderer frame={currentFrame} resolver={second} />))
     expect(container.querySelector("iframe")).toBeNull()
     expect(container.textContent).toBe("Loading Checkout.")
   })
@@ -182,7 +216,7 @@ describe("FrameRenderer", () => {
         }))
       )
     }
-    await act(async() => root.render(<FrameRenderer frame={frame("change_frame_interrupt")} resolver={resolver} />))
+    await act(async() => render(<FrameRenderer frame={frame("change_frame_interrupt")} resolver={resolver} />))
     await act(async() => root.unmount())
     expect(interrupted).toBe(true)
     root = createRoot(container)
@@ -201,10 +235,12 @@ describe("FrameRenderer", () => {
       resolve: () => Effect.succeed(iframePlan("https://example.com/replacement"))
     }
 
-    await act(async() => root.render(<FrameRenderer frame={frame("change_frame_pending")} resolver={pending} />))
-    await act(async() => root.render(<FrameRenderer frame={frame("change_frame_replacement")} resolver={resolved} />))
+    await act(async() => render(<FrameRenderer frame={frame("change_frame_pending")} resolver={pending} />))
+    await act(async() => render(<FrameRenderer frame={frame("change_frame_replacement")} resolver={resolved} />))
     expect(interrupted).toBe(true)
-    expect(container.querySelector("iframe")?.getAttribute("src")).toBe("https://example.com/replacement")
+    await waitFor(() => expect(
+      container.querySelector("iframe")?.getAttribute("src")
+    ).toBe("https://example.com/replacement"))
   })
 
   it("downloads opaque artifact bytes and revokes each object URL once", async() => {
@@ -231,7 +267,8 @@ describe("FrameRenderer", () => {
     let selected = artifact("a", 1)
     const resolver: FrameRepresentationResolver = { resolve: () => Effect.succeed(selected) }
 
-    await act(async() => root.render(<FrameRenderer frame={frame("change_artifact_a", selected.representation)} resolver={resolver} />))
+    await act(async() => render(<FrameRenderer frame={frame("change_artifact_a", selected.representation)} resolver={resolver} />))
+    await waitFor(() => expect(container.querySelector("a")).not.toBeNull())
     const firstLink = container.querySelector("a")
     expect(firstLink?.getAttribute("href")).toBe("blob:artifact-1")
     expect(firstLink?.getAttribute("download")).toBe("artifact_react_a")
@@ -240,8 +277,8 @@ describe("FrameRenderer", () => {
     expect(container.querySelector("iframe")).toBeNull()
 
     selected = artifact("b", 3)
-    await act(async() => root.render(<FrameRenderer frame={frame("change_artifact_b", selected.representation)} resolver={resolver} />))
-    expect(revoked).toEqual(["blob:artifact-1"])
+    await act(async() => render(<FrameRenderer frame={frame("change_artifact_b", selected.representation)} resolver={resolver} />))
+    await waitFor(() => expect(revoked).toEqual(["blob:artifact-1"]))
     expect(container.querySelector("a")?.getAttribute("href")).toBe("blob:artifact-2")
 
     await act(async() => root.unmount())
@@ -273,12 +310,12 @@ describe("FrameRenderer", () => {
     })
     const resolver: FrameRepresentationResolver = { resolve: () => Effect.succeed(plan) }
 
-    await act(async() => root.render(<StrictMode>
+    await act(async() => render(<StrictMode>
       <FrameRenderer frame={frame("change_artifact_strict", plan.representation)} resolver={resolver} />
     </StrictMode>))
+    await waitFor(() => expect(created.length).toBeGreaterThan(0))
     await act(async() => root.unmount())
 
-    expect(created.length).toBeGreaterThan(0)
     expect(revoked.toSorted()).toEqual(created.toSorted())
     expect(new Set(revoked).size).toBe(revoked.length)
     root = createRoot(container)
