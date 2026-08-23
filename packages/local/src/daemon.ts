@@ -4,6 +4,7 @@ import {
   CanvasAuthority,
   type VerifiedInvocation
 } from "@crit/authority"
+import { LocalBrowserConnection } from "@crit/client"
 import { CanvasId, Id, type InstallationId } from "@crit/domain"
 import {
   CanvasReplica,
@@ -486,7 +487,9 @@ const browserBootstrapRoutes = HttpRouter.use(Effect.fn(function*(router) {
     const exchange = yield* browser.exchange(body.value.capability)
     if (exchange.kind === "rejected") return HttpServerResponse.empty({ status: 401 })
     return yield* HttpServerResponse.setCookie(
-      HttpServerResponse.jsonUnsafe({ redirectTo: browser.browserOrigin }),
+      HttpServerResponse.jsonUnsafe({
+        redirectTo: `${browser.browserOrigin}${LocalBrowserConnection.encode(browser.connection)}`
+      }),
       browser.cookieName,
       exchange.session,
       { httpOnly: true, sameSite: "strict", secure: false, path: browser.path }

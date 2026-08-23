@@ -1,4 +1,9 @@
 import type { VerifiedInvocation } from "@crit/authority"
+import {
+  LocalBrowserConnection,
+  type LocalBrowserConnectionDescriptor
+} from "@crit/client"
+import type { LocalDaemonInstanceNonce } from "@crit/replica/http"
 import { Context, Crypto, Effect, Encoding, Layer, Redacted, Ref, Schema } from "effect"
 
 export const BrowserCapability = Schema.String.check(
@@ -27,13 +32,14 @@ type BrowserAuthState =
 
 export interface BrowserSessionOptions {
   readonly baseUrl: string
-  readonly instance: string
+  readonly instance: LocalDaemonInstanceNonce
   readonly browserOrigin: BrowserOrigin
   readonly invocation: VerifiedInvocation
 }
 
 export interface BrowserSessionService {
   readonly bootstrapUrl: Redacted.Redacted<string>
+  readonly connection: LocalBrowserConnectionDescriptor
   readonly browserOrigin: BrowserOrigin
   readonly daemonOrigin: string
   readonly host: string
@@ -68,12 +74,17 @@ export class BrowserSession extends Context.Service<BrowserSession, BrowserSessi
         kind: "awaiting-bootstrap",
         bootstrapDigest: yield* digest(capability)
       })
-      const url = new URL(options.baseUrl)
-      const path: `/${string}` = `/browser/${options.instance}/`
+      const connection = LocalBrowserConnection.make({
+        baseUrl: options.baseUrl,
+        instance: options.instance
+      })
+      const url = new URL(connection.baseUrl)
+      const path = connection.browserPath
       const cookieName = `crit_session_${options.instance}`
 
       return BrowserSession.of({
-        bootstrapUrl: Redacted.make(`${options.baseUrl}${path}#${capability}`),
+        bootstrapUrl: Redacted.make(`${connection.baseUrl}${path}#${capability}`),
+        connection,
         browserOrigin: options.browserOrigin,
         daemonOrigin: url.origin,
         host: url.host,

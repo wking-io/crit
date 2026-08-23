@@ -4,11 +4,15 @@ import { join } from "node:path"
 
 import { NodeServices } from "@effect/platform-node"
 import { AuthorityModel } from "@crit/authority"
-import { LocalCanvasClient, LocalRepresentationClient } from "@crit/client"
+import {
+  LocalBrowserConnection,
+  LocalCanvasClient,
+  LocalRepresentationClient
+} from "@crit/client"
 import { Id, WebUrlRepresentation, decodeCanvasCommandBatch } from "@crit/domain"
 import { ReplicaModel } from "@crit/replica"
 import { localApiVersionHeader } from "@crit/replica/http"
-import { Context, Effect, Fiber, Layer, Option, Redacted, Scope, Stream } from "effect"
+import { Context, Effect, Fiber, Layer, Option, Redacted, Result, Schema, Scope, Stream } from "effect"
 import { FetchHttpClient } from "effect/unstable/http"
 import * as Socket from "effect/unstable/socket/Socket"
 import { describe, expect, it } from "vitest"
@@ -19,6 +23,7 @@ import { LocalInstallation } from "../src/development.js"
 import { decodeStored } from "../src/stored-json.js"
 
 const browserOrigin = "http://127.0.0.1:5173"
+const BrowserSessionResponse = Schema.Struct({ redirectTo: Schema.String })
 
 const temporaryRoot = Effect.acquireRelease(
   Effect.sync(() => mkdtempSync(join(tmpdir(), "crit-browser-session-"))),
@@ -130,11 +135,19 @@ describe("browser session HTTP protocol", () => {
       expect(result.document.headers.get("content-security-policy")).toContain("script-src 'self'")
       expect(result.document.headers.get("content-security-policy")).not.toContain("unsafe-inline")
       expect(result.response.status).toBe(200)
-      expect(yield* Effect.promise(() => result.response.clone().json())).toEqual({
-        redirectTo: browserOrigin
-      })
+      const { redirectTo } = Schema.decodeUnknownSync(BrowserSessionResponse)(
+        yield* Effect.promise(() => result.response.clone().json())
+      )
+      const redirect = new URL(redirectTo)
+      expect(redirect.origin).toBe(browserOrigin)
+      expect(redirect.search).toBe("")
+      expect(redirectTo).not.toContain(result.capability)
       const cookie = cookiePair(result.response)
       expect(cookie).toBeDefined()
+      expect(redirectTo).not.toContain(cookie ?? "missing-cookie")
+      const sessionValue = cookie?.split("=", 2)[1]
+      expect(sessionValue).toBeDefined()
+      expect(redirectTo).not.toContain(sessionValue ?? "missing-session")
       expect(result.response.headers.get("set-cookie")).toContain("HttpOnly")
       expect(result.response.headers.get("set-cookie")).toContain("SameSite=Strict")
       expect(result.response.headers.get("set-cookie")).toContain(
@@ -152,7 +165,17 @@ describe("browser session HTTP protocol", () => {
           super.send(data, cb)
         }
       }
-      const browserPath = `/browser/${development.descriptor.instance}/` satisfies `/${string}/`
+      const browserFetch = Layer.succeed(FetchHttpClient.Fetch, (input, init) => {
+        expect(init?.credentials).toBe("include")
+        const headers = new Headers(init?.headers)
+        expect(headers.has("authorization")).toBe(false)
+        requestCount += 1
+        headers.set("cookie", cookie ?? "")
+        headers.set("origin", browserOrigin)
+        return fetch(input, { ...init, headers })
+      })
+      const decodedConnection = LocalBrowserConnection.decode(redirect.hash)
+      const browserOptions = LocalBrowserConnection.options(Result.getOrThrow(decodedConnection))
       const resolved = yield* Effect.promise(() => resolveRepresentation({
         baseUrl: development.descriptor.baseUrl,
         instance: development.descriptor.instance,
@@ -166,27 +189,11 @@ describe("browser session HTTP protocol", () => {
       })
       const browserClientContext = yield* Layer.buildWithScope(
         Layer.merge(
-          LocalCanvasClient.layer({
-            _tag: "browser-session",
-            baseUrl: development.descriptor.baseUrl,
-            browserPath
-          }),
-          LocalRepresentationClient.layer({
-            _tag: "browser-session",
-            baseUrl: development.descriptor.baseUrl,
-            browserPath
-          })
+          LocalCanvasClient.layer(browserOptions),
+          LocalRepresentationClient.layer(browserOptions)
         ).pipe(
           Layer.provide(FetchHttpClient.layer),
-          Layer.provide(Layer.succeed(FetchHttpClient.Fetch, (input, init) => {
-            expect(init?.credentials).toBe("include")
-            const headers = new Headers(init?.headers)
-            expect(headers.has("authorization")).toBe(false)
-            requestCount += 1
-            headers.set("cookie", cookie ?? "")
-            headers.set("origin", browserOrigin)
-            return fetch(input, { ...init, headers })
-          }))
+          Layer.provide(browserFetch)
         ),
         yield* Effect.scope
       )
@@ -227,8 +234,19 @@ describe("browser session HTTP protocol", () => {
       const synced = yield* browserClient.sync(canvasId)
       expect(synced.view.projection.title).toBe("Browser changed")
       expect(synced.view.pending).toHaveLength(0)
+      const reloadOptions = LocalBrowserConnection.options(Result.getOrThrow(
+        LocalBrowserConnection.decode(new URL(redirectTo).hash)
+      ))
+      const reloadContext = yield* Layer.buildWithScope(
+        LocalCanvasClient.layer(reloadOptions).pipe(
+          Layer.provide(FetchHttpClient.layer),
+          Layer.provide(browserFetch)
+        ),
+        yield* Effect.scope
+      )
+      expect(yield* Context.get(reloadContext, LocalCanvasClient).status()).toMatchObject({ apiVersion: "1" })
       expect(sentSocketMessages).toEqual([])
-      expect(requestCount).toBe(6)
+      expect(requestCount).toBe(7)
       const corsCreated = yield* Effect.promise(() => createCanvas({
         baseUrl: development.descriptor.baseUrl,
         instance: development.descriptor.instance,
@@ -244,6 +262,7 @@ describe("browser session HTTP protocol", () => {
         LocalInstallation,
         readFileSync(join(dataRoot, "installation.json"), "utf8")
       )
+      expect(redirectTo).not.toContain(installation.bearerSecret)
       const bearerView = yield* Effect.promise(() => fetch(
         `${development.descriptor.baseUrl}/api/v1/open/canvas_browser_session`,
         {
