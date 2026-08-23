@@ -1,6 +1,21 @@
-import { ArtifactRepresentation, Id, Sha256Digest } from "@crit/domain"
-import { Data, Effect, Layer, Schema } from "effect"
+import {
+  ApplicationRouteRepresentation,
+  ArtifactRepresentation,
+  HttpUrl,
+  Id,
+  RootedRoute,
+  Sha256Digest,
+  WebUrlRepresentation,
+  type ApplicationId
+} from "@crit/domain"
+import { Data, Effect, Layer, Option, Schema } from "effect"
 
+import {
+  ApplicationBaseUrl,
+  ApplicationBindings,
+  RepresentationRuntime,
+  RepresentationRuntimeLive
+} from "./runtime.js"
 import { ArtifactStore } from "./store.js"
 
 export class ArtifactStoreConformanceFailure extends Data.TaggedError("ArtifactStoreConformanceFailure")<{
@@ -67,3 +82,176 @@ export const runArtifactStoreConformance = <E, R>(
   (scenario) => scenario.run.pipe(Effect.provide(layer)),
   { discard: true }
 )
+
+const unboundApplicationId = Id.application("application_conformance_unbound")
+
+export interface RepresentationRuntimeConformanceExpectation {
+  readonly applicationId: ApplicationId
+  readonly baseUrl: ApplicationBaseUrl
+  readonly renderedUrl: HttpUrl
+}
+
+export class RepresentationRuntimeConformanceFailure extends Data.TaggedError("RepresentationRuntimeConformanceFailure")<{
+  readonly message: string
+}> {}
+
+const requireRuntimeFact = (condition: boolean, message: string) => condition
+  ? Effect.void
+  : Effect.fail(new RepresentationRuntimeConformanceFailure({ message }))
+
+export interface RepresentationRuntimeConformanceScenario {
+  readonly name: string
+  readonly run: Effect.Effect<
+    void,
+    unknown,
+    ApplicationBindings | ArtifactStore | RepresentationRuntime
+  >
+}
+
+export const representationRuntimeConformanceScenarios = (
+  expected: RepresentationRuntimeConformanceExpectation
+): readonly RepresentationRuntimeConformanceScenario[] => [{
+  name: "composes bound application routes without changing their state or query",
+  run: Effect.gen(function*() {
+    const bindings = yield* ApplicationBindings
+    const runtime = yield* RepresentationRuntime
+    const bound = yield* bindings.get(expected.applicationId)
+    yield* requireRuntimeFact(
+      Option.isSome(bound) && bound.value === expected.baseUrl,
+      "the binding adapter did not return the expected base URL"
+    )
+    const state = { selection: { artifact: "artifact_1" } }
+    const representation = ApplicationRouteRepresentation.make({
+      applicationId: expected.applicationId,
+      route: Schema.decodeUnknownSync(RootedRoute)("/products/%E2%9C%93?view=grid"),
+      state
+    })
+    const encoded = JSON.stringify(representation)
+    const plan = yield* runtime.resolve(representation)
+    yield* requireRuntimeFact(plan._tag === "iframe", "a bound application route did not produce an iframe")
+    if (plan._tag !== "iframe") return
+    yield* requireRuntimeFact(
+      plan.url === expected.renderedUrl,
+      "application route composition changed the rooted route"
+    )
+    yield* requireRuntimeFact(
+      plan.representation !== representation && JSON.stringify(plan.representation) === encoded,
+      "application iframe did not detach an equal representation"
+    )
+    state.selection.artifact = "artifact_changed"
+    yield* requireRuntimeFact(
+      JSON.stringify(plan.representation) === encoded,
+      "application iframe retained caller-owned state"
+    )
+  })
+}, {
+  name: "preserves web URL representations exactly",
+  run: Effect.gen(function*() {
+    const runtime = yield* RepresentationRuntime
+    const representation = WebUrlRepresentation.make({
+      url: Schema.decodeUnknownSync(HttpUrl)("https://web.example/review?mode=wide")
+    })
+    const plan = yield* runtime.resolve(representation)
+    yield* requireRuntimeFact(plan._tag === "iframe", "a web URL did not produce an iframe")
+    if (plan._tag !== "iframe") return
+    yield* requireRuntimeFact(plan.url === representation.url, "web iframe changed its URL")
+    yield* requireRuntimeFact(
+      plan.representation !== representation &&
+        JSON.stringify(plan.representation) === JSON.stringify(representation),
+      "web iframe did not detach an equal representation"
+    )
+  })
+}, {
+  name: "returns detached verified artifact bytes",
+  run: Effect.gen(function*() {
+    const store = yield* ArtifactStore
+    const runtime = yield* RepresentationRuntime
+    const artifact = yield* store.put({
+      artifactId: Id.artifact("artifact_runtime_conformance"),
+      bytes: bytes(2, 7, 1)
+    })
+    const plan = yield* runtime.resolve(artifact)
+    yield* requireRuntimeFact(plan._tag === "artifact-bytes", "a stored artifact did not produce bytes")
+    if (plan._tag !== "artifact-bytes") return
+    yield* requireRuntimeFact(
+      plan.representation !== artifact &&
+        JSON.stringify(plan.representation) === JSON.stringify(artifact),
+      "artifact plan did not detach an equal representation"
+    )
+    plan.bytes[0] = 9
+    const retained = yield* store.read(artifact)
+    yield* requireRuntimeFact(retained[0] === 2, "artifact plan exposed store-owned bytes")
+  })
+}, {
+  name: "makes an unbound application unavailable",
+  run: Effect.gen(function*() {
+    const runtime = yield* RepresentationRuntime
+    const representation = ApplicationRouteRepresentation.make({
+      applicationId: unboundApplicationId,
+      route: Schema.decodeUnknownSync(RootedRoute)("/")
+    })
+    const plan = yield* runtime.resolve(representation)
+    yield* requireRuntimeFact(
+      plan._tag === "unavailable" &&
+        plan.reason === "application-unbound" &&
+        plan.representation !== representation &&
+        JSON.stringify(plan.representation) === JSON.stringify(representation),
+      "an unbound application did not retain its legal unavailable representation"
+    )
+  })
+}, {
+  name: "distinguishes missing and corrupt artifacts",
+  run: Effect.gen(function*() {
+    const store = yield* ArtifactStore
+    const runtime = yield* RepresentationRuntime
+    const missing = ArtifactRepresentation.make({
+      artifactId: Id.artifact("artifact_runtime_missing"),
+      digest: Schema.decodeUnknownSync(Sha256Digest)(`sha256:${"0".repeat(64)}`)
+    })
+    const missingPlan = yield* runtime.resolve(missing)
+    yield* requireRuntimeFact(
+      missingPlan._tag === "unavailable" &&
+        missingPlan.reason === "artifact-not-found" &&
+        missingPlan.representation !== missing &&
+        JSON.stringify(missingPlan.representation) === JSON.stringify(missing),
+      "a missing artifact did not retain its legal unavailable representation"
+    )
+
+    const stored = yield* store.put({
+      artifactId: Id.artifact("artifact_runtime_corrupt"),
+      bytes: bytes(3, 1, 4)
+    })
+    const corrupt = ArtifactRepresentation.make({
+      artifactId: stored.artifactId,
+      digest: Schema.decodeUnknownSync(Sha256Digest)(`sha256:${"f".repeat(64)}`)
+    })
+    const corruptPlan = yield* runtime.resolve(corrupt)
+    yield* requireRuntimeFact(
+      corruptPlan._tag === "unavailable" &&
+        corruptPlan.reason === "artifact-corrupt" &&
+        corruptPlan.representation !== corrupt &&
+        JSON.stringify(corruptPlan.representation) === JSON.stringify(corrupt),
+      "a corrupt artifact did not retain its legal unavailable representation"
+    )
+  })
+}]
+
+export const runRepresentationRuntimeConformance = <ArtifactE, ArtifactR, BindingE, BindingR>(
+  options: {
+    readonly artifactStoreLayer: Layer.Layer<ArtifactStore, ArtifactE, ArtifactR>
+    readonly applicationBindingsLayer: Layer.Layer<ApplicationBindings, BindingE, BindingR>
+    readonly expected: RepresentationRuntimeConformanceExpectation
+  }
+): Effect.Effect<void, unknown | ArtifactE | BindingE, ArtifactR | BindingR> => {
+  const dependencies = Layer.merge(
+    options.artifactStoreLayer,
+    options.applicationBindingsLayer
+  )
+  const runtime = RepresentationRuntimeLive.pipe(Layer.provide(dependencies))
+  const environment = Layer.merge(dependencies, runtime)
+  return Effect.forEach(
+    representationRuntimeConformanceScenarios(options.expected),
+    (scenario) => scenario.run.pipe(Effect.provide(environment)),
+    { discard: true }
+  )
+}

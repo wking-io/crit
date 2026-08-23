@@ -1,5 +1,5 @@
 import { AuthorityClockLive, AuthorityFailure, AuthorityModel, CanvasAuthority, MemoryCanvasAuthority, PersonInvocation } from "@crit/authority"
-import { Id, decodeCanvasCommandBatch } from "@crit/domain"
+import { DomainValue, Id, decodeCanvasCommandBatch } from "@crit/domain"
 import { ProtocolValue } from "@crit/protocol"
 import { Deferred, Effect, Fiber, Layer, Option, Schema, Stream } from "effect"
 import { describe, expect, it } from "vitest"
@@ -131,7 +131,7 @@ describe("MemoryCanvasReplica", () => {
           canvasId,
           commands: decodeCanvasCommandBatch([{ _tag: "rename-canvas", expectedTitle: "Original", title: "Owned" }])
         })
-        const incoming = ProtocolValue.detach(person)
+        const incoming = DomainValue.detach(person)
         const fiber = yield* Effect.forkChild(replica.change(input, incoming))
         yield* Effect.yieldNow
         Reflect.set(input.commands[0], "title", "Mutated")

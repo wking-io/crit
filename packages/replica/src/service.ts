@@ -1,6 +1,6 @@
 import { AuthorityModel, CanvasAuthority } from "@crit/authority"
 import type { VerifiedInvocation } from "@crit/authority"
-import type { CanvasId } from "@crit/domain"
+import { DomainValue, type CanvasId } from "@crit/domain"
 import { ReplicaChangedSchema, type ReplicaChanged } from "@crit/protocol"
 import { Context, Effect, Layer, PubSub, Result, Scope, Semaphore, Stream, SynchronizedRef } from "effect"
 
@@ -74,7 +74,7 @@ const makeCanvasReplica = Effect.gen(function*() {
     : Effect.succeed(state)))
   const render = (state: ReplicaState) => {
     const result = ReplicaPolicy.view(state)
-    return result._tag === "Success" ? Effect.succeed(ReplicaPolicy.detach(result.success)) : Effect.fail(result.failure)
+    return result._tag === "Success" ? Effect.succeed(DomainValue.detach(result.success)) : Effect.fail(result.failure)
   }
   const current: CanvasReplicaService["current"] = (canvasId) => requireState(canvasId).pipe(
     Effect.flatMap(render),
@@ -87,14 +87,14 @@ const makeCanvasReplica = Effect.gen(function*() {
       Effect.mapError(() => new ReplicaCanvasNotFound({ canvasId }))
     )
     const state = yield* modify<ReplicaState, never>(canvasId, (latest) => Result.succeed([
-      latest ?? ReplicaPolicy.initialize(ReplicaPolicy.detach(authorityView)),
-      latest ?? ReplicaPolicy.initialize(ReplicaPolicy.detach(authorityView))
+      latest ?? ReplicaPolicy.initialize(DomainValue.detach(authorityView)),
+      latest ?? ReplicaPolicy.initialize(DomainValue.detach(authorityView))
     ] as const))
     return yield* render(state)
   }).pipe(Effect.withSpan("crit.replica.open", { attributes: { "crit.canvas.id": canvasId } }))
   const change: CanvasReplicaService["change"] = (input, invocation) => Effect.suspend(() => {
-    const ownedInput = ReplicaPolicy.detach(input)
-    const ownedInvocation = ReplicaPolicy.detach(invocation)
+    const ownedInput = DomainValue.detach(input)
+    const ownedInvocation = DomainValue.detach(invocation)
     return Effect.gen(function*() {
       const changeId = yield* ids.next
       const state = yield* modify<ReplicaState, ReplicaChangeFailure>(ownedInput.canvasId, (current): Result.Result<readonly [ReplicaState, ReplicaState], ReplicaChangeFailure> => {
@@ -130,7 +130,7 @@ const makeCanvasReplica = Effect.gen(function*() {
       }
       const counts = yield* modify<{ readonly pulled: number; readonly acknowledged: number }, ReplicaSyncFailure>(canvasId, (current): Result.Result<readonly [{ readonly pulled: number; readonly acknowledged: number }, ReplicaState], ReplicaSyncFailure> => {
         if (current === undefined) return Result.fail(new ReplicaNotOpen({ canvasId }))
-        const result = ReplicaPolicy.incorporatePage(current, ReplicaPolicy.detach(page))
+        const result = ReplicaPolicy.incorporatePage(current, DomainValue.detach(page))
         return result._tag === "Success"
           ? Result.succeed([{ pulled: result.success.pulled, acknowledged: result.success.acknowledged }, result.success.state] as const)
           : Result.fail(result.failure)
@@ -153,7 +153,7 @@ const makeCanvasReplica = Effect.gen(function*() {
       const state = yield* requireState(canvasId)
       const eligible = state.pending.find((record) => record.state._tag === "ready")
       if (eligible === undefined) break
-      const submitted = yield* authority.submit(ReplicaPolicy.detach(eligible.proposal), ReplicaPolicy.detach(eligible.invocation)).pipe(Effect.result)
+      const submitted = yield* authority.submit(DomainValue.detach(eligible.proposal), DomainValue.detach(eligible.invocation)).pipe(Effect.result)
       if (submitted._tag === "Failure") {
         const failure = submitted.failure
         if (failure._tag === "change-rejected") {

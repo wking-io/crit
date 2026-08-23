@@ -4,6 +4,7 @@ import { assert, describe, expect, it } from "vitest"
 
 import {
   CanvasEngine,
+  DomainValue,
   decodeCanvasChange,
   decodeCanvasProjection
 } from "../src/index.js"
@@ -80,7 +81,7 @@ describe("CanvasEngine.apply", () => {
         { _tag: "rename-canvas", expectedTitle: "Checkout", title: "Final" }
       ]
     })
-    const before = structuredClone(initial)
+    const before = DomainValue.detach(initial)
 
     expect(CanvasEngine.apply(initial, change)).toEqual({
       _tag: "rejected",
@@ -180,8 +181,8 @@ describe("CanvasEngine.replay", () => {
 
   it("replays fixtures deterministically without mutating inputs", () => {
     const { initial, changes, projection } = decodedFixture()
-    const initialBefore = structuredClone(initial)
-    const changesBefore = structuredClone(changes)
+    const initialBefore = DomainValue.detach(initial)
+    const changesBefore = DomainValue.detach(changes)
 
     for (let run = 0; run < 10; run += 1) {
       expect(CanvasEngine.replay(initial, changes)).toEqual({

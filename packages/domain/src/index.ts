@@ -20,6 +20,7 @@ export {
   Sha256Digest,
   WorkspaceId
 } from "./ids.js"
+export { DomainValue } from "./value.js"
 
 export {
   AcceptedAttribution,

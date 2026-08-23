@@ -1,4 +1,4 @@
-import type { CanvasId, ChangeId } from "@crit/domain"
+import { DomainValue, type CanvasId, type ChangeId } from "@crit/domain"
 import type { AcceptedCanvasChange, Cursor } from "@crit/protocol"
 import { Effect, Layer, Result, SynchronizedRef } from "effect"
 
@@ -39,8 +39,8 @@ const make = Effect.gen(function*() {
   )
 
   const create: CanvasAuthority["Service"]["create"] = (command, invocation) => Effect.suspend(() => {
-    const ownedCommand = AuthorityPolicy.detach(command)
-    const ownedInvocation = AuthorityPolicy.detach(invocation)
+    const ownedCommand = DomainValue.detach(command)
+    const ownedInvocation = DomainValue.detach(invocation)
     return SynchronizedRef.modifyEffect(registry, (canvases) => {
       if (canvases.has(ownedCommand.canvasId)) {
         return Effect.fail(AuthorityFailure.canvasAlreadyExists({ canvasId: ownedCommand.canvasId }))
@@ -58,19 +58,19 @@ const make = Effect.gen(function*() {
           cursorPositions: new Map([[view.cursor, 0]]),
           retries: new Map()
         })
-        return [AuthorityPolicy.detach(view), new Map(canvases).set(ownedCommand.canvasId, state)] as const
+        return [DomainValue.detach(view), new Map(canvases).set(ownedCommand.canvasId, state)] as const
       }))
     })
   })
 
   const open: CanvasAuthority["Service"]["open"] = (canvasId) => lookup(canvasId).pipe(
     Effect.flatMap(SynchronizedRef.get),
-    Effect.map((state) => AuthorityPolicy.detach(state.view))
+    Effect.map((state) => DomainValue.detach(state.view))
   )
 
   const submit: CanvasAuthority["Service"]["submit"] = (proposal, invocation) => Effect.suspend(() => {
-    const ownedProposal = AuthorityPolicy.detach(proposal)
-    const ownedInvocation = AuthorityPolicy.detach(invocation)
+    const ownedProposal = DomainValue.detach(proposal)
+    const ownedInvocation = DomainValue.detach(invocation)
     return lookup(ownedProposal.canvasId).pipe(
       Effect.flatMap((state) => SynchronizedRef.modifyEffect(state, (current) => {
         const retry = AuthorityPolicy.evaluateRetry({
@@ -131,7 +131,7 @@ const make = Effect.gen(function*() {
         position = knownPosition
       }
       const changes = state.changes.slice(position, position + query.limit)
-      return Effect.succeed(AuthorityPolicy.detach(AuthorityPolicy.makeChangePage({
+      return Effect.succeed(DomainValue.detach(AuthorityPolicy.makeChangePage({
         query,
         genesisCursor: state.genesisCursor,
         position,

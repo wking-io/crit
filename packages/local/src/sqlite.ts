@@ -20,6 +20,7 @@ import {
   CanvasId,
   CanvasProjection,
   ChangeId,
+  DomainValue,
   IsoTimestamp,
 } from "@crit/domain"
 import {
@@ -203,8 +204,8 @@ const make = (
   })
 
   const create: CanvasAuthority["Service"]["create"] = (command: CreateCanvas, invocation: VerifiedInvocation) => Effect.suspend(() => {
-    const ownedCommand = AuthorityPolicy.detach(command)
-    const ownedInvocation = AuthorityPolicy.detach(invocation)
+    const ownedCommand = DomainValue.detach(command)
+    const ownedInvocation = DomainValue.detach(invocation)
     return Effect.gen(function*() {
       if ((yield* readCanvas(ownedCommand.canvasId).pipe(Effect.orDie)) !== undefined) {
         return yield* Effect.fail(AuthorityFailure.canvasAlreadyExists({ canvasId: ownedCommand.canvasId }))
@@ -233,12 +234,12 @@ const make = (
     Effect.orDie,
     Effect.flatMap((canvas) => canvas === undefined
       ? Effect.fail(AuthorityFailure.canvasNotFound({ canvasId }))
-      : Effect.succeed(AuthorityPolicy.detach(canvas.view)))
+      : Effect.succeed(DomainValue.detach(canvas.view)))
   )
 
   const submit: CanvasAuthority["Service"]["submit"] = (proposal, invocation) => Effect.suspend(() => {
-    const ownedProposal = AuthorityPolicy.detach(proposal)
-    const ownedInvocation = AuthorityPolicy.detach(invocation)
+    const ownedProposal = DomainValue.detach(proposal)
+    const ownedInvocation = DomainValue.detach(invocation)
     return Effect.gen(function*() {
       const preflight = yield* evaluate(ownedProposal, ownedInvocation).pipe(Effect.orDie)
       if (preflight._tag === "decision") {
@@ -281,7 +282,7 @@ const make = (
           WHERE canvas_id = ${ownedProposal.canvasId}`
         return Result.succeed(accepted.receipt)
       })).pipe(Effect.orDie)
-      return yield* AuthorityPolicy.decisionEffect(decision).pipe(Effect.map(AuthorityPolicy.detach))
+      return yield* AuthorityPolicy.decisionEffect(decision).pipe(Effect.map(DomainValue.detach))
     })
   })
 
@@ -305,7 +306,7 @@ const make = (
     const changes = rows.map((row) => readAccepted(
       Schema.decodeUnknownSync(AcceptedRow, { onExcessProperty: "error" })(row)
     ))
-    return AuthorityPolicy.detach(AuthorityPolicy.makeChangePage({
+    return DomainValue.detach(AuthorityPolicy.makeChangePage({
       query,
       genesisCursor: canvas.genesisCursor,
       position,
