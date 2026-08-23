@@ -5,6 +5,7 @@ import {
   type ChangeRejected
 } from "@crit/authority"
 import type { CanvasId } from "@crit/domain"
+import { ArtifactRepresentation, type RepresentationRef } from "@crit/domain"
 import type { ReplicaChanged } from "@crit/protocol"
 import type {
   ReplicaChange,
@@ -13,6 +14,14 @@ import type {
   SyncResult
 } from "@crit/replica"
 import { ReplicaNotOpen } from "@crit/replica"
+import {
+  ArtifactBytesRenderPlan,
+  LocalRepresentationJsonResponse,
+  LocalRepresentationResolveFailure,
+  LocalRepresentationResolveRequest,
+  localRepresentationResolvePath,
+  type RenderPlan
+} from "@crit/representations"
 import {
   LocalApiAuthorization,
   type LocalDaemonStatus,
@@ -28,7 +37,7 @@ import {
   localReplicaSocketCloseCode
 } from "@crit/replica/http"
 import { Context, Deferred, Effect, Exit, flow, Layer, Queue, Redacted, Ref, Schema, Scope, Stream, type Take } from "effect"
-import { HttpClient, HttpClientError, HttpClientRequest } from "effect/unstable/http"
+import { FetchHttpClient, HttpClient, HttpClientError, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { HttpApiClient, HttpApiMiddleware } from "effect/unstable/httpapi"
 import * as Socket from "effect/unstable/socket/Socket"
 
@@ -75,6 +84,109 @@ export interface LocalCanvasClientService {
     SubscriptionFailure,
     Socket.WebSocketConstructor | Scope.Scope
   >
+}
+
+export type LocalRepresentationClientFailure =
+  | LocalApiUnauthorized
+  | LocalApiOriginRejected
+  | LocalApiVersionUnsupported
+  | LocalRepresentationResolveFailure
+  | HttpClientError.HttpClientError
+  | Schema.SchemaError
+
+export interface LocalRepresentationClientService {
+  readonly resolve: (
+    representation: RepresentationRef
+  ) => Effect.Effect<RenderPlan, LocalRepresentationClientFailure>
+}
+
+export type LocalRepresentationClientOptions = {
+  readonly baseUrl: string
+} & (
+  | {
+    readonly _tag: "bearer"
+    readonly token: LocalApiToken
+    readonly origin?: string
+  }
+  | {
+    readonly _tag: "browser-session"
+    readonly browserPath: `/${string}/`
+    readonly origin: string
+  }
+)
+
+const representationRequest = (
+  options: LocalRepresentationClientOptions,
+  representation: RepresentationRef
+) => {
+  const path = options._tag === "bearer"
+    ? localRepresentationResolvePath
+    : `${options.browserPath}${localRepresentationResolvePath.slice(1)}`
+  const request = HttpClientRequest.post(`${options.baseUrl.replace(/\/$/, "")}${path}`).pipe(
+    HttpClientRequest.setHeader(localApiVersionHeader, localApiVersion),
+    options._tag === "bearer" ? HttpClientRequest.bearerToken(options.token) : (request) => request,
+    options.origin === undefined
+      ? (request) => request
+      : HttpClientRequest.setHeader("origin", options.origin)
+  )
+  return HttpClientRequest.bodyJsonUnsafe(request, LocalRepresentationResolveRequest.make({
+    _tag: "resolve-representation",
+    schemaVersion: 1,
+    representation
+  }))
+}
+
+const decodeRepresentationFailure = (
+  response: HttpClientResponse.HttpClientResponse
+): Effect.Effect<RenderPlan, LocalRepresentationClientFailure> => {
+  switch (response.status) {
+    case 401:
+      return HttpClientResponse.schemaBodyJson(LocalApiUnauthorized)(response).pipe(Effect.flatMap(Effect.fail))
+    case 403:
+      return HttpClientResponse.schemaBodyJson(LocalApiOriginRejected)(response).pipe(Effect.flatMap(Effect.fail))
+    case 426:
+      return HttpClientResponse.schemaBodyJson(LocalApiVersionUnsupported)(response).pipe(Effect.flatMap(Effect.fail))
+    case 500:
+      return HttpClientResponse.schemaBodyJson(LocalRepresentationResolveFailure)(response).pipe(
+        Effect.flatMap(Effect.fail)
+      )
+    default:
+      return HttpClientResponse.filterStatusOk(response).pipe(
+        Effect.flatMap(HttpClientResponse.schemaBodyJson(LocalRepresentationJsonResponse))
+      )
+  }
+}
+
+export class LocalRepresentationClient extends Context.Service<
+  LocalRepresentationClient,
+  LocalRepresentationClientService
+>()("@crit/client/LocalRepresentationClient") {
+  static readonly layer = (options: LocalRepresentationClientOptions) => Layer.effect(
+    LocalRepresentationClient,
+    Effect.gen(function*() {
+      const http = yield* HttpClient.HttpClient
+      const execute = (representation: RepresentationRef) => http.execute(
+        representationRequest(options, representation)
+      ).pipe(options._tag === "browser-session"
+        ? Effect.provideService(FetchHttpClient.RequestInit, { credentials: "include" })
+        : (effect) => effect)
+      const resolve = (representation: RepresentationRef) => execute(representation).pipe(
+        Effect.flatMap((response) => {
+          if (response.status === 200 && response.headers["content-type"]?.startsWith("application/octet-stream")) {
+            return Schema.decodeUnknownEffect(ArtifactRepresentation)(representation).pipe(
+              Effect.zipWith(response.arrayBuffer, (artifact, buffer): RenderPlan => ArtifactBytesRenderPlan.make({
+                representation: artifact,
+                bytes: new Uint8Array(buffer)
+              }))
+            )
+          }
+          if (response.status === 200) return HttpClientResponse.schemaBodyJson(LocalRepresentationJsonResponse)(response)
+          return decodeRepresentationFailure(response)
+        })
+      )
+      return LocalRepresentationClient.of({ resolve })
+    })
+  )
 }
 
 const notificationUrl = (baseUrl: string, canvasId: CanvasId) => {

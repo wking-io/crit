@@ -1,4 +1,5 @@
 import { mkdtempSync, rmSync } from "node:fs"
+import { request as nodeRequest } from "node:http"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 
@@ -9,17 +10,32 @@ import {
   CanvasAuthority,
   PersonInvocation
 } from "@crit/authority"
-import { LocalCanvasClient } from "@crit/client"
-import { Id, decodeCanvasCommandBatch } from "@crit/domain"
+import { LocalCanvasClient, LocalRepresentationClient } from "@crit/client"
+import {
+  ApplicationRouteRepresentation,
+  ArtifactRepresentation,
+  Id,
+  WebUrlRepresentation,
+  decodeCanvasCommandBatch
+} from "@crit/domain"
 import {
   LocalDaemonInstanceNonce,
   LocalApiOriginRejected,
   LocalApiUnauthorized,
+  LocalApiVersionUnsupported,
   localApiToken
 } from "@crit/replica/http"
 import { ReplicaModel } from "@crit/replica"
+import {
+  ApplicationBaseUrl,
+  ApplicationBindingLookupFailure,
+  ApplicationBindings,
+  ArtifactStore,
+  LocalRepresentationResolveFailure,
+  RepresentationRuntimeLive
+} from "@crit/representations"
 import { Context, Effect, Fiber, Layer, Option, Schema, Stream, Tracer } from "effect"
-import { FetchHttpClient, HttpServer } from "effect/unstable/http"
+import { FetchHttpClient, HttpClient, HttpClientRequest, HttpServer } from "effect/unstable/http"
 import * as Socket from "effect/unstable/socket/Socket"
 import { describe, expect, it } from "vitest"
 
@@ -39,6 +55,23 @@ const invocation = Schema.decodeUnknownSync(PersonInvocation)({
 })
 const instance = Schema.decodeUnknownSync(LocalDaemonInstanceNonce)("0123456789abcdef0123456789abcdef")
 const installationId = Id.installation("installation_daemon_test")
+const applicationId = Id.application("application_daemon_test")
+const artifactBytes = new TextEncoder().encode("artifact transport bytes")
+
+const representationRuntime = RepresentationRuntimeLive.pipe(
+  Layer.provide(Layer.succeed(ApplicationBindings, ApplicationBindings.of({
+    get: (requested) => Effect.succeed(requested === applicationId
+      ? Option.some(Schema.decodeUnknownSync(ApplicationBaseUrl)("http://127.0.0.1:4173/"))
+      : Option.none())
+  }))),
+  Layer.provide(Layer.succeed(ArtifactStore, ArtifactStore.of({
+    put: (input) => Effect.succeed(ArtifactRepresentation.make({
+      artifactId: input.artifactId,
+      digest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    })),
+    read: () => Effect.succeed(artifactBytes)
+  })))
+)
 
 const tempDatabasePath = Effect.acquireRelease(
   Effect.sync(() => mkdtempSync(join(tmpdir(), "crit-local-daemon-"))),
@@ -59,19 +92,28 @@ const clientFor = (options: {
     invocation,
     instance,
     installationId
-  }), scope)
+  }).pipe(Layer.provide(representationRuntime)), scope)
   const server = Context.get(serverContext, HttpServer.HttpServer)
   if (server.address._tag !== "TcpAddress") return yield* Effect.die("expected TCP daemon")
   const clientContext = yield* Layer.buildWithScope(
-    LocalCanvasClient.layer({
+    Layer.merge(
+      LocalCanvasClient.layer({
       baseUrl: `http://127.0.0.1:${server.address.port}`,
       token: localApiToken(options.clientToken ?? options.token),
       origin: options.origin
-    }).pipe(Layer.provide(FetchHttpClient.layer)),
+      }),
+      LocalRepresentationClient.layer({
+        _tag: "bearer",
+        baseUrl: `http://127.0.0.1:${server.address.port}`,
+        token: localApiToken(options.clientToken ?? options.token),
+        origin: options.origin
+      })
+    ).pipe(Layer.provide(FetchHttpClient.layer)),
     scope
   )
   return {
     client: Context.get(clientContext, LocalCanvasClient),
+    representations: Context.get(clientContext, LocalRepresentationClient),
     baseUrl: `http://127.0.0.1:${server.address.port}`
   }
 })
@@ -83,6 +125,156 @@ const rawHeaders = (token: string, version = "1") => ({
 })
 
 describe("LocalDaemon", () => {
+  it("resolves application, web, unavailable, and artifact representations over bearer HTTP", () => {
+    const token = "private-token-canary-with-at-least-32-characters"
+    return Effect.runPromise(Effect.scoped(Effect.gen(function*() {
+      const databasePath = yield* tempDatabasePath
+      const { representations } = yield* clientFor({ databasePath, token })
+      const application = yield* representations.resolve(ApplicationRouteRepresentation.make({
+        applicationId,
+        route: "/preview?mode=local"
+      }))
+      expect(application).toMatchObject({
+        _tag: "iframe",
+        url: "http://127.0.0.1:4173/preview?mode=local"
+      })
+      const web = yield* representations.resolve(WebUrlRepresentation.make({
+        url: "https://example.com/preview"
+      }))
+      expect(web).toMatchObject({ _tag: "iframe", url: "https://example.com/preview" })
+      const unavailable = yield* representations.resolve(ApplicationRouteRepresentation.make({
+        applicationId: Id.application("application_unbound"),
+        route: "/"
+      }))
+      expect(unavailable).toMatchObject({ _tag: "unavailable", reason: "application-unbound" })
+      const artifact = ArtifactRepresentation.make({
+        artifactId: Id.artifact("artifact_transport"),
+        digest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      })
+      const rendered = yield* representations.resolve(artifact)
+      expect(rendered).toMatchObject({ _tag: "artifact-bytes", representation: artifact })
+      if (rendered._tag === "artifact-bytes") expect(rendered.bytes).toEqual(artifactBytes)
+    })))
+  })
+
+  it("bounds and strictly decodes representation requests", () => Effect.runPromise(Effect.scoped(Effect.gen(function*() {
+    const databasePath = yield* tempDatabasePath
+    const token = "request-bounds-token-with-at-least-32-characters"
+    const { baseUrl } = yield* clientFor({ databasePath, token })
+    const endpoint = `${baseUrl}/api/v1/representations/resolve`
+    const request = (body: string) => Effect.promise(() => fetch(endpoint, {
+      method: "POST",
+      headers: rawHeaders(token),
+      body
+    }))
+    expect((yield* request("not-json")).status).toBe(400)
+    expect((yield* request(JSON.stringify({
+      _tag: "resolve-representation",
+      schemaVersion: 1,
+      representation: {
+        _tag: "web-url",
+        url: "https://example.com/",
+        excess: true
+      }
+    }))).status).toBe(400)
+    expect((yield* request(JSON.stringify({
+      _tag: "resolve-representation",
+      schemaVersion: 1,
+      representation: {
+        _tag: "web-url",
+        url: `https://example.com/${"x".repeat(17_000)}`
+      }
+    }))).status).toBe(413)
+    const chunkedStatus = yield* Effect.promise(() => new Promise<number>((resolve, reject) => {
+      const outgoing = nodeRequest(endpoint, {
+        method: "POST",
+        headers: rawHeaders(token)
+      }, (response) => {
+        resolve(response.statusCode ?? 0)
+        response.destroy()
+      })
+      outgoing.once("error", reject)
+      outgoing.write(JSON.stringify({
+        _tag: "resolve-representation",
+        schemaVersion: 1,
+        representation: { _tag: "web-url", url: "https://example.com/" }
+      }))
+      outgoing.end()
+    }))
+    expect(chunkedStatus).toBe(411)
+  }))))
+
+  it("returns a stable representation runtime failure without leaking its reason", () =>
+    Effect.runPromise(Effect.scoped(Effect.gen(function*() {
+      const databasePath = yield* tempDatabasePath
+      const token = "runtime-failure-token-with-at-least-32-characters"
+      const scope = yield* Effect.scope
+      const secret = "private binding failure canary"
+      const failingRuntime = RepresentationRuntimeLive.pipe(
+        Layer.provide(Layer.succeed(ApplicationBindings, ApplicationBindings.of({
+          get: (requestedApplicationId) => Effect.fail(new ApplicationBindingLookupFailure({
+            applicationId: requestedApplicationId,
+            reason: secret
+          }))
+        }))),
+        Layer.provide(Layer.succeed(ArtifactStore, ArtifactStore.of({
+          put: (input) => Effect.succeed(ArtifactRepresentation.make({
+            artifactId: input.artifactId,
+            digest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          })),
+          read: () => Effect.succeed(artifactBytes)
+        })))
+      )
+      const serverContext = yield* Layer.buildWithScope(LocalDaemon.layer({
+        databasePath,
+        token: localApiToken(token),
+        allowedOrigins: new Set(),
+        invocation,
+        instance,
+        installationId
+      }).pipe(Layer.provide(failingRuntime)), scope)
+      const server = Context.get(serverContext, HttpServer.HttpServer)
+      if (server.address._tag !== "TcpAddress") return yield* Effect.die("expected TCP daemon")
+      const baseUrl = `http://127.0.0.1:${server.address.port}`
+      const clientContext = yield* Layer.buildWithScope(
+        LocalRepresentationClient.layer({ _tag: "bearer", baseUrl, token: localApiToken(token) }).pipe(
+          Layer.provide(FetchHttpClient.layer)
+        ),
+        scope
+      )
+      const clientFailure = yield* Context.get(clientContext, LocalRepresentationClient).resolve(
+        ApplicationRouteRepresentation.make({ applicationId, route: "/" })
+      ).pipe(Effect.flip)
+      expect(clientFailure).toEqual(new LocalRepresentationResolveFailure({
+        schemaVersion: 1,
+        reason: "application-binding"
+      }))
+      const response = yield* Effect.promise(() => fetch(
+        `${baseUrl}/api/v1/representations/resolve`,
+        {
+          method: "POST",
+          headers: rawHeaders(token),
+          body: JSON.stringify({
+            _tag: "resolve-representation",
+            schemaVersion: 1,
+            representation: {
+              _tag: "application-route",
+              applicationId,
+              route: "/"
+            }
+          })
+        }
+      ))
+      expect(response.status).toBe(500)
+      const body = yield* Effect.promise(() => response.text())
+      expect(JSON.parse(body)).toEqual({
+        _tag: "LocalRepresentationResolveFailure",
+        schemaVersion: 1,
+        reason: "application-binding"
+      })
+      expect(body).not.toContain(secret)
+    }))))
+
   it("propagates Effect HTTP context into domain and SQL spans", () => {
     const spans: Array<Tracer.NativeSpan> = []
     const tracer = Tracer.make({
@@ -243,7 +435,7 @@ describe("LocalDaemon", () => {
 
   it("rejects invalid bearer credentials", () => Effect.runPromise(Effect.scoped(Effect.gen(function*() {
     const databasePath = yield* tempDatabasePath
-    const { baseUrl, client } = yield* clientFor({
+    const { baseUrl, client, representations } = yield* clientFor({
       databasePath,
       token: "correct-token-with-at-least-32-characters",
       clientToken: "wrong-token-with-at-least-32-characters"
@@ -252,6 +444,10 @@ describe("LocalDaemon", () => {
     expect(failure).toEqual(new LocalApiUnauthorized({ message: "Missing or invalid bearer token" }))
     const statusFailure = yield* client.status().pipe(Effect.flip)
     expect(statusFailure).toEqual(new LocalApiUnauthorized({ message: "Missing or invalid bearer token" }))
+    const representationFailure = yield* representations.resolve(WebUrlRepresentation.make({
+      url: "https://example.com/"
+    })).pipe(Effect.flip)
+    expect(representationFailure).toEqual(new LocalApiUnauthorized({ message: "Missing or invalid bearer token" }))
     const socketFailure = yield* client.subscribe(Id.canvas("canvas_auth")).pipe(
       Effect.provide(Socket.layerWebSocketConstructorGlobal),
       Effect.flip
@@ -265,13 +461,17 @@ describe("LocalDaemon", () => {
 
   it("rejects a present foreign Origin", () => Effect.runPromise(Effect.scoped(Effect.gen(function*() {
     const databasePath = yield* tempDatabasePath
-    const { client } = yield* clientFor({
+    const { client, representations } = yield* clientFor({
       databasePath,
       token: "correct-token-with-at-least-32-characters",
       origin: "http://neighbor.example"
     })
     const failure = yield* client.open(Id.canvas("canvas_origin")).pipe(Effect.flip)
     expect(failure).toEqual(new LocalApiOriginRejected({ origin: "http://neighbor.example" }))
+    const representationFailure = yield* representations.resolve(WebUrlRepresentation.make({
+      url: "https://example.com/"
+    })).pipe(Effect.flip)
+    expect(representationFailure).toEqual(new LocalApiOriginRejected({ origin: "http://neighbor.example" }))
   }))))
 
   it("rejects unsupported versions and ignores untrusted identity fields", () =>
@@ -289,6 +489,26 @@ describe("LocalDaemon", () => {
         requestedVersion: "2",
         supportedVersion: "1"
       })
+      const versionedHttp = Layer.effect(HttpClient.HttpClient, Effect.gen(function*() {
+        const http = yield* HttpClient.HttpClient
+        return HttpClient.mapRequest(http, HttpClientRequest.setHeader("x-crit-api-version", "2"))
+      })).pipe(Layer.provide(FetchHttpClient.layer))
+      const versionedContext = yield* Layer.buildWithScope(
+        LocalRepresentationClient.layer({ _tag: "bearer", baseUrl, token: localApiToken(token) }).pipe(
+          Layer.provide(versionedHttp)
+        ),
+        yield* Effect.scope
+      )
+      const representationVersionFailure = yield* Context.get(
+        versionedContext,
+        LocalRepresentationClient
+      ).resolve(
+        WebUrlRepresentation.make({ url: "https://example.com/" })
+      ).pipe(Effect.flip)
+      expect(representationVersionFailure).toEqual(new LocalApiVersionUnsupported({
+        requestedVersion: "2",
+        supportedVersion: "1"
+      }))
 
       const canvasId = Id.canvas("canvas_untrusted_identity")
       const malicious = yield* Effect.promise(() => fetch(`${baseUrl}/api/v1/create`, {

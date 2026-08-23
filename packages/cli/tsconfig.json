@@ -9,13 +9,15 @@
     "paths": {
       "@crit/domain": ["../domain/src/index.ts"],
       "@crit/local": ["../local/src/index.ts"],
-      "@crit/replica": ["../replica/src/index.ts"]
+      "@crit/replica": ["../replica/src/index.ts"],
+      "@crit/representations": ["../representations/src/index.ts"]
     }
   },
   "include": ["src"],
   "references": [
     { "path": "../domain" },
     { "path": "../replica" },
+    { "path": "../representations" },
     { "path": "../local" }
   ]
 }

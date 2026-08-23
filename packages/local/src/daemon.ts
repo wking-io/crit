@@ -27,8 +27,14 @@ import {
   localApiVersion,
   localApiVersionHeader
 } from "@crit/replica/http"
+import {
+  LocalRepresentationResolveFailure,
+  LocalRepresentationResolveRequest,
+  RepresentationRuntime,
+  localRepresentationResolvePath
+} from "@crit/representations"
 import { NodeHttpServer } from "@effect/platform-node"
-import { Crypto, Effect, Fiber, FileSystem, Layer, Pull, Queue, Redacted, Schema, Stream } from "effect"
+import { Crypto, Effect, Fiber, FileSystem, Layer, Match, Option, Pull, Queue, Redacted, Schema, Stream } from "effect"
 import {
   HttpMiddleware,
   HttpRouter,
@@ -118,15 +124,56 @@ const handlers = (options: LocalDaemonOptions) => HttpApiBuilder.group(
   })
 )
 
-const bearerRequestAuthority = (
+type LocalRequestAuthorizationFailure =
+  | LocalApiUnauthorized
+  | LocalApiOriginRejected
+  | LocalApiVersionUnsupported
+
+const bearerCredentialAuthorizationFailure = (
   request: HttpServerRequest.HttpServerRequest,
   options: LocalDaemonOptions,
   credential: string | undefined
-) => {
-  if (credential !== Redacted.value(options.token)) return "credential"
+) : LocalRequestAuthorizationFailure | undefined => {
+  if (credential !== Redacted.value(options.token)) {
+    return new LocalApiUnauthorized({ message: "Missing or invalid bearer token" })
+  }
   const origin = request.headers.origin
-  if (origin !== undefined && !options.allowedOrigins.has(origin)) return "origin"
+  if (origin !== undefined && !options.allowedOrigins.has(origin)) {
+    return new LocalApiOriginRejected({ origin })
+  }
   return undefined
+}
+
+const bearerRequestAuthorizationFailure = (
+  request: HttpServerRequest.HttpServerRequest,
+  options: LocalDaemonOptions,
+  credential: string | undefined
+): LocalRequestAuthorizationFailure | undefined => {
+  const credentialFailure = bearerCredentialAuthorizationFailure(request, options, credential)
+  if (credentialFailure !== undefined) return credentialFailure
+  const requestedVersion = request.headers[localApiVersionHeader]
+  return requestedVersion === localApiVersion
+    ? undefined
+    : new LocalApiVersionUnsupported({
+      requestedVersion: requestedVersion ?? null,
+      supportedVersion: localApiVersion
+    })
+}
+
+const bearerCredential = (request: HttpServerRequest.HttpServerRequest) =>
+  request.headers.authorization?.startsWith("Bearer ")
+    ? request.headers.authorization.slice("Bearer ".length)
+    : undefined
+
+const authorizationFailureResponse = (failure: LocalRequestAuthorizationFailure) => {
+  switch (failure._tag) {
+    case "LocalApiUnauthorized":
+      return HttpServerResponse.jsonUnsafe(failure, { status: 401 })
+    case "LocalApiOriginRejected":
+      return HttpServerResponse.jsonUnsafe(failure, { status: 403 })
+    case "LocalApiVersionUnsupported":
+      return HttpServerResponse.jsonUnsafe(failure, { status: 426 })
+  }
 }
 
 const bearerAuthorizationLayer = (options: LocalDaemonOptions) => Layer.succeed(
@@ -134,20 +181,8 @@ const bearerAuthorizationLayer = (options: LocalDaemonOptions) => Layer.succeed(
   LocalApiAuthorization.of({
     bearer: Effect.fn(function*(httpEffect, { credential }) {
       const request = yield* HttpServerRequest.HttpServerRequest
-      const authorityFailure = bearerRequestAuthority(request, options, Redacted.value(credential))
-      if (authorityFailure === "credential") {
-        return yield* new LocalApiUnauthorized({ message: "Missing or invalid bearer token" })
-      }
-      const requestedVersion = request.headers[localApiVersionHeader]
-      if (requestedVersion !== localApiVersion) {
-        return yield* new LocalApiVersionUnsupported({
-          requestedVersion: requestedVersion ?? null,
-          supportedVersion: localApiVersion
-        })
-      }
-      if (authorityFailure === "origin") {
-        return yield* new LocalApiOriginRejected({ origin: request.headers.origin ?? "missing" })
-      }
+      const failure = bearerRequestAuthorizationFailure(request, options, Redacted.value(credential))
+      if (failure !== undefined) return yield* failure
       return yield* Effect.provideService(
         httpEffect,
         AuthenticatedInvocation,
@@ -166,7 +201,7 @@ const browserCors = (origin: string) => HttpMiddleware.cors({
   credentials: true
 })
 
-const requestAuthority = (
+const browserRequestAuthority = (
   request: HttpServerRequest.HttpServerRequest,
   browser: BrowserSessionService,
   expectedOrigin: string,
@@ -178,6 +213,35 @@ const requestAuthority = (
   if (requireOrigin && origin === undefined) return "origin"
   return undefined
 }
+
+const browserRequestAuthorizationFailure = (
+  request: HttpServerRequest.HttpServerRequest,
+  browser: BrowserSessionService,
+  requireOrigin: boolean
+): Effect.Effect<LocalRequestAuthorizationFailure | undefined> => Effect.gen(function*() {
+  if (browserRequestAuthority(request, browser, browser.browserOrigin, requireOrigin) !== undefined) {
+    return new LocalApiOriginRejected({ origin: request.headers.origin ?? "missing" })
+  }
+  return yield* browserSessionAuthorizationFailure(request, browser)
+})
+
+const browserSessionAuthorizationFailure = (
+  request: HttpServerRequest.HttpServerRequest,
+  browser: BrowserSessionService
+): Effect.Effect<LocalRequestAuthorizationFailure | undefined> => Effect.gen(function*() {
+  const requestedVersion = request.headers[localApiVersionHeader]
+  if (requestedVersion !== localApiVersion) {
+    return new LocalApiVersionUnsupported({
+      requestedVersion: requestedVersion ?? null,
+      supportedVersion: localApiVersion
+    })
+  }
+  const session = request.cookies[browser.cookieName]
+  if (session === undefined || !(yield* browser.authorize(session))) {
+    return new LocalApiUnauthorized({ message: "Missing or invalid browser session" })
+  }
+  return undefined
+})
 
 const isWebSocketUpgrade = (request: HttpServerRequest.HttpServerRequest) =>
   request.headers.upgrade?.toLowerCase() === "websocket"
@@ -206,7 +270,7 @@ const notificationSocket = (
       return HttpServerResponse.empty()
     }
     const hello = Schema.decodeUnknownOption(Schema.fromJsonString(LocalReplicaSocketHello))(candidate.value)
-    if (hello._tag === "None" || bearerRequestAuthority(request, bearerOptions, hello.value.bearer) !== undefined) {
+    if (hello._tag === "None" || bearerCredentialAuthorizationFailure(request, bearerOptions, hello.value.bearer) !== undefined) {
       yield* write(new Socket.CloseEvent(localReplicaSocketCloseCode.unauthorized, "authentication rejected"))
       return HttpServerResponse.empty()
     }
@@ -257,7 +321,7 @@ const browserNotificationRoutes = HttpRouter.use(Effect.fn(function*(router) {
   const path: `/${string}` = `${browser.path}${localReplicaNotificationsPath.slice(1)}`
   yield* router.add("GET", path, (request) => Effect.gen(function*() {
     if (!isWebSocketUpgrade(request)) return HttpServerResponse.empty({ status: 400 })
-    if (requestAuthority(request, browser, browser.browserOrigin, true) !== undefined) {
+    if (browserRequestAuthority(request, browser, browser.browserOrigin, true) !== undefined) {
       return HttpServerResponse.empty({ status: 403 })
     }
     const session = request.cookies[browser.cookieName]
@@ -280,26 +344,8 @@ const browserAuthorizationLayer = Layer.effect(
     return LocalApiAuthorization.of({
       bearer: Effect.fn(function*(httpEffect) {
         const request = yield* HttpServerRequest.HttpServerRequest
-        const authorityFailure = requestAuthority(
-          request,
-          browser,
-          browser.browserOrigin,
-          request.method !== "GET"
-        )
-        if (authorityFailure !== undefined) {
-          return yield* new LocalApiOriginRejected({ origin: request.headers.origin ?? "missing" })
-        }
-        const requestedVersion = request.headers[localApiVersionHeader]
-        if (requestedVersion !== localApiVersion) {
-          return yield* new LocalApiVersionUnsupported({
-            requestedVersion: requestedVersion ?? null,
-            supportedVersion: localApiVersion
-          })
-        }
-        const session = request.cookies[browser.cookieName]
-        if (session === undefined || !(yield* browser.authorize(session))) {
-          return yield* new LocalApiUnauthorized({ message: "Missing or invalid browser session" })
-        }
+        const failure = yield* browserRequestAuthorizationFailure(request, browser, request.method !== "GET")
+        if (failure !== undefined) return yield* failure
         return yield* Effect.provideService(
           browserCors(browser.browserOrigin)(httpEffect),
           AuthenticatedInvocation,
@@ -309,6 +355,85 @@ const browserAuthorizationLayer = Layer.effect(
     })
   })
 )
+
+const representationFailureResponse = (reason: "application-binding" | "artifact-store") =>
+  HttpServerResponse.jsonUnsafe(new LocalRepresentationResolveFailure({
+    schemaVersion: 1,
+    reason
+  }), { status: 500 })
+
+const representationRequestBody = (request: HttpServerRequest.HttpServerRequest) => Effect.gen(function*() {
+  const limit = 16_384
+  const body = yield* request.arrayBuffer.pipe(
+    Effect.provideService(HttpServerRequest.MaxBodySize, FileSystem.Size(limit)),
+    Effect.option
+  )
+  if (body._tag === "None") return "too-large" as const
+  return Schema.decodeUnknownOption(
+    Schema.fromJsonString(LocalRepresentationResolveRequest),
+    { onExcessProperty: "error" }
+  )(new TextDecoder().decode(body.value)).pipe(
+    Option.match({
+      onNone: () => "invalid" as const,
+      onSome: (value) => value
+    })
+  )
+})
+
+const resolveRepresentation = Effect.fn(function*() {
+  const runtime = yield* RepresentationRuntime
+  const request = yield* HttpServerRequest.HttpServerRequest
+  const contentLengthHeader = request.headers["content-length"]
+  if (contentLengthHeader === undefined) return HttpServerResponse.empty({ status: 411 })
+  const contentLength = Number(contentLengthHeader)
+  if (!Number.isSafeInteger(contentLength) || contentLength < 0) {
+    return HttpServerResponse.empty({ status: 400 })
+  }
+  if (contentLength > 16_384) {
+    return HttpServerResponse.empty({ status: 413 })
+  }
+  const body = yield* representationRequestBody(request)
+  if (body === "too-large") return HttpServerResponse.empty({ status: 413 })
+  if (body === "invalid") return HttpServerResponse.empty({ status: 400 })
+  return yield* runtime.resolve(body.representation).pipe(
+    Effect.map(Match.valueTags({
+      "artifact-bytes": (plan) => HttpServerResponse.uint8Array(plan.bytes, {
+        contentType: "application/octet-stream"
+      }),
+      iframe: (plan) => HttpServerResponse.jsonUnsafe(plan),
+      unavailable: (plan) => HttpServerResponse.jsonUnsafe(plan)
+    })),
+    Effect.catchTags({
+      ApplicationBindingLookupFailure: () => Effect.succeed(representationFailureResponse("application-binding")),
+      ArtifactStoreIoFailure: () => Effect.succeed(representationFailureResponse("artifact-store"))
+    })
+  )
+})
+
+const bearerRepresentationRoutes = (options: LocalDaemonOptions) => HttpRouter.use(Effect.fn(function*(router) {
+  yield* router.add("POST", localRepresentationResolvePath, (request) => {
+    const failure = bearerRequestAuthorizationFailure(request, options, bearerCredential(request))
+    if (failure !== undefined) return Effect.succeed(authorizationFailureResponse(failure))
+    return resolveRepresentation()
+  })
+}))
+
+const browserRepresentationRoutes = HttpRouter.use(Effect.fn(function*(router) {
+  const browser = yield* BrowserSession
+  const path: `/${string}` = `${browser.path}${localRepresentationResolvePath.slice(1)}`
+  yield* router.add("POST", path, (request) => Effect.gen(function*() {
+    if (browserRequestAuthority(request, browser, browser.browserOrigin, true) !== undefined) {
+      return authorizationFailureResponse(new LocalApiOriginRejected({
+        origin: request.headers.origin ?? "missing"
+      }))
+    }
+    const failure = yield* browserSessionAuthorizationFailure(request, browser)
+    const response = failure === undefined
+      ? resolveRepresentation()
+      : Effect.succeed(authorizationFailureResponse(failure))
+    return yield* browserCors(browser.browserOrigin)(response)
+  }))
+}))
 
 const browserDocument = `<!doctype html>
 <html><head><meta charset="utf-8"><title>Crit</title></head>
@@ -346,7 +471,7 @@ const browserBootstrapRoutes = HttpRouter.use(Effect.fn(function*(router) {
       }))
       : Effect.succeed(HttpServerResponse.empty({ status: 403 })))
   yield* router.add("POST", sessionPath, (request) => Effect.gen(function*() {
-    if (requestAuthority(request, browser, browser.daemonOrigin, true) !== undefined) {
+    if (browserRequestAuthority(request, browser, browser.daemonOrigin, true) !== undefined) {
       return HttpServerResponse.empty({ status: 403 })
     }
     const contentLength = Number(request.headers["content-length"] ?? "0")
@@ -368,7 +493,7 @@ const browserBootstrapRoutes = HttpRouter.use(Effect.fn(function*(router) {
     ).pipe(Effect.orDie)
   }))
   yield* router.add("OPTIONS", browserApiPath, (request) => {
-    if (requestAuthority(request, browser, browser.browserOrigin, true) !== undefined) {
+    if (browserRequestAuthority(request, browser, browser.browserOrigin, true) !== undefined) {
       return Effect.succeed(HttpServerResponse.empty({ status: 403 }))
     }
     return browserCors(browser.browserOrigin)(Effect.succeed(HttpServerResponse.empty({ status: 204 })))
@@ -411,14 +536,11 @@ const daemonLayer = (
       )
     }))
     const routeDefinitions = browser === undefined
-      ? bearerRoutes
-      : Layer.mergeAll(bearerRoutes, bearerNotificationRoutes(options), browserBootstrapRoutes, browserCanvasRoutes, browserNotificationRoutes).pipe(
+      ? Layer.mergeAll(bearerRoutes, bearerNotificationRoutes(options), bearerRepresentationRoutes(options))
+      : Layer.mergeAll(bearerRoutes, bearerNotificationRoutes(options), bearerRepresentationRoutes(options), browserBootstrapRoutes, browserCanvasRoutes, browserNotificationRoutes, browserRepresentationRoutes).pipe(
         Layer.provide(Layer.succeed(BrowserSession, browser))
       )
-    const allRoutes = browser === undefined
-      ? Layer.merge(bearerRoutes, bearerNotificationRoutes(options))
-      : routeDefinitions
-    const routes = allRoutes.pipe(Layer.provide(services))
+    const routes = routeDefinitions.pipe(Layer.provide(services))
     return HttpRouter.serve(routes).pipe(
       Layer.provideMerge(NodeHttpServer.layer(createServer, {
         host: "127.0.0.1",

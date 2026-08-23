@@ -25,3 +25,9 @@ export type {
   RepresentationRuntimeFailure,
   RepresentationRuntimeService
 } from "./runtime.js"
+export {
+  localRepresentationResolvePath,
+  LocalRepresentationJsonResponse,
+  LocalRepresentationResolveFailure,
+  LocalRepresentationResolveRequest
+} from "./http.js"
