@@ -1,5 +1,17 @@
-import { decodeCanvasCommandBatch, decodeCanvasProjection } from "@crit/domain"
-import { ReplicaView } from "@crit/replica"
+import {
+  CanvasChangeFailureSchema,
+  decodeCanvasCommandBatch,
+  decodeCanvasProjection,
+  Id
+} from "@crit/domain"
+import {
+  AcceptedUnconfirmed,
+  Blocked,
+  Conflicted,
+  Ready,
+  ReplicaView,
+  type PendingState
+} from "@crit/replica"
 import {
   IframeRenderPlan,
   type RenderPlan
@@ -80,9 +92,11 @@ const empty = decodeCanvasProjection({
 
 const decodeView = Schema.decodeUnknownSync(ReplicaView)
 
+const decodeFailure = Schema.decodeUnknownSync(CanvasChangeFailureSchema)
+
 const pendingChange = (
   changeId: string,
-  state: Record<string, unknown>,
+  state: PendingState,
   commands: ReturnType<typeof decodeCanvasCommandBatch>,
   dependencies: readonly string[] = []
 ) => ({
@@ -133,22 +147,20 @@ const mixed = decodeView({
   acknowledgedCursor: "cursor_ack",
   projection,
   pending: [
-    pendingChange("change_ready", { _tag: "ready" }, rename),
-    pendingChange("change_unconfirmed", { _tag: "accepted-unconfirmed" }, rename),
-    pendingChange("change_conflicted", {
-      _tag: "conflicted",
-      failure: {
+    pendingChange("change_ready", Ready.make({}), rename),
+    pendingChange("change_unconfirmed", AcceptedUnconfirmed.make({}), rename),
+    pendingChange("change_conflicted", Conflicted.make({
+      failure: decodeFailure({
         _tag: "precondition-failed",
         commandIndex: 0,
         field: "title",
         expected: "Review",
         actual: "Other"
-      }
-    }, rename),
-    pendingChange("change_blocked", {
-      _tag: "blocked",
-      blockedBy: ["change_conflicted"]
-    }, rename, ["change_conflicted"])
+      })
+    }), rename),
+    pendingChange("change_blocked", Blocked.make({
+      blockedBy: [Id.change("change_conflicted")]
+    }), rename, ["change_conflicted"])
   ]
 })
 
@@ -158,15 +170,14 @@ const missingFrame = decodeView({
   acknowledgedCursor: "cursor_ack",
   projection,
   pending: [
-    pendingChange("change_missing", {
-      _tag: "conflicted",
-      failure: {
+    pendingChange("change_missing", Conflicted.make({
+      failure: decodeFailure({
         _tag: "entity-not-found",
         commandIndex: 0,
         entity: "frame",
         id: "frame_missing"
-      }
-    }, addMissingFrame)
+      })
+    }), addMissingFrame)
   ]
 })
 
