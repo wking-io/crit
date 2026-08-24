@@ -13,6 +13,7 @@ import { StrictMode, act, type ReactElement } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
+import type { BridgedCommentFrame } from "@crit/frame-bridge"
 import { type FrameCommentDownMessage } from "@crit/protocol"
 
 import {
@@ -260,30 +261,44 @@ describe("CanvasBoard comment pins", () => {
 
   it("configures live element pins on the Frame comment bridge", async() => {
     const posted: FrameCommentDownMessage[] = []
-    const frameWindow = {
-      postMessage(message: FrameCommentDownMessage) {
+    const frameWindow: NonNullable<BridgedCommentFrame["contentWindow"]> = {
+      postMessage(message) {
         posted.push(message)
       }
     }
-    const stubWindow = frameWindow as Window
-    const contentWindow = vi.spyOn(HTMLIFrameElement.prototype, "contentWindow", "get")
-      .mockReturnValue(stubWindow)
-
-    await renderReady(
-      <CanvasBoard {...requiredBoard}  projection={threadedProjection} resolver={resolver} />
+    const contentWindow = Object.getOwnPropertyDescriptor(
+      HTMLIFrameElement.prototype,
+      "contentWindow"
     )
-    await waitFor(() => expect(posted.length).toBeGreaterThan(0))
-
-    const pin = posted.at(-1)?.event.pins[0]
-    expect(pin?.id).toBe("thread_element")
-    expect(pin?.anchor).toMatchObject({
-      kind: "element",
-      documentUrl: url,
-      selector: "[data-total]",
-      point: { x: 0.5, y: 0.25 }
+    if (contentWindow === undefined) {
+      throw new Error("iframe contentWindow descriptor missing")
+    }
+    Object.defineProperty(HTMLIFrameElement.prototype, "contentWindow", {
+      configurable: true,
+      get: () => frameWindow
     })
-    expect(pin?.anchor.point).not.toEqual({ x: 0.75, y: 0.2 })
-    contentWindow.mockRestore()
+    try {
+      await renderReady(
+        <CanvasBoard {...requiredBoard}  projection={threadedProjection} resolver={resolver} />
+      )
+      await waitFor(() => expect(posted.length).toBeGreaterThan(0))
+
+      const pin = posted.at(-1)?.event.pins[0]
+      expect(pin?.id).toBe("thread_element")
+      expect(pin?.anchor).toMatchObject({
+        kind: "element",
+        documentUrl: url,
+        selector: "[data-total]",
+        point: { x: 0.5, y: 0.25 }
+      })
+      expect(pin?.anchor.point).not.toEqual({ x: 0.75, y: 0.2 })
+    } finally {
+      Object.defineProperty(
+        HTMLIFrameElement.prototype,
+        "contentWindow",
+        contentWindow
+      )
+    }
   })
 
   it("keeps pins inside the transformed camera world", async() => {

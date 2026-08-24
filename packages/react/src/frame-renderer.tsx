@@ -26,6 +26,8 @@ import {
   type ReactElement
 } from "react"
 
+import { UnsandboxedLiveReviewIframe } from "./unsandboxed-live-review-iframe.js"
+
 export type FrameRendererFrame = Pick<
   Frame,
   "title" | "representation" | "representationChangedByChangeId"
@@ -215,10 +217,9 @@ function LiveFrame({
   }, [onInputIntent, plan.url])
 
   return (
-    <iframe
+    <UnsandboxedLiveReviewIframe
       className={className}
-      ref={iframeRef}
-      referrerPolicy="no-referrer"
+      iframeRef={iframeRef}
       src={plan.url}
       title={title}
     />
