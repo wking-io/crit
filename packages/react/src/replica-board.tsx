@@ -5,12 +5,14 @@ import type { ReactElement } from "react"
 
 import type { CanvasCamera } from "./canvas-camera.js"
 import { CanvasBoard } from "./canvas-board.js"
+import type { CanvasSelection } from "./canvas-selection.js"
 import type { FrameRepresentationResolver } from "./frame-renderer.js"
 
 export interface ReplicaBoardProps {
   readonly view: ReplicaView
   readonly resolver: FrameRepresentationResolver
   readonly camera?: CanvasCamera
+  readonly selection?: CanvasSelection
   readonly className?: string
 }
 
@@ -90,6 +92,7 @@ export function ReplicaBoard({
   camera,
   className,
   resolver,
+  selection,
   view
 }: ReplicaBoardProps): ReactElement {
   const status = statusFromPending(view.pending)
@@ -107,15 +110,12 @@ export function ReplicaBoard({
           )
           : null}
       </section>
-      {camera === undefined
-        ? <CanvasBoard projection={view.projection} resolver={resolver} />
-        : (
-          <CanvasBoard
-            camera={camera}
-            projection={view.projection}
-            resolver={resolver}
-          />
-        )}
+      <CanvasBoard
+        {...(camera === undefined ? {} : { camera })}
+        {...(selection === undefined ? {} : { selection })}
+        projection={view.projection}
+        resolver={resolver}
+      />
     </div>
   )
 }

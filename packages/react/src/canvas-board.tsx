@@ -1,4 +1,5 @@
 import {
+  type CanvasItemRef,
   type CanvasProjection,
   type Frame,
   type Note
@@ -10,6 +11,7 @@ import {
   type CanvasCamera,
   canvasCameraStyle
 } from "./canvas-camera.js"
+import { CanvasSelection } from "./canvas-selection.js"
 import {
   FrameRenderer,
   type FrameRepresentationResolver
@@ -20,8 +22,17 @@ export interface CanvasBoardProps {
   readonly projection: CanvasProjection
   readonly resolver: FrameRepresentationResolver
   readonly camera?: CanvasCamera
+  readonly selection?: CanvasSelection
   readonly className?: string
 }
+
+const ariaSelected = (
+  selection: CanvasSelection | undefined,
+  item: CanvasItemRef
+): true | undefined =>
+  selection !== undefined && CanvasSelection.has(selection, item)
+    ? true
+    : undefined
 
 const itemStyle = (
   geometry: Frame["geometry"] | Note["geometry"],
@@ -39,7 +50,8 @@ export function CanvasBoard({
   camera,
   className,
   projection,
-  resolver
+  resolver,
+  selection
 }: CanvasBoardProps): ReactElement {
   const frames = framesById(projection.frames)
   const notes = notesById(projection.notes)
@@ -50,41 +62,52 @@ export function CanvasBoard({
     )
     : projection.stack.map((item, zIndex) =>
       Match.value(item).pipe(Match.tagsExhaustive({
-        frame: ({ frameId }) => {
+        frame: (item) => {
+          const { frameId } = item
           const frame = frames.get(frameId)
           if (frame === undefined) return null
           return (
-            <section
+            <div
               aria-label={frame.title}
+              aria-selected={ariaSelected(selection, item)}
               key={frame.frameId}
+              role="option"
               style={itemStyle(frame.geometry, zIndex)}
             >
               <FrameRenderer frame={frame} resolver={resolver} />
-            </section>
+            </div>
           )
         },
-        note: ({ noteId }) => {
+        note: (item) => {
+          const { noteId } = item
           const note = notes.get(noteId)
           if (note === undefined) return null
           return (
-            <article
+            <div
+              aria-label={note.text}
+              aria-selected={ariaSelected(selection, item)}
               key={note.noteId}
+              role="option"
               style={itemStyle(note.geometry, zIndex)}
             >
               {note.text}
-            </article>
+            </div>
           )
         }
       }))
     )
 
+  const hasItems = projection.stack.length > 0
+
   return (
     <section
       aria-label={projection.title}
+      aria-multiselectable={hasItems ? true : undefined}
       className={className}
+      role={hasItems ? "listbox" : undefined}
       style={{ position: "relative" }}
     >
-      {camera === undefined || projection.stack.length === 0
+      {camera === undefined || !hasItems
         ? items
         : <div style={canvasCameraStyle(camera)}>{items}</div>}
     </section>
