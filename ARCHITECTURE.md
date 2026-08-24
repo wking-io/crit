@@ -26,6 +26,7 @@ packages/
 ├── representations/  RepresentationRuntime and RenderPlan
 ├── client/           HTTP and WebSocket clients
 ├── react/            primary review UI
+├── host/             browser composition root (depends on react + client)
 ├── frame-bridge/     versioned browser bridge
 ├── local/            crit dev, SQLite, and filesystem artifacts
 ├── cloudflare/       Worker, Durable Object, D1, R2, OAuth, and MCP
