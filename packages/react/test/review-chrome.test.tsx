@@ -127,7 +127,7 @@ describe("ReviewChrome", () => {
     expect(container.querySelector("[aria-label='Exit fullscreen']")).toBeNull()
   })
 
-  it("submits an add-note batch from the form", async() => {
+  it("submits an add-frame batch from the form", async() => {
     vi.spyOn(crypto, "randomUUID")
       .mockReturnValue("00000000-0000-4000-8000-000000000001")
     const onSubmit = vi.fn()
@@ -138,10 +138,10 @@ describe("ReviewChrome", () => {
         selection={selection([])}
       />
     ))
-    const input = container.querySelector("[aria-label='Note text']")
-    const form = container.querySelector("form[aria-label='Add note']")
+    const input = container.querySelector("[aria-label='Frame URL']")
+    const form = container.querySelector("form[aria-label='Add frame']")
     if (!(input instanceof HTMLInputElement) || !(form instanceof HTMLFormElement)) {
-      throw new Error("Add Note form missing")
+      throw new Error("Add Frame form missing")
     }
 
     await act(async() => {
@@ -149,18 +149,21 @@ describe("ReviewChrome", () => {
         HTMLInputElement.prototype,
         "value"
       )?.set
-      setValue?.call(input, "New note")
+      setValue?.call(input, "https://example.org/review")
       input.dispatchEvent(new Event("input", { bubbles: true }))
     })
     await act(async() => form.requestSubmit())
 
     expect(onSubmit).toHaveBeenCalledWith([{
-      _tag: "add-note",
-      noteId: "note_00000000000040008000000000000001",
-      text: "New note",
-      color: "neutral",
-      geometry: { x: 40, y: 40, width: 240, height: 160 },
-      attachedFrameId: null
+      _tag: "add-frame",
+      frameId: "frame_00000000000040008000000000000001",
+      title: "https://example.org/review",
+      representation: {
+        _tag: "web-url",
+        url: "https://example.org/review"
+      },
+      status: "in-progress",
+      geometry: { x: 80, y: 80, width: 1280, height: 832 }
     }])
   })
 })

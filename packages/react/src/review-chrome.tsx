@@ -34,12 +34,6 @@ const formActions = [
     inputTag: "url"
   },
   {
-    id: "add-note",
-    label: "Add note",
-    inputLabel: "Note text",
-    inputTag: "text"
-  },
-  {
     id: "rename-canvas",
     label: "Rename canvas",
     inputLabel: "Canvas title",
@@ -49,30 +43,6 @@ const formActions = [
     id: "set-frame-title",
     label: "Set frame title",
     inputLabel: "Frame title",
-    inputTag: "text"
-  },
-  {
-    id: "edit-note",
-    label: "Edit note",
-    inputLabel: "Note text",
-    inputTag: "text"
-  },
-  {
-    id: "compose-comment",
-    label: "Add comment",
-    inputLabel: "Comment body",
-    inputTag: "text"
-  },
-  {
-    id: "reply-comment",
-    label: "Reply",
-    inputLabel: "Reply body",
-    inputTag: "text"
-  },
-  {
-    id: "edit-comment",
-    label: "Edit latest comment",
-    inputLabel: "Comment body",
     inputTag: "text"
   }
 ] as const satisfies readonly {

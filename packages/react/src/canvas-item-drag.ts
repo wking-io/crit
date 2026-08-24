@@ -2,9 +2,7 @@ import {
   type CanvasCommandBatch,
   type Frame,
   type Geometry,
-  type Note,
-  proposeSetFrameGeometry,
-  proposeSetNoteGeometry
+  proposeSetFrameGeometry
 } from "@crit/domain"
 import {
   useRef,
@@ -14,11 +12,10 @@ import {
 
 import type { CanvasCamera } from "./canvas-camera.js"
 
-type CanvasItem = Frame | Note
 type DragMode = "move" | "resize"
 
 type CanvasDrag = {
-  readonly item: CanvasItem
+  readonly frame: Frame
   readonly mode: DragMode
   readonly pointerId: number
   readonly startClientX: number
@@ -26,12 +23,9 @@ type CanvasDrag = {
 }
 
 type DragPreview = {
-  readonly itemKey: string
+  readonly frameId: Frame["frameId"]
   readonly geometry: Geometry
 }
-
-const itemKey = (item: CanvasItem): string =>
-  "frameId" in item ? `frame:${item.frameId}` : `note:${item.noteId}`
 
 const dragGeometry = (
   drag: CanvasDrag,
@@ -43,15 +37,15 @@ const dragGeometry = (
   const deltaY = (clientY - drag.startClientY) / zoom
   if (drag.mode === "move") {
     return {
-      ...drag.item.geometry,
-      x: drag.item.geometry.x + deltaX,
-      y: drag.item.geometry.y + deltaY
+      ...drag.frame.geometry,
+      x: drag.frame.geometry.x + deltaX,
+      y: drag.frame.geometry.y + deltaY
     }
   }
   return {
-    ...drag.item.geometry,
-    width: Math.max(1, drag.item.geometry.width + deltaX),
-    height: Math.max(1, drag.item.geometry.height + deltaY)
+    ...drag.frame.geometry,
+    width: Math.max(1, drag.frame.geometry.width + deltaX),
+    height: Math.max(1, drag.frame.geometry.height + deltaY)
   }
 }
 
@@ -69,7 +63,7 @@ export const useCanvasItemDrag = (args: {
   const [preview, setPreview] = useState<DragPreview | null>(null)
 
   const begin = (
-    item: CanvasItem,
+    frame: Frame,
     mode: DragMode,
     event: ReactPointerEvent<HTMLElement>
   ) => {
@@ -77,23 +71,23 @@ export const useCanvasItemDrag = (args: {
     event.preventDefault()
     event.currentTarget.setPointerCapture?.(event.pointerId)
     dragRef.current = {
-      item,
+      frame,
       mode,
       pointerId: event.pointerId,
       startClientX: event.clientX,
       startClientY: event.clientY
     }
-    setPreview({ itemKey: itemKey(item), geometry: item.geometry })
+    setPreview({ frameId: frame.frameId, geometry: frame.geometry })
   }
 
-  const geometryFor = (item: CanvasItem): Geometry =>
-    preview?.itemKey === itemKey(item) ? preview.geometry : item.geometry
+  const geometryFor = (frame: Frame): Geometry =>
+    preview?.frameId === frame.frameId ? preview.geometry : frame.geometry
 
   const update = (event: ReactPointerEvent<HTMLElement>) => {
     const drag = dragRef.current
     if (drag === null || drag.pointerId !== event.pointerId) return
     setPreview({
-      itemKey: itemKey(drag.item),
+      frameId: drag.frame.frameId,
       geometry: dragGeometry(
         drag,
         event.clientX,
@@ -116,13 +110,9 @@ export const useCanvasItemDrag = (args: {
     setPreview(null)
     if (
       args.onSubmit === undefined ||
-      sameGeometry(geometry, drag.item.geometry)
+      sameGeometry(geometry, drag.frame.geometry)
     ) return
-    args.onSubmit([
-      "frameId" in drag.item
-        ? proposeSetFrameGeometry(drag.item, geometry)
-        : proposeSetNoteGeometry(drag.item, geometry)
-    ])
+    args.onSubmit([proposeSetFrameGeometry(drag.frame, geometry)])
   }
 
   const cancel = () => {

@@ -8,7 +8,7 @@ The alpha remains runnable as a behavior reference. The rewrite does not read it
 
 ## Product outcome
 
-Crit is a local-first collaborative review canvas for live applications. The UI is the primary viewing and review surface. People and agents both create and edit Frames, Notes, and comments.
+Crit is a local-first collaborative review canvas for live applications. The UI is the primary viewing and review surface. The first-release UI is Frames only. Notes and comments stay in the domain model for later.
 
 Local work is complete without an account:
 
@@ -138,10 +138,9 @@ The rewrite intentionally ports these alpha behaviors:
 
 - Stable Canvas entity IDs and atomic semantic command batches.
 - Narrow content preconditions and explicit recoverable conflicts.
-- Frame and Note geometry, stacking, attachment, deletion, and Note Color.
-- Note and Comment Actor authors stamped from the accepted change.
+- Frame geometry, stacking, deletion, and review status.
 - Immutable capture artifacts with cleanup after rejected commits.
-- Infinite Canvas camera, iframe lifecycle, input relay, and comment anchoring.
+- Infinite Canvas camera, iframe lifecycle, and input relay.
 - Review status and visible Person, Agent, and presence information.
 - Align and distribute, breakpoint presets, contextual help, pause-offscreen Frames, fullscreen, open in new tab, and developer copy-node-id. Not undo or redo, and not a fit-page display command.
 

@@ -1,4 +1,4 @@
-import { decodeCanvasProjection, proposeSetNoteColor } from "@crit/domain"
+import { decodeCanvasProjection } from "@crit/domain"
 import {
   IframeRenderPlan,
   type RenderPlan
@@ -123,7 +123,7 @@ afterEach(async() => {
 })
 
 describe("CanvasBoard", () => {
-  it("places Frames and Notes from the projection stack", async() => {
+  it("places Frames from the projection stack", async() => {
     const resolver: FrameRepresentationResolver = {
       resolve: () => Effect.succeed(IframeRenderPlan.make({
         representation: projection.frames[0]!.representation,
@@ -138,7 +138,6 @@ describe("CanvasBoard", () => {
 
     const board = container.querySelector("[aria-label='Review']")
     const frame = container.querySelector("[aria-label='Checkout']")
-    const note = container.querySelector("[aria-label='Check the price by Ada']")
     expect(board).not.toBeNull()
     expect(frame).toBeInstanceOf(HTMLElement)
     if (!(frame instanceof HTMLElement)) return
@@ -149,11 +148,7 @@ describe("CanvasBoard", () => {
     expect(frame.style.zIndex).toBe("0")
     expect(frame.getAttribute("data-review-status")).toBe("in-progress")
     expect(frame.textContent).toContain("In progress")
-    expect(note?.textContent).toBe("Check the price")
-    expect(note?.getAttribute("data-note-color")).toBe("blue")
-    expect(note?.getAttribute("data-note-author")).toBe("Ada")
-    expect(note?.style.left).toBe("400px")
-    expect(note?.style.zIndex).toBe("1")
+    expect(container.querySelector("[aria-label='Check the price by Ada']")).toBeNull()
     expect(container.querySelector("iframe")?.getAttribute("src")).toBe(url)
   })
 
@@ -165,7 +160,7 @@ describe("CanvasBoard", () => {
       <CanvasBoard {...requiredBoard} projection={empty} resolver={resolver} />
     ))
     expect(container.querySelector("[role='status']")?.textContent).toBe(
-      "Empty has no Frames or Notes."
+      "Empty has no Frames."
     )
     expect(container.querySelector("iframe")).toBeNull()
     expect(container.querySelector("[aria-label='Check the price by Ada']")).toBeNull()
@@ -192,7 +187,7 @@ describe("CanvasBoard", () => {
     expect(frame.textContent).toContain("Ready for review")
   })
 
-  it("submits a Note Color change for the selected Note", async() => {
+  it("removes the selected Frame with Delete", async() => {
     const onSubmit = vi.fn()
     const resolver: FrameRepresentationResolver = {
       resolve: () => Effect.succeed(IframeRenderPlan.make({
@@ -200,43 +195,16 @@ describe("CanvasBoard", () => {
         url
       }) satisfies RenderPlan)
     }
-    const note = projection.notes[0]
-    if (note === undefined) throw new Error("Note missing")
     await act(async() => render(
       <CanvasBoard
         {...requiredBoard}
         onSubmit={onSubmit}
         projection={projection}
         resolver={resolver}
-        selection={CanvasSelection.make([{ _tag: "note", noteId: note.noteId }])}
-      />
-    ))
-    const green = container.querySelector(
-      "[aria-label='Set note color to green']"
-    )
-    expect(green).toBeInstanceOf(HTMLButtonElement)
-    if (!(green instanceof HTMLButtonElement)) return
-    await act(async() => green.click())
-    expect(onSubmit).toHaveBeenCalledWith([proposeSetNoteColor(note, "green")])
-  })
-
-  it("removes the selected item with Delete", async() => {
-    const onSubmit = vi.fn()
-    const resolver: FrameRepresentationResolver = {
-      resolve: () => Effect.succeed(IframeRenderPlan.make({
-        representation: projection.frames[0]!.representation,
-        url
-      }) satisfies RenderPlan)
-    }
-    const note = projection.notes[0]
-    if (note === undefined) throw new Error("Note missing")
-    await act(async() => render(
-      <CanvasBoard
-        {...requiredBoard}
-        onSubmit={onSubmit}
-        projection={projection}
-        resolver={resolver}
-        selection={CanvasSelection.make([{ _tag: "note", noteId: note.noteId }])}
+        selection={CanvasSelection.make([{
+          _tag: "frame",
+          frameId: "frame_checkout"
+        }])}
       />
     ))
 
@@ -244,8 +212,8 @@ describe("CanvasBoard", () => {
       window.dispatchEvent(new KeyboardEvent("keydown", { key: "Delete" }))
     })
     expect(onSubmit).toHaveBeenCalledWith([{
-      _tag: "remove-note",
-      noteId: "note_price",
+      _tag: "remove-frame",
+      frameId: "frame_checkout",
       expectedUpdatedByChangeId: "change_1"
     }])
   })
@@ -323,48 +291,6 @@ describe("CanvasBoard", () => {
       frameId: "frame_checkout",
       expectedChangedByChangeId: "change_1",
       geometry: { x: 60, y: 110, width: 320, height: 200 }
-    }])
-  })
-
-  it("submits selected Note geometry after pointer resize", async() => {
-    const onSubmit = vi.fn()
-    const resolver: FrameRepresentationResolver = {
-      resolve: () => Effect.succeed(IframeRenderPlan.make({
-        representation: projection.frames[0]!.representation,
-        url
-      }) satisfies RenderPlan)
-    }
-    await act(async() => render(
-      <CanvasBoard
-        {...requiredBoard}
-        onSubmit={onSubmit}
-        projection={projection}
-        resolver={resolver}
-        selection={CanvasSelection.make([{
-          _tag: "note",
-          noteId: "note_price"
-        }])}
-      />
-    ))
-    const resize = container.querySelector(
-      "[aria-label='Resize Check the price']"
-    )
-    const board = container.querySelector("[aria-label='Review']")
-    if (!(resize instanceof HTMLElement) || !(board instanceof HTMLElement)) {
-      throw new Error("Note resize handle missing")
-    }
-
-    await act(async() => {
-      pointer(resize, "pointerdown", 100, 100)
-      pointer(board, "pointermove", 130, 120)
-      pointer(board, "pointerup", 130, 120)
-    })
-
-    expect(onSubmit).toHaveBeenCalledWith([{
-      _tag: "set-note-geometry",
-      noteId: "note_price",
-      expectedChangedByChangeId: "change_1",
-      geometry: { x: 400, y: 80, width: 190, height: 100 }
     }])
   })
 

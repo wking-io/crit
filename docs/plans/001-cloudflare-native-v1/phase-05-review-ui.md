@@ -6,12 +6,12 @@ Port the useful alpha interaction model onto `CanvasReplica` and `Representation
 
 ## Build
 
-- Implement Canvas navigation, Frame and Note layout, stacking, resizing, attachment, review status, comments, anchors, captures, presence, and sync state.
+- Implement Canvas navigation, Frame layout, stacking, resizing, review status, captures, presence, and sync state.
 - Keep UI state such as camera, selection, hover, and transient drafts outside the canonical Canvas Projection.
 - Show pending, synchronized, conflicted, unavailable, and offline states directly.
-- Display Person and Agent authorship on Notes and Comments without implying that the delegating Person performed Agent work.
+- The first-release review UI is Frames only. Do not paint or mutate Notes or Comment Threads.
 - Preserve loaded iframe behavior and responsive viewport presets where verified by the behavior reference. Do not add a fit-page display command.
-- Port align and distribute, breakpoint presets, contextual help, pause-offscreen Frames, fullscreen, open in new tab, Note Color, and developer copy-node-id. Do not port undo and redo.
+- Port align and distribute, breakpoint presets, contextual help, pause-offscreen Frames, fullscreen, open in new tab, and developer copy-node-id. Do not port undo and redo.
 
 ## Prove
 

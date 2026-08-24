@@ -138,22 +138,18 @@ const commandsFor = (
 
 describe("review actions", () => {
   it("lists policies available for the current selection", () => {
-    const selection = itemSelection([{ _tag: "note", noteId: "note_a" }])
+    const selection = itemSelection([{ _tag: "frame", frameId: "frame_a" }])
     const ids = availableReviewActions({ projection, selection })
       .map((entry) => entry.id)
 
     expect(ids).toContain("remove")
-    expect(ids).toContain("set-note-color-green")
-    expect(ids).not.toContain("set-note-color-blue")
-    expect(ids).not.toContain("set-frame-status-approved")
+    expect(ids).toContain("set-frame-status-approved")
+    expect(ids).not.toContain("set-frame-status-in-progress")
   })
 
-  it("builds mutation batches for status, title, color, remove, and stacking", () => {
+  it("builds mutation batches for status, title, remove, and stacking", () => {
     const frame = context(itemSelection([
       { _tag: "frame", frameId: "frame_a" }
-    ]))
-    const note = context(itemSelection([
-      { _tag: "note", noteId: "note_a" }
     ]))
 
     expect(commandsFor("set-frame-status-approved", frame)).toEqual([{
@@ -171,15 +167,9 @@ describe("review actions", () => {
       expectedChangedByChangeId: "change_1",
       title: "Updated"
     }])
-    expect(commandsFor("set-note-color-green", note)).toEqual([{
-      _tag: "set-note-color",
-      noteId: "note_a",
-      expectedChangedByChangeId: "change_1",
-      color: "green"
-    }])
-    expect(commandsFor("remove", note)).toEqual([{
-      _tag: "remove-note",
-      noteId: "note_a",
+    expect(commandsFor("remove", frame)).toEqual([{
+      _tag: "remove-frame",
+      frameId: "frame_a",
       expectedUpdatedByChangeId: "change_1"
     }])
     expect(commandsFor("bring-to-front", frame)).toEqual([{
@@ -190,11 +180,9 @@ describe("review actions", () => {
     }])
   })
 
-  it("mints ids when adding Frames and Notes", () => {
+  it("mints ids when adding Frames", () => {
     const randomUUID = vi.spyOn(crypto, "randomUUID")
-    randomUUID
-      .mockReturnValueOnce("00000000-0000-4000-8000-000000000001")
-      .mockReturnValueOnce("00000000-0000-4000-8000-000000000002")
+    randomUUID.mockReturnValueOnce("00000000-0000-4000-8000-000000000001")
     const selection = itemSelection([])
 
     expect(commandsFor("add-frame", context(selection, {
@@ -208,38 +196,6 @@ describe("review actions", () => {
         url: "https://example.org/review"
       }
     })
-    expect(commandsFor("add-note", context(selection, {
-      _tag: "text",
-      text: "New note"
-    }))[0]).toMatchObject({
-      _tag: "add-note",
-      noteId: "note_00000000000040008000000000000002",
-      text: "New note",
-      color: "neutral",
-      attachedFrameId: null
-    })
-  })
-
-  it("builds attachment and detachment batches", () => {
-    const pair = context(itemSelection([
-      { _tag: "frame", frameId: "frame_a" },
-      { _tag: "note", noteId: "note_a" }
-    ]))
-    const attached = context(itemSelection([
-      { _tag: "note", noteId: "note_b" }
-    ]))
-
-    expect(commandsFor("attach-note", pair)).toEqual([{
-      _tag: "attach-note",
-      noteId: "note_a",
-      frameId: "frame_a",
-      expectedChangedByChangeId: "change_1"
-    }])
-    expect(commandsFor("detach-note", attached)).toEqual([{
-      _tag: "detach-note",
-      noteId: "note_b",
-      expectedChangedByChangeId: "change_1"
-    }])
   })
 
   it("maps arrangement and breakpoint plans onto geometry commands", () => {
@@ -295,47 +251,4 @@ describe("review actions", () => {
     })
   })
 
-  it("builds comment compose, reply, edit, and resolution batches", () => {
-    const randomUUID = vi.spyOn(crypto, "randomUUID")
-    randomUUID
-      .mockReturnValueOnce("00000000-0000-4000-8000-000000000003")
-      .mockReturnValueOnce("00000000-0000-4000-8000-000000000004")
-      .mockReturnValueOnce("00000000-0000-4000-8000-000000000005")
-    const frame = context(itemSelection([
-      { _tag: "frame", frameId: "frame_a" }
-    ]), { _tag: "text", text: "New thread" })
-    const thread = context(
-      { _tag: "comment-thread", threadId: "thread_a" },
-      { _tag: "text", text: "Reply" }
-    )
-
-    expect(commandsFor("compose-comment", frame)[0]).toMatchObject({
-      _tag: "add-comment-thread",
-      threadId: "thread_00000000000040008000000000000003",
-      commentId: "comment_00000000000040008000000000000004",
-      body: "New thread"
-    })
-    expect(commandsFor("reply-comment", thread)[0]).toMatchObject({
-      _tag: "reply-to-comment-thread",
-      threadId: "thread_a",
-      commentId: "comment_00000000000040008000000000000005",
-      body: "Reply"
-    })
-    expect(commandsFor("edit-comment", {
-      ...thread,
-      input: { _tag: "text", text: "Edited" }
-    })).toEqual([{
-      _tag: "edit-comment",
-      threadId: "thread_a",
-      commentId: "comment_a",
-      expectedBody: "Review this",
-      body: "Edited"
-    }])
-    expect(commandsFor("resolve-comment", thread)).toEqual([{
-      _tag: "set-comment-thread-resolution",
-      threadId: "thread_a",
-      expectedChangedByChangeId: "change_1",
-      resolved: true
-    }])
-  })
 })

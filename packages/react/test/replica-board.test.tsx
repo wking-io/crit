@@ -260,7 +260,7 @@ describe("ReplicaBoard", () => {
     const boardStatus = [...container.querySelectorAll("[role='status']")]
       .map((node) => node.textContent)
     expect(boardStatus).toContain("Empty is synchronized.")
-    expect(boardStatus).toContain("Empty has no Frames or Notes.")
+    expect(boardStatus).toContain("Empty has no Frames.")
     expect(container.querySelector("iframe")).toBeNull()
   })
 
