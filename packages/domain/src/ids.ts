@@ -39,12 +39,6 @@ export type ChangeId = typeof ChangeId.Type
 export const ExecutionId = semanticId("execution_", "ExecutionId")
 export type ExecutionId = typeof ExecutionId.Type
 
-export const OAuthClientId = semanticId("oauth_client_", "OAuthClientId")
-export type OAuthClientId = typeof OAuthClientId.Type
-
-export const GrantId = semanticId("grant_", "GrantId")
-export type GrantId = typeof GrantId.Type
-
 export const HttpUrl = Schema.String.check(
   Schema.isPattern(/^https?:\/\/[^/?#\s]+(?:[/?#][^\s]*)?$/)
 ).pipe(Schema.brand("HttpUrl"))
@@ -85,7 +79,5 @@ export const Id = {
   application: Schema.decodeUnknownSync(ApplicationId),
   artifact: Schema.decodeUnknownSync(ArtifactId),
   change: Schema.decodeUnknownSync(ChangeId),
-  execution: Schema.decodeUnknownSync(ExecutionId),
-  oauthClient: Schema.decodeUnknownSync(OAuthClientId),
-  grant: Schema.decodeUnknownSync(GrantId)
+  execution: Schema.decodeUnknownSync(ExecutionId)
 }

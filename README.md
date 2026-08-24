@@ -2,7 +2,7 @@
 
 Crit is a local-first collaborative review canvas for live web applications.
 
-People use the Crit UI to arrange live pages, compare responsive Frames, leave Notes and comments, preserve captures, and review changes together. Agents can create and edit the same content through local tools or an OAuth Code Mode MCP server.
+Authors use the Crit UI, CLI, and local agents to arrange live pages, compare responsive Frames, and preserve captures. After share, teammates review in the hosted UI. They do not install Crit. v1 is Frames only.
 
 ## Rewrite status
 
@@ -31,30 +31,23 @@ npx crit share checkout-redesign
 
 Crit selects the remembered accessible Workspace. Otherwise it selects the Installation's default Workspace. Run Workspace commands only to switch.
 
-## Target agent workflow
+## Target review workflow
 
-Local agents connect to `crit dev`. Shared agents connect to:
+Local agents connect to `crit dev` while the author is building. After share, review is human-led.
 
-```text
-https://mcp.crit.acme.internal/mcp
-```
+A teammate opens the hosted review UI and signs in with Cloudflare Access. They do not install Crit. Crit has no MCP server and no OAuth agent grants.
 
-The remote MCP server uses OAuth and exposes two Code Mode tools:
-
-- `search` discovers the relevant typed Crit operations.
-- `execute` runs code against a capability-limited `crit` client.
-
-Accepted work identifies the Agent as author. Crit also records the Person who delegated access and optional reported harness, model, session, and task metadata.
+Accepted local Agent work identifies the Agent as author. Crit also records the Person who ran that Agent and optional reported harness, model, session, and task metadata.
 
 ## Target Cloudflare deployment
 
 Crit runs in the customer's Cloudflare account:
 
-- Workers serve the API, OAuth routes, MCP routing, and Static Assets.
+- Workers serve the API, hosted review UI, and Static Assets.
 - Cloudflare Access supplies company identity.
-- D1 stores Installation, Workspace, membership, grant, Application, and Deployment data.
+- D1 stores Installation, Workspace, membership, Application, and Deployment data.
 - One SQLite Durable Object owns each shared Canvas Ledger.
-- R2 stores immutable artifacts and retained Agent execution records.
+- R2 stores immutable artifacts.
 
 One Installation is one tenant. Crit v1 has no Organization model.
 
@@ -84,4 +77,4 @@ npm test
 npm run verify
 ```
 
-The rewrite adds shared conformance suites for the local SQLite authority and Canvas Durable Object, plus end-to-end local, synchronization, Representation, installation, and OAuth MCP proofs.
+The rewrite adds shared conformance suites for the local SQLite authority and Canvas Durable Object, plus end-to-end local, synchronization, Representation, installation, and hosted-review proofs.

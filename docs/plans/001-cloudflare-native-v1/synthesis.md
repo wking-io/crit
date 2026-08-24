@@ -8,19 +8,21 @@ The first architecture pass chose a strangler migration because Crit already has
 
 The product decision changed: compatibility is not a goal. Crit can be rewritten to make the stable v1 as coherent as possible.
 
+A later product decision withdrew remote agents. Shared work is human review in the hosted UI. See [ADR 0001](../../adr/0001-hosted-review-no-mcp.md).
+
 ## New conclusion
 
 Use the clean target directly:
 
-- Organize the implementation around `CanvasEngine`, `CanvasAuthority`, `CanvasReplica`, `RepresentationRuntime`, and `CodeExecutionRuntime`.
+- Organize the implementation around `CanvasEngine`, `CanvasAuthority`, `CanvasReplica`, and `RepresentationRuntime`.
 - Establish the final package ownership graph immediately.
 - Build on an ordered semantic ledger from the first persisted change.
 - Use SQLite for the local authority and one SQLite Durable Object for each shared Canvas.
 - Store logical Representations from the first Frame.
 - Keep all Actor attribution outside client commands and stamp it at trusted boundaries.
 - Make `crit dev` the only local state owner.
-- Make the UI and every Agent client consume the same replica and operation contracts.
-- Keep Cloudflare and experimental Code Mode details behind adapters.
+- Serve the shared review UI from the Worker. A reviewer has no local replica.
+- Keep Cloudflare types out of domain packages.
 
 ## What the alpha still contributes
 
@@ -39,7 +41,7 @@ A clean rewrite does not mean one undifferentiated implementation jump. The phas
 5. Review UI.
 6. Cloudflare platform.
 7. Synchronization.
-8. OAuth MCP.
+8. Hosted review.
 9. Installation and release.
 
 This sequence protects correctness without preserving the old architecture.
@@ -53,7 +55,8 @@ This sequence protects correctness without preserving the old architecture.
 - D1 as the canonical Canvas ledger.
 - A Queue in the commit path.
 - Whole-Canvas CRDTs for v1.
-- Cloudflare bindings or Code Mode SDK types in domain packages.
-- One MCP tool per Canvas command.
+- Cloudflare bindings in domain packages.
+- A remote MCP server, Code Mode runtime, or OAuth agent grants.
 - Automatic localhost tunneling or a generic URL proxy.
 - Organization tenancy inside one customer installation.
+- Requiring teammates to install Crit in order to review.

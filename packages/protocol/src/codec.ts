@@ -58,7 +58,7 @@ const preflight = (
 const trustedFields = new Set([
   "acceptedAt", "attribution", "sequence", "cursor", "subject", "actor",
   "author", "person", "agent", "editedAt", "at", "time", "digest", "hash",
-  "personId", "agentId", "oauthClientId", "grantId", "executionId",
+  "personId", "agentId", "executionId",
   "delegatedBy", "reportedRuntime", "harness", "model", "source", "sessionId",
   "taskId", "displayName"
 ])

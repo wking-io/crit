@@ -56,11 +56,9 @@ describe("Principal", () => {
   }
   const agentPrincipal = {
     _tag: "agent",
-    subject: "oauth|codex",
+    subject: "local-agent|codex",
     agent,
-    delegatedBy: person,
-    oauthClientId: "oauth_client_codex",
-    grantId: "grant_storefront"
+    delegatedBy: person
   }
 
   it.each([personPrincipal, agentPrincipal])("round-trips every variant", (input) => {
@@ -70,12 +68,12 @@ describe("Principal", () => {
 
   it("requires the fields belonging to each variant", () => {
     expect(() => decodePrincipal({ _tag: "person", subject: "oidc|will", agent })).toThrow()
-    expect(() => decodePrincipal({ _tag: "agent", subject: "oauth|codex", agent })).toThrow()
+    expect(() => decodePrincipal({ _tag: "agent", subject: "local-agent|codex", agent })).toThrow()
   })
 
   it("rejects malformed and extra fields", () => {
     expect(() => decodePrincipal({ ...personPrincipal, executionId: "execution_01K" })).toThrow()
-    expect(() => decodePrincipal({ ...agentPrincipal, grantId: "wrong" })).toThrow()
+    expect(() => decodePrincipal({ ...agentPrincipal, grantId: "grant_storefront" })).toThrow()
   })
 })
 
@@ -107,8 +105,6 @@ describe("AcceptedAttribution", () => {
     _tag: "agent",
     agent,
     delegatedBy: person,
-    oauthClientId: "oauth_client_codex",
-    grantId: "grant_storefront",
     executionId: "execution_01K",
     reportedRuntime
   }
@@ -125,7 +121,7 @@ describe("AcceptedAttribution", () => {
     })).toThrow()
     expect(() => decodeAcceptedAttribution({
       ...agentAttribution,
-      subject: "oauth|codex"
+      subject: "local-agent|codex"
     })).toThrow()
   })
 
@@ -140,7 +136,7 @@ describe("AcceptedAttribution", () => {
   })
 
   it("rejects malformed and extra fields", () => {
-    expect(() => decodeAcceptedAttribution({ ...agentAttribution, grantId: "bad" })).toThrow()
+    expect(() => decodeAcceptedAttribution({ ...agentAttribution, grantId: "grant_storefront" })).toThrow()
     expect(() => decodeAcceptedAttribution({ ...personAttribution, delegatedBy: person })).toThrow()
   })
 
@@ -154,11 +150,9 @@ describe("AcceptedAttribution", () => {
     }))).toEqual(person)
     expect(actorFromPrincipal(decodePrincipal({
       _tag: "agent",
-      subject: "oauth|codex",
+      subject: "local-agent|codex",
       agent,
-      delegatedBy: person,
-      oauthClientId: "oauth_client_codex",
-      grantId: "grant_storefront"
+      delegatedBy: person
     }))).toEqual(agent)
   })
 })

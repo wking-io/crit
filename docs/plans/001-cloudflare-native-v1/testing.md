@@ -22,11 +22,11 @@ Run one suite against local and shared resolvers. Cover `application-route`, `we
 
 ### Protocol contracts
 
-Keep versioned fixtures for HTTP, WebSocket, MCP, manifest, and bridge messages. Decode every fixture at the boundary. Reject unknown incompatible versions with a structured upgrade error.
+Keep versioned fixtures for HTTP, WebSocket, manifest, and bridge messages. Decode every fixture at the boundary. Reject unknown incompatible versions with a structured upgrade error.
 
 ### Security
 
-Prove that the server ignores client-supplied actor and timestamp fields. Prove that an OAuth grant cannot cross its Workspace or scopes. Prove that Code Mode code cannot read bindings, tokens, arbitrary network resources, or another Workspace. Prove that ordinary production builds and ordinary production previews contain no Frame Bridge markers. Prove that only an explicit shared-review-preview opt-in adds them.
+Prove that the server ignores client-supplied actor and timestamp fields. Prove that Access and Workspace policy cannot cross an unauthorized Workspace. Prove that ordinary production builds and ordinary production previews contain no Frame Bridge markers. Prove that only an explicit shared-review-preview opt-in adds them. Prove that `/mcp` and agent OAuth routes do not exist.
 
 ## Runtime proofs
 
@@ -40,11 +40,11 @@ Open one shared Canvas from two isolated local replicas. Disconnect both. Make i
 
 ### Representation workflow
 
-Resolve one `application-route` Frame to localhost in the developer UI and to a registered preview in the shared UI. Remove the shared binding and confirm that the shared UI shows an unavailable state without mutating the Frame. Capture the Frame and confirm that both viewers render the same R2 artifact digest.
+Resolve one `application-route` Frame to localhost in the developer UI and to a registered preview in the hosted review UI. Remove the shared binding and confirm that the hosted UI shows an unavailable state without mutating the Frame. Capture the Frame and confirm that both viewers render the same R2 artifact digest.
 
-### Agent workflow
+### Hosted review workflow
 
-Connect an MCP client to `/mcp`. Complete OAuth with the default Workspace. Use `search`, then `execute` to add a Frame. Confirm that the ledger identifies the Agent, delegating Person, OAuth client, grant, execution, and reported harness or model separately. Revoke the grant and confirm that the next call fails.
+Open the shared Canvas in a browser with no Crit install. Complete Access sign-in to the default Workspace. View Frames and a shared preview as a Person. Confirm that `/mcp` is not a route.
 
 ### Installation workflow
 

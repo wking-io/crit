@@ -10,12 +10,10 @@ import {
   ChangeId,
   ExecutionId,
   FrameId,
-  GrantId,
   HttpUrl,
   Id,
   InstallationId,
   IsoTimestamp,
-  OAuthClientId,
   PersonId,
   Sha256Digest,
   WorkspaceId
@@ -31,9 +29,7 @@ const semanticIds = [
   { name: "ApplicationId", valid: "application_storefront", parse: Id.application, roundTrip: () => Schema.encodeSync(ApplicationId)(Id.application("application_storefront")) },
   { name: "ArtifactId", valid: "artifact_capture", parse: Id.artifact, roundTrip: () => Schema.encodeSync(ArtifactId)(Id.artifact("artifact_capture")) },
   { name: "ChangeId", valid: "change_01KABC", parse: Id.change, roundTrip: () => Schema.encodeSync(ChangeId)(Id.change("change_01KABC")) },
-  { name: "ExecutionId", valid: "execution_01KABC", parse: Id.execution, roundTrip: () => Schema.encodeSync(ExecutionId)(Id.execution("execution_01KABC")) },
-  { name: "OAuthClientId", valid: "oauth_client_codex", parse: Id.oauthClient, roundTrip: () => Schema.encodeSync(OAuthClientId)(Id.oauthClient("oauth_client_codex")) },
-  { name: "GrantId", valid: "grant_01KABC", parse: Id.grant, roundTrip: () => Schema.encodeSync(GrantId)(Id.grant("grant_01KABC")) }
+  { name: "ExecutionId", valid: "execution_01KABC", parse: Id.execution, roundTrip: () => Schema.encodeSync(ExecutionId)(Id.execution("execution_01KABC")) }
 ]
 
 describe("semantic IDs", () => {

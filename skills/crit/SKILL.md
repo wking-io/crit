@@ -1,19 +1,19 @@
 ---
 name: crit
-description: Uses Crit to create and review Canvases, Frames, Notes, and comments locally or through the shared OAuth MCP service. Use when the user asks an Agent to inspect or change Crit review work.
+description: Uses Crit to create and review Canvases and Frames through the local crit dev client. Use when the user asks an Agent to inspect or change Crit authoring work on their machine.
 ---
 
 # Crit workflows
 
 ## Rewrite status
 
-This skill describes the stable v1 contract. Before running a command, check `crit --help` or the MCP operation catalog. The current alpha does not implement the target workflow. Do not guess commands, edit alpha Canvas files, or treat alpha output as the v1 protocol.
+This skill describes the stable v1 contract. Before running a command, check `crit --help`. The current alpha does not implement the target workflow. Do not guess commands, edit alpha Canvas files, or treat alpha output as the v1 protocol.
 
 ## Choose the surface
 
-- Use the local client exposed by `crit dev` for work on the developer's machine.
-- Use the OAuth MCP endpoint for shared work. It exposes only `search` and `execute`.
-- Use the UI as the primary viewing and review surface. Use Agent operations for structured edits.
+- Use the local client exposed by `crit dev` while the user is authoring on their machine.
+- After a Canvas is shared, people review in the hosted UI. They do not install Crit. Do not review a shared Canvas as an Agent.
+- Use the UI as the primary viewing and review surface. Use Agent operations for structured local edits.
 
 ## Work safely
 
@@ -28,9 +28,9 @@ This skill describes the stable v1 contract. Before running a command, check `cr
 
 ## Agent attribution
 
-Remote access comes from an OAuth grant scoped to an Installation and Workspace. Crit records the Agent as author and separately records the Person who delegated access. Supply harness, model, session, and task metadata when the client supports it, but never claim that client-reported metadata is server-verified.
+Local Agent access comes from the daemon on the user's machine. Crit records the Agent as author and separately records the Person who ran it. Supply harness, model, session, and task metadata when the client supports it, but never claim that client-reported metadata is server-verified.
 
-Do not send credentials, tokens, private reasoning, or storage bindings in Canvas commands or comments.
+Do not send credentials, tokens, private reasoning, or storage bindings in Canvas commands.
 
 ## Workspaces
 
@@ -42,4 +42,4 @@ Presence is ephemeral and never proves authorship. Accepted Canvas Changes and t
 
 ## Setup failures
 
-If the local client is unavailable, ask the user to start the project's `crit dev` integration or follow the target setup documentation. If remote authorization fails, complete OAuth through the Crit server. Git identity is not remote authentication.
+If the local client is unavailable, ask the user to start the project's `crit dev` integration or follow the target setup documentation. If a teammate needs to review a shared Canvas, give them the hosted review URL. Git identity is not remote authentication.
