@@ -107,7 +107,7 @@ describe("FrameRenderer", () => {
   })
 
   it("injects and connects the input bridge for a same-origin live iframe", async() => {
-    const url = `${window.location.origin}/fixture`
+    const url = "https://example.com/fixture"
     const resolver: FrameRepresentationResolver = {
       resolve: () => Effect.succeed(iframePlan(url))
     }
@@ -155,7 +155,7 @@ describe("FrameRenderer", () => {
   })
 
   it("does not inject the input bridge without an input callback", async() => {
-    const url = `${window.location.origin}/fixture-without-input`
+    const url = "https://example.com/fixture-without-input"
     const resolver: FrameRepresentationResolver = {
       resolve: () => Effect.succeed(iframePlan(url))
     }
