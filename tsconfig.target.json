@@ -8,6 +8,7 @@
     { "path": "./packages/representations" },
     { "path": "./packages/client" },
     { "path": "./packages/react" },
+    { "path": "./packages/host" },
     { "path": "./packages/frame-bridge" },
     { "path": "./packages/local" },
     { "path": "./packages/cloudflare" },
