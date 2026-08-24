@@ -2,7 +2,8 @@ import {
   type CanvasItemRef,
   type CanvasProjection,
   type Frame,
-  type Note
+  type Note,
+  type ReviewStatus
 } from "@crit/domain"
 import {
   connectCanvasInput,
@@ -66,6 +67,13 @@ const itemStyle = (
 const isAdditiveSelection = (
   event: Pick<ReactPointerEvent, "ctrlKey" | "metaKey" | "shiftKey">
 ): boolean => event.ctrlKey || event.metaKey || event.shiftKey
+
+const reviewStatusLabel = {
+  "in-progress": "In progress",
+  "ready-for-review": "Ready for review",
+  approved: "Approved",
+  "changes-requested": "Changes requested"
+} satisfies Record<ReviewStatus, string>
 
 export function CanvasBoard({
   camera,
@@ -183,11 +191,13 @@ export function CanvasBoard({
               }
               aria-label={frame.title}
               aria-selected={ariaSelected(selection, item)}
+              data-review-status={frame.status}
               key={frame.frameId}
               role="option"
               style={itemStyle(frame.geometry, zIndex)}
               onPointerDown={(event) => selectItem(item, event)}
             >
+              {reviewStatusLabel[frame.status]}
               <FrameRenderer
                 {...(liveThreads.length === 0 ? {} : { commentThreads: liveThreads })}
                 {...(frameReceivesInput ? { onInputIntent: onFrameInputIntent } : {})}
