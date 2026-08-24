@@ -15,6 +15,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import {
   CanvasBoard,
+  CanvasSelection,
   type FrameRepresentationResolver
 } from "../src/index.js"
 import { requiredBoard } from "./required-board.js"
@@ -26,7 +27,7 @@ notifyManager.setScheduler(queueMicrotask)
 const url = "https://example.com/checkout"
 const reviewProjection = (status: "in-progress" | "ready-for-review") =>
   decodeCanvasProjection({
-    schemaVersion: 2,
+    schemaVersion: 3,
     canvasId: "canvas_review",
     title: "Review",
     frames: [{
@@ -42,42 +43,24 @@ const reviewProjection = (status: "in-progress" | "ready-for-review") =>
       statusChangedByChangeId: "change_1",
       geometryChangedByChangeId: "change_1"
     }],
-    notes: [{
-      noteId: "note_price",
-      text: "Check the price",
-      geometry: { x: 400, y: 80, width: 160, height: 80 },
-      attachedFrameId: "frame_checkout",
-      createdByChangeId: "change_1",
-      updatedByChangeId: "change_1",
-      textChangedByChangeId: "change_1",
-      geometryChangedByChangeId: "change_1",
-      attachmentChangedByChangeId: "change_1"
-    }],
-    threads: [],
     stack: [
-      { _tag: "frame", frameId: "frame_checkout" },
-      { _tag: "note", noteId: "note_price" }
+      { _tag: "frame", frameId: "frame_checkout" }
     ],
     stackChangedByChangeId: "change_1",
     issuedIds: {
-      frameIds: ["frame_checkout"],
-      noteIds: ["note_price"],
-      threadIds: [],
-      commentIds: []
+      frameIds: ["frame_checkout"]
     }
   })
 const projection = reviewProjection("in-progress")
 
 const empty = decodeCanvasProjection({
-  schemaVersion: 2,
+  schemaVersion: 3,
   canvasId: "canvas_empty",
   title: "Empty",
   frames: [],
-  notes: [],
-  threads: [],
   stack: [],
   stackChangedByChangeId: null,
-  issuedIds: { frameIds: [], noteIds: [], threadIds: [], commentIds: [] }
+  issuedIds: { frameIds: [] }
 })
 
 let container: HTMLDivElement
@@ -90,6 +73,16 @@ const render = (element: ReactElement) => root.render(
   </QueryClientProvider>
 )
 const waitFor = (assertion: () => void) => act(async() => vi.waitFor(assertion))
+const pointer = (
+  target: Element,
+  type: "pointerdown" | "pointermove" | "pointerup",
+  clientX: number,
+  clientY: number
+) => target.dispatchEvent(new MouseEvent(type, {
+  bubbles: true,
+  clientX,
+  clientY
+}))
 
 beforeEach(() => {
   container = document.createElement("div")
@@ -105,10 +98,11 @@ afterEach(async() => {
   queryClient.clear()
   container.remove()
   vi.restoreAllMocks()
+  vi.unstubAllGlobals()
 })
 
 describe("CanvasBoard", () => {
-  it("places Frames and Notes from the projection stack", async() => {
+  it("places Frames from the projection stack", async() => {
     const resolver: FrameRepresentationResolver = {
       resolve: () => Effect.succeed(IframeRenderPlan.make({
         representation: projection.frames[0]!.representation,
@@ -123,7 +117,6 @@ describe("CanvasBoard", () => {
 
     const board = container.querySelector("[aria-label='Review']")
     const frame = container.querySelector("[aria-label='Checkout']")
-    const note = container.querySelector("[aria-label='Check the price']")
     expect(board).not.toBeNull()
     expect(frame).toBeInstanceOf(HTMLElement)
     if (!(frame instanceof HTMLElement)) return
@@ -134,9 +127,7 @@ describe("CanvasBoard", () => {
     expect(frame.style.zIndex).toBe("0")
     expect(frame.getAttribute("data-review-status")).toBe("in-progress")
     expect(frame.textContent).toContain("In progress")
-    expect(note?.textContent).toBe("Check the price")
-    expect(note?.style.left).toBe("400px")
-    expect(note?.style.zIndex).toBe("1")
+    expect(container.querySelector("[aria-label='Check the price by Ada']")).toBeNull()
     expect(container.querySelector("iframe")?.getAttribute("src")).toBe(url)
   })
 
@@ -148,10 +139,10 @@ describe("CanvasBoard", () => {
       <CanvasBoard {...requiredBoard} projection={empty} resolver={resolver} />
     ))
     expect(container.querySelector("[role='status']")?.textContent).toBe(
-      "Empty has no Frames or Notes."
+      "Empty has no Frames."
     )
     expect(container.querySelector("iframe")).toBeNull()
-    expect(container.querySelector("[aria-label='Check the price']")).toBeNull()
+    expect(container.querySelector("[aria-label='Check the price by Ada']")).toBeNull()
   })
 
   it("paints the Frame review-status label from the closed table", async() => {
@@ -173,5 +164,203 @@ describe("CanvasBoard", () => {
     if (!(frame instanceof HTMLElement)) return
     expect(frame.getAttribute("data-review-status")).toBe("ready-for-review")
     expect(frame.textContent).toContain("Ready for review")
+  })
+
+  it("removes the selected Frame with Delete", async() => {
+    const onSubmit = vi.fn()
+    const resolver: FrameRepresentationResolver = {
+      resolve: () => Effect.succeed(IframeRenderPlan.make({
+        representation: projection.frames[0]!.representation,
+        url
+      }) satisfies RenderPlan)
+    }
+    await act(async() => render(
+      <CanvasBoard
+        {...requiredBoard}
+        onSubmit={onSubmit}
+        projection={projection}
+        resolver={resolver}
+        selection={CanvasSelection.make([{
+          _tag: "frame",
+          frameId: "frame_checkout"
+        }])}
+      />
+    ))
+
+    await act(async() => {
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Delete" }))
+    })
+    expect(onSubmit).toHaveBeenCalledWith([{
+      _tag: "remove-frame",
+      frameId: "frame_checkout",
+      expectedUpdatedByChangeId: "change_1"
+    }])
+  })
+
+  it("submits Frame geometry from the first pointer drag", async() => {
+    const onSubmit = vi.fn()
+    const resolver: FrameRepresentationResolver = {
+      resolve: () => Effect.succeed(IframeRenderPlan.make({
+        representation: projection.frames[0]!.representation,
+        url
+      }) satisfies RenderPlan)
+    }
+    await act(async() => render(
+      <CanvasBoard
+        {...requiredBoard}
+        onSubmit={onSubmit}
+        projection={projection}
+        resolver={resolver}
+      />
+    ))
+    const frame = container.querySelector("[aria-label='Checkout']")
+    const board = container.querySelector("[aria-label='Review']")
+    if (!(frame instanceof HTMLElement) || !(board instanceof HTMLElement)) {
+      throw new Error("Review Frame missing")
+    }
+
+    await act(async() => {
+      pointer(frame, "pointerdown", 100, 100)
+      pointer(board, "pointermove", 120, 130)
+      pointer(board, "pointerup", 120, 130)
+    })
+
+    expect(onSubmit).toHaveBeenCalledWith([{
+      _tag: "set-frame-geometry",
+      frameId: "frame_checkout",
+      expectedChangedByChangeId: "change_1",
+      geometry: { x: 60, y: 110, width: 320, height: 200 }
+    }])
+  })
+
+  it("submits selected Frame geometry after a pointer move", async() => {
+    const onSubmit = vi.fn()
+    const resolver: FrameRepresentationResolver = {
+      resolve: () => Effect.succeed(IframeRenderPlan.make({
+        representation: projection.frames[0]!.representation,
+        url
+      }) satisfies RenderPlan)
+    }
+    await act(async() => render(
+      <CanvasBoard
+        {...requiredBoard}
+        onSubmit={onSubmit}
+        projection={projection}
+        resolver={resolver}
+        selection={CanvasSelection.make([{
+          _tag: "frame",
+          frameId: "frame_checkout"
+        }])}
+      />
+    ))
+    const frame = container.querySelector("[aria-label='Checkout']")
+    const board = container.querySelector("[aria-label='Review']")
+    if (!(frame instanceof HTMLElement) || !(board instanceof HTMLElement)) {
+      throw new Error("Review Frame missing")
+    }
+
+    await act(async() => {
+      pointer(frame, "pointerdown", 100, 100)
+      pointer(board, "pointermove", 120, 130)
+      pointer(board, "pointerup", 120, 130)
+    })
+
+    expect(onSubmit).toHaveBeenCalledWith([{
+      _tag: "set-frame-geometry",
+      frameId: "frame_checkout",
+      expectedChangedByChangeId: "change_1",
+      geometry: { x: 60, y: 110, width: 320, height: 200 }
+    }])
+  })
+
+  it("handles open-url effects without submitting to the replica", async() => {
+    const onSubmit = vi.fn()
+    const open = vi.spyOn(window, "open").mockImplementation(() => null)
+    const resolver: FrameRepresentationResolver = {
+      resolve: () => Effect.succeed(IframeRenderPlan.make({
+        representation: projection.frames[0]!.representation,
+        url
+      }) satisfies RenderPlan)
+    }
+    await act(async() => render(
+      <CanvasBoard
+        {...requiredBoard}
+        onSubmit={onSubmit}
+        projection={projection}
+        resolver={resolver}
+        selection={CanvasSelection.make([{
+          _tag: "frame",
+          frameId: "frame_checkout"
+        }])}
+      />
+    ))
+    const openButton = container.querySelector(
+      "[aria-label='Open in new tab']"
+    )
+    if (!(openButton instanceof HTMLButtonElement)) {
+      throw new Error("Open URL action missing")
+    }
+
+    await act(async() => openButton.click())
+
+    expect(open).toHaveBeenCalledWith(
+      url,
+      "_blank",
+      "noopener,noreferrer"
+    )
+    expect(onSubmit).not.toHaveBeenCalled()
+  })
+
+  it("pauses offscreen Frame renderers", async() => {
+    let callback: IntersectionObserverCallback | undefined
+    let observed: Element | undefined
+    class Observer {
+      constructor(next: IntersectionObserverCallback) {
+        callback = next
+      }
+      disconnect() {}
+      observe(target: Element) {
+        observed = target
+      }
+    }
+    vi.stubGlobal("IntersectionObserver", Observer)
+    const resolver: FrameRepresentationResolver = {
+      resolve: () => Effect.succeed(IframeRenderPlan.make({
+        representation: projection.frames[0]!.representation,
+        url
+      }) satisfies RenderPlan)
+    }
+    await act(async() => render(
+      <CanvasBoard
+        {...requiredBoard}
+        onSubmit={vi.fn()}
+        projection={projection}
+        resolver={resolver}
+        selection={CanvasSelection.make([{
+          _tag: "frame",
+          frameId: "frame_checkout"
+        }])}
+      />
+    ))
+    await waitFor(() => expect(container.querySelector("iframe")).not.toBeNull())
+    const pause = container.querySelector(
+      "[aria-label='Pause offscreen frames']"
+    )
+    if (!(pause instanceof HTMLButtonElement)) {
+      throw new Error("Pause action missing")
+    }
+
+    await act(async() => pause.click())
+    if (callback === undefined || observed === undefined) {
+      throw new Error("Frame observer missing")
+    }
+    // SAFETY: The observer callback only reads isIntersecting and target.
+    await act(async() => callback(
+      [{ isIntersecting: false, target: observed } as IntersectionObserverEntry],
+      {} as IntersectionObserver
+    ))
+
+    expect(container.querySelector("iframe")).toBeNull()
+    expect(container.textContent).toContain("Checkout is paused.")
   })
 })

@@ -1,4 +1,15 @@
-import { CanvasId, CanvasTitle } from "@crit/domain"
+import {
+  ApplicationRouteRepresentation,
+  ArtifactId,
+  ArtifactRepresentation,
+  AuthoredText,
+  CanvasId,
+  CanvasTitle,
+  Id,
+  RootedRoute,
+  Sha256Digest,
+  WebUrlRepresentation
+} from "@crit/domain"
 import {
   inspectLocalDaemon,
   LocalDaemonIdentityMismatch,
@@ -13,11 +24,16 @@ import {
   type ProjectManifestFailure,
   type LocalDaemonInspection
 } from "@crit/local"
-import { ReplicaView } from "@crit/replica"
+import { ReplicaModel, ReplicaView } from "@crit/replica"
 import { LocalApiUnauthorized, LocalApiVersionUnsupported } from "@crit/replica/http"
 import { ApplicationBaseUrl } from "@crit/representations"
-import { Console, Context, Effect, Layer, Match, Option, Redacted, Schema, type Effect as EffectType } from "effect"
+import { Console, Context, Crypto, Effect, FileSystem, Layer, Match, Option, Path, Redacted, Result, Schema, type Effect as EffectType } from "effect"
 import { Argument, Command, Flag } from "effect/unstable/cli"
+
+import { frameCommand, frameSourceLabel, resolveFrameGeometry } from "./add-frame.js"
+import { HOST_ORIGIN, resolveHostRoot, startHostApp } from "./host-app.js"
+import { CanvasLayout, canvasLayout, formatCanvasLayout } from "./layout.js"
+import { PROJECT_SKILL_RELATIVE_PATH, projectSkillSource } from "./project-skill.js"
 
 class CliOperationalFailure extends Schema.TaggedError<CliOperationalFailure>()(
   "CliOperationalFailure",
@@ -35,6 +51,18 @@ const decode = <S extends Schema.ConstraintDecoder<unknown>>(schema: S, value: s
   try: () => Schema.decodeUnknownSync(schema)(value),
   catch: () => new CliOperationalFailure({ message: `Invalid ${name}: ${value}` })
 })
+
+const requiredFlag = <A>(value: Option.Option<A>, message: string): EffectType.Effect<A, CliOperationalFailure> =>
+  Option.match(value, {
+    onNone: () => Effect.fail(new CliOperationalFailure({ message })),
+    onSome: Effect.succeed
+  })
+
+const unusedFlag = (value: Option.Option<string>, message: string): EffectType.Effect<void, CliOperationalFailure> =>
+  Option.match(value, {
+    onNone: () => Effect.void,
+    onSome: () => Effect.fail(new CliOperationalFailure({ message }))
+  })
 
 const connected = <A, E>(
   root: string,
@@ -84,7 +112,7 @@ const formatProjectManifestFailure = Match.typeTags<ProjectManifestFailure, stri
     `Unable to ${operation} Crit project manifest at ${path} (${reason})`
 })
 
-const crit = Command.make("crit-target").pipe(
+const crit = Command.make("crit").pipe(
   Command.withDescription("Crit local development tools")
 )
 
@@ -104,6 +132,22 @@ const init = Command.make(
         message: formatProjectManifestFailure(failure)
       }))
     )
+    const pathService = yield* Path.Path
+    const fs = yield* FileSystem.FileSystem
+    const skillPath = pathService.join(root, PROJECT_SKILL_RELATIVE_PATH)
+    const skillExists = yield* fs.exists(skillPath)
+    if (!skillExists) {
+      yield* fs.makeDirectory(pathService.dirname(skillPath), { recursive: true }).pipe(
+        Effect.mapError((cause) => new CliOperationalFailure({
+          message: `Unable to create Crit skill directory (${String(cause)})`
+        }))
+      )
+      yield* fs.writeFileString(skillPath, projectSkillSource).pipe(
+        Effect.mapError((cause) => new CliOperationalFailure({
+          message: `Unable to write Crit skill (${String(cause)})`
+        }))
+      )
+    }
     if (asJson) {
       return yield* Console.log(JSON.stringify(
         Schema.encodeSync(ProjectManifestInitialization)(result)
@@ -111,8 +155,9 @@ const init = Command.make(
     }
     yield* Console.log(`${result._tag}  ${result.path}`)
     yield* Console.log(`Application  ${result.manifest.applicationId}`)
+    yield* Console.log(`Skill  ${skillPath}`)
   })
-).pipe(Command.withDescription("Initialize Crit project identity"))
+).pipe(Command.withDescription("Initialize Crit project identity and local agent skill"))
 
 const dev = Command.make(
   "dev",
@@ -129,9 +174,12 @@ const dev = Command.make(
     browserOrigin: Flag.string("browser-origin").pipe(
       Flag.withDescription("Loopback origin hosting the Crit browser application"),
       Flag.optional
+    ),
+    noHost: Flag.boolean("no-host").pipe(
+      Flag.withDescription("Do not start the Crit browser application")
     )
   },
-  Effect.fn(function*({ applicationOrigin, browserOrigin, dataRoot: root, root: projectRoot }) {
+  Effect.fn(function*({ applicationOrigin, browserOrigin, dataRoot: root, noHost, root: projectRoot }) {
     const application = yield* Option.match(applicationOrigin, {
       onNone: () => Effect.succeed(undefined),
       onSome: (origin) => decode(ApplicationBaseUrl, origin, "application origin").pipe(
@@ -140,7 +188,24 @@ const dev = Command.make(
     })
     yield* Effect.scoped(Effect.gen(function*() {
       const applicationOptions = application === undefined ? {} : { application }
-      const developmentLayer = Option.match(browserOrigin, {
+      const resolvedBrowserOrigin = yield* Option.match(browserOrigin, {
+        onSome: (origin) => Effect.succeed(Option.some(origin)),
+        onNone: () => noHost
+          ? Effect.succeed(Option.none<string>())
+          : Effect.gen(function*() {
+            const hostRoot = resolveHostRoot()
+            if (hostRoot === undefined) {
+              return yield* Effect.fail(new CliOperationalFailure({
+                message: "Unable to find the Crit browser application"
+              }))
+            }
+            yield* startHostApp(hostRoot).pipe(
+              Effect.mapError((failure) => new CliOperationalFailure({ message: failure.message }))
+            )
+            return Option.some(HOST_ORIGIN)
+          })
+      })
+      const developmentLayer = Option.match(resolvedBrowserOrigin, {
         onNone: () => LocalDevelopment.layer({ dataRoot: root, ...applicationOptions }),
         onSome: (origin) => LocalDevelopment.layer({
           dataRoot: root,
@@ -158,7 +223,7 @@ const dev = Command.make(
       return yield* Effect.never
     }))
   })
-).pipe(Command.withDescription("Run the project-local Crit daemon"))
+).pipe(Command.withDescription("Run the project-local Crit daemon and browser application"))
 
 const status = Command.make("status", { dataRoot, json }, ({ dataRoot: root, json: asJson }) =>
   Effect.scoped(inspectLocalDaemon({ dataRoot: root }).pipe(
@@ -216,6 +281,174 @@ const open = Command.make("open", {
   yield* printView(view, asJson)
 })).pipe(Command.withDescription("Open a Canvas through the local daemon"))
 
-export const command = crit.pipe(Command.withSubcommands([init, dev, status, create, open]))
+const readProjectManifest = (projectRoot: string) =>
+  Effect.gen(function*() {
+    const projectManifest = yield* LocalProjectManifest
+    return yield* projectManifest.read
+  }).pipe(
+    Effect.provide(LocalProjectManifest.layer({ root: projectRoot })),
+    Effect.mapError((failure) => new CliOperationalFailure({
+      message: formatProjectManifestFailure(failure)
+    }))
+  )
+
+const addFrame = Command.make("add-frame", {
+  dataRoot,
+  json,
+  canvasId: Argument.string("canvas-id"),
+  type: Flag.choice("type", ["application-route", "web-url", "artifact"]).pipe(
+    Flag.withDescription("Frame representation type")
+  ),
+  route: Flag.string("route").pipe(
+    Flag.withDescription("Rooted application route"),
+    Flag.optional
+  ),
+  url: Flag.string("url").pipe(
+    Flag.withDescription("Public HTTP URL"),
+    Flag.optional
+  ),
+  artifactId: Flag.string("artifact-id").pipe(
+    Flag.withDescription("Captured artifact id"),
+    Flag.optional
+  ),
+  digest: Flag.string("digest").pipe(
+    Flag.withDescription("Artifact sha256 digest"),
+    Flag.optional
+  ),
+  title: Flag.string("title").pipe(
+    Flag.withDescription("Frame title")
+  ),
+  x: Flag.float("x").pipe(
+    Flag.withDescription("Frame x position")
+  ),
+  y: Flag.float("y").pipe(
+    Flag.withDescription("Frame y position")
+  ),
+  width: Flag.float("width").pipe(Flag.optional),
+  height: Flag.float("height").pipe(Flag.optional),
+  root: Flag.directory("root", { mustExist: true }).pipe(Flag.withDefault("."))
+}, ({
+  artifactId,
+  canvasId,
+  dataRoot: root,
+  digest,
+  height,
+  json: asJson,
+  route,
+  root: projectRoot,
+  title,
+  type,
+  url,
+  width,
+  x,
+  y
+}) => Effect.gen(function*() {
+  const id = yield* decode(CanvasId, canvasId, "canvas ID")
+  const representation = yield* Match.value(type).pipe(
+    Match.when("application-route", () => Effect.gen(function*() {
+      yield* unusedFlag(url, "--url is not used with --type application-route")
+      yield* unusedFlag(artifactId, "--artifact-id is not used with --type application-route")
+      yield* unusedFlag(digest, "--digest is not used with --type application-route")
+      const routeValue = yield* requiredFlag(route, "Missing --route for --type application-route")
+      const decodedRoute = yield* decode(RootedRoute, routeValue, "route")
+      const manifest = yield* readProjectManifest(projectRoot)
+      return ApplicationRouteRepresentation.make({
+        applicationId: manifest.applicationId,
+        route: decodedRoute
+      })
+    })),
+    Match.when("web-url", () => Effect.gen(function*() {
+      yield* unusedFlag(route, "--route is not used with --type web-url")
+      yield* unusedFlag(artifactId, "--artifact-id is not used with --type web-url")
+      yield* unusedFlag(digest, "--digest is not used with --type web-url")
+      const urlValue = yield* requiredFlag(url, "Missing --url for --type web-url")
+      return yield* Effect.try({
+        try: () => Schema.decodeUnknownSync(WebUrlRepresentation)({ _tag: "web-url", url: urlValue }),
+        catch: () => new CliOperationalFailure({ message: `Invalid url: ${urlValue}` })
+      })
+    })),
+    Match.when("artifact", () => Effect.gen(function*() {
+      yield* unusedFlag(route, "--route is not used with --type artifact")
+      yield* unusedFlag(url, "--url is not used with --type artifact")
+      const artifactValue = yield* requiredFlag(artifactId, "Missing --artifact-id for --type artifact")
+      const digestValue = yield* requiredFlag(digest, "Missing --digest for --type artifact")
+      const decodedId = yield* decode(ArtifactId, artifactValue, "artifact ID")
+      const decodedDigest = yield* decode(Sha256Digest, digestValue, "digest")
+      return ArtifactRepresentation.make({
+        artifactId: decodedId,
+        digest: decodedDigest
+      })
+    })),
+    Match.exhaustive
+  )
+  const resolvedTitle = yield* decode(AuthoredText, title, "title")
+  const geometry = yield* Result.match(resolveFrameGeometry({ x, y, width, height }), {
+    onFailure: (message) => Effect.fail(new CliOperationalFailure({ message })),
+    onSuccess: Effect.succeed
+  })
+  const crypto = yield* Crypto.Crypto
+  const frameId = yield* crypto.randomUUIDv4.pipe(
+    Effect.map((uuid) => Id.frame(`frame_${uuid.replaceAll("-", "")}`)),
+    Effect.mapError((cause) => new CliOperationalFailure({ message: cause.message }))
+  )
+  const added = yield* connected(root, ({ client }) => Effect.gen(function*() {
+    yield* client.open(id).pipe(
+      Effect.mapError((failure) => Match.value(failure).pipe(
+        Match.when({ _tag: "canvas-not-found" }, ({ canvasId }) => new CliOperationalFailure({
+          message: `Canvas not found: ${canvasId}`
+        })),
+        Match.orElse(() => new CliOperationalFailure({ message: "Unable to add Frame" }))
+      ))
+    )
+    const command = frameCommand({
+      frameId,
+      title: resolvedTitle,
+      representation,
+      geometry
+    })
+    const changed = yield* client.change(ReplicaModel.change({
+      canvasId: id,
+      commands: [command]
+    })).pipe(
+      Effect.mapError((failure) => Match.value(failure).pipe(
+        Match.when({ _tag: "canvas-not-found" }, ({ canvasId }) => new CliOperationalFailure({
+          message: `Canvas not found: ${canvasId}`
+        })),
+        Match.when({ _tag: "change-rejected" }, () => new CliOperationalFailure({
+          message: "Unable to add Frame"
+        })),
+        Match.orElse(() => new CliOperationalFailure({ message: "Unable to add Frame" }))
+      ))
+    )
+    return { frameId, view: changed.view }
+  }))
+  if (asJson) {
+    return yield* Console.log(JSON.stringify(Schema.encodeSync(ReplicaView)(added.view)))
+  }
+  yield* Console.log(`${added.frameId}  ${frameSourceLabel(representation)}`)
+})).pipe(Command.withDescription("Add a Frame to a Canvas through the local daemon"))
+
+const layout = Command.make("layout", {
+  dataRoot,
+  json,
+  canvasId: Argument.string("canvas-id")
+}, ({ canvasId, dataRoot: root, json: asJson }) => Effect.gen(function*() {
+  const id = yield* decode(CanvasId, canvasId, "canvas ID")
+  const view = yield* connected(root, ({ client }) => client.open(id).pipe(
+    Effect.mapError((failure) => Match.value(failure).pipe(
+      Match.when({ _tag: "canvas-not-found" }, ({ canvasId }) => new CliOperationalFailure({
+        message: `Canvas not found: ${canvasId}`
+      })),
+      Match.orElse(() => new CliOperationalFailure({ message: "Unable to read Canvas layout" }))
+    ))
+  ))
+  const current = canvasLayout(view.projection)
+  if (asJson) {
+    return yield* Console.log(JSON.stringify(Schema.encodeSync(CanvasLayout)(current)))
+  }
+  yield* Console.log(formatCanvasLayout(current))
+})).pipe(Command.withDescription("Print Canvas Frame geometry"))
+
+export const command = crit.pipe(Command.withSubcommands([init, dev, status, create, open, addFrame, layout]))
 
 export const main = Command.run(command, { version: "0.0.0" })

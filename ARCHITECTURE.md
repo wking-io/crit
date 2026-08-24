@@ -1,6 +1,6 @@
 # Architecture
 
-Crit is a local-first collaborative review canvas for live web applications. Authors use the Crit UI, CLI, and local agents to arrange and review Frames, Notes, and comments. After share, teammates review in the hosted UI. They do not install Crit. Agents do not operate on the shared installation.
+Crit is a local-first collaborative review canvas for live web applications. Authors use the Crit UI, CLI, and local agents to arrange and review Frames. After share, teammates review in the hosted UI. They do not install Crit. Agents do not operate on the shared installation. v1 is Frames only.
 
 The target v1 is a clean rewrite. The current local-only alpha remains a behavior reference during the rewrite. Its persistence, identity, URL, and adapter interfaces do not constrain the new system.
 
@@ -42,8 +42,6 @@ These boundaries are part of the rewrite contract. The old source tree is not mi
 A Canvas projection contains:
 
 - Frames and their geometry, viewport, review state, and Representation.
-- Notes and their geometry, attachment, text, and Actor authorship.
-- Comment Threads, replies, anchors, and resolution state.
 - Stable entity IDs and deletion records required for replay.
 
 A projection is a rebuildable view. It is not the canonical stored record.

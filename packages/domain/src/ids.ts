@@ -21,15 +21,6 @@ export type CanvasId = typeof CanvasId.Type
 export const FrameId = semanticId("frame_", "FrameId")
 export type FrameId = typeof FrameId.Type
 
-export const NoteId = semanticId("note_", "NoteId")
-export type NoteId = typeof NoteId.Type
-
-export const CommentThreadId = semanticId("thread_", "CommentThreadId")
-export type CommentThreadId = typeof CommentThreadId.Type
-
-export const CommentId = semanticId("comment_", "CommentId")
-export type CommentId = typeof CommentId.Type
-
 export const PersonId = semanticId("person_", "PersonId")
 export type PersonId = typeof PersonId.Type
 
@@ -83,9 +74,6 @@ export const Id = {
   workspace: Schema.decodeUnknownSync(WorkspaceId),
   canvas: Schema.decodeUnknownSync(CanvasId),
   frame: Schema.decodeUnknownSync(FrameId),
-  note: Schema.decodeUnknownSync(NoteId),
-  commentThread: Schema.decodeUnknownSync(CommentThreadId),
-  comment: Schema.decodeUnknownSync(CommentId),
   person: Schema.decodeUnknownSync(PersonId),
   agent: Schema.decodeUnknownSync(AgentId),
   application: Schema.decodeUnknownSync(ApplicationId),

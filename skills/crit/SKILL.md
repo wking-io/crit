@@ -1,6 +1,6 @@
 ---
 name: crit
-description: Uses Crit to create and review Canvases, Frames, Notes, and comments through the local crit dev client. Use when the user asks an Agent to inspect or change Crit authoring work on their machine.
+description: Uses Crit to create and review Canvases and Frames through the local crit dev client. Use when the user asks an Agent to inspect or change Crit authoring work on their machine.
 ---
 
 # Crit workflows
@@ -30,7 +30,7 @@ This skill describes the stable v1 contract. Before running a command, check `cr
 
 Local Agent access comes from the daemon on the user's machine. Crit records the Agent as author and separately records the Person who ran it. Supply harness, model, session, and task metadata when the client supports it, but never claim that client-reported metadata is server-verified.
 
-Do not send credentials, tokens, private reasoning, or storage bindings in Canvas commands or comments.
+Do not send credentials, tokens, private reasoning, or storage bindings in Canvas commands.
 
 ## Workspaces
 

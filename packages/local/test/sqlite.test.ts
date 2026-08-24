@@ -196,11 +196,12 @@ describe("SQLite CanvasAuthority", () => {
         changeId: Id.change(`change_handle_${index}`),
         observedCursor: null,
         commands: decodeCanvasCommandBatch([{
-          _tag: "add-note",
-          noteId: `note_handle_${index}`,
-          text: `Note ${index}`,
-          geometry: { x: index, y: 0, width: 10, height: 10 },
-          attachedFrameId: null
+          _tag: "add-frame",
+          frameId: `frame_handle_${index}`,
+          title: `Frame ${index}`,
+          representation: { _tag: "web-url", url: `https://example.com/${index}` },
+          status: "in-progress",
+          geometry: { x: index, y: 0, width: 10, height: 10 }
         }])
       }, person)
       const receipts = yield* Effect.all([submit(1, left), submit(2, right)], { concurrency: "unbounded" })

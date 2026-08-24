@@ -33,7 +33,7 @@ notifyManager.setScheduler(queueMicrotask)
 
 const url = "https://example.com/checkout"
 const projection = decodeCanvasProjection({
-  schemaVersion: 2,
+  schemaVersion: 3,
   canvasId: "canvas_review",
   title: "Review",
   frames: [{
@@ -48,29 +48,26 @@ const projection = decodeCanvasProjection({
     representationChangedByChangeId: "change_1",
     statusChangedByChangeId: "change_1",
     geometryChangedByChangeId: "change_1"
-  }],
-  notes: [{
-    noteId: "note_price",
-    text: "Check the price",
-    geometry: { x: 400, y: 80, width: 160, height: 80 },
-    attachedFrameId: "frame_checkout",
+  }, {
+    frameId: "frame_pricing",
+    title: "Pricing",
+    representation: { _tag: "web-url", url: "https://example.com/pricing" },
+    status: "in-progress",
+    geometry: { x: 400, y: 80, width: 320, height: 200 },
     createdByChangeId: "change_1",
     updatedByChangeId: "change_1",
-    textChangedByChangeId: "change_1",
-    geometryChangedByChangeId: "change_1",
-    attachmentChangedByChangeId: "change_1"
+    titleChangedByChangeId: "change_1",
+    representationChangedByChangeId: "change_1",
+    statusChangedByChangeId: "change_1",
+    geometryChangedByChangeId: "change_1"
   }],
-  threads: [],
   stack: [
     { _tag: "frame", frameId: "frame_checkout" },
-    { _tag: "note", noteId: "note_price" }
+    { _tag: "frame", frameId: "frame_pricing" }
   ],
   stackChangedByChangeId: "change_1",
   issuedIds: {
-    frameIds: ["frame_checkout"],
-    noteIds: ["note_price"],
-    threadIds: [],
-    commentIds: []
+    frameIds: ["frame_checkout", "frame_pricing"]
   }
 })
 
@@ -83,9 +80,9 @@ const view = Schema.decodeUnknownSync(ReplicaView)({
 })
 
 const checkout = projection.stack[0]!
-const priceNote = projection.stack[1]!
+const pricing = projection.stack[1]!
 const checkoutSelection = CanvasSelection.make([checkout])
-const bothSelection = CanvasSelection.make([checkout, priceNote])
+const bothSelection = CanvasSelection.make([checkout, pricing])
 const emptySelection = CanvasSelection.make([])
 const unknownSelection = CanvasSelection.make([
   { _tag: "frame", frameId: "frame_unknown" }
@@ -172,13 +169,13 @@ describe("CanvasSelection", () => {
     expect(CanvasSelection.make([])).toEqual([])
     expect(CanvasSelection.make([
       { _tag: "frame", frameId: "frame_checkout" },
-      { _tag: "note", noteId: "note_price" }
-    ])).toEqual([checkout, priceNote])
+      { _tag: "frame", frameId: "frame_pricing" }
+    ])).toEqual([checkout, pricing])
   })
 
   it("reports membership only for included refs", () => {
     expect(CanvasSelection.has(checkoutSelection, checkout)).toBe(true)
-    expect(CanvasSelection.has(checkoutSelection, priceNote)).toBe(false)
+    expect(CanvasSelection.has(checkoutSelection, pricing)).toBe(false)
     expect(CanvasSelection.has(checkoutSelection, unknownSelection[0]!)).toBe(false)
   })
 
@@ -193,12 +190,12 @@ describe("CanvasSelection", () => {
     })).toEqual(checkoutSelection)
     expect(CanvasSelection.apply(checkoutSelection, {
       _tag: "item",
-      item: priceNote,
+      item: pricing,
       additive: true
     })).toEqual(bothSelection)
     expect(CanvasSelection.apply(bothSelection, {
       _tag: "item",
-      item: priceNote,
+      item: pricing,
       additive: true
     })).toEqual(checkoutSelection)
     expect(CanvasSelection.apply(undefined, {
@@ -212,9 +209,6 @@ describe("CanvasSelection", () => {
     expect(CanvasSelection.inputTarget(undefined)).toEqual({ _tag: "camera" })
     expect(CanvasSelection.inputTarget(emptySelection)).toEqual({ _tag: "camera" })
     expect(CanvasSelection.inputTarget(bothSelection)).toEqual({ _tag: "camera" })
-    expect(CanvasSelection.inputTarget(CanvasSelection.make([priceNote]))).toEqual(
-      { _tag: "camera" }
-    )
     expect(CanvasSelection.inputTarget(checkoutSelection)).toEqual({
       _tag: "frame",
       frameId: "frame_checkout"
@@ -234,12 +228,12 @@ describe("CanvasBoard selection", () => {
     )
 
     const frame = container.querySelector("[aria-label='Checkout']")
-    const note = container.querySelector("[aria-label='Check the price']")
+    const other = container.querySelector("[aria-label='Pricing']")
     expect(frame).toBeInstanceOf(HTMLElement)
-    expect(note).toBeInstanceOf(HTMLElement)
-    if (!(frame instanceof HTMLElement) || !(note instanceof HTMLElement)) return
+    expect(other).toBeInstanceOf(HTMLElement)
+    if (!(frame instanceof HTMLElement) || !(other instanceof HTMLElement)) return
     expect(frame.getAttribute("aria-selected")).toBe("true")
-    expect(note.hasAttribute("aria-selected")).toBe(false)
+    expect(other.hasAttribute("aria-selected")).toBe(false)
   })
 
   it("marks both selected items", async() => {
@@ -253,12 +247,12 @@ describe("CanvasBoard selection", () => {
     )
 
     const frame = container.querySelector("[aria-label='Checkout']")
-    const note = container.querySelector("[aria-label='Check the price']")
+    const other = container.querySelector("[aria-label='Pricing']")
     expect(frame).toBeInstanceOf(HTMLElement)
-    expect(note).toBeInstanceOf(HTMLElement)
-    if (!(frame instanceof HTMLElement) || !(note instanceof HTMLElement)) return
+    expect(other).toBeInstanceOf(HTMLElement)
+    if (!(frame instanceof HTMLElement) || !(other instanceof HTMLElement)) return
     expect(frame.getAttribute("aria-selected")).toBe("true")
-    expect(note.getAttribute("aria-selected")).toBe("true")
+    expect(other.getAttribute("aria-selected")).toBe("true")
   })
 
   it("ignores selected refs that are absent from the projection", async() => {
@@ -287,7 +281,7 @@ describe("CanvasBoard selection", () => {
       />
     )
     const empty = [...container.querySelectorAll(
-      "[aria-label='Checkout'], [aria-label='Check the price']"
+      "[aria-label='Checkout'], [aria-label='Pricing']"
     )].map((item) => item.getAttribute("aria-selected"))
 
     expect(empty).toEqual([null, null])
@@ -313,7 +307,7 @@ describe("CanvasBoard selection", () => {
     expect(onSelectionChange).toHaveBeenCalledWith(checkoutSelection)
   })
 
-  it("selects the price Note on pointer down", async() => {
+  it("selects the Pricing Frame on pointer down", async() => {
     const onSelectionChange = vi.fn()
     await renderReady(
       <CanvasBoard
@@ -324,20 +318,20 @@ describe("CanvasBoard selection", () => {
         selection={checkoutSelection}
       />
     )
-    const note = container.querySelector("[aria-label='Check the price']")
-    expect(note).toBeInstanceOf(HTMLElement)
-    if (!(note instanceof HTMLElement)) return
+    const other = container.querySelector("[aria-label='Pricing']")
+    expect(other).toBeInstanceOf(HTMLElement)
+    if (!(other instanceof HTMLElement)) return
 
-    pointerDown(note)
+    pointerDown(other)
 
     expect(onSelectionChange).toHaveBeenCalledTimes(1)
     expect(onSelectionChange).toHaveBeenCalledWith(
-      CanvasSelection.make([priceNote])
+      CanvasSelection.make([pricing])
     )
   })
 
   it.each(additivePointerCases)(
-    "adds and toggles the price Note with $name",
+    "adds and toggles the Pricing Frame with $name",
     async({ modifiers }) => {
       const onSelectionChange = vi.fn()
       await renderReady(
@@ -349,11 +343,11 @@ describe("CanvasBoard selection", () => {
           selection={checkoutSelection}
         />
       )
-      const note = container.querySelector("[aria-label='Check the price']")
-      expect(note).toBeInstanceOf(HTMLElement)
-      if (!(note instanceof HTMLElement)) return
+      const other = container.querySelector("[aria-label='Pricing']")
+      expect(other).toBeInstanceOf(HTMLElement)
+      if (!(other instanceof HTMLElement)) return
 
-      pointerDown(note, modifiers)
+      pointerDown(other, modifiers)
       expect(onSelectionChange).toHaveBeenCalledTimes(1)
       expect(onSelectionChange).toHaveBeenLastCalledWith(bothSelection)
 
@@ -366,7 +360,7 @@ describe("CanvasBoard selection", () => {
           selection={bothSelection}
         />
       )
-      pointerDown(note, modifiers)
+      pointerDown(other, modifiers)
 
       expect(onSelectionChange).toHaveBeenCalledTimes(2)
       expect(onSelectionChange).toHaveBeenLastCalledWith(checkoutSelection)
@@ -445,17 +439,17 @@ describe("ReplicaBoard selection", () => {
     )
 
     const frame = container.querySelector("[aria-label='Checkout']")
-    const note = container.querySelector("[aria-label='Check the price']")
+    const other = container.querySelector("[aria-label='Pricing']")
     expect(frame).toBeInstanceOf(HTMLElement)
-    expect(note).toBeInstanceOf(HTMLElement)
-    if (!(frame instanceof HTMLElement) || !(note instanceof HTMLElement)) return
+    expect(other).toBeInstanceOf(HTMLElement)
+    if (!(frame instanceof HTMLElement) || !(other instanceof HTMLElement)) return
     expect(frame.getAttribute("aria-selected")).toBe("true")
 
-    pointerDown(note)
+    pointerDown(other)
 
     expect(onSelectionChange).toHaveBeenCalledTimes(1)
     expect(onSelectionChange).toHaveBeenCalledWith(
-      CanvasSelection.make([priceNote])
+      CanvasSelection.make([pricing])
     )
   })
 

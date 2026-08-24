@@ -32,7 +32,7 @@ Prove that the server ignores client-supplied actor and timestamp fields. Prove 
 
 ### Local workflow
 
-Start the host application and `crit dev`. Create a Canvas, add a live Frame, add a Note and comment through the UI, make another change through a local agent, restart both processes, and confirm that all work returns.
+Start the host application and `crit dev`. Create a Canvas, add a live Frame through the UI, make another change through a local agent, restart both processes, and confirm that all work returns.
 
 ### Collaboration workflow
 
@@ -44,7 +44,7 @@ Resolve one `application-route` Frame to localhost in the developer UI and to a 
 
 ### Hosted review workflow
 
-Open the shared Canvas in a browser with no Crit install. Complete Access sign-in to the default Workspace. Leave a Note and comment as a Person. Confirm that the author's local replica receives those accepted changes and attributes them to that Person. Confirm that `/mcp` is not a route.
+Open the shared Canvas in a browser with no Crit install. Complete Access sign-in to the default Workspace. View Frames and a shared preview as a Person. Confirm that `/mcp` is not a route.
 
 ### Installation workflow
 

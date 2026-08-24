@@ -258,7 +258,7 @@ describe("canvas selection session", () => {
 
   it("uses sessionStorage when the host provides that layer", async() => {
     const selection = CanvasSelection.make([
-      { _tag: "note", noteId: "note_price" }
+      { _tag: "frame", frameId: "frame_checkout" }
     ])
     const saved = await Effect.runPromise(
       setCanvasSelectionSession({ canvasId: canvasA, selection }).pipe(

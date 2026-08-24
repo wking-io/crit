@@ -8,7 +8,7 @@ The alpha remains runnable as a behavior reference. The rewrite does not read it
 
 ## Product outcome
 
-Crit is a local-first collaborative review canvas for live applications. Authors build canvases on their machine. After share, teammates review in the hosted UI. They do not install Crit.
+Crit is a local-first collaborative review canvas for live applications. Authors build canvases on their machine. After share, teammates review in the hosted UI. They do not install Crit. v1 is Frames only. Notes and comments are out of the rewrite until we design them again.
 
 Local work is complete without an account:
 
@@ -25,7 +25,7 @@ npx crit login https://crit.acme.internal
 npx crit share checkout-redesign
 ```
 
-A teammate opens the hosted review UI, signs in with company Access, and leaves Notes and comments. Agents stay on the author's machine. Crit has no remote agent interface.
+A teammate opens the hosted review UI and signs in with company Access. Agents stay on the author's machine. Crit has no remote agent interface.
 
 ## System shape
 
@@ -133,10 +133,11 @@ The rewrite intentionally ports these alpha behaviors:
 
 - Stable Canvas entity IDs and atomic semantic command batches.
 - Narrow content preconditions and explicit recoverable conflicts.
-- Frame and Note geometry, stacking, attachment, and deletion behavior.
+- Frame geometry, stacking, deletion, and review status.
 - Immutable capture artifacts with cleanup after rejected commits.
-- Infinite Canvas camera, iframe lifecycle, input relay, and comment anchoring.
+- Infinite Canvas camera, iframe lifecycle, and input relay.
 - Review status and visible Person, Agent, and presence information.
+- Align and distribute, breakpoint presets, contextual help, pause-offscreen Frames, fullscreen, open in new tab, and developer copy-node-id. Not undo or redo, and not a fit-page display command.
 
 It does not preserve alpha JSON, IndexedDB state, filesystem Canvas documents, URL-based Frame identity, Git-based authority, `CanvasSession`, `CanvasRepository`, Vite HTTP routes, command constructors, or package exports.
 
@@ -152,6 +153,7 @@ It does not preserve alpha JSON, IndexedDB state, filesystem Canvas documents, U
 - Teammates review in the hosted UI. They do not install Crit.
 - Agents author only through local tools. After share, review is human-led.
 - Crit has no MCP server, Code Mode runtime, or OAuth agent grants.
+- Notes and Comments are out of v1.
 - Agent attribution identifies the Agent, the local Person who ran it, the execution, and optional reported runtime metadata.
 - No CRDT, cross-Canvas transaction, automatic tunnel, unrestricted proxy, D1 ledger, Queue commit path, or multi-Organization tenancy.
 

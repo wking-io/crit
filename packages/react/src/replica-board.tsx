@@ -1,4 +1,4 @@
-import type { CanvasChangeFailure } from "@crit/domain"
+import type { CanvasChangeFailure, CanvasCommandBatch } from "@crit/domain"
 import type { ReplicaView } from "@crit/replica"
 import { Match } from "effect"
 import type { ReactElement } from "react"
@@ -7,6 +7,7 @@ import type { CanvasCamera } from "./canvas-camera.js"
 import { CanvasBoard } from "./canvas-board.js"
 import type { CanvasSelection } from "./canvas-selection.js"
 import type { FrameRepresentationResolver } from "./frame-renderer.js"
+import type { ReviewClientEffect } from "./review-actions.js"
 
 export interface ReplicaBoardProps {
   readonly view: ReplicaView
@@ -15,6 +16,8 @@ export interface ReplicaBoardProps {
   readonly onCameraChange: (camera: CanvasCamera) => void
   readonly selection: CanvasSelection
   readonly onSelectionChange: (selection: CanvasSelection) => void
+  readonly onSubmit?: (commands: CanvasCommandBatch) => void
+  readonly onEffect?: (effect: ReviewClientEffect) => void
   readonly className?: string
 }
 
@@ -48,9 +51,7 @@ const conflictCopy = (failure: CanvasChangeFailure): string =>
     "precondition-failed": ({ field }) =>
       `Rejected because ${field} changed since this was proposed.`,
     "invalid-reference": ({ field }) =>
-      `Rejected because ${field} points at a missing item.`,
-    "derived-geometry-invalid": () =>
-      "Rejected because an attached Note's geometry became invalid."
+      `Rejected because ${field} points at a missing item.`
   }))
 
 const entryStateCopy = (state: PendingChange["state"]): string =>
@@ -97,7 +98,9 @@ export function ReplicaBoard({
   camera,
   className,
   onCameraChange,
+  onEffect,
   onSelectionChange,
+  onSubmit,
   resolver,
   selection,
   view
@@ -120,7 +123,9 @@ export function ReplicaBoard({
       <CanvasBoard
         camera={camera}
         onCameraChange={onCameraChange}
+        onEffect={onEffect}
         onSelectionChange={onSelectionChange}
+        onSubmit={onSubmit}
         projection={view.projection}
         resolver={resolver}
         selection={selection}

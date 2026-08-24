@@ -41,7 +41,7 @@ const makeView = (args: {
     canvasId: args.canvasId,
     acknowledgedCursor: args.cursor,
     projection: decodeCanvasProjection({
-      schemaVersion: 2,
+      schemaVersion: 3,
       canvasId: args.canvasId,
       title: "Review",
       frames: [{
@@ -57,15 +57,10 @@ const makeView = (args: {
         statusChangedByChangeId: "change_1",
         geometryChangedByChangeId: "change_1"
       }],
-      notes: [],
-      threads: [],
       stack: [{ _tag: "frame", frameId: "frame_checkout" }],
       stackChangedByChangeId: "change_1",
       issuedIds: {
-        frameIds: ["frame_checkout"],
-        noteIds: [],
-        threadIds: [],
-        commentIds: []
+        frameIds: ["frame_checkout"]
       }
     }),
     pending: []
@@ -89,7 +84,7 @@ const viewAfterAdd = Schema.decodeUnknownSync(ReplicaView)({
   canvasId: canvasA,
   acknowledgedCursor: "cursor_after_add",
   projection: decodeCanvasProjection({
-    schemaVersion: 2,
+    schemaVersion: 3,
     canvasId: canvasA,
     title: "Review",
     frames: [{
@@ -117,18 +112,13 @@ const viewAfterAdd = Schema.decodeUnknownSync(ReplicaView)({
       statusChangedByChangeId: "change_1",
       geometryChangedByChangeId: "change_1"
     }],
-    notes: [],
-    threads: [],
     stack: [
       { _tag: "frame", frameId: "frame_checkout" },
       { _tag: "frame", frameId: "frame_added" }
     ],
     stackChangedByChangeId: "change_2",
     issuedIds: {
-      frameIds: ["frame_added", "frame_checkout"],
-      noteIds: [],
-      threadIds: [],
-      commentIds: []
+      frameIds: ["frame_added", "frame_checkout"]
     }
   }),
   pending: []

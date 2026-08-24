@@ -70,6 +70,7 @@ const startWithoutBrowser = (dataRoot: string, environment?: NodeJS.ProcessEnv) 
   const child = spawn(process.execPath, [
     join(import.meta.dirname, "..", "dist", "main.js"),
     "dev",
+    "--no-host",
     "--data-root",
     dataRoot
   ], { stdio: ["ignore", "pipe", "pipe"], env: environment })
@@ -100,6 +101,7 @@ const startWithApplication = (dataRoot: string, root: string, applicationOrigin:
   const child = spawn(process.execPath, [
     join(import.meta.dirname, "..", "dist", "main.js"),
     "dev",
+    "--no-host",
     "--data-root",
     dataRoot,
     "--root",
@@ -166,6 +168,49 @@ const runAsync = (dataRoot: string, args: ReadonlyArray<string>, environment: No
   })
 
 describe("built crit-target dev", () => {
+  it("starts the host and prints a browser bootstrap URL", async() => {
+    const directory = mkdtempSync(join(tmpdir(), "crit-cli-loop-"))
+    directories.push(directory)
+    const dataRoot = join(directory, ".crit", "v1")
+    const child = spawn(process.execPath, [
+      join(import.meta.dirname, "..", "dist", "main.js"),
+      "dev",
+      "--data-root",
+      dataRoot
+    ], { stdio: ["ignore", "pipe", "pipe"] })
+    children.push(child)
+    let output = ""
+    const started = await new Promise<{
+      readonly baseUrl: string
+      readonly browserBootstrapUrl: string
+    }>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        child.kill("SIGKILL")
+        reject(new Error(`Timed out waiting for local loop: ${output}`))
+      }, 12_000)
+      child.stdout.on("data", (chunk: Uint8Array) => {
+        output += Buffer.from(chunk).toString("utf8")
+        const daemonMatch = /Crit daemon listening at (http:\/\/127\.0\.0\.1:\d+)/.exec(output)
+        const browserMatch = /Open Crit in your browser: (http:\/\/127\.0\.0\.1:\d+\/browser\/[0-9a-f]{32}\/#[-_A-Za-z0-9]+)/.exec(output)
+        if (daemonMatch?.[1] === undefined || browserMatch?.[1] === undefined) return
+        clearTimeout(timeout)
+        resolve({ baseUrl: daemonMatch[1], browserBootstrapUrl: browserMatch[1] })
+      })
+      child.stderr.on("data", (chunk: Uint8Array) => {
+        output += Buffer.from(chunk).toString("utf8")
+      })
+      child.once("error", (cause) => {
+        clearTimeout(timeout)
+        reject(cause)
+      })
+    })
+    const page = await fetch("http://127.0.0.1:5173/")
+    expect(page.status).toBe(200)
+    expect(await page.text()).toContain("id=\"root\"")
+    expect(started.browserBootstrapUrl).toContain(started.baseUrl)
+    await stop(child)
+  })
+
   it("binds the initialized project application through the real transport", async () => {
     const directory = mkdtempSync(join(tmpdir(), "crit-cli-application-"))
     directories.push(directory)
@@ -226,6 +271,7 @@ describe("built crit-target dev", () => {
     const dataRoot = join(directory, ".crit", "v1")
     const result = run(dataRoot, [
       "dev",
+      "--no-host",
       "--root",
       directory,
       "--application-origin",

@@ -35,7 +35,7 @@ notifyManager.setScheduler(queueMicrotask)
 
 const url = "https://example.com/checkout"
 const projection = decodeCanvasProjection({
-  schemaVersion: 2,
+  schemaVersion: 3,
   canvasId: "canvas_review",
   title: "Review",
   frames: [{
@@ -50,29 +50,26 @@ const projection = decodeCanvasProjection({
     representationChangedByChangeId: "change_1",
     statusChangedByChangeId: "change_1",
     geometryChangedByChangeId: "change_1"
-  }],
-  notes: [{
-    noteId: "note_price",
-    text: "Check the price",
-    geometry: { x: 400, y: 80, width: 160, height: 80 },
-    attachedFrameId: "frame_checkout",
+  }, {
+    frameId: "frame_pricing",
+    title: "Pricing",
+    representation: { _tag: "web-url", url: "https://example.com/pricing" },
+    status: "in-progress",
+    geometry: { x: 400, y: 80, width: 320, height: 200 },
     createdByChangeId: "change_1",
     updatedByChangeId: "change_1",
-    textChangedByChangeId: "change_1",
-    geometryChangedByChangeId: "change_1",
-    attachmentChangedByChangeId: "change_1"
+    titleChangedByChangeId: "change_1",
+    representationChangedByChangeId: "change_1",
+    statusChangedByChangeId: "change_1",
+    geometryChangedByChangeId: "change_1"
   }],
-  threads: [],
   stack: [
     { _tag: "frame", frameId: "frame_checkout" },
-    { _tag: "note", noteId: "note_price" }
+    { _tag: "frame", frameId: "frame_pricing" }
   ],
   stackChangedByChangeId: "change_1",
   issuedIds: {
-    frameIds: ["frame_checkout"],
-    noteIds: ["note_price"],
-    threadIds: [],
-    commentIds: []
+    frameIds: ["frame_checkout", "frame_pricing"]
   }
 })
 
@@ -412,50 +409,7 @@ describe("CanvasBoard camera navigation", () => {
         resolver={resolver}
         selection={CanvasSelection.make([
           { _tag: "frame", frameId: "frame_checkout" },
-          { _tag: "note", noteId: "note_price" }
-        ])}
-      />
-    ))
-    await waitFor(() => expect(container.querySelector("iframe")).not.toBeNull())
-    const board = container.querySelector("[aria-label='Review']")
-    const iframe = container.querySelector("iframe")
-    expect(board).toBeInstanceOf(HTMLElement)
-    expect(iframe).toBeInstanceOf(HTMLIFrameElement)
-    if (!(board instanceof HTMLElement) ||
-      !(iframe instanceof HTMLIFrameElement)) return
-    stubBoardRect(board)
-    const frameWindow = iframe.contentWindow
-    expect(frameWindow).not.toBeNull()
-    if (frameWindow === null) return
-
-    await act(async() => {
-      window.dispatchEvent(new MessageEvent("message", {
-        origin: new URL(url).origin,
-        source: frameWindow,
-        data: {
-          source: FRAME_INPUT_BRIDGE_SOURCE,
-          schemaVersion: FRAME_INPUT_BRIDGE_SCHEMA_VERSION,
-          intent: { type: "wheel", ...wheel, deltaX: 4, deltaY: 8 }
-        }
-      }))
-    })
-
-    expect(onCameraChange).toHaveBeenCalledWith(
-      CanvasCamera.make({ x: 6, y: 12, zoom: 1 })
-    )
-  })
-
-  it("keeps the camera when the sole selection is a Note", async() => {
-    const onCameraChange = vi.fn()
-    await act(async() => render(
-      <CanvasBoard
-        {...requiredBoard}
-        camera={resting}
-        onCameraChange={onCameraChange}
-        projection={projection}
-        resolver={resolver}
-        selection={CanvasSelection.make([
-          { _tag: "note", noteId: "note_price" }
+          { _tag: "frame", frameId: "frame_pricing" }
         ])}
       />
     ))

@@ -22,20 +22,11 @@ export {
   type FrameWheelDecision
 } from "./input-relay.js"
 export {
-  connectBridgedFrameComments,
-  critFrameCommentBridgeScript,
-  type BridgedCommentFrame,
-  type FrameCommentMessageTarget
-} from "./comment-bridge.js"
-export {
   frameBridgeOriginFromHref,
   isTrustedFrameBridgeEvent
 } from "./origin.js"
 export type {
   FrameBridgeOrigin,
-  FrameCommentDownEvent,
-  FrameCommentPin,
-  FrameCommentUpEvent,
   FrameInputIntent
 } from "@crit/protocol"
 

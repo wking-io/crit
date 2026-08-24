@@ -5,15 +5,12 @@ export {
   AuthSubject,
   CanvasId,
   ChangeId,
-  CommentId,
-  CommentThreadId,
   ExecutionId,
   FrameId,
   HttpUrl,
   Id,
   InstallationId,
   IsoTimestamp,
-  NoteId,
   PersonId,
   Sha256Digest,
   WorkspaceId
@@ -26,6 +23,8 @@ export {
   AgentAttribution,
   AgentPrincipal,
   AgentSnapshot,
+  actorFromAttribution,
+  actorFromPrincipal,
   HarnessDescriptor,
   ModelDescriptor,
   PersonAttribution,
@@ -54,33 +53,33 @@ export {
   emptyCanvasProjection
 } from "./canvas.js"
 export { Geometry, NormalizedPoint, Point } from "./geometry.js"
-export { CommentAnchor, ElementAnchor, ElementEvidence, ElementFingerprint, FrameAnchor } from "./anchor.js"
-export { AuthoredText, CanvasItemRef, Comment, CommentThread, Frame, Note, ReviewStatus } from "./content.js"
+export { AuthoredText, CanvasItemRef, Frame, ReviewStatus } from "./content.js"
 export {
-  AddCommentThreadCommand,
   AddFrameCommand,
-  AddNoteCommand,
-  AttachNoteCommand,
   CanvasChange,
   CanvasCommand,
   CanvasCommandBatch,
   decodeCanvasChange,
   decodeCanvasCommandBatch,
-  DetachNoteCommand,
-  EditCommentCommand,
-  EditNoteCommand,
   PlaceCanvasItemCommand,
   RemoveFrameCommand,
-  RemoveNoteCommand,
-  ReplyToCommentThreadCommand,
   RenameCanvasCommand,
-  SetCommentThreadResolutionCommand,
   SetFrameGeometryCommand,
   SetFrameRepresentationCommand,
   SetFrameStatusCommand,
-  SetFrameTitleCommand,
-  SetNoteGeometryCommand
+  SetFrameTitleCommand
 } from "./command.js"
+export {
+  proposeAddFrame,
+  proposeBringToFront,
+  proposeRemoveFrame,
+  proposeRenameCanvas,
+  proposeSendToBack,
+  proposeSetFrameGeometry,
+  proposeSetFrameRepresentation,
+  proposeSetFrameStatus,
+  proposeSetFrameTitle
+} from "./intent.js"
 export { CanvasChangeFailureSchema, CanvasEngine } from "./engine.js"
 export type {
   CanvasChangeFailure,

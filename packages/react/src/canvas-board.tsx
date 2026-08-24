@@ -1,15 +1,14 @@
 import {
+  type CanvasCommandBatch,
   type CanvasItemRef,
   type CanvasProjection,
   type Frame,
-  type Note,
   type ReviewStatus
 } from "@crit/domain"
 import {
   connectCanvasInput,
   type FrameInputIntent
 } from "@crit/frame-bridge"
-import { Match } from "effect"
 import {
   useCallback,
   useEffect,
@@ -25,7 +24,7 @@ import {
   type CanvasCamera,
   canvasCameraStyle
 } from "./canvas-camera.js"
-import { CommentPin } from "./canvas-comment-pin.js"
+import { useCanvasItemDrag } from "./canvas-item-drag.js"
 import {
   CanvasSelection,
   type CanvasSelectionCommand
@@ -34,7 +33,10 @@ import {
   FrameRenderer,
   type FrameRepresentationResolver
 } from "./frame-renderer.js"
-import { framesById, notesById } from "./projection-index.js"
+import { framesById } from "./projection-index.js"
+import { ReviewChrome } from "./review-chrome.js"
+import type { ReviewClientEffect } from "./review-actions.js"
+import { useReviewEffects } from "./review-effects.js"
 
 export interface CanvasBoardProps {
   readonly projection: CanvasProjection
@@ -43,6 +45,8 @@ export interface CanvasBoardProps {
   readonly onCameraChange: (camera: CanvasCamera) => void
   readonly selection: CanvasSelection
   readonly onSelectionChange: (selection: CanvasSelection) => void
+  readonly onSubmit?: (commands: CanvasCommandBatch) => void
+  readonly onEffect?: (effect: ReviewClientEffect) => void
   readonly className?: string
 }
 
@@ -53,7 +57,7 @@ const ariaSelected = (
   CanvasSelection.has(selection, item) ? true : undefined
 
 const itemStyle = (
-  geometry: Frame["geometry"] | Note["geometry"],
+  geometry: Frame["geometry"],
   zIndex: number
 ): CSSProperties => ({
   height: geometry.height,
@@ -79,16 +83,29 @@ export function CanvasBoard({
   camera,
   className,
   onCameraChange,
+  onEffect,
   onSelectionChange,
+  onSubmit,
   projection,
   resolver,
   selection
 }: CanvasBoardProps): ReactElement {
   const rootRef = useRef<HTMLElement>(null)
   const selectedFrameRef = useRef<HTMLDivElement>(null)
+  const frameElementsRef = useRef(new Map<string, HTMLDivElement>())
   const navigationRef = useRef({ camera, onCameraChange })
   const selectionRef = useRef({ selection, onSelectionChange })
   const inputTarget = CanvasSelection.inputTarget(selection)
+  const itemDrag = useCanvasItemDrag({
+    camera,
+    onSubmit
+  })
+  const reviewEffects = useReviewEffects({
+    frameElementsRef,
+    frames: projection.frames,
+    onEffect,
+    selectedFrameRef
+  })
 
   useLayoutEffect(() => {
     navigationRef.current = { camera, onCameraChange }
@@ -97,6 +114,12 @@ export function CanvasBoard({
   useLayoutEffect(() => {
     selectionRef.current = { selection, onSelectionChange }
   }, [onSelectionChange, selection])
+
+  useLayoutEffect(() => {
+    selectedFrameRef.current = inputTarget._tag === "frame"
+      ? frameElementsRef.current.get(inputTarget.frameId) ?? null
+      : null
+  }, [inputTarget])
 
   const applySelectionCommand = useCallback(
     (command: CanvasSelectionCommand) => {
@@ -140,8 +163,7 @@ export function CanvasBoard({
   }, [applyCameraIntent])
 
   const frames = framesById(projection.frames)
-  const notes = notesById(projection.notes)
-  const selectItem = (
+  const selectFrame = (
     item: CanvasItemRef,
     event: ReactPointerEvent<HTMLDivElement>
   ) => applySelectionCommand({
@@ -150,87 +172,80 @@ export function CanvasBoard({
     additive: isAdditiveSelection(event)
   })
 
-  const items = projection.stack.length === 0
-    ? (
-      <p role="status">{`${projection.title} has no Frames or Notes.`}</p>
-    )
-    : projection.stack.map((item, zIndex) =>
-      Match.value(item).pipe(Match.tagsExhaustive({
-        frame: (item) => {
-          const { frameId } = item
-          const frame = frames.get(frameId)
-          if (frame === undefined) return null
-          const threads = projection.threads.filter(
-            (thread) => thread.anchor.frameId === frameId
-          )
-          const liveThreads = threads.filter(
-            (thread) => thread.anchor._tag === "element"
-          )
-          const frameThreads = threads.filter(
-            (thread) => thread.anchor._tag === "frame"
-          )
-          const frameReceivesInput = inputTarget._tag === "camera" ||
-            inputTarget.frameId !== frameId
-          const onFrameInputIntent = (intent: FrameInputIntent) => {
-            if (intent.type === "select") {
-              applySelectionCommand({
-                _tag: "item",
-                item,
-                additive: intent.additive
-              })
-              return
-            }
-            applyCameraIntent(intent)
-          }
-          return (
-            <div
-              ref={
-                inputTarget._tag === "frame" && inputTarget.frameId === frameId
-                  ? selectedFrameRef
-                  : undefined
-              }
-              aria-label={frame.title}
-              aria-selected={ariaSelected(selection, item)}
-              data-review-status={frame.status}
-              key={frame.frameId}
-              role="option"
-              style={itemStyle(frame.geometry, zIndex)}
-              onPointerDown={(event) => selectItem(item, event)}
-            >
-              {reviewStatusLabel[frame.status]}
-              <FrameRenderer
-                {...(liveThreads.length === 0 ? {} : { commentThreads: liveThreads })}
-                {...(frameReceivesInput ? { onInputIntent: onFrameInputIntent } : {})}
-                frame={frame}
-                resolver={resolver}
-              />
-              {frameThreads.map((thread) => (
-                <CommentPin key={thread.threadId} thread={thread} />
-              ))}
-            </div>
-          )
-        },
-        note: (item) => {
-          const { noteId } = item
-          const note = notes.get(noteId)
-          if (note === undefined) return null
-          return (
-            <div
-              aria-label={note.text}
-              aria-selected={ariaSelected(selection, item)}
-              key={note.noteId}
-              role="option"
-              style={itemStyle(note.geometry, zIndex)}
-              onPointerDown={(event) => selectItem(item, event)}
-            >
-              {note.text}
-            </div>
-          )
-        }
-      }))
-    )
+  const frameEntries = projection.stack.flatMap((item, zIndex) => {
+    const frame = frames.get(item.frameId)
+    if (frame === undefined) return []
+    return [{ frame, item, zIndex }]
+  })
 
-  const hasItems = projection.stack.length > 0
+  const items = frameEntries.length === 0
+    ? (
+      <p role="status">{`${projection.title} has no Frames.`}</p>
+    )
+    : frameEntries.map(({ frame, item, zIndex }) => {
+      const { frameId } = item
+      const frameReceivesInput = inputTarget._tag === "camera" ||
+        inputTarget.frameId !== frameId
+      const onFrameInputIntent = (intent: FrameInputIntent) => {
+        if (intent.type === "select") {
+          applySelectionCommand({
+            _tag: "item",
+            item,
+            additive: intent.additive
+          })
+          return
+        }
+        applyCameraIntent(intent)
+      }
+      return (
+        <div
+          ref={(element) => {
+            if (element === null) frameElementsRef.current.delete(frameId)
+            else frameElementsRef.current.set(frameId, element)
+          }}
+          aria-label={frame.title}
+          aria-selected={ariaSelected(selection, item)}
+          data-frame-id={frameId}
+          data-review-status={frame.status}
+          key={frame.frameId}
+          role="option"
+          style={itemStyle(itemDrag.geometryFor(frame), zIndex)}
+          onPointerDown={(event) => {
+            selectFrame(item, event)
+            itemDrag.begin(frame, "move", event)
+          }}
+        >
+          {reviewStatusLabel[frame.status]}
+          <FrameRenderer
+            {...(frameReceivesInput ? { onInputIntent: onFrameInputIntent } : {})}
+            frame={frame}
+            paused={reviewEffects.isFramePaused(frameId)}
+            resolver={resolver}
+          />
+          {CanvasSelection.has(selection, item) && onSubmit !== undefined
+            ? (
+              <span
+                aria-label={`Resize ${frame.title}`}
+                style={{
+                  bottom: 0,
+                  cursor: "se-resize",
+                  position: "absolute",
+                  right: 0
+                }}
+                onPointerDown={(event) => {
+                  event.stopPropagation()
+                  itemDrag.begin(frame, "resize", event)
+                }}
+              >
+                Resize
+              </span>
+            )
+            : null}
+        </div>
+      )
+    })
+
+  const hasItems = frameEntries.length > 0
 
   return (
     <section
@@ -240,6 +255,7 @@ export function CanvasBoard({
       className={className}
       role={hasItems ? "listbox" : undefined}
       style={{ position: "relative" }}
+      onPointerCancel={itemDrag.cancel}
       onPointerDown={(event) => {
         const target = event.target
         if (
@@ -248,7 +264,21 @@ export function CanvasBoard({
         ) return
         applySelectionCommand({ _tag: "clear" })
       }}
+      onPointerMove={itemDrag.update}
+      onPointerUp={itemDrag.finish}
     >
+      {onSubmit === undefined
+        ? null
+        : (
+          <ReviewChrome
+            fullscreen={reviewEffects.fullscreen}
+            onEffect={reviewEffects.handle}
+            onSubmit={onSubmit}
+            pauseOffscreen={reviewEffects.pauseOffscreen}
+            projection={projection}
+            selection={{ _tag: "items", items: selection }}
+          />
+        )}
       {hasItems
         ? <div style={canvasCameraStyle(camera)}>{items}</div>
         : items}

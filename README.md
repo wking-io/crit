@@ -2,7 +2,7 @@
 
 Crit is a local-first collaborative review canvas for live web applications.
 
-Authors use the Crit UI, CLI, and local agents to arrange live pages, compare responsive Frames, leave Notes and comments, and preserve captures. After share, teammates review in the hosted UI. They do not install Crit.
+Authors use the Crit UI, CLI, and local agents to arrange live pages, compare responsive Frames, and preserve captures. After share, teammates review in the hosted UI. They do not install Crit. v1 is Frames only.
 
 ## Rewrite status
 
@@ -35,7 +35,7 @@ Crit selects the remembered accessible Workspace. Otherwise it selects the Insta
 
 Local agents connect to `crit dev` while the author is building. After share, review is human-led.
 
-A teammate opens the hosted review UI, signs in with Cloudflare Access, and leaves Notes and comments. They do not install Crit. Crit has no MCP server and no OAuth agent grants.
+A teammate opens the hosted review UI and signs in with Cloudflare Access. They do not install Crit. Crit has no MCP server and no OAuth agent grants.
 
 Accepted local Agent work identifies the Agent as author. Crit also records the Person who ran that Agent and optional reported harness, model, session, and task metadata.
 
