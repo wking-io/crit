@@ -30,7 +30,7 @@ import { ApplicationBaseUrl } from "@crit/representations"
 import { Console, Context, Effect, Layer, Match, Option, Redacted, Result, Schema, type Effect as EffectType } from "effect"
 import { Argument, Command, Flag } from "effect/unstable/cli"
 
-import { frameCommand, frameSourceLabel, inferredTitle, resolveFrameGeometry } from "./add-frame.js"
+import { frameCommand, frameSourceLabel, resolveFrameGeometry } from "./add-frame.js"
 import { CanvasLayout, canvasLayout, formatCanvasLayout } from "./layout.js"
 
 class CliOperationalFailure extends Schema.TaggedError<CliOperationalFailure>()(
@@ -276,9 +276,15 @@ const addFrame = Command.make("add-frame", {
     Flag.withDescription("Artifact sha256 digest"),
     Flag.optional
   ),
-  title: Flag.string("title").pipe(Flag.optional),
-  x: Flag.float("x").pipe(Flag.optional),
-  y: Flag.float("y").pipe(Flag.optional),
+  title: Flag.string("title").pipe(
+    Flag.withDescription("Frame title")
+  ),
+  x: Flag.float("x").pipe(
+    Flag.withDescription("Frame x position")
+  ),
+  y: Flag.float("y").pipe(
+    Flag.withDescription("Frame y position")
+  ),
   width: Flag.float("width").pipe(Flag.optional),
   height: Flag.float("height").pipe(Flag.optional),
   root: Flag.directory("root", { mustExist: true }).pipe(Flag.withDefault("."))
@@ -336,15 +342,13 @@ const addFrame = Command.make("add-frame", {
     })),
     Match.exhaustive
   )
-  const resolvedTitle = yield* Option.match(title, {
-    onNone: () => Effect.succeed(inferredTitle(representation)),
-    onSome: (value) => decode(AuthoredText, value, "title")
+  const resolvedTitle = yield* decode(AuthoredText, title, "title")
+  const geometry = yield* Result.match(resolveFrameGeometry({ x, y, width, height }), {
+    onFailure: (message) => Effect.fail(new CliOperationalFailure({ message })),
+    onSuccess: Effect.succeed
   })
-  if (Option.isSome(x) !== Option.isSome(y)) {
-    return yield* Effect.fail(new CliOperationalFailure({ message: "x and y must be set together" }))
-  }
   const added = yield* connected(root, ({ client }) => Effect.gen(function*() {
-    const opened = yield* client.open(id).pipe(
+    yield* client.open(id).pipe(
       Effect.mapError((failure) => Match.value(failure).pipe(
         Match.when({ _tag: "canvas-not-found" }, ({ canvasId }) => new CliOperationalFailure({
           message: `Canvas not found: ${canvasId}`
@@ -352,16 +356,6 @@ const addFrame = Command.make("add-frame", {
         Match.orElse(() => new CliOperationalFailure({ message: "Unable to add Frame" }))
       ))
     )
-    const geometry = yield* Result.match(resolveFrameGeometry({
-      frameCount: opened.projection.frames.length,
-      x,
-      y,
-      width,
-      height
-    }), {
-      onFailure: (message) => Effect.fail(new CliOperationalFailure({ message })),
-      onSuccess: Effect.succeed
-    })
     const frameId = Id.frame(`frame_${crypto.randomUUID().replaceAll("-", "")}`)
     const command = frameCommand({
       frameId,

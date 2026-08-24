@@ -5,25 +5,17 @@ import { join } from "node:path"
 
 import {
   ApplicationRouteRepresentation,
-  ArtifactRepresentation,
   AuthoredText,
+  Geometry,
   Id,
-  RootedRoute,
-  Sha256Digest,
-  WebUrlRepresentation
+  RootedRoute
 } from "@crit/domain"
 import { Option, Result, Schema } from "effect"
 import { afterEach, describe, expect, it } from "vitest"
 
 import {
-  DEFAULT_FRAME_HEIGHT,
-  DEFAULT_FRAME_WIDTH,
   frameCommand,
   frameSourceLabel,
-  inferredFrameTitle,
-  inferredTitle,
-  inferredWebUrlTitle,
-  nextFrameGeometry,
   resolveFrameGeometry
 } from "../src/add-frame.js"
 
@@ -89,66 +81,24 @@ const run = (dataRoot: string, args: ReadonlyArray<string>) => spawnSync(process
   dataRoot
 ], { encoding: "utf8" })
 
+const placed = (title: string, x: string, y: string): Array<string> => [
+  "--title",
+  title,
+  "--x",
+  x,
+  "--y",
+  y
+]
+
 const applicationId = Id.application("application_storefront")
 const frameId = Id.frame("frame_checkout")
 const checkout = Schema.decodeUnknownSync(RootedRoute)("/checkout")
-const home = Schema.decodeUnknownSync(RootedRoute)("/")
 const checkoutTitle = Schema.decodeUnknownSync(AuthoredText)("Checkout")
-const pricingUrl = Schema.decodeUnknownSync(WebUrlRepresentation)({
-  _tag: "web-url",
-  url: "https://example.com/pricing"
-}).url
-const digest = Schema.decodeUnknownSync(Sha256Digest)(
-  "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-)
+const origin = Geometry.make({ x: 0, y: 0, width: 1200, height: 800 })
 const none = Option.none<number>()
 
-describe("inferredFrameTitle", () => {
-  it("uses the last route segment", () => {
-    expect(inferredFrameTitle(checkout)).toBe("checkout")
-  })
-
-  it("titles a root route Untitled frame", () => {
-    expect(inferredFrameTitle(home)).toBe("Untitled frame")
-  })
-})
-
-describe("inferredTitle", () => {
-  it("uses the last web-url path segment", () => {
-    expect(inferredWebUrlTitle(pricingUrl)).toBe("pricing")
-    expect(inferredTitle(WebUrlRepresentation.make({ url: pricingUrl }))).toBe("pricing")
-  })
-
-  it("titles an artifact Untitled frame", () => {
-    expect(inferredTitle(ArtifactRepresentation.make({
-      artifactId: Id.artifact("artifact_capture"),
-      digest
-    }))).toBe("Untitled frame")
-  })
-})
-
 describe("frameCommand", () => {
-  it("stores the given representation", () => {
-    const representation = ApplicationRouteRepresentation.make({
-      applicationId,
-      route: checkout
-    })
-    const command = frameCommand({
-      frameId,
-      title: inferredTitle(representation),
-      representation,
-      geometry: nextFrameGeometry({
-        frameCount: 0,
-        width: DEFAULT_FRAME_WIDTH,
-        height: DEFAULT_FRAME_HEIGHT
-      })
-    })
-    expect(command.title).toBe("checkout")
-    expect(command.representation).toEqual(representation)
-    expect(frameSourceLabel(representation)).toBe("/checkout")
-  })
-
-  it("keeps an explicit title", () => {
+  it("stores the given representation and title", () => {
     const representation = ApplicationRouteRepresentation.make({
       applicationId,
       route: checkout
@@ -157,63 +107,37 @@ describe("frameCommand", () => {
       frameId,
       title: checkoutTitle,
       representation,
-      geometry: nextFrameGeometry({
-        frameCount: 0,
-        width: DEFAULT_FRAME_WIDTH,
-        height: DEFAULT_FRAME_HEIGHT
-      })
+      geometry: origin
     })
     expect(command.title).toBe("Checkout")
-  })
-})
-
-describe("nextFrameGeometry", () => {
-  it("tiles the first three Frames", () => {
-    expect(nextFrameGeometry({
-      frameCount: 0,
-      width: DEFAULT_FRAME_WIDTH,
-      height: DEFAULT_FRAME_HEIGHT
-    })).toEqual({ x: 0, y: 0, width: 1200, height: 800 })
-    expect(nextFrameGeometry({
-      frameCount: 1,
-      width: DEFAULT_FRAME_WIDTH,
-      height: DEFAULT_FRAME_HEIGHT
-    })).toEqual({ x: 1240, y: 0, width: 1200, height: 800 })
-    expect(nextFrameGeometry({
-      frameCount: 3,
-      width: DEFAULT_FRAME_WIDTH,
-      height: DEFAULT_FRAME_HEIGHT
-    })).toEqual({ x: 0, y: 840, width: 1200, height: 800 })
+    expect(command.representation).toEqual(representation)
+    expect(frameSourceLabel(representation)).toBe("/checkout")
   })
 })
 
 describe("resolveFrameGeometry", () => {
-  it("uses an explicit position", () => {
-    const geometry = resolveFrameGeometry({
-      frameCount: 4,
-      x: Option.some(80),
-      y: Option.some(120),
+  it("uses an explicit position and size", () => {
+    expect(Result.getOrThrow(resolveFrameGeometry({
+      x: 80,
+      y: 120,
       width: Option.some(640),
       height: Option.some(480)
-    })
-    expect(Result.getOrThrow(geometry)).toEqual({ x: 80, y: 120, width: 640, height: 480 })
+    }))).toEqual({ x: 80, y: 120, width: 640, height: 480 })
   })
 
-  it("rejects a partial position", () => {
-    expect(Option.getOrUndefined(Result.getFailure(resolveFrameGeometry({
-      frameCount: 0,
-      x: Option.some(80),
-      y: none,
+  it("defaults width and height", () => {
+    expect(Result.getOrThrow(resolveFrameGeometry({
+      x: 80,
+      y: 40,
       width: none,
       height: none
-    })))).toBe("x and y must be set together")
+    }))).toEqual({ x: 80, y: 40, width: 1200, height: 800 })
   })
 
   it("rejects a non-positive size", () => {
     expect(Option.getOrUndefined(Result.getFailure(resolveFrameGeometry({
-      frameCount: 0,
-      x: Option.some(0),
-      y: Option.some(0),
+      x: 0,
+      y: 0,
       width: Option.some(0),
       height: none
     })))).toBe("Invalid geometry")
@@ -244,6 +168,7 @@ describe("built crit-target add-frame", () => {
       "application-route",
       "--route",
       "/checkout",
+      ...placed("Checkout", "0", "0"),
       "--root",
       directory,
       "--json"
@@ -255,7 +180,7 @@ describe("built crit-target add-frame", () => {
     expect(frame.representation._tag).toBe("application-route")
     expect(frame.representation.applicationId).toBe(applicationId)
     expect(frame.representation.route).toBe("/checkout")
-    expect(frame.title).toBe("checkout")
+    expect(frame.title).toBe("Checkout")
     expect(frame.geometry).toEqual({ x: 0, y: 0, width: 1200, height: 800 })
     expect(frame.frameId).toMatch(/^frame_[a-f0-9]{32}$/)
 
@@ -266,8 +191,7 @@ describe("built crit-target add-frame", () => {
       "application-route",
       "--route",
       "/about",
-      "--title",
-      "About",
+      ...placed("About", "1240", "0"),
       "--root",
       directory,
       "--json"
@@ -300,12 +224,7 @@ describe("built crit-target add-frame", () => {
       "web-url",
       "--url",
       "https://example.com/pricing",
-      "--title",
-      "Pricing",
-      "--x",
-      "80",
-      "--y",
-      "40",
+      ...placed("Pricing", "80", "40"),
       "--width",
       "640",
       "--height",
@@ -344,6 +263,7 @@ describe("built crit-target add-frame", () => {
       "artifact_capture",
       "--digest",
       "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      ...placed("Capture", "0", "0"),
       "--json"
     ])
     expect(added.status, added.stderr).toBe(0)
@@ -353,7 +273,7 @@ describe("built crit-target add-frame", () => {
       artifactId: "artifact_capture",
       digest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     })
-    expect(frame.title).toBe("Untitled frame")
+    expect(frame.title).toBe("Capture")
     await stop(started.child)
   })
 
@@ -377,6 +297,7 @@ describe("built crit-target add-frame", () => {
       "application-route",
       "--route",
       "/checkout",
+      ...placed("Checkout", "0", "0"),
       "--root",
       directory
     ])
@@ -404,6 +325,7 @@ describe("built crit-target add-frame", () => {
       "application-route",
       "--route",
       "/checkout",
+      ...placed("Checkout", "0", "0"),
       "--root",
       directory
     ])
@@ -419,7 +341,8 @@ describe("built crit-target add-frame", () => {
       "--type",
       "application-route",
       "--route",
-      "products"
+      "products",
+      ...placed("Products", "0", "0")
     ])
     expect(result.status).not.toBe(0)
     expect(result.stderr).toContain("Invalid route: products")
@@ -432,14 +355,15 @@ describe("built crit-target add-frame", () => {
       "--type",
       "web-url",
       "--url",
-      "http://localhost:3000/app"
+      "http://localhost:3000/app",
+      ...placed("App", "0", "0")
     ])
     expect(result.status).not.toBe(0)
     expect(result.stderr).toContain("Invalid url: http://localhost:3000/app")
   })
 
-  it("rejects x without y before talking to the daemon", () => {
-    const result = run(join(tmpdir(), "crit-cli-add-frame-partial-xy"), [
+  it("rejects a missing title before talking to the daemon", () => {
+    const result = run(join(tmpdir(), "crit-cli-add-frame-no-title"), [
       "add-frame",
       "canvas_cli_frames",
       "--type",
@@ -447,10 +371,43 @@ describe("built crit-target add-frame", () => {
       "--url",
       "https://example.com/pricing",
       "--x",
-      "80"
+      "80",
+      "--y",
+      "40"
     ])
     expect(result.status).not.toBe(0)
-    expect(result.stderr).toContain("x and y must be set together")
+    expect(result.stderr).toContain("--title")
+  })
+
+  it("rejects a missing position before talking to the daemon", () => {
+    const result = run(join(tmpdir(), "crit-cli-add-frame-no-xy"), [
+      "add-frame",
+      "canvas_cli_frames",
+      "--type",
+      "web-url",
+      "--url",
+      "https://example.com/pricing",
+      "--title",
+      "Pricing"
+    ])
+    expect(result.status).not.toBe(0)
+    expect(result.stderr.toLowerCase()).toMatch(/--x|--y/)
+  })
+
+  it("rejects invalid geometry before talking to the daemon", () => {
+    const result = run(join(tmpdir(), "crit-cli-add-frame-bad-size"), [
+      "add-frame",
+      "canvas_cli_frames",
+      "--type",
+      "web-url",
+      "--url",
+      "https://example.com/pricing",
+      ...placed("Pricing", "0", "0"),
+      "--width",
+      "0"
+    ])
+    expect(result.status).not.toBe(0)
+    expect(result.stderr).toBe("Invalid geometry\n")
   })
 
   it("reports a stopped daemon", async() => {
@@ -473,6 +430,7 @@ describe("built crit-target add-frame", () => {
       "application-route",
       "--route",
       "/checkout",
+      ...placed("Checkout", "0", "0"),
       "--root",
       directory
     ])
