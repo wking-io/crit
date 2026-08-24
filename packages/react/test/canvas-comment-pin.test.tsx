@@ -8,15 +8,12 @@ import {
   QueryClient,
   QueryClientProvider
 } from "@tanstack/react-query"
-import { Effect, Option } from "effect"
+import { Effect } from "effect"
 import { StrictMode, act, type ReactElement } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
-import {
-  decodeFrameCommentDownMessage,
-  type FrameCommentDownMessage
-} from "@crit/protocol"
+import { type FrameCommentDownMessage } from "@crit/protocol"
 
 import {
   CanvasBoard,
@@ -255,9 +252,8 @@ describe("CanvasBoard comment pins", () => {
   it("configures live element pins on the Frame comment bridge", async() => {
     const posted: FrameCommentDownMessage[] = []
     const frameWindow = {
-      postMessage(message: unknown) {
-        const decoded = decodeFrameCommentDownMessage(message)
-        if (Option.isSome(decoded)) posted.push(decoded.value)
+      postMessage(message: FrameCommentDownMessage) {
+        posted.push(message)
       }
     }
     // SAFETY: jsdom's iframe window has no postMessage; the bridge only calls that method.
