@@ -1,4 +1,4 @@
-import { AuthorityView, PersonInvocation } from "@crit/authority"
+import { AgentInvocation, AuthorityView, PersonInvocation } from "@crit/authority"
 import { Id, PersonAttribution, decodeCanvasCommandBatch, emptyCanvasProjection } from "@crit/domain"
 import { ProtocolValue, type AcceptedCanvasChange, type ChangePage } from "@crit/protocol"
 import { Effect, Result, Schema } from "effect"
@@ -18,6 +18,18 @@ const person = Schema.decodeUnknownSync(PersonInvocation)({
     subject: "oidc|replica-policy",
     person: { _tag: "person", personId: "person_replica_policy", displayName: "Replica" }
   }
+})
+const agent = Schema.decodeUnknownSync(AgentInvocation)({
+  _tag: "agent",
+  principal: {
+    _tag: "agent",
+    subject: "oauth|replica-policy",
+    agent: { _tag: "agent", agentId: "agent_replica_policy", displayName: "Codex" },
+    delegatedBy: person.principal.person,
+    oauthClientId: "oauth_client_replica_policy",
+    grantId: "grant_replica_policy"
+  },
+  executionId: "execution_replica_policy"
 })
 const commands = decodeCanvasCommandBatch([{ _tag: "rename-canvas", expectedTitle: "Original", title: "Accepted" }])
 const changeId = Id.change("change_replica_policy")
@@ -48,6 +60,29 @@ const enqueued = () => Result.getOrThrow(ReplicaPolicy.enqueue(
 ))
 
 describe("ReplicaPolicy reconciliation", () => {
+  it("names a person author on the pending view", () => {
+    const viewed = Result.getOrThrow(ReplicaPolicy.view(enqueued()))
+    expect(viewed.pending[0]?.author).toEqual({
+      _tag: "person",
+      displayName: person.principal.person.displayName
+    })
+  })
+
+  it("names an agent author on the pending view without the delegating person", () => {
+    const enqueuedAgent = Result.getOrThrow(ReplicaPolicy.enqueue(
+      initial(),
+      ReplicaModel.change({ canvasId, commands }),
+      agent,
+      changeId
+    ))
+    const viewed = Result.getOrThrow(ReplicaPolicy.view(enqueuedAgent))
+    expect(viewed.pending[0]?.author).toEqual({
+      _tag: "agent",
+      displayName: agent.principal.agent.displayName
+    })
+    expect(viewed.pending[0]?.author).not.toHaveProperty("delegatedBy")
+  })
+
   it("satisfies reusable receipt and page idempotency", async () => {
     await Effect.runPromise(ReplicaConformance.receiptAndPageIdempotency)
   })

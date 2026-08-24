@@ -5,6 +5,7 @@ export {
   ChangeIdGenerationFailure,
   Conflicted,
   LocalChangeRejected,
+  PendingAuthor,
   PendingChange,
   PendingState,
   Ready,
@@ -20,6 +21,7 @@ export {
   SyncResult
 } from "./model.js"
 export type {
+  PendingAuthor,
   ReplicaChangeFailure,
   ReplicaFailure,
   ReplicaOpenFailure,

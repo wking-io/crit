@@ -62,6 +62,9 @@ const entryStateCopy = (state: PendingChange["state"]): string =>
       `Blocked by ${changeCount(blockedBy.length)} ahead of it.`
   }))
 
+const entryCopy = (change: PendingChange): string =>
+  `${entryStateCopy(change.state)} Proposed by ${change.author.displayName}.`
+
 const outstandingHeadline = (
   title: ReplicaView["projection"]["title"],
   changes: readonly [PendingChange, ...PendingChange[]]
@@ -108,7 +111,7 @@ export function ReplicaBoard({
           ? (
             <ul>
               {status.changes.map((change) => (
-                <li key={change.proposal.changeId}>{entryStateCopy(change.state)}</li>
+                <li key={change.proposal.changeId}>{entryCopy(change)}</li>
               ))}
             </ul>
           )

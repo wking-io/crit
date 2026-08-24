@@ -95,10 +95,20 @@ const decodeView = Schema.decodeUnknownSync(ReplicaView)
 
 const decodeFailure = Schema.decodeUnknownSync(CanvasChangeFailureSchema)
 
+const personAuthor: { readonly _tag: "person"; readonly displayName: string } = {
+  _tag: "person",
+  displayName: "Ada"
+}
+const agentAuthor: { readonly _tag: "agent"; readonly displayName: string } = {
+  _tag: "agent",
+  displayName: "Codex"
+}
+
 const pendingChange = (
   changeId: string,
   state: PendingState,
   commands: ReturnType<typeof decodeCanvasCommandBatch>,
+  author: { readonly _tag: "person" | "agent"; readonly displayName: string },
   dependencies: readonly string[] = []
 ) => ({
   proposal: {
@@ -108,7 +118,8 @@ const pendingChange = (
     commands
   },
   dependencies,
-  state
+  state,
+  author
 })
 
 const rename = decodeCanvasCommandBatch([{
@@ -148,8 +159,8 @@ const mixed = decodeView({
   acknowledgedCursor: "cursor_ack",
   projection,
   pending: [
-    pendingChange("change_ready", Ready.make({}), rename),
-    pendingChange("change_unconfirmed", AcceptedUnconfirmed.make({}), rename),
+    pendingChange("change_ready", Ready.make({}), rename, personAuthor),
+    pendingChange("change_unconfirmed", AcceptedUnconfirmed.make({}), rename, personAuthor),
     pendingChange("change_conflicted", Conflicted.make({
       failure: decodeFailure({
         _tag: "precondition-failed",
@@ -158,10 +169,10 @@ const mixed = decodeView({
         expected: "Review",
         actual: "Other"
       })
-    }), rename),
+    }), rename, personAuthor),
     pendingChange("change_blocked", Blocked.make({
       blockedBy: [Id.change("change_conflicted")]
-    }), rename, ["change_conflicted"])
+    }), rename, personAuthor, ["change_conflicted"])
   ]
 })
 
@@ -178,7 +189,7 @@ const missingFrame = decodeView({
         entity: "frame",
         id: "frame_missing"
       })
-    }), addMissingFrame)
+    }), addMissingFrame, personAuthor)
   ]
 })
 
@@ -266,10 +277,10 @@ describe("ReplicaBoard", () => {
     )
     const rows = [...region?.querySelectorAll("li") ?? []].map((node) => node.textContent)
     expect(rows).toEqual([
-      "Waiting to sync.",
-      "Accepted, awaiting confirmation.",
-      "Rejected because title changed since this was proposed.",
-      "Blocked by 1 change ahead of it."
+      "Waiting to sync. Proposed by Ada.",
+      "Accepted, awaiting confirmation. Proposed by Ada.",
+      "Rejected because title changed since this was proposed. Proposed by Ada.",
+      "Blocked by 1 change ahead of it. Proposed by Ada."
     ])
     expect(container.querySelector("[aria-label='Checkout']")).toBeInstanceOf(HTMLElement)
   })
@@ -284,10 +295,31 @@ describe("ReplicaBoard", () => {
       "Review has conflicted changes."
     )
     expect(syncRegion()?.querySelector("li")?.textContent).toBe(
-      "Rejected because its frame no longer exists."
+      "Rejected because its frame no longer exists. Proposed by Ada."
     )
     expect(container.querySelector("[aria-label='Missing']")).toBeNull()
     expect(container.querySelector("[aria-label='Checkout']")).toBeInstanceOf(HTMLElement)
+  })
+
+  it("names an agent proposal by the agent, not a delegating person", async() => {
+    const agentProposed = decodeView({
+      _tag: "replica-view",
+      canvasId: projection.canvasId,
+      acknowledgedCursor: "cursor_ack",
+      projection,
+      pending: [pendingChange("change_agent", Ready.make({}), rename, agentAuthor)]
+    })
+    await act(async() => render(
+      <ReplicaBoard {...requiredBoard}  resolver={checkoutResolver} view={agentProposed} />
+    ))
+    const region = syncRegion()
+    expect(region?.querySelector("[role='status']")?.textContent).toBe(
+      "Review has pending changes."
+    )
+    expect(region?.querySelector("li")?.textContent).toBe(
+      "Waiting to sync. Proposed by Codex."
+    )
+    expect(region?.textContent).not.toContain("Ada")
   })
 
   it("drops the queue when a later view is synchronized", async() => {
