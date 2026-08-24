@@ -5,8 +5,6 @@ export {
   AuthSubject,
   CanvasId,
   ChangeId,
-  CommentId,
-  CommentThreadId,
   ExecutionId,
   FrameId,
   GrantId,
@@ -14,7 +12,6 @@ export {
   Id,
   InstallationId,
   IsoTimestamp,
-  NoteId,
   OAuthClientId,
   PersonId,
   Sha256Digest,
@@ -58,59 +55,35 @@ export {
   emptyCanvasProjection
 } from "./canvas.js"
 export { Geometry, NormalizedPoint, Point } from "./geometry.js"
-export { CommentAnchor, ElementAnchor, ElementEvidence, ElementFingerprint, FrameAnchor } from "./anchor.js"
-export { AuthoredText, CanvasItemRef, Comment, CommentThread, Frame, Note, NoteColor, ReviewStatus } from "./content.js"
+export { AuthoredText, CanvasItemRef, Frame, ReviewStatus } from "./content.js"
 export {
-  AddCommentThreadCommand,
   AddFrameCommand,
-  AddNoteCommand,
-  AttachNoteCommand,
   CanvasChange,
   CanvasCommand,
   CanvasCommandBatch,
   decodeCanvasChange,
   decodeCanvasCommandBatch,
-  DetachNoteCommand,
-  EditCommentCommand,
-  EditNoteCommand,
   PlaceCanvasItemCommand,
   RemoveFrameCommand,
-  RemoveNoteCommand,
-  ReplyToCommentThreadCommand,
   RenameCanvasCommand,
-  SetCommentThreadResolutionCommand,
   SetFrameGeometryCommand,
   SetFrameRepresentationCommand,
   SetFrameStatusCommand,
-  SetFrameTitleCommand,
-  SetNoteColorCommand,
-  SetNoteGeometryCommand
+  SetFrameTitleCommand
 } from "./command.js"
 export {
-  proposeAddCommentThread,
   proposeAddFrame,
-  proposeAddNote,
-  proposeAttachNote,
   proposeBringToFront,
-  proposeDetachNote,
-  proposeEditComment,
-  proposeEditNote,
   proposeRemoveFrame,
-  proposeRemoveNote,
   proposeRenameCanvas,
-  proposeReplyToCommentThread,
   proposeSendToBack,
-  proposeSetCommentThreadResolution,
   proposeSetFrameGeometry,
   proposeSetFrameRepresentation,
   proposeSetFrameStatus,
-  proposeSetFrameTitle,
-  proposeSetNoteColor,
-  proposeSetNoteGeometry
+  proposeSetFrameTitle
 } from "./intent.js"
-export { CanvasChangeFailureSchema, CanvasEngine, engineChange, engineChangeFromAccepted } from "./engine.js"
+export { CanvasChangeFailureSchema, CanvasEngine } from "./engine.js"
 export type {
-  AuthoredEngineChange,
   CanvasChangeFailure,
   CanvasChangeResult,
   CanvasReplayFailure,

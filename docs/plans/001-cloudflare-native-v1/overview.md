@@ -8,7 +8,7 @@ The alpha remains runnable as a behavior reference. The rewrite does not read it
 
 ## Product outcome
 
-Crit is a local-first collaborative review canvas for live applications. The UI is the primary viewing and review surface. The first-release UI is Frames only. Notes and comments stay in the domain model for later.
+Crit is a local-first collaborative review canvas for live applications. The UI is the primary viewing and review surface. v1 is Frames only. Notes and comments are out of the rewrite until we design them again.
 
 Local work is complete without an account:
 

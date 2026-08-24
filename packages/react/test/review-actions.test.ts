@@ -12,7 +12,7 @@ import {
 } from "../src/review-actions.js"
 
 const projection = decodeCanvasProjection({
-  schemaVersion: 2,
+  schemaVersion: 3,
   canvasId: "canvas_review",
   title: "Review",
   frames: [
@@ -47,68 +47,13 @@ const projection = decodeCanvasProjection({
       geometryChangedByChangeId: "change_1"
     }
   ],
-  notes: [
-    {
-      noteId: "note_a",
-      text: "First",
-      author: { _tag: "person", personId: "person_ada", displayName: "Ada" },
-      color: "blue",
-      geometry: { x: 100, y: 40, width: 80, height: 60 },
-      attachedFrameId: null,
-      createdByChangeId: "change_1",
-      updatedByChangeId: "change_1",
-      textChangedByChangeId: "change_1",
-      colorChangedByChangeId: "change_1",
-      geometryChangedByChangeId: "change_1",
-      attachmentChangedByChangeId: "change_1"
-    },
-    {
-      noteId: "note_b",
-      text: "Attached",
-      author: { _tag: "person", personId: "person_ada", displayName: "Ada" },
-      color: "neutral",
-      geometry: { x: 20, y: 30, width: 80, height: 60 },
-      attachedFrameId: "frame_a",
-      createdByChangeId: "change_1",
-      updatedByChangeId: "change_1",
-      textChangedByChangeId: "change_1",
-      colorChangedByChangeId: "change_1",
-      geometryChangedByChangeId: "change_1",
-      attachmentChangedByChangeId: "change_1"
-    }
-  ],
-  threads: [{
-    threadId: "thread_a",
-    anchor: {
-      _tag: "frame",
-      frameId: "frame_a",
-      point: { x: 0.5, y: 0.5 }
-    },
-    resolved: false,
-    comments: [{
-      commentId: "comment_a",
-      body: "Review this",
-      author: { _tag: "person", personId: "person_ada", displayName: "Ada" },
-      createdByChangeId: "change_1",
-      bodyChangedByChangeId: "change_1"
-    }],
-    createdByChangeId: "change_1",
-    updatedByChangeId: "change_1",
-    anchorChangedByChangeId: "change_1",
-    resolutionChangedByChangeId: "change_1"
-  }],
   stack: [
     { _tag: "frame", frameId: "frame_a" },
-    { _tag: "note", noteId: "note_a" },
-    { _tag: "frame", frameId: "frame_b" },
-    { _tag: "note", noteId: "note_b" }
+    { _tag: "frame", frameId: "frame_b" }
   ],
   stackChangedByChangeId: "change_1",
   issuedIds: {
-    frameIds: ["frame_a", "frame_b"],
-    noteIds: ["note_a", "note_b"],
-    threadIds: ["thread_a"],
-    commentIds: ["comment_a"]
+    frameIds: ["frame_a", "frame_b"]
   }
 })
 
@@ -175,7 +120,7 @@ describe("review actions", () => {
     expect(commandsFor("bring-to-front", frame)).toEqual([{
       _tag: "place-canvas-item",
       item: { _tag: "frame", frameId: "frame_a" },
-      after: { _tag: "note", noteId: "note_b" },
+      after: { _tag: "frame", frameId: "frame_b" },
       expectedStackChangeId: "change_1"
     }])
   })

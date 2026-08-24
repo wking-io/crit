@@ -16,15 +16,13 @@ const makeView = (cursor: string): ReplicaView =>
     canvasId,
     acknowledgedCursor: cursor,
     projection: decodeCanvasProjection({
-      schemaVersion: 2,
+      schemaVersion: 3,
       canvasId,
       title: "Untitled",
       frames: [],
-      notes: [],
-      threads: [],
       stack: [],
       stackChangedByChangeId: null,
-      issuedIds: { frameIds: [], noteIds: [], threadIds: [], commentIds: [] }
+      issuedIds: { frameIds: [] }
     }),
     pending: []
   })

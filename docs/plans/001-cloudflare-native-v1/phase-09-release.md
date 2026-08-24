@@ -17,6 +17,6 @@ Ship a repeatable customer-hosted installation and a coherent local-to-team work
 
 - A fresh customer Cloudflare account installs from the documented procedure.
 - A developer initializes locally, creates and reviews work offline, shares it, invites a teammate through company identity, resolves a shared preview, and continues offline.
-- A remote OAuth Agent comments and changes a Frame with correct provenance.
+- A remote OAuth Agent changes a Frame with correct provenance.
 - Backup and restore reproduce D1 control data, Canvas ledgers, and R2 artifacts.
 - Package, security, conformance, browser, and end-to-end release suites pass.

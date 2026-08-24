@@ -5,10 +5,7 @@ import {
 } from "@crit/domain"
 import { Schema } from "effect"
 
-const itemKey = (item: CanvasItemRef): string =>
-  item._tag === "frame"
-    ? `frame:${item.frameId}`
-    : `note:${item.noteId}`
+const itemKey = (item: CanvasItemRef): string => `frame:${item.frameId}`
 
 const CanvasSelectionValue = Schema.Array(CanvasItemRefSchema).check(
   Schema.makeFilter<readonly CanvasItemRef[]>((selection) =>
@@ -73,8 +70,8 @@ export const CanvasSelection = {
   inputTarget: (selection: CanvasSelection | undefined): CanvasInputTarget => {
     if (selection === undefined || selection.length !== 1) return cameraTarget
     const item = selection[0]
-    return item !== undefined && item._tag === "frame"
-      ? { _tag: "frame", frameId: item.frameId }
-      : cameraTarget
+    return item === undefined
+      ? cameraTarget
+      : { _tag: "frame", frameId: item.frameId }
   }
 }

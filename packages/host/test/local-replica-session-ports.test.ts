@@ -21,7 +21,7 @@ const view = Schema.decodeUnknownSync(ReplicaView)({
   canvasId,
   acknowledgedCursor: "cursor_one",
   projection: decodeCanvasProjection({
-    schemaVersion: 2,
+    schemaVersion: 3,
     canvasId,
     title: "Review",
     frames: [{
@@ -37,15 +37,10 @@ const view = Schema.decodeUnknownSync(ReplicaView)({
       statusChangedByChangeId: "change_1",
       geometryChangedByChangeId: "change_1"
     }],
-    notes: [],
-    threads: [],
     stack: [{ _tag: "frame", frameId: "frame_checkout" }],
     stackChangedByChangeId: "change_1",
     issuedIds: {
-      frameIds: ["frame_checkout"],
-      noteIds: [],
-      threadIds: [],
-      commentIds: []
+      frameIds: ["frame_checkout"]
     }
   }),
   pending: []

@@ -5,8 +5,7 @@ import {
   Id,
   IsoTimestamp,
   decodeCanvasCommandBatch,
-  emptyCanvasProjection,
-  engineChangeFromAccepted
+  emptyCanvasProjection
 } from "@crit/domain"
 import { ProtocolValue, type ProposedCanvasChange } from "@crit/protocol"
 import { Data, Deferred, Effect, Exit, Fiber, Layer, Result, Schema, type Scope } from "effect"
@@ -262,14 +261,14 @@ const ledgerScenario = (factory: AuthorityConformanceFactory): AuthorityConforma
       const authority = raced
       yield* create(authority)
       const submissions = Array.from({ length: 6 }, (_, index) => authority.submit(proposal(
-        `change_conformance_note_${index}`,
+        `change_conformance_frame_${index}`,
         decodeCanvasCommandBatch([{
-          _tag: "add-note",
-          noteId: `note_conformance_${index}`,
-          text: `Note ${index}`,
-          geometry: { x: index, y: 0, width: 10, height: 10 },
-          attachedFrameId: null,
-          color: "blue"
+          _tag: "add-frame",
+          frameId: `frame_conformance_${index}`,
+          title: `Frame ${index}`,
+          representation: { _tag: "web-url", url: `https://example.com/${index}` },
+          status: "in-progress",
+          geometry: { x: index, y: 0, width: 10, height: 10 }
         }])
       ), index === 0 ? agent : person))
       yield* Effect.all(submissions, { concurrency: "unbounded" })
@@ -286,7 +285,7 @@ const ledgerScenario = (factory: AuthorityConformanceFactory): AuthorityConforma
       const view = yield* authority.open(canvasA)
       const replay = CanvasEngine.replay(
         emptyCanvasProjection(canvasA, "Authority"),
-        history.map(engineChangeFromAccepted)
+        history
       )
       requireScenario(
         name,

@@ -1,9 +1,7 @@
 import { type AuthorityView, type ChangeRejected } from "@crit/authority"
 import {
-  actorFromPrincipal,
   CanvasEngine,
-  ChangeId,
-  engineChangeFromAccepted
+  ChangeId
 } from "@crit/domain"
 import {
   ChangeValue,
@@ -41,7 +39,7 @@ const pendingAuthor = (invocation: PendingRecord["invocation"]): PendingAuthor =
   }))
 
 const rebuild = (state: ReplicaState) => {
-  const replay = CanvasEngine.replay(state.genesisProjection, state.accepted.map(engineChangeFromAccepted))
+  const replay = CanvasEngine.replay(state.genesisProjection, state.accepted)
   if (replay._tag === "replay-failed") return Result.fail(new ReplicaInvariantFailure({
     canvasId: state.canvasId,
     reason: `accepted history failed at ${replay.failure._tag}`
@@ -65,7 +63,7 @@ const rebuild = (state: ReplicaState) => {
       statuses.set(record.proposal.changeId, record.state)
       continue
     }
-    const applied = CanvasEngine.apply(projection, record.proposal, actorFromPrincipal(record.invocation.principal))
+    const applied = CanvasEngine.apply(projection, record.proposal)
     if (applied._tag === "rejected") {
       const next = { ...record, state: Conflicted.make({ failure: applied.failure }) }
       pending.push(next)
@@ -110,11 +108,10 @@ const enqueue = (state: ReplicaState, input: ReplicaChange, invocation: PendingR
   const current = rebuild(state)
   if (current._tag === "Failure") return current
   const proposal: ProposedCanvasChange = { changeId, canvasId: input.canvasId, observedCursor: state.acknowledgedCursor, commands: input.commands }
-  const onAcknowledged = CanvasEngine.replay(state.genesisProjection, state.accepted.map(engineChangeFromAccepted))
+  const onAcknowledged = CanvasEngine.replay(state.genesisProjection, state.accepted)
   if (onAcknowledged._tag === "replay-failed") return Result.fail(new ReplicaInvariantFailure({ canvasId: state.canvasId, reason: "accepted history is invalid" }))
-  const author = actorFromPrincipal(invocation.principal)
-  const acknowledgedResult = CanvasEngine.apply(onAcknowledged.projection, proposal, author)
-  const optimisticResult = CanvasEngine.apply(current.success.projection, proposal, author)
+  const acknowledgedResult = CanvasEngine.apply(onAcknowledged.projection, proposal)
+  const optimisticResult = CanvasEngine.apply(current.success.projection, proposal)
   if (optimisticResult._tag === "rejected") return Result.fail(new LocalChangeRejected({ canvasId: state.canvasId, changeId, failure: optimisticResult.failure }))
   const dependencies = acknowledgedResult._tag === "applied" ? [] : state.pending.filter(active).map((record) => record.proposal.changeId)
   const next = { ...state, pending: [...current.success.state.pending, { proposal, invocation, dependencies, state: Ready.make({}) }] }

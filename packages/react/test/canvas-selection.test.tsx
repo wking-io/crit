@@ -33,7 +33,7 @@ notifyManager.setScheduler(queueMicrotask)
 
 const url = "https://example.com/checkout"
 const projection = decodeCanvasProjection({
-  schemaVersion: 2,
+  schemaVersion: 3,
   canvasId: "canvas_review",
   title: "Review",
   frames: [{
@@ -61,18 +61,13 @@ const projection = decodeCanvasProjection({
     statusChangedByChangeId: "change_1",
     geometryChangedByChangeId: "change_1"
   }],
-  notes: [],
-  threads: [],
   stack: [
     { _tag: "frame", frameId: "frame_checkout" },
     { _tag: "frame", frameId: "frame_pricing" }
   ],
   stackChangedByChangeId: "change_1",
   issuedIds: {
-    frameIds: ["frame_checkout", "frame_pricing"],
-    noteIds: [],
-    threadIds: [],
-    commentIds: []
+    frameIds: ["frame_checkout", "frame_pricing"]
   }
 })
 

@@ -100,10 +100,7 @@ const hasUnknownCommandKind = (input: Schema.Json): boolean => {
     const header = readCommandHeader(command)
     if (Option.isSome(header) && !new Set([
       "rename-canvas", "add-frame", "set-frame-title", "set-frame-representation",
-      "set-frame-status", "set-frame-geometry", "remove-frame", "place-canvas-item",
-      "add-note", "edit-note", "set-note-color", "set-note-geometry", "attach-note", "detach-note",
-      "remove-note", "add-comment-thread", "reply-to-comment-thread", "edit-comment",
-      "set-comment-thread-resolution"
+      "set-frame-status", "set-frame-geometry", "remove-frame", "place-canvas-item"
     ]).has(header.value._tag)) {
       return true
     }

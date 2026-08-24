@@ -13,7 +13,7 @@ _Avoid_: Organization, tenant record
 
 **Active Workspace**: The Workspace used for new links and Workspace-scoped browsing. Changing it does not move an existing linked Canvas.
 
-**Canvas**: A named review space containing Frames, Notes, and Comment Threads.
+**Canvas**: A named review space containing Frames.
 
 **Canvas Projection**: The current Canvas content rebuilt from accepted Canvas Changes. It is a view, not the canonical history.
 _Avoid_: Canvas Document, authoritative document
@@ -62,20 +62,9 @@ _Avoid_: Canvas Document, authoritative document
 
 **Capture**: The operation that creates an Artifact from a live Representation and adds a separate Artifact Frame.
 
-**Note**: Plain-text authored review feedback with Canvas geometry, a Note Color, an Actor author, and optional Frame attachment.
-
-**Note Color**: One of a closed set of color families used to distinguish Notes on the Canvas.
-_Avoid_: highlight, label, tag
-
-**Comment Thread**: A Canvas conversation pinned to a Frame or to content within its live Representation. A thread contains one opening Comment and flat Replies.
-
-**Comment**: One authored message in a Comment Thread. Its author is the Actor of the change that created it.
-
-**Comment Anchor**: The durable location of a Comment Thread. An Element Anchor identifies bridged page content. A Frame Anchor stores a normalized Frame point.
-
 **Principal**: The authenticated identity making a request.
 
-**Actor**: The durable author of an accepted change or authored Canvas content. An Actor is either a Person or an Agent.
+**Actor**: The durable author of an accepted change. An Actor is either a Person or an Agent.
 
 **Person**: A human Actor associated with company identity for shared work and provisional local identity for local-only work.
 
@@ -91,7 +80,7 @@ _Avoid_: highlight, label, tag
 
 **Presence**: Ephemeral awareness of connected People and active Agent Executions. Presence is not Canvas history.
 
-**Frame Bridge**: The versioned browser protocol used for input relay, element anchors, route and revision reporting, highlighting, and authorized inspection.
+**Frame Bridge**: The versioned browser protocol used for input relay, route and revision reporting, highlighting, and authorized inspection.
 
 **Code Mode MCP**: Crit's remote agent interface. It uses OAuth and exposes `search` and `execute`.
 

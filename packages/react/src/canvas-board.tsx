@@ -164,7 +164,7 @@ export function CanvasBoard({
 
   const frames = framesById(projection.frames)
   const selectFrame = (
-    item: Extract<CanvasItemRef, { readonly _tag: "frame" }>,
+    item: CanvasItemRef,
     event: ReactPointerEvent<HTMLDivElement>
   ) => applySelectionCommand({
     _tag: "item",
@@ -173,7 +173,6 @@ export function CanvasBoard({
   })
 
   const frameEntries = projection.stack.flatMap((item, zIndex) => {
-    if (item._tag !== "frame") return []
     const frame = frames.get(item.frameId)
     if (frame === undefined) return []
     return [{ frame, item, zIndex }]

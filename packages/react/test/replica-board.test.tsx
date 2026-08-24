@@ -39,7 +39,7 @@ notifyManager.setScheduler(queueMicrotask)
 
 const url = "https://example.com/checkout"
 const projection = decodeCanvasProjection({
-  schemaVersion: 2,
+  schemaVersion: 3,
   canvasId: "canvas_review",
   title: "Review",
   frames: [{
@@ -55,44 +55,23 @@ const projection = decodeCanvasProjection({
     statusChangedByChangeId: "change_1",
     geometryChangedByChangeId: "change_1"
   }],
-  notes: [{
-    noteId: "note_price",
-    text: "Check the price",
-    geometry: { x: 400, y: 80, width: 160, height: 80 },
-    attachedFrameId: "frame_checkout",
-    author: { _tag: "person", personId: "person_ada", displayName: "Ada" },
-    color: "blue",
-    createdByChangeId: "change_1",
-    updatedByChangeId: "change_1",
-    textChangedByChangeId: "change_1",
-    colorChangedByChangeId: "change_1",
-    geometryChangedByChangeId: "change_1",
-    attachmentChangedByChangeId: "change_1"
-  }],
-  threads: [],
   stack: [
-    { _tag: "frame", frameId: "frame_checkout" },
-    { _tag: "note", noteId: "note_price" }
+    { _tag: "frame", frameId: "frame_checkout" }
   ],
   stackChangedByChangeId: "change_1",
   issuedIds: {
-    frameIds: ["frame_checkout"],
-    noteIds: ["note_price"],
-    threadIds: [],
-    commentIds: []
+    frameIds: ["frame_checkout"]
   }
 })
 
 const empty = decodeCanvasProjection({
-  schemaVersion: 2,
+  schemaVersion: 3,
   canvasId: "canvas_empty",
   title: "Empty",
   frames: [],
-  notes: [],
-  threads: [],
   stack: [],
   stackChangedByChangeId: null,
-  issuedIds: { frameIds: [], noteIds: [], threadIds: [], commentIds: [] }
+  issuedIds: { frameIds: [] }
 })
 
 const decodeView = Schema.decodeUnknownSync(ReplicaView)

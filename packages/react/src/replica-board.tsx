@@ -51,9 +51,7 @@ const conflictCopy = (failure: CanvasChangeFailure): string =>
     "precondition-failed": ({ field }) =>
       `Rejected because ${field} changed since this was proposed.`,
     "invalid-reference": ({ field }) =>
-      `Rejected because ${field} points at a missing item.`,
-    "derived-geometry-invalid": () =>
-      "Rejected because an attached Note's geometry became invalid."
+      `Rejected because ${field} points at a missing item.`
   }))
 
 const entryStateCopy = (state: PendingChange["state"]): string =>
