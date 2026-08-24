@@ -4,6 +4,8 @@ import { Schema } from "effect"
 import {
   AcceptedAttribution,
   ActorSnapshot,
+  actorFromAttribution,
+  actorFromPrincipal,
   Id,
   Principal,
   ReportedRuntime,
@@ -140,5 +142,23 @@ describe("AcceptedAttribution", () => {
   it("rejects malformed and extra fields", () => {
     expect(() => decodeAcceptedAttribution({ ...agentAttribution, grantId: "bad" })).toThrow()
     expect(() => decodeAcceptedAttribution({ ...personAttribution, delegatedBy: person })).toThrow()
+  })
+
+  it("projects only the Actor from trusted attribution and principals", () => {
+    expect(actorFromAttribution(decodeAcceptedAttribution(personAttribution))).toEqual(person)
+    expect(actorFromAttribution(decodeAcceptedAttribution(agentAttribution))).toEqual(agent)
+    expect(actorFromPrincipal(decodePrincipal({
+      _tag: "person",
+      subject: "oidc|will",
+      person
+    }))).toEqual(person)
+    expect(actorFromPrincipal(decodePrincipal({
+      _tag: "agent",
+      subject: "oauth|codex",
+      agent,
+      delegatedBy: person,
+      oauthClientId: "oauth_client_codex",
+      grantId: "grant_storefront"
+    }))).toEqual(agent)
   })
 })

@@ -49,9 +49,12 @@ const projectionInput = {
     text: "Check the price",
     geometry: { x: 400, y: 80, width: 160, height: 80 },
     attachedFrameId: "frame_checkout",
+    author: { _tag: "person", personId: "person_ada", displayName: "Ada" },
+    color: "blue",
     createdByChangeId: "change_1",
     updatedByChangeId: "change_1",
     textChangedByChangeId: "change_1",
+    colorChangedByChangeId: "change_1",
     geometryChangedByChangeId: "change_1",
     attachmentChangedByChangeId: "change_1"
   }],
@@ -90,6 +93,7 @@ const threadedProjection = decodeCanvasProjection({
     comments: [{
       commentId: "comment_element",
       body: "Inspect the total",
+      author: { _tag: "person", personId: "person_ada", displayName: "Ada" },
       createdByChangeId: "change_1",
       bodyChangedByChangeId: "change_1"
     }],
@@ -108,11 +112,13 @@ const threadedProjection = decodeCanvasProjection({
     comments: [{
       commentId: "comment_frame_first",
       body: "Review checkout spacing",
+      author: { _tag: "person", personId: "person_ada", displayName: "Ada" },
       createdByChangeId: "change_1",
       bodyChangedByChangeId: "change_1"
     }, {
       commentId: "comment_frame_reply",
       body: "This is the reply",
+      author: { _tag: "person", personId: "person_ada", displayName: "Ada" },
       createdByChangeId: "change_1",
       bodyChangedByChangeId: "change_1"
     }],
@@ -131,6 +137,7 @@ const threadedProjection = decodeCanvasProjection({
     comments: [{
       commentId: "comment_resolved",
       body: "Confirm tax copy",
+      author: { _tag: "person", personId: "person_ada", displayName: "Ada" },
       createdByChangeId: "change_1",
       bodyChangedByChangeId: "change_1"
     }],
@@ -203,7 +210,7 @@ describe("CanvasBoard comment pins", () => {
     expect(frame).toBeInstanceOf(HTMLElement)
     if (!(frame instanceof HTMLElement)) return
     expect(frame.children).toHaveLength(1)
-    expect(frame.querySelector("[aria-label='Review checkout spacing']")).toBeNull()
+    expect(frame.querySelector("[aria-label='Review checkout spacing by Ada']")).toBeNull()
   })
 
   it("places a Frame-anchored thread inside its Frame", async() => {
@@ -212,7 +219,7 @@ describe("CanvasBoard comment pins", () => {
     )
 
     const frame = container.querySelector("[aria-label='Checkout']")
-    const pin = frame?.querySelector("[aria-label='Review checkout spacing']")
+    const pin = frame?.querySelector("[aria-label='Review checkout spacing by Ada']")
     expect(frame).toBeInstanceOf(HTMLElement)
     expect(pin).toBeInstanceOf(HTMLElement)
     if (!(frame instanceof HTMLElement) || !(pin instanceof HTMLElement)) return
@@ -231,10 +238,11 @@ describe("CanvasBoard comment pins", () => {
       <CanvasBoard {...requiredBoard}  projection={threadedProjection} resolver={resolver} />
     )
 
-    const pin = container.querySelector("[aria-label='Resolved: Confirm tax copy']")
+    const pin = container.querySelector("[aria-label='Resolved: Confirm tax copy by Ada']")
     expect(pin).toBeInstanceOf(HTMLElement)
     if (!(pin instanceof HTMLElement)) return
     expect(pin.getAttribute("data-resolved")).toBe("true")
+    expect(pin.getAttribute("data-comment-author")).toBe("Ada")
   })
 
   it("does not paint an element thread on the Frame chrome", async() => {
@@ -246,7 +254,7 @@ describe("CanvasBoard comment pins", () => {
     expect(frame).toBeInstanceOf(HTMLElement)
     if (!(frame instanceof HTMLElement)) return
     expect(frame.querySelector("[aria-label='Inspect the total']")).toBeNull()
-    expect(frame.querySelector("[aria-label='Review checkout spacing']"))
+    expect(frame.querySelector("[aria-label='Review checkout spacing by Ada']"))
       .toBeInstanceOf(HTMLElement)
   })
 
@@ -290,7 +298,7 @@ describe("CanvasBoard comment pins", () => {
     )
 
     const board = container.querySelector("[aria-label='Review']")
-    const pin = container.querySelector("[aria-label='Review checkout spacing']")
+    const pin = container.querySelector("[aria-label='Review checkout spacing by Ada']")
     expect(board).toBeInstanceOf(HTMLElement)
     expect(pin).toBeInstanceOf(HTMLElement)
     if (!(board instanceof HTMLElement) || !(pin instanceof HTMLElement)) return

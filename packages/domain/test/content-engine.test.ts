@@ -1,6 +1,6 @@
 import { assert, describe, expect, it } from "vitest"
 
-import { CanvasEngine, decodeCanvasChange, decodeCanvasProjection } from "../src/index.js"
+import { CanvasEngine, decodeCanvasChange, decodeCanvasProjection, engineChange } from "../src/index.js"
 
 const empty = () => decodeCanvasProjection({
   schemaVersion: 2, canvasId: "canvas_review", title: "Review",
@@ -9,9 +9,16 @@ const empty = () => decodeCanvasProjection({
 })
 const geometry = (x = 0, y = 0) => ({ x, y, width: 100, height: 80 })
 const representation = { _tag: "application-route", applicationId: "application_shop", route: "/checkout" }
+const person = { _tag: "person" as const, personId: "person_ada", displayName: "Ada" }
+const agent = { _tag: "agent" as const, agentId: "agent_codex", displayName: "Codex" }
 const change = (changeId: string, commands: readonly unknown[]) => decodeCanvasChange({ canvasId: "canvas_review", changeId, commands })
-const apply = (projection: ReturnType<typeof empty>, changeId: string, commands: readonly unknown[]) => {
-  const result = CanvasEngine.apply(projection, change(changeId, commands))
+const apply = (
+  projection: ReturnType<typeof empty>,
+  changeId: string,
+  commands: readonly unknown[],
+  author: typeof person | typeof agent = person
+) => {
+  const result = CanvasEngine.apply(projection, change(changeId, commands), author)
   assert(result._tag === "applied")
   return result.projection
 }
@@ -20,15 +27,15 @@ describe("authored Canvas content", () => {
   it("composes all content mutations with change provenance and stable ordering", () => {
     const first = apply(empty(), "change_create", [
       { _tag: "add-frame", frameId: "frame_b", title: "Checkout", representation, status: "in-progress", geometry: geometry(10, 20) },
-      { _tag: "add-note", noteId: "note_b", text: "Tighten copy", geometry: geometry(15, 25), attachedFrameId: "frame_b" },
+      { _tag: "add-note", noteId: "note_b", text: "Tighten copy", color: "blue", geometry: geometry(15, 25), attachedFrameId: "frame_b" },
       { _tag: "add-comment-thread", threadId: "thread_b", commentId: "comment_b", body: "Why?", anchor: { _tag: "element", frameId: "frame_b", representationChangedByChangeId: "change_create", selector: "#buy", fingerprint: { tagName: "button", evidence: [{ kind: "id", value: "buy" }] }, point: { x: 0.5, y: 0.25 }, fallback: { x: 0.5, y: 0.5 } } }
     ])
     expect(first).toMatchObject({
       stackChangedByChangeId: "change_create",
       stack: [{ _tag: "frame", frameId: "frame_b" }, { _tag: "note", noteId: "note_b" }],
       frames: [{ createdByChangeId: "change_create", updatedByChangeId: "change_create" }],
-      notes: [{ createdByChangeId: "change_create", attachedFrameId: "frame_b" }],
-      threads: [{ comments: [{ createdByChangeId: "change_create" }] }]
+      notes: [{ createdByChangeId: "change_create", attachedFrameId: "frame_b", author: person, color: "blue" }],
+      threads: [{ comments: [{ createdByChangeId: "change_create", author: person }] }]
     })
 
     const second = apply(first, "change_edit", [
@@ -48,21 +55,21 @@ describe("authored Canvas content", () => {
   })
 
   it("rejects stale authored content atomically", () => {
-    const initial = apply(empty(), "change_create", [{ _tag: "add-note", noteId: "note_a", text: "Old", geometry: geometry(), attachedFrameId: null }])
+    const initial = apply(empty(), "change_create", [{ _tag: "add-note", noteId: "note_a", text: "Old", color: "blue", geometry: geometry(), attachedFrameId: null }])
     const result = CanvasEngine.apply(initial, change("change_stale", [
       { _tag: "edit-note", noteId: "note_a", expectedText: "Old", text: "New" },
       { _tag: "edit-note", noteId: "note_a", expectedText: "Old", text: "Lost" }
-    ]))
+    ]), person)
     expect(result).toMatchObject({ _tag: "rejected", failure: { _tag: "precondition-failed", commandIndex: 1, field: "text" } })
     expect(initial.notes[0]?.text).toBe("Old")
   })
 
   it("preserves stamps for no-ops and lifetime IDs after deletion", () => {
-    const created = apply(empty(), "change_create", [{ _tag: "add-note", noteId: "note_a", text: "Same", geometry: geometry(), attachedFrameId: null }])
+    const created = apply(empty(), "change_create", [{ _tag: "add-note", noteId: "note_a", text: "Same", color: "blue", geometry: geometry(), attachedFrameId: null }])
     const noop = apply(created, "change_noop", [{ _tag: "edit-note", noteId: "note_a", expectedText: "Same", text: "Same" }])
     expect(noop).toBe(created)
     const removed = apply(created, "change_remove", [{ _tag: "remove-note", noteId: "note_a", expectedUpdatedByChangeId: "change_create" }])
-    expect(CanvasEngine.apply(removed, change("change_reuse", [{ _tag: "add-note", noteId: "note_a", text: "Again", geometry: geometry(), attachedFrameId: null }]))).toMatchObject({ _tag: "rejected", failure: { _tag: "id-already-issued" } })
+    expect(CanvasEngine.apply(removed, change("change_reuse", [{ _tag: "add-note", noteId: "note_a", text: "Again", color: "blue", geometry: geometry(), attachedFrameId: null }]), person)).toMatchObject({ _tag: "rejected", failure: { _tag: "id-already-issued" } })
     expect(() => decodeCanvasProjection(JSON.parse(JSON.stringify(removed)))).not.toThrow()
   })
 
@@ -77,8 +84,8 @@ describe("authored Canvas content", () => {
       { x: 0, y: 0, width: 1, height: 0 },
       { x: 0, y: 0, width: 1, height: -1 },
       { x: 0, y: 0, width: 1, height: Number.POSITIVE_INFINITY }
-    ]) expect(() => change("change_bad", [{ _tag: "add-note", noteId: "note_a", text: "Bad", geometry: bad, attachedFrameId: null }])).toThrow()
-    const projection = JSON.parse(JSON.stringify(apply(empty(), "change_create", [{ _tag: "add-note", noteId: "note_a", text: "Good", geometry: geometry(), attachedFrameId: null }])))
+    ]) expect(() => change("change_bad", [{ _tag: "add-note", noteId: "note_a", text: "Bad", color: "blue", geometry: bad, attachedFrameId: null }])).toThrow()
+    const projection = JSON.parse(JSON.stringify(apply(empty(), "change_create", [{ _tag: "add-note", noteId: "note_a", text: "Good", color: "blue", geometry: geometry(), attachedFrameId: null }])))
     projection.issuedIds.noteIds = []
     expect(() => decodeCanvasProjection(projection)).toThrow()
   })
@@ -108,13 +115,13 @@ describe("authored Canvas content", () => {
     const changed = apply(anchored, "change_representation", [{ _tag: "set-frame-representation", frameId: "frame_a", expectedChangedByChangeId: "change_create", representation: { ...representation, route: "/cart" } }])
     expect(changed.threads[0]?.anchor).toMatchObject({ representationChangedByChangeId: "change_create" })
     expect(() => decodeCanvasProjection(JSON.parse(JSON.stringify(changed)))).not.toThrow()
-    expect(CanvasEngine.apply(changed, change("change_stale_anchor", [{ _tag: "add-comment-thread", threadId: "thread_b", commentId: "comment_y", body: "Stale", anchor: changed.threads[0]?.anchor }]))).toMatchObject({ _tag: "rejected", failure: { _tag: "precondition-failed", field: "anchor.representationChangedByChangeId" } })
+    expect(CanvasEngine.apply(changed, change("change_stale_anchor", [{ _tag: "add-comment-thread", threadId: "thread_b", commentId: "comment_y", body: "Stale", anchor: changed.threads[0]?.anchor }]), person)).toMatchObject({ _tag: "rejected", failure: { _tag: "precondition-failed", field: "anchor.representationChangedByChangeId" } })
   })
 
   it("deletes a Frame coherently while retaining every issued identity", () => {
     const created = apply(empty(), "change_create", [
       { _tag: "add-frame", frameId: "frame_a", title: "Frame", representation, status: "in-progress", geometry: geometry() },
-      { _tag: "add-note", noteId: "note_a", text: "Attached", geometry: geometry(), attachedFrameId: "frame_a" },
+      { _tag: "add-note", noteId: "note_a", text: "Attached", color: "blue", geometry: geometry(), attachedFrameId: "frame_a" },
       { _tag: "add-comment-thread", threadId: "thread_a", commentId: "comment_a", body: "Thread", anchor: { _tag: "frame", frameId: "frame_a", point: { x: 0, y: 1 } } }
     ])
     const removed = apply(created, "change_remove", [{ _tag: "remove-frame", frameId: "frame_a", expectedUpdatedByChangeId: "change_create" }])
@@ -124,7 +131,7 @@ describe("authored Canvas content", () => {
   it("distinguishes Frame translation from resize for attached Note geometry", () => {
     const created = apply(empty(), "change_create", [
       { _tag: "add-frame", frameId: "frame_a", title: "Frame", representation, status: "in-progress", geometry: geometry(10, 20) },
-      { _tag: "add-note", noteId: "note_a", text: "Note", geometry: geometry(30, 40), attachedFrameId: "frame_a" }
+      { _tag: "add-note", noteId: "note_a", text: "Note", color: "blue", geometry: geometry(30, 40), attachedFrameId: "frame_a" }
     ])
     const resized = apply(created, "change_resize", [{ _tag: "set-frame-geometry", frameId: "frame_a", expectedChangedByChangeId: "change_create", geometry: { x: 10, y: 20, width: 200, height: 160 } }])
     expect(resized.notes[0]).toMatchObject({ geometry: geometry(30, 40), geometryChangedByChangeId: "change_create" })
@@ -142,7 +149,7 @@ describe("authored Canvas content", () => {
     const result = CanvasEngine.apply(created, change("change_edit", [
       { _tag: "edit-comment", threadId: "thread_a", commentId: "comment_z", expectedBody: "First", body: "Changed" },
       { _tag: "edit-comment", threadId: "thread_a", commentId: "comment_a", expectedBody: "Wrong", body: "Lost" }
-    ]))
+    ]), person)
     expect(result).toMatchObject({ _tag: "rejected", failure: { _tag: "precondition-failed", commandIndex: 1 } })
     expect(created.threads[0]?.comments[0]?.body).toBe("First")
   })
@@ -150,15 +157,15 @@ describe("authored Canvas content", () => {
   it("rejects duplicate and reused IDs in every namespace", () => {
     const created = apply(empty(), "change_create", [
       { _tag: "add-frame", frameId: "frame_a", title: "Frame", representation, status: "in-progress", geometry: geometry() },
-      { _tag: "add-note", noteId: "note_a", text: "Note", geometry: geometry(), attachedFrameId: null },
+      { _tag: "add-note", noteId: "note_a", text: "Note", color: "blue", geometry: geometry(), attachedFrameId: null },
       { _tag: "add-comment-thread", threadId: "thread_a", commentId: "comment_a", body: "First", anchor: { _tag: "frame", frameId: "frame_a", point: { x: 0.5, y: 0.5 } } }
     ])
     for (const command of [
       { _tag: "add-frame", frameId: "frame_a", title: "Again", representation, status: "in-progress", geometry: geometry() },
-      { _tag: "add-note", noteId: "note_a", text: "Again", geometry: geometry(), attachedFrameId: null },
+      { _tag: "add-note", noteId: "note_a", text: "Again", color: "blue", geometry: geometry(), attachedFrameId: null },
       { _tag: "add-comment-thread", threadId: "thread_a", commentId: "comment_b", body: "Again", anchor: { _tag: "frame", frameId: "frame_a", point: { x: 0.5, y: 0.5 } } },
       { _tag: "reply-to-comment-thread", threadId: "thread_a", commentId: "comment_a", body: "Again" }
-    ]) expect(CanvasEngine.apply(created, change("change_duplicate", [command]))).toMatchObject({ _tag: "rejected", failure: { _tag: "id-already-issued" } })
+    ]) expect(CanvasEngine.apply(created, change("change_duplicate", [command]), person)).toMatchObject({ _tag: "rejected", failure: { _tag: "id-already-issued" } })
 
     const removed = apply(created, "change_remove", [
       { _tag: "remove-note", noteId: "note_a", expectedUpdatedByChangeId: "change_create" },
@@ -166,10 +173,10 @@ describe("authored Canvas content", () => {
     ])
     for (const command of [
       { _tag: "add-frame", frameId: "frame_a", title: "Again", representation, status: "in-progress", geometry: geometry() },
-      { _tag: "add-note", noteId: "note_a", text: "Again", geometry: geometry(), attachedFrameId: null },
+      { _tag: "add-note", noteId: "note_a", text: "Again", color: "blue", geometry: geometry(), attachedFrameId: null },
       { _tag: "add-comment-thread", threadId: "thread_a", commentId: "comment_b", body: "Again", anchor: { _tag: "frame", frameId: "frame_a", point: { x: 0.5, y: 0.5 } } },
       { _tag: "add-comment-thread", threadId: "thread_b", commentId: "comment_a", body: "Again", anchor: { _tag: "frame", frameId: "frame_a", point: { x: 0.5, y: 0.5 } } }
-    ]) expect(CanvasEngine.apply(removed, change("change_reuse_all", [command]))).toMatchObject({ _tag: "rejected", failure: { _tag: "id-already-issued" } })
+    ]) expect(CanvasEngine.apply(removed, change("change_reuse_all", [command]), person)).toMatchObject({ _tag: "rejected", failure: { _tag: "id-already-issued" } })
   })
 
   it("rejects duplicate stack entries, dangling threads, and duplicate comment IDs at projection decode", () => {
@@ -192,16 +199,17 @@ describe("authored Canvas content", () => {
   it("replays mixed content deterministically and keeps provenance resolvable before and after acceptance", () => {
     const changes = [
       change("change_create", [{ _tag: "add-frame", frameId: "frame_a", title: "Frame", representation, status: "in-progress", geometry: geometry() }]),
-      change("change_note", [{ _tag: "add-note", noteId: "note_a", text: "Note", geometry: geometry(), attachedFrameId: "frame_a" }]),
+      change("change_note", [{ _tag: "add-note", noteId: "note_a", text: "Note", color: "blue", geometry: geometry(), attachedFrameId: "frame_a" }]),
       change("change_edit", [{ _tag: "edit-note", noteId: "note_a", expectedText: "Note", text: "Edited" }])
     ]
     const pending = new Map([["change_edit", { state: "pending", actor: "agent-local" }]])
-    const first = CanvasEngine.replay(empty(), changes)
+    const authored = changes.map((value) => engineChange(value, person))
+    const first = CanvasEngine.replay(empty(), authored)
     assert(first._tag === "replayed")
     expect(pending.get(first.projection.notes[0]!.textChangedByChangeId)).toMatchObject({ state: "pending" })
     const accepted = new Map([["change_edit", { state: "accepted", actor: "agent-server" }]])
     expect(accepted.get(first.projection.notes[0]!.textChangedByChangeId)).toMatchObject({ state: "accepted" })
-    expect(CanvasEngine.replay(empty(), changes)).toEqual(first)
+    expect(CanvasEngine.replay(empty(), authored)).toEqual(first)
   })
 
   it("uses one canonical code-point order for active and issued IDs", () => {
@@ -217,11 +225,11 @@ describe("authored Canvas content", () => {
   it("rejects non-finite derived Note translation atomically", () => {
     const created = apply(empty(), "change_create", [
       { _tag: "add-frame", frameId: "frame_a", title: "Frame", representation, status: "in-progress", geometry: geometry(Number.MAX_VALUE, Number.MAX_VALUE) },
-      { _tag: "add-note", noteId: "note_a", text: "Note", geometry: geometry(Number.MAX_VALUE, -Number.MAX_VALUE), attachedFrameId: "frame_a" }
+      { _tag: "add-note", noteId: "note_a", text: "Note", color: "blue", geometry: geometry(Number.MAX_VALUE, -Number.MAX_VALUE), attachedFrameId: "frame_a" }
     ])
     const result = CanvasEngine.apply(created, change("change_overflow", [
       { _tag: "set-frame-geometry", frameId: "frame_a", expectedChangedByChangeId: "change_create", geometry: geometry(-Number.MAX_VALUE, -Number.MAX_VALUE) }
-    ]))
+    ]), person)
     expect(result).toMatchObject({ _tag: "rejected", failure: { _tag: "derived-geometry-invalid", commandIndex: 0, noteId: "note_a" } })
     expect(created.frames[0]?.geometry.x).toBe(Number.MAX_VALUE)
     expect(created.notes[0]?.geometry).toMatchObject({ x: Number.MAX_VALUE, y: -Number.MAX_VALUE })
@@ -232,9 +240,42 @@ describe("authored Canvas content", () => {
     const initialRepresentation = { ...representation, state: { actor: "npc", source: "checkout" } }
     const equivalentRepresentation = { ...representation, state: { source: "checkout", actor: "npc" } }
     const created = apply(empty(), "change_create", [{ _tag: "add-frame", frameId: "frame_a", title: "Frame", representation: initialRepresentation, status: "in-progress", geometry: geometry() }])
-    const result = CanvasEngine.apply(created, change("change_noop", [{ _tag: "set-frame-representation", frameId: "frame_a", expectedChangedByChangeId: "change_create", representation: equivalentRepresentation }]))
+    const result = CanvasEngine.apply(created, change("change_noop", [{ _tag: "set-frame-representation", frameId: "frame_a", expectedChangedByChangeId: "change_create", representation: equivalentRepresentation }]), person)
     expect(result).toEqual({ _tag: "applied", projection: created })
     if (result._tag === "applied") expect(result.projection).toBe(created)
     expect(created.frames[0]).toMatchObject({ representationChangedByChangeId: "change_create", updatedByChangeId: "change_create" })
+  })
+
+  it("stamps Note and Comment authors from the change Actor and keeps them on edit", () => {
+    const created = apply(empty(), "change_create", [
+      { _tag: "add-frame", frameId: "frame_a", title: "Frame", representation, status: "in-progress", geometry: geometry() },
+      { _tag: "add-note", noteId: "note_a", text: "Note", color: "blue", geometry: geometry(), attachedFrameId: null },
+      { _tag: "add-comment-thread", threadId: "thread_a", commentId: "comment_a", body: "First", anchor: { _tag: "frame", frameId: "frame_a", point: { x: 0.5, y: 0.5 } } }
+    ], agent)
+    expect(created.notes[0]?.author).toEqual(agent)
+    expect(created.threads[0]?.comments[0]?.author).toEqual(agent)
+    const edited = apply(created, "change_edit", [
+      { _tag: "edit-note", noteId: "note_a", expectedText: "Note", text: "Edited" },
+      { _tag: "reply-to-comment-thread", threadId: "thread_a", commentId: "comment_b", body: "Second" },
+      { _tag: "edit-comment", threadId: "thread_a", commentId: "comment_a", expectedBody: "First", body: "Changed" }
+    ], person)
+    expect(edited.notes[0]).toMatchObject({ author: agent, text: "Edited" })
+    expect(edited.threads[0]?.comments[0]).toMatchObject({ author: agent, body: "Changed" })
+    expect(edited.threads[0]?.comments[1]).toMatchObject({ author: person, body: "Second" })
+  })
+
+  it("requires a Note Color and changes it through a preconditioned command", () => {
+    expect(() => change("change_missing", [{ _tag: "add-note", noteId: "note_a", text: "Note", geometry: geometry(), attachedFrameId: null }])).toThrow()
+    expect(() => change("change_invalid", [{ _tag: "add-note", noteId: "note_a", text: "Note", color: "pink", geometry: geometry(), attachedFrameId: null }])).toThrow()
+    const created = apply(empty(), "change_create", [{ _tag: "add-note", noteId: "note_a", text: "Note", color: "blue", geometry: geometry(), attachedFrameId: null }])
+    expect(created.notes[0]).toMatchObject({ color: "blue", colorChangedByChangeId: "change_create" })
+    const stale = CanvasEngine.apply(created, change("change_stale", [
+      { _tag: "set-note-color", noteId: "note_a", expectedChangedByChangeId: "change_other", color: "green" }
+    ]), person)
+    expect(stale).toMatchObject({ _tag: "rejected", failure: { _tag: "precondition-failed", field: "colorChangedByChangeId" } })
+    const colored = apply(created, "change_color", [{ _tag: "set-note-color", noteId: "note_a", expectedChangedByChangeId: "change_create", color: "green" }])
+    expect(colored.notes[0]).toMatchObject({ color: "green", colorChangedByChangeId: "change_color", author: person })
+    const noop = apply(colored, "change_same", [{ _tag: "set-note-color", noteId: "note_a", expectedChangedByChangeId: "change_color", color: "green" }])
+    expect(noop).toBe(colored)
   })
 })

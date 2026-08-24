@@ -5,8 +5,26 @@ import { FrameItemRef, NoteItemRef, type CanvasItemRef, type CommentThread, type
 import type { CanvasChange, CanvasCommand, CanvasCommandBatch } from "./command.js"
 import { compareCanonicalId } from "./canonical-order.js"
 import type { Geometry } from "./geometry.js"
+import { actorFromAttribution } from "./identity.js"
+import type { AcceptedAttribution, ActorSnapshot } from "./identity.js"
 import { CanvasId, ChangeId, NoteId } from "./ids.js"
 import type { RepresentationRef } from "./representation.js"
+
+export type AuthoredEngineChange = CanvasChange & { readonly author: ActorSnapshot }
+
+export const engineChange = (
+  change: CanvasChange,
+  author: ActorSnapshot
+): AuthoredEngineChange => ({
+  canvasId: change.canvasId,
+  changeId: change.changeId,
+  commands: change.commands,
+  author
+})
+
+export const engineChangeFromAccepted = (change: CanvasChange & {
+  readonly attribution: AcceptedAttribution
+}): AuthoredEngineChange => engineChange(change, actorFromAttribution(change.attribution))
 
 const CommandIndex = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))
 const EntityKind = Schema.Literals(["frame", "note", "thread", "comment"])
@@ -80,7 +98,7 @@ const stackEquals = (left: readonly CanvasItemRef[], right: readonly CanvasItemR
 type CanvasAggregateCommand = Extract<CanvasCommand, { readonly _tag: "rename-canvas" }>
 type FrameAggregateCommand = Extract<CanvasCommand, { readonly _tag: "add-frame" | "set-frame-title" | "set-frame-representation" | "set-frame-status" | "set-frame-geometry" | "remove-frame" }>
 type StackAggregateCommand = Extract<CanvasCommand, { readonly _tag: "place-canvas-item" }>
-type NoteAggregateCommand = Extract<CanvasCommand, { readonly _tag: "add-note" | "edit-note" | "set-note-geometry" | "attach-note" | "detach-note" | "remove-note" }>
+type NoteAggregateCommand = Extract<CanvasCommand, { readonly _tag: "add-note" | "edit-note" | "set-note-color" | "set-note-geometry" | "attach-note" | "detach-note" | "remove-note" }>
 type CommentAggregateCommand = Extract<CanvasCommand, { readonly _tag: "add-comment-thread" | "reply-to-comment-thread" | "edit-comment" | "set-comment-thread-resolution" }>
 
 const applyCanvasCommand = (p: CanvasProjection, c: CanvasAggregateCommand, commandIndex: number): CanvasChangeResult => {
@@ -179,12 +197,18 @@ const applyStackCommand = (p: CanvasProjection, c: StackAggregateCommand, comman
   }
 }
 
-const applyNoteCommand = (p: CanvasProjection, c: NoteAggregateCommand, commandIndex: number, changeId: ChangeId): CanvasChangeResult => {
+const applyNoteCommand = (
+  p: CanvasProjection,
+  c: NoteAggregateCommand,
+  commandIndex: number,
+  changeId: ChangeId,
+  author: ActorSnapshot
+): CanvasChangeResult => {
   switch (c._tag) {
     case "add-note": {
       if (p.issuedIds.noteIds.includes(c.noteId)) return entityFailure(commandIndex, "note", c.noteId, true)
       if (c.attachedFrameId !== null && findFrame(p, c.attachedFrameId) === undefined) return reject(InvalidReference.make({ commandIndex, field: "attachedFrameId", id: c.attachedFrameId }, trusted))
-      const note: Note = { noteId: c.noteId, text: c.text, geometry: c.geometry, attachedFrameId: c.attachedFrameId, createdByChangeId: changeId, updatedByChangeId: changeId, textChangedByChangeId: changeId, geometryChangedByChangeId: changeId, attachmentChangedByChangeId: changeId }
+      const note: Note = { noteId: c.noteId, text: c.text, author, color: c.color, geometry: c.geometry, attachedFrameId: c.attachedFrameId, createdByChangeId: changeId, updatedByChangeId: changeId, textChangedByChangeId: changeId, colorChangedByChangeId: changeId, geometryChangedByChangeId: changeId, attachmentChangedByChangeId: changeId }
       return applied({ ...p, notes: [...p.notes, note].sort((a, b) => compareCanonicalId(a.noteId, b.noteId)), stack: [...p.stack, NoteItemRef.make({ noteId: c.noteId }, trusted)], stackChangedByChangeId: changeId, issuedIds: { ...p.issuedIds, noteIds: insertSorted(p.issuedIds.noteIds, c.noteId) } })
     }
     case "edit-note": {
@@ -193,6 +217,14 @@ const applyNoteCommand = (p: CanvasProjection, c: NoteAggregateCommand, commandI
       if (note.text !== c.expectedText) return precondition(commandIndex, "text", c.expectedText, note.text)
       if (note.text === c.text) return applied(p)
       const next = { ...note, text: c.text, textChangedByChangeId: changeId, updatedByChangeId: changeId }
+      return applied({ ...p, notes: replaceById(p.notes, (value) => value.noteId === note.noteId, next) })
+    }
+    case "set-note-color": {
+      const note = findNote(p, c.noteId)
+      if (note === undefined) return entityFailure(commandIndex, "note", c.noteId, false)
+      if (note.colorChangedByChangeId !== c.expectedChangedByChangeId) return precondition(commandIndex, "colorChangedByChangeId", c.expectedChangedByChangeId, note.colorChangedByChangeId)
+      if (note.color === c.color) return applied(p)
+      const next = { ...note, color: c.color, colorChangedByChangeId: changeId, updatedByChangeId: changeId }
       return applied({ ...p, notes: replaceById(p.notes, (value) => value.noteId === note.noteId, next) })
     }
     case "set-note-geometry": {
@@ -222,7 +254,13 @@ const applyNoteCommand = (p: CanvasProjection, c: NoteAggregateCommand, commandI
   }
 }
 
-const applyCommentCommand = (p: CanvasProjection, c: CommentAggregateCommand, commandIndex: number, changeId: ChangeId): CanvasChangeResult => {
+const applyCommentCommand = (
+  p: CanvasProjection,
+  c: CommentAggregateCommand,
+  commandIndex: number,
+  changeId: ChangeId,
+  author: ActorSnapshot
+): CanvasChangeResult => {
   switch (c._tag) {
     case "add-comment-thread": {
       if (p.issuedIds.threadIds.includes(c.threadId)) return entityFailure(commandIndex, "thread", c.threadId, true)
@@ -230,14 +268,14 @@ const applyCommentCommand = (p: CanvasProjection, c: CommentAggregateCommand, co
       const frame = findFrame(p, c.anchor.frameId)
       if (frame === undefined) return reject(InvalidReference.make({ commandIndex, field: "anchor.frameId", id: c.anchor.frameId }, trusted))
       if (c.anchor._tag === "element" && c.anchor.representationChangedByChangeId !== frame.representationChangedByChangeId) return precondition(commandIndex, "anchor.representationChangedByChangeId", c.anchor.representationChangedByChangeId, frame.representationChangedByChangeId)
-      const thread: CommentThread = { threadId: c.threadId, anchor: c.anchor, resolved: false, comments: [{ commentId: c.commentId, body: c.body, createdByChangeId: changeId, bodyChangedByChangeId: changeId }], createdByChangeId: changeId, updatedByChangeId: changeId, anchorChangedByChangeId: changeId, resolutionChangedByChangeId: changeId }
+      const thread: CommentThread = { threadId: c.threadId, anchor: c.anchor, resolved: false, comments: [{ commentId: c.commentId, body: c.body, author, createdByChangeId: changeId, bodyChangedByChangeId: changeId }], createdByChangeId: changeId, updatedByChangeId: changeId, anchorChangedByChangeId: changeId, resolutionChangedByChangeId: changeId }
       return applied({ ...p, threads: [...p.threads, thread].sort((a, b) => compareCanonicalId(a.threadId, b.threadId)), issuedIds: { ...p.issuedIds, threadIds: insertSorted(p.issuedIds.threadIds, c.threadId), commentIds: insertSorted(p.issuedIds.commentIds, c.commentId) } })
     }
     case "reply-to-comment-thread": {
       const thread = findThread(p, c.threadId)
       if (thread === undefined) return entityFailure(commandIndex, "thread", c.threadId, false)
       if (p.issuedIds.commentIds.includes(c.commentId)) return entityFailure(commandIndex, "comment", c.commentId, true)
-      const next = { ...thread, comments: appendNonEmpty(thread.comments, { commentId: c.commentId, body: c.body, createdByChangeId: changeId, bodyChangedByChangeId: changeId }), updatedByChangeId: changeId }
+      const next = { ...thread, comments: appendNonEmpty(thread.comments, { commentId: c.commentId, body: c.body, author, createdByChangeId: changeId, bodyChangedByChangeId: changeId }), updatedByChangeId: changeId }
       return applied({ ...p, threads: replaceById(p.threads, (value) => value.threadId === thread.threadId, next), issuedIds: { ...p.issuedIds, commentIds: insertSorted(p.issuedIds.commentIds, c.commentId) } })
     }
     case "edit-comment": {
@@ -262,38 +300,53 @@ const applyCommentCommand = (p: CanvasProjection, c: CommentAggregateCommand, co
   }
 }
 
-const applyCommand = (p: CanvasProjection, c: CanvasCommand, commandIndex: number, changeId: ChangeId): CanvasChangeResult => {
+const applyCommand = (
+  p: CanvasProjection,
+  c: CanvasCommand,
+  commandIndex: number,
+  changeId: ChangeId,
+  author: ActorSnapshot
+): CanvasChangeResult => {
   switch (c._tag) {
     case "rename-canvas": return applyCanvasCommand(p, c, commandIndex)
     case "add-frame": case "set-frame-title": case "set-frame-representation": case "set-frame-status": case "set-frame-geometry": case "remove-frame":
       return applyFrameCommand(p, c, commandIndex, changeId)
     case "place-canvas-item": return applyStackCommand(p, c, commandIndex, changeId)
-    case "add-note": case "edit-note": case "set-note-geometry": case "attach-note": case "detach-note": case "remove-note":
-      return applyNoteCommand(p, c, commandIndex, changeId)
+    case "add-note": case "edit-note": case "set-note-color": case "set-note-geometry": case "attach-note": case "detach-note": case "remove-note":
+      return applyNoteCommand(p, c, commandIndex, changeId, author)
     case "add-comment-thread": case "reply-to-comment-thread": case "edit-comment": case "set-comment-thread-resolution":
-      return applyCommentCommand(p, c, commandIndex, changeId)
+      return applyCommentCommand(p, c, commandIndex, changeId, author)
   }
 }
 
-const applyCommands = (initial: CanvasProjection, commands: CanvasCommandBatch, changeId: ChangeId): CanvasChangeResult => {
+const applyCommands = (
+  initial: CanvasProjection,
+  commands: CanvasCommandBatch,
+  changeId: ChangeId,
+  author: ActorSnapshot
+): CanvasChangeResult => {
   let projection = initial
   for (const [commandIndex, command] of commands.entries()) {
-    const result = applyCommand(projection, command, commandIndex, changeId)
+    const result = applyCommand(projection, command, commandIndex, changeId, author)
     if (result._tag === "rejected") return result
     projection = result.projection
   }
   return applied(projection)
 }
-const apply = (projection: CanvasProjection, change: CanvasChange): CanvasChangeResult => projection.canvasId !== change.canvasId
+const apply = (
+  projection: CanvasProjection,
+  change: CanvasChange,
+  author: ActorSnapshot
+): CanvasChangeResult => projection.canvasId !== change.canvasId
   ? reject(CanvasMismatch.make({ expectedCanvasId: projection.canvasId, actualCanvasId: change.canvasId }, trusted))
-  : applyCommands(projection, change.commands, change.changeId)
-const replay = (initial: CanvasProjection, changes: readonly CanvasChange[]): CanvasReplayResult => {
+  : applyCommands(projection, change.commands, change.changeId, author)
+const replay = (initial: CanvasProjection, changes: readonly AuthoredEngineChange[]): CanvasReplayResult => {
   let projection = initial
   const seen = new Map<ChangeId, number>()
   for (const [changeIndex, change] of changes.entries()) {
     const firstIndex = seen.get(change.changeId)
     if (firstIndex !== undefined) return ReplayFailed.make({ failure: DuplicateChange.make({ changeId: change.changeId, firstIndex, currentIndex: changeIndex }, trusted) }, trusted)
-    const result = apply(projection, change)
+    const result = apply(projection, change, change.author)
     if (result._tag === "rejected") return ReplayFailed.make({ failure: ChangeRejected.make({ changeIndex, changeId: change.changeId, failure: result.failure }, trusted) }, trusted)
     seen.set(change.changeId, changeIndex)
     projection = result.projection

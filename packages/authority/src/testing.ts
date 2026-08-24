@@ -5,7 +5,8 @@ import {
   Id,
   IsoTimestamp,
   decodeCanvasCommandBatch,
-  emptyCanvasProjection
+  emptyCanvasProjection,
+  engineChangeFromAccepted
 } from "@crit/domain"
 import { ProtocolValue, type ProposedCanvasChange } from "@crit/protocol"
 import { Data, Deferred, Effect, Exit, Fiber, Layer, Result, Schema, type Scope } from "effect"
@@ -267,7 +268,8 @@ const ledgerScenario = (factory: AuthorityConformanceFactory): AuthorityConforma
           noteId: `note_conformance_${index}`,
           text: `Note ${index}`,
           geometry: { x: index, y: 0, width: 10, height: 10 },
-          attachedFrameId: null
+          attachedFrameId: null,
+          color: "blue"
         }])
       ), index === 0 ? agent : person))
       yield* Effect.all(submissions, { concurrency: "unbounded" })
@@ -282,7 +284,10 @@ const ledgerScenario = (factory: AuthorityConformanceFactory): AuthorityConforma
       requireScenario(name, first.hasMore && !second.hasMore, "paging continuation was incorrect")
       requireScenario(name, history[0]?.attribution._tag === "agent", "Agent submission lost attribution")
       const view = yield* authority.open(canvasA)
-      const replay = CanvasEngine.replay(emptyCanvasProjection(canvasA, "Authority"), history)
+      const replay = CanvasEngine.replay(
+        emptyCanvasProjection(canvasA, "Authority"),
+        history.map(engineChangeFromAccepted)
+      )
       requireScenario(
         name,
         replay._tag === "replayed" && Schema.toEquivalence(CanvasProjection)(replay.projection, view.projection),

@@ -2,7 +2,7 @@ import { Schema } from "effect"
 
 import { CommentAnchor } from "./anchor.js"
 import { CanvasTitle } from "./canvas.js"
-import { AuthoredText, CanvasItemRef, ReviewStatus } from "./content.js"
+import { AuthoredText, CanvasItemRef, NoteColor, ReviewStatus } from "./content.js"
 import { Geometry } from "./geometry.js"
 import { CanvasId, ChangeId, CommentId, CommentThreadId, FrameId, NoteId } from "./ids.js"
 import { RepresentationRef } from "./representation.js"
@@ -15,8 +15,9 @@ export const SetFrameStatusCommand = Schema.TaggedStruct("set-frame-status", { f
 export const SetFrameGeometryCommand = Schema.TaggedStruct("set-frame-geometry", { frameId: FrameId, expectedChangedByChangeId: ChangeId, geometry: Geometry })
 export const RemoveFrameCommand = Schema.TaggedStruct("remove-frame", { frameId: FrameId, expectedUpdatedByChangeId: ChangeId })
 export const PlaceCanvasItemCommand = Schema.TaggedStruct("place-canvas-item", { item: CanvasItemRef, after: Schema.NullOr(CanvasItemRef), expectedStackChangeId: Schema.NullOr(ChangeId) })
-export const AddNoteCommand = Schema.TaggedStruct("add-note", { noteId: NoteId, text: AuthoredText, geometry: Geometry, attachedFrameId: Schema.NullOr(FrameId) })
+export const AddNoteCommand = Schema.TaggedStruct("add-note", { noteId: NoteId, text: AuthoredText, color: NoteColor, geometry: Geometry, attachedFrameId: Schema.NullOr(FrameId) })
 export const EditNoteCommand = Schema.TaggedStruct("edit-note", { noteId: NoteId, expectedText: AuthoredText, text: AuthoredText })
+export const SetNoteColorCommand = Schema.TaggedStruct("set-note-color", { noteId: NoteId, expectedChangedByChangeId: ChangeId, color: NoteColor })
 export const SetNoteGeometryCommand = Schema.TaggedStruct("set-note-geometry", { noteId: NoteId, expectedChangedByChangeId: ChangeId, geometry: Geometry })
 export const AttachNoteCommand = Schema.TaggedStruct("attach-note", { noteId: NoteId, frameId: FrameId, expectedChangedByChangeId: ChangeId })
 export const DetachNoteCommand = Schema.TaggedStruct("detach-note", { noteId: NoteId, expectedChangedByChangeId: ChangeId })
@@ -30,9 +31,9 @@ export const CanvasCommand = Schema.Union([
   RenameCanvasCommand, AddFrameCommand, SetFrameTitleCommand,
   SetFrameRepresentationCommand, SetFrameStatusCommand, SetFrameGeometryCommand,
   RemoveFrameCommand, PlaceCanvasItemCommand, AddNoteCommand, EditNoteCommand,
-  SetNoteGeometryCommand, AttachNoteCommand, DetachNoteCommand, RemoveNoteCommand,
-  AddCommentThreadCommand, ReplyToCommentThreadCommand, EditCommentCommand,
-  SetCommentThreadResolutionCommand
+  SetNoteColorCommand, SetNoteGeometryCommand, AttachNoteCommand, DetachNoteCommand,
+  RemoveNoteCommand, AddCommentThreadCommand, ReplyToCommentThreadCommand,
+  EditCommentCommand, SetCommentThreadResolutionCommand
 ])
 export type CanvasCommand = typeof CanvasCommand.Type
 export type RenameCanvasCommand = typeof RenameCanvasCommand.Type

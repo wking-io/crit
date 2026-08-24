@@ -28,6 +28,8 @@ export {
   AgentAttribution,
   AgentPrincipal,
   AgentSnapshot,
+  actorFromAttribution,
+  actorFromPrincipal,
   HarnessDescriptor,
   ModelDescriptor,
   PersonAttribution,
@@ -57,7 +59,7 @@ export {
 } from "./canvas.js"
 export { Geometry, NormalizedPoint, Point } from "./geometry.js"
 export { CommentAnchor, ElementAnchor, ElementEvidence, ElementFingerprint, FrameAnchor } from "./anchor.js"
-export { AuthoredText, CanvasItemRef, Comment, CommentThread, Frame, Note, ReviewStatus } from "./content.js"
+export { AuthoredText, CanvasItemRef, Comment, CommentThread, Frame, Note, NoteColor, ReviewStatus } from "./content.js"
 export {
   AddCommentThreadCommand,
   AddFrameCommand,
@@ -81,10 +83,12 @@ export {
   SetFrameRepresentationCommand,
   SetFrameStatusCommand,
   SetFrameTitleCommand,
+  SetNoteColorCommand,
   SetNoteGeometryCommand
 } from "./command.js"
-export { CanvasChangeFailureSchema, CanvasEngine } from "./engine.js"
+export { CanvasChangeFailureSchema, CanvasEngine, engineChange, engineChangeFromAccepted } from "./engine.js"
 export type {
+  AuthoredEngineChange,
   CanvasChangeFailure,
   CanvasChangeResult,
   CanvasReplayFailure,

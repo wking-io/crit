@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs"
 
-import { CanvasEngine, Id, decodeCanvasProjection } from "@crit/domain"
+import { CanvasEngine, Id, decodeCanvasProjection, engineChangeFromAccepted } from "@crit/domain"
 import { Result } from "effect"
 import { assert, describe, expect, it } from "vitest"
 
@@ -143,7 +143,7 @@ describe("ChangeProtocol", () => {
     const accepted = ChangeProtocol.accepted.decode(fixture("accepted"))
     assert(Result.isSuccess(accepted))
 
-    expect(CanvasEngine.replay(initial, [accepted.success])).toEqual({
+    expect(CanvasEngine.replay(initial, [engineChangeFromAccepted(accepted.success)])).toEqual({
       _tag: "replayed",
       projection: {
         schemaVersion: 2,
@@ -168,7 +168,8 @@ describe("ChangeProtocol", () => {
       { _tag: "set-frame-geometry", frameId: "frame_a", expectedChangedByChangeId: "change_a", geometry: g },
       { _tag: "remove-frame", frameId: "frame_a", expectedUpdatedByChangeId: "change_a" },
       { _tag: "place-canvas-item", item, after: null, expectedStackChangeId: "change_a" },
-      { _tag: "add-note", noteId: "note_a", text: "Note", geometry: g, attachedFrameId: null },
+      { _tag: "add-note", noteId: "note_a", text: "Note", color: "blue", geometry: g, attachedFrameId: null },
+      { _tag: "set-note-color", noteId: "note_a", expectedChangedByChangeId: "change_a", color: "green" },
       { _tag: "edit-note", noteId: "note_a", expectedText: "Note", text: "Edited" },
       { _tag: "set-note-geometry", noteId: "note_a", expectedChangedByChangeId: "change_a", geometry: g },
       { _tag: "attach-note", noteId: "note_a", frameId: "frame_a", expectedChangedByChangeId: "change_a" },

@@ -56,9 +56,12 @@ const projection = decodeCanvasProjection({
     text: "Check the price",
     geometry: { x: 400, y: 80, width: 160, height: 80 },
     attachedFrameId: "frame_checkout",
+    author: { _tag: "person", personId: "person_ada", displayName: "Ada" },
+    color: "blue",
     createdByChangeId: "change_1",
     updatedByChangeId: "change_1",
     textChangedByChangeId: "change_1",
+    colorChangedByChangeId: "change_1",
     geometryChangedByChangeId: "change_1",
     attachmentChangedByChangeId: "change_1"
   }],

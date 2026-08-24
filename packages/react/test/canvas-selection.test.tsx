@@ -54,9 +54,12 @@ const projection = decodeCanvasProjection({
     text: "Check the price",
     geometry: { x: 400, y: 80, width: 160, height: 80 },
     attachedFrameId: "frame_checkout",
+    author: { _tag: "person", personId: "person_ada", displayName: "Ada" },
+    color: "blue",
     createdByChangeId: "change_1",
     updatedByChangeId: "change_1",
     textChangedByChangeId: "change_1",
+    colorChangedByChangeId: "change_1",
     geometryChangedByChangeId: "change_1",
     attachmentChangedByChangeId: "change_1"
   }],
@@ -234,7 +237,7 @@ describe("CanvasBoard selection", () => {
     )
 
     const frame = container.querySelector("[aria-label='Checkout']")
-    const note = container.querySelector("[aria-label='Check the price']")
+    const note = container.querySelector("[aria-label='Check the price by Ada']")
     expect(frame).toBeInstanceOf(HTMLElement)
     expect(note).toBeInstanceOf(HTMLElement)
     if (!(frame instanceof HTMLElement) || !(note instanceof HTMLElement)) return
@@ -253,7 +256,7 @@ describe("CanvasBoard selection", () => {
     )
 
     const frame = container.querySelector("[aria-label='Checkout']")
-    const note = container.querySelector("[aria-label='Check the price']")
+    const note = container.querySelector("[aria-label='Check the price by Ada']")
     expect(frame).toBeInstanceOf(HTMLElement)
     expect(note).toBeInstanceOf(HTMLElement)
     if (!(frame instanceof HTMLElement) || !(note instanceof HTMLElement)) return
@@ -287,7 +290,7 @@ describe("CanvasBoard selection", () => {
       />
     )
     const empty = [...container.querySelectorAll(
-      "[aria-label='Checkout'], [aria-label='Check the price']"
+      "[aria-label='Checkout'], [aria-label='Check the price by Ada']"
     )].map((item) => item.getAttribute("aria-selected"))
 
     expect(empty).toEqual([null, null])
@@ -324,7 +327,7 @@ describe("CanvasBoard selection", () => {
         selection={checkoutSelection}
       />
     )
-    const note = container.querySelector("[aria-label='Check the price']")
+    const note = container.querySelector("[aria-label='Check the price by Ada']")
     expect(note).toBeInstanceOf(HTMLElement)
     if (!(note instanceof HTMLElement)) return
 
@@ -349,7 +352,7 @@ describe("CanvasBoard selection", () => {
           selection={checkoutSelection}
         />
       )
-      const note = container.querySelector("[aria-label='Check the price']")
+      const note = container.querySelector("[aria-label='Check the price by Ada']")
       expect(note).toBeInstanceOf(HTMLElement)
       if (!(note instanceof HTMLElement)) return
 
@@ -445,7 +448,7 @@ describe("ReplicaBoard selection", () => {
     )
 
     const frame = container.querySelector("[aria-label='Checkout']")
-    const note = container.querySelector("[aria-label='Check the price']")
+    const note = container.querySelector("[aria-label='Check the price by Ada']")
     expect(frame).toBeInstanceOf(HTMLElement)
     expect(note).toBeInstanceOf(HTMLElement)
     if (!(frame instanceof HTMLElement) || !(note instanceof HTMLElement)) return

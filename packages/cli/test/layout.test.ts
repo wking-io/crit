@@ -42,10 +42,12 @@ const populated = () => {
           noteId: "note_copy",
           text: "Tighten copy",
           geometry: { x: 1300, y: 40, width: 280, height: 160 },
-          attachedFrameId: null
+          attachedFrameId: null,
+          color: "blue"
         }
       ]
-    })
+    }),
+    { _tag: "person", personId: "person_layout", displayName: "Layout" }
   )
   if (result._tag !== "applied") {
     throw new Error(`expected applied projection, received ${result._tag}`)

@@ -216,8 +216,10 @@ export function CanvasBoard({
           if (note === undefined) return null
           return (
             <div
-              aria-label={note.text}
+              aria-label={`${note.text} by ${note.author.displayName}`}
               aria-selected={ariaSelected(selection, item)}
+              data-note-author={note.author.displayName}
+              data-note-color={note.color}
               key={note.noteId}
               role="option"
               style={itemStyle(note.geometry, zIndex)}

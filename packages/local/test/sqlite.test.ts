@@ -11,7 +11,7 @@ import {
   authorityClockLayer
 } from "@crit/authority"
 import { authorityConformanceScenarios } from "@crit/authority/testing"
-import { CanvasEngine, DomainValue, Id, IsoTimestamp, decodeCanvasCommandBatch, emptyCanvasProjection } from "@crit/domain"
+import { CanvasEngine, DomainValue, Id, IsoTimestamp, decodeCanvasCommandBatch, emptyCanvasProjection, engineChangeFromAccepted } from "@crit/domain"
 import { Context, Deferred, Effect, Exit, Fiber, Layer, Schema } from "effect"
 import { describe, expect, it } from "vitest"
 
@@ -103,7 +103,7 @@ describe("SQLite CanvasAuthority", () => {
         _tag: "changes-after", canvasId, after: null, limit: AuthorityModel.pageLimit(100)
       })
       const view = yield* authority.open(canvasId)
-      const replay = CanvasEngine.replay(emptyCanvasProjection(canvasId, "Authority"), page.changes)
+      const replay = CanvasEngine.replay(emptyCanvasProjection(canvasId, "Authority"), page.changes.map(engineChangeFromAccepted))
       expect(view.projection.title).toBe("Final")
       expect(page.changes).toHaveLength(2)
       expect(replay._tag === "replayed" && replay.projection).toEqual(view.projection)
@@ -200,7 +200,8 @@ describe("SQLite CanvasAuthority", () => {
           noteId: `note_handle_${index}`,
           text: `Note ${index}`,
           geometry: { x: index, y: 0, width: 10, height: 10 },
-          attachedFrameId: null
+          attachedFrameId: null,
+          color: "blue"
         }])
       }, person)
       const receipts = yield* Effect.all([submit(1, left), submit(2, right)], { concurrency: "unbounded" })

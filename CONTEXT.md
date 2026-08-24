@@ -62,11 +62,14 @@ _Avoid_: Canvas Document, authoritative document
 
 **Capture**: The operation that creates an Artifact from a live Representation and adds a separate Artifact Frame.
 
-**Note**: Plain-text authored review feedback with Canvas geometry and optional Frame attachment.
+**Note**: Plain-text authored review feedback with Canvas geometry, a Note Color, an Actor author, and optional Frame attachment.
+
+**Note Color**: One of a closed set of color families used to distinguish Notes on the Canvas.
+_Avoid_: highlight, label, tag
 
 **Comment Thread**: A Canvas conversation pinned to a Frame or to content within its live Representation. A thread contains one opening Comment and flat Replies.
 
-**Comment**: One authored message in a Comment Thread.
+**Comment**: One authored message in a Comment Thread. Its author is the Actor of the change that created it.
 
 **Comment Anchor**: The durable location of a Comment Thread. An Element Anchor identifies bridged page content. A Frame Anchor stores a normalized Frame point.
 

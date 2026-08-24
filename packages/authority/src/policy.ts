@@ -1,5 +1,6 @@
 import {
   type AcceptedAttribution,
+  actorFromPrincipal,
   AgentAttribution,
   CanvasEngine,
   type CanvasId,
@@ -139,7 +140,11 @@ const evaluateFresh = (args: {
     })) })
   }
   const identity = retryIdentity(args.proposal, args.invocation)
-  const result = CanvasEngine.apply(args.projection, args.proposal)
+  const result = CanvasEngine.apply(
+    args.projection,
+    args.proposal,
+    actorFromPrincipal(args.invocation.principal)
+  )
   if (result._tag === "rejected") {
     const failure = AuthorityFailure.changeRejected({
       canvasId: args.proposal.canvasId,

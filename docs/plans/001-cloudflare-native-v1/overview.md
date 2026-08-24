@@ -138,10 +138,12 @@ The rewrite intentionally ports these alpha behaviors:
 
 - Stable Canvas entity IDs and atomic semantic command batches.
 - Narrow content preconditions and explicit recoverable conflicts.
-- Frame and Note geometry, stacking, attachment, and deletion behavior.
+- Frame and Note geometry, stacking, attachment, deletion, and Note Color.
+- Note and Comment Actor authors stamped from the accepted change.
 - Immutable capture artifacts with cleanup after rejected commits.
 - Infinite Canvas camera, iframe lifecycle, input relay, and comment anchoring.
 - Review status and visible Person, Agent, and presence information.
+- Align and distribute, breakpoint presets, contextual help, pause-offscreen Frames, fullscreen, open in new tab, and developer copy-node-id. Not undo or redo, and not a fit-page display command.
 
 It does not preserve alpha JSON, IndexedDB state, filesystem Canvas documents, URL-based Frame identity, Git-based authority, `CanvasSession`, `CanvasRepository`, Vite HTTP routes, command constructors, or package exports.
 

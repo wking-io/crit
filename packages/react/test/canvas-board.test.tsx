@@ -47,9 +47,12 @@ const reviewProjection = (status: "in-progress" | "ready-for-review") =>
       text: "Check the price",
       geometry: { x: 400, y: 80, width: 160, height: 80 },
       attachedFrameId: "frame_checkout",
+      author: { _tag: "person", personId: "person_ada", displayName: "Ada" },
+      color: "blue",
       createdByChangeId: "change_1",
       updatedByChangeId: "change_1",
       textChangedByChangeId: "change_1",
+      colorChangedByChangeId: "change_1",
       geometryChangedByChangeId: "change_1",
       attachmentChangedByChangeId: "change_1"
     }],
@@ -123,7 +126,7 @@ describe("CanvasBoard", () => {
 
     const board = container.querySelector("[aria-label='Review']")
     const frame = container.querySelector("[aria-label='Checkout']")
-    const note = container.querySelector("[aria-label='Check the price']")
+    const note = container.querySelector("[aria-label='Check the price by Ada']")
     expect(board).not.toBeNull()
     expect(frame).toBeInstanceOf(HTMLElement)
     if (!(frame instanceof HTMLElement)) return
@@ -135,6 +138,8 @@ describe("CanvasBoard", () => {
     expect(frame.getAttribute("data-review-status")).toBe("in-progress")
     expect(frame.textContent).toContain("In progress")
     expect(note?.textContent).toBe("Check the price")
+    expect(note?.getAttribute("data-note-color")).toBe("blue")
+    expect(note?.getAttribute("data-note-author")).toBe("Ada")
     expect(note?.style.left).toBe("400px")
     expect(note?.style.zIndex).toBe("1")
     expect(container.querySelector("iframe")?.getAttribute("src")).toBe(url)
@@ -151,7 +156,7 @@ describe("CanvasBoard", () => {
       "Empty has no Frames or Notes."
     )
     expect(container.querySelector("iframe")).toBeNull()
-    expect(container.querySelector("[aria-label='Check the price']")).toBeNull()
+    expect(container.querySelector("[aria-label='Check the price by Ada']")).toBeNull()
   })
 
   it("paints the Frame review-status label from the closed table", async() => {

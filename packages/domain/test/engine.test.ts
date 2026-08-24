@@ -6,8 +6,16 @@ import {
   CanvasEngine,
   DomainValue,
   decodeCanvasChange,
-  decodeCanvasProjection
+  decodeCanvasProjection,
+  engineChange,
+  engineChangeFromAccepted
 } from "../src/index.js"
+
+const author = {
+  _tag: "person" as const,
+  personId: "person_one",
+  displayName: "One"
+}
 
 const fixture = () => JSON.parse(
   readFileSync(new URL("fixtures/replay.json", import.meta.url), "utf8")
@@ -56,10 +64,10 @@ describe("CanvasEngine.apply", () => {
     if (first === undefined || second === undefined) {
       throw new Error("Replay fixture needs two changes")
     }
-    const firstResult = CanvasEngine.apply(initial, first)
+    const firstResult = CanvasEngine.apply(initial, first, author)
     assert(firstResult._tag === "applied")
 
-    expect(CanvasEngine.apply(firstResult.projection, second)).toEqual({
+    expect(CanvasEngine.apply(firstResult.projection, second, author)).toEqual({
       _tag: "applied",
       projection
     })
@@ -83,7 +91,7 @@ describe("CanvasEngine.apply", () => {
     })
     const before = DomainValue.detach(initial)
 
-    expect(CanvasEngine.apply(initial, change)).toEqual({
+    expect(CanvasEngine.apply(initial, change, author)).toEqual({
       _tag: "rejected",
       failure: {
         _tag: "canvas-title-mismatch",
@@ -110,7 +118,7 @@ describe("CanvasEngine.apply", () => {
         { _tag: "rename-canvas", expectedTitle: "Checkout", title: "Checkout" }
       ]
     })
-    const result = CanvasEngine.apply(initial, change)
+    const result = CanvasEngine.apply(initial, change, author)
 
     expect(result).toEqual({ _tag: "applied", projection: initial })
     if (result._tag === "applied") expect(result.projection).toBe(initial)
@@ -126,7 +134,7 @@ describe("CanvasEngine.apply", () => {
       ]
     })
 
-    expect(CanvasEngine.apply(initial, other)).toEqual({
+    expect(CanvasEngine.apply(initial, other, author)).toEqual({
       _tag: "rejected",
       failure: {
         _tag: "canvas-mismatch",
@@ -150,7 +158,7 @@ describe("CanvasEngine.replay", () => {
     const first = changes[0]
     if (first === undefined) throw new Error("Replay fixture needs a change")
 
-    expect(CanvasEngine.replay(initial, [first, first])).toEqual({
+    expect(CanvasEngine.replay(initial, [engineChange(first, author), engineChange(first, author)])).toEqual({
       _tag: "replay-failed",
       failure: {
         _tag: "duplicate-change",
@@ -165,7 +173,7 @@ describe("CanvasEngine.replay", () => {
     const { initial, changes } = decodedFixture()
     const reordered = [...changes].reverse()
 
-    expect(CanvasEngine.replay(initial, reordered)).toMatchObject({
+    expect(CanvasEngine.replay(initial, reordered.map((change) => engineChange(change, author)))).toMatchObject({
       _tag: "replay-failed",
       failure: {
         _tag: "change-rejected",
@@ -185,7 +193,7 @@ describe("CanvasEngine.replay", () => {
     const changesBefore = DomainValue.detach(changes)
 
     for (let run = 0; run < 10; run += 1) {
-      expect(CanvasEngine.replay(initial, changes)).toEqual({
+      expect(CanvasEngine.replay(initial, changes.map((change) => engineChange(change, author)))).toEqual({
         _tag: "replayed",
         projection
       })
@@ -205,7 +213,7 @@ describe("CanvasEngine.replay", () => {
       attribution: { _tag: "person", person: { personId: "person_one", displayName: "One" } }
     }))
 
-    expect(CanvasEngine.replay(initial, acceptedValues)).toEqual({
+    expect(CanvasEngine.replay(initial, acceptedValues.map(engineChangeFromAccepted))).toEqual({
       _tag: "replayed",
       projection
     })
