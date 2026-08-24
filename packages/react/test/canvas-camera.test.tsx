@@ -23,6 +23,7 @@ import {
   applyCanvasCameraIntent,
   CanvasBoard,
   CanvasCamera,
+  CanvasSelection,
   ReplicaBoard,
   type FrameRepresentationResolver
 } from "../src/index.js"
@@ -313,6 +314,141 @@ describe("CanvasBoard camera navigation", () => {
         onCameraChange={onCameraChange}
         projection={projection}
         resolver={resolver}
+      />
+    ))
+    await waitFor(() => expect(container.querySelector("iframe")).not.toBeNull())
+    const board = container.querySelector("[aria-label='Review']")
+    const iframe = container.querySelector("iframe")
+    expect(board).toBeInstanceOf(HTMLElement)
+    expect(iframe).toBeInstanceOf(HTMLIFrameElement)
+    if (!(board instanceof HTMLElement) ||
+      !(iframe instanceof HTMLIFrameElement)) return
+    stubBoardRect(board)
+    const frameWindow = iframe.contentWindow
+    expect(frameWindow).not.toBeNull()
+    if (frameWindow === null) return
+
+    await act(async() => {
+      window.dispatchEvent(new MessageEvent("message", {
+        origin: new URL(url).origin,
+        source: frameWindow,
+        data: {
+          source: FRAME_INPUT_BRIDGE_SOURCE,
+          schemaVersion: FRAME_INPUT_BRIDGE_SCHEMA_VERSION,
+          intent: { type: "wheel", ...wheel, deltaX: 4, deltaY: 8 }
+        }
+      }))
+    })
+
+    expect(onCameraChange).toHaveBeenCalledWith(
+      CanvasCamera.make({ x: 6, y: 12, zoom: 1 })
+    )
+  })
+
+  it("leaves a sole selected Frame's wheel for the Frame", async() => {
+    const onCameraChange = vi.fn()
+    await act(async() => render(
+      <CanvasBoard
+        camera={resting}
+        onCameraChange={onCameraChange}
+        projection={projection}
+        resolver={resolver}
+        selection={CanvasSelection.make([
+          { _tag: "frame", frameId: "frame_checkout" }
+        ])}
+      />
+    ))
+    await waitFor(() => expect(container.querySelector("iframe")).not.toBeNull())
+    const board = container.querySelector("[aria-label='Review']")
+    const frame = container.querySelector("[aria-label='Checkout']")
+    const iframe = container.querySelector("iframe")
+    expect(board).toBeInstanceOf(HTMLElement)
+    expect(frame).toBeInstanceOf(HTMLElement)
+    expect(iframe).toBeInstanceOf(HTMLIFrameElement)
+    if (
+      !(board instanceof HTMLElement) ||
+      !(frame instanceof HTMLElement) ||
+      !(iframe instanceof HTMLIFrameElement)
+    ) return
+    stubBoardRect(board)
+    vi.spyOn(frame, "getBoundingClientRect").mockReturnValue(
+      new DOMRect(0, 0, 100, 100)
+    )
+    const frameWindow = iframe.contentWindow
+    expect(frameWindow).not.toBeNull()
+    if (frameWindow === null) return
+
+    const event = dispatchWheel(window)
+    await act(async() => {
+      window.dispatchEvent(new MessageEvent("message", {
+        origin: new URL(url).origin,
+        source: frameWindow,
+        data: {
+          source: FRAME_INPUT_BRIDGE_SOURCE,
+          schemaVersion: FRAME_INPUT_BRIDGE_SCHEMA_VERSION,
+          intent: { type: "wheel", ...wheel, deltaX: 4, deltaY: 8 }
+        }
+      }))
+    })
+
+    expect(event.defaultPrevented).toBe(false)
+    expect(onCameraChange).not.toHaveBeenCalled()
+  })
+
+  it("keeps the camera when more than one item is selected", async() => {
+    const onCameraChange = vi.fn()
+    await act(async() => render(
+      <CanvasBoard
+        camera={resting}
+        onCameraChange={onCameraChange}
+        projection={projection}
+        resolver={resolver}
+        selection={CanvasSelection.make([
+          { _tag: "frame", frameId: "frame_checkout" },
+          { _tag: "note", noteId: "note_price" }
+        ])}
+      />
+    ))
+    await waitFor(() => expect(container.querySelector("iframe")).not.toBeNull())
+    const board = container.querySelector("[aria-label='Review']")
+    const iframe = container.querySelector("iframe")
+    expect(board).toBeInstanceOf(HTMLElement)
+    expect(iframe).toBeInstanceOf(HTMLIFrameElement)
+    if (!(board instanceof HTMLElement) ||
+      !(iframe instanceof HTMLIFrameElement)) return
+    stubBoardRect(board)
+    const frameWindow = iframe.contentWindow
+    expect(frameWindow).not.toBeNull()
+    if (frameWindow === null) return
+
+    await act(async() => {
+      window.dispatchEvent(new MessageEvent("message", {
+        origin: new URL(url).origin,
+        source: frameWindow,
+        data: {
+          source: FRAME_INPUT_BRIDGE_SOURCE,
+          schemaVersion: FRAME_INPUT_BRIDGE_SCHEMA_VERSION,
+          intent: { type: "wheel", ...wheel, deltaX: 4, deltaY: 8 }
+        }
+      }))
+    })
+
+    expect(onCameraChange).toHaveBeenCalledWith(
+      CanvasCamera.make({ x: 6, y: 12, zoom: 1 })
+    )
+  })
+
+  it("keeps the camera when the sole selection is a Note", async() => {
+    const onCameraChange = vi.fn()
+    await act(async() => render(
+      <CanvasBoard
+        camera={resting}
+        onCameraChange={onCameraChange}
+        projection={projection}
+        resolver={resolver}
+        selection={CanvasSelection.make([
+          { _tag: "note", noteId: "note_price" }
+        ])}
       />
     ))
     await waitFor(() => expect(container.querySelector("iframe")).not.toBeNull())

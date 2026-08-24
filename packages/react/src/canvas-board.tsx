@@ -69,8 +69,10 @@ export function CanvasBoard({
   selection
 }: CanvasBoardProps): ReactElement {
   const rootRef = useRef<HTMLElement>(null)
+  const selectedFrameRef = useRef<HTMLDivElement>(null)
   const navigationRef = useRef({ camera, onCameraChange })
   const navigationArmed = camera !== undefined && onCameraChange !== undefined
+  const inputTarget = CanvasSelection.inputTarget(selection)
 
   useLayoutEffect(() => {
     navigationRef.current = { camera, onCameraChange }
@@ -100,7 +102,16 @@ export function CanvasBoard({
     return connectCanvasInput({
       target: window,
       root,
-      onIntent: applyCameraIntent
+      onIntent: applyCameraIntent,
+      ignore: ({ clientX, clientY }) => {
+        const frame = selectedFrameRef.current
+        if (frame === null) return false
+        const rect = frame.getBoundingClientRect()
+        return clientX >= rect.left &&
+          clientX <= rect.right &&
+          clientY >= rect.top &&
+          clientY <= rect.bottom
+      }
     })
   }, [applyCameraIntent, navigationArmed])
 
@@ -126,8 +137,16 @@ export function CanvasBoard({
           const frameThreads = threads.filter(
             (thread) => thread.anchor._tag === "frame"
           )
+          const frameReceivesInput = navigationArmed && (
+            inputTarget._tag === "camera" || inputTarget.frameId !== frameId
+          )
           return (
             <div
+              ref={
+                inputTarget._tag === "frame" && inputTarget.frameId === frameId
+                  ? selectedFrameRef
+                  : undefined
+              }
               aria-label={frame.title}
               aria-selected={ariaSelected(selection, item)}
               key={frame.frameId}
@@ -136,7 +155,7 @@ export function CanvasBoard({
             >
               <FrameRenderer
                 {...(liveThreads.length === 0 ? {} : { commentThreads: liveThreads })}
-                {...(navigationArmed ? { onInputIntent: applyCameraIntent } : {})}
+                {...(frameReceivesInput ? { onInputIntent: applyCameraIntent } : {})}
                 frame={frame}
                 resolver={resolver}
               />
