@@ -15,6 +15,7 @@ import {
   useLayoutEffect,
   useRef,
   type CSSProperties,
+  type PointerEvent as ReactPointerEvent,
   type ReactElement
 } from "react"
 
@@ -24,7 +25,10 @@ import {
   canvasCameraStyle
 } from "./canvas-camera.js"
 import { CommentPin } from "./canvas-comment-pin.js"
-import { CanvasSelection } from "./canvas-selection.js"
+import {
+  CanvasSelection,
+  type CanvasSelectionCommand
+} from "./canvas-selection.js"
 import {
   FrameRenderer,
   type FrameRepresentationResolver
@@ -34,19 +38,18 @@ import { framesById, notesById } from "./projection-index.js"
 export interface CanvasBoardProps {
   readonly projection: CanvasProjection
   readonly resolver: FrameRepresentationResolver
-  readonly camera?: CanvasCamera
-  readonly onCameraChange?: (camera: CanvasCamera) => void
-  readonly selection?: CanvasSelection
+  readonly camera: CanvasCamera
+  readonly onCameraChange: (camera: CanvasCamera) => void
+  readonly selection: CanvasSelection
+  readonly onSelectionChange: (selection: CanvasSelection) => void
   readonly className?: string
 }
 
 const ariaSelected = (
-  selection: CanvasSelection | undefined,
+  selection: CanvasSelection,
   item: CanvasItemRef
 ): true | undefined =>
-  selection !== undefined && CanvasSelection.has(selection, item)
-    ? true
-    : undefined
+  CanvasSelection.has(selection, item) ? true : undefined
 
 const itemStyle = (
   geometry: Frame["geometry"] | Note["geometry"],
@@ -60,10 +63,15 @@ const itemStyle = (
   zIndex
 })
 
+const isAdditiveSelection = (
+  event: Pick<ReactPointerEvent, "ctrlKey" | "metaKey" | "shiftKey">
+): boolean => event.ctrlKey || event.metaKey || event.shiftKey
+
 export function CanvasBoard({
   camera,
   className,
   onCameraChange,
+  onSelectionChange,
   projection,
   resolver,
   selection
@@ -71,20 +79,29 @@ export function CanvasBoard({
   const rootRef = useRef<HTMLElement>(null)
   const selectedFrameRef = useRef<HTMLDivElement>(null)
   const navigationRef = useRef({ camera, onCameraChange })
-  const navigationArmed = camera !== undefined && onCameraChange !== undefined
+  const selectionRef = useRef({ selection, onSelectionChange })
   const inputTarget = CanvasSelection.inputTarget(selection)
 
   useLayoutEffect(() => {
     navigationRef.current = { camera, onCameraChange }
   }, [camera, onCameraChange])
 
+  useLayoutEffect(() => {
+    selectionRef.current = { selection, onSelectionChange }
+  }, [onSelectionChange, selection])
+
+  const applySelectionCommand = useCallback(
+    (command: CanvasSelectionCommand) => {
+      const latest = selectionRef.current
+      latest.onSelectionChange(CanvasSelection.apply(latest.selection, command))
+    },
+    []
+  )
+
   const applyCameraIntent = useCallback((intent: FrameInputIntent) => {
     const root = rootRef.current
     if (root === null) return
     const latest = navigationRef.current
-    if (latest.camera === undefined || latest.onCameraChange === undefined) {
-      return
-    }
     const nextCamera = applyCanvasCameraIntent(
       latest.camera,
       intent,
@@ -96,7 +113,6 @@ export function CanvasBoard({
   }, [])
 
   useEffect(() => {
-    if (!navigationArmed) return
     const root = rootRef.current
     if (root === null) return
     return connectCanvasInput({
@@ -113,10 +129,18 @@ export function CanvasBoard({
           clientY <= rect.bottom
       }
     })
-  }, [applyCameraIntent, navigationArmed])
+  }, [applyCameraIntent])
 
   const frames = framesById(projection.frames)
   const notes = notesById(projection.notes)
+  const selectItem = (
+    item: CanvasItemRef,
+    event: ReactPointerEvent<HTMLDivElement>
+  ) => applySelectionCommand({
+    _tag: "item",
+    item,
+    additive: isAdditiveSelection(event)
+  })
 
   const items = projection.stack.length === 0
     ? (
@@ -137,9 +161,19 @@ export function CanvasBoard({
           const frameThreads = threads.filter(
             (thread) => thread.anchor._tag === "frame"
           )
-          const frameReceivesInput = navigationArmed && (
-            inputTarget._tag === "camera" || inputTarget.frameId !== frameId
-          )
+          const frameReceivesInput = inputTarget._tag === "camera" ||
+            inputTarget.frameId !== frameId
+          const onFrameInputIntent = (intent: FrameInputIntent) => {
+            if (intent.type === "select") {
+              applySelectionCommand({
+                _tag: "item",
+                item,
+                additive: intent.additive
+              })
+              return
+            }
+            applyCameraIntent(intent)
+          }
           return (
             <div
               ref={
@@ -152,10 +186,11 @@ export function CanvasBoard({
               key={frame.frameId}
               role="option"
               style={itemStyle(frame.geometry, zIndex)}
+              onPointerDown={(event) => selectItem(item, event)}
             >
               <FrameRenderer
                 {...(liveThreads.length === 0 ? {} : { commentThreads: liveThreads })}
-                {...(frameReceivesInput ? { onInputIntent: applyCameraIntent } : {})}
+                {...(frameReceivesInput ? { onInputIntent: onFrameInputIntent } : {})}
                 frame={frame}
                 resolver={resolver}
               />
@@ -176,6 +211,7 @@ export function CanvasBoard({
               key={note.noteId}
               role="option"
               style={itemStyle(note.geometry, zIndex)}
+              onPointerDown={(event) => selectItem(item, event)}
             >
               {note.text}
             </div>
@@ -194,10 +230,18 @@ export function CanvasBoard({
       className={className}
       role={hasItems ? "listbox" : undefined}
       style={{ position: "relative" }}
+      onPointerDown={(event) => {
+        const target = event.target
+        if (
+          target instanceof Element &&
+          target.closest('[role="option"]') !== null
+        ) return
+        applySelectionCommand({ _tag: "clear" })
+      }}
     >
-      {camera === undefined || !hasItems
-        ? items
-        : <div style={canvasCameraStyle(camera)}>{items}</div>}
+      {hasItems
+        ? <div style={canvasCameraStyle(camera)}>{items}</div>
+        : items}
     </section>
   )
 }

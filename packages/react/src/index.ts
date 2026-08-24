@@ -18,6 +18,11 @@ export { CanvasBoard } from "./canvas-board.js"
 export type { CanvasBoardProps } from "./canvas-board.js"
 export { CanvasSelection } from "./canvas-selection.js"
 export type { CanvasInputTarget } from "./canvas-selection.js"
+export {
+  getCanvasSelectionSession,
+  removeCanvasSelectionSession,
+  setCanvasSelectionSession
+} from "./canvas-selection-session.js"
 export { FrameRenderer } from "./frame-renderer.js"
 export type {
   FrameRendererFrame,

@@ -20,19 +20,56 @@ const CanvasSelectionValue = Schema.Array(CanvasItemRefSchema).check(
 
 export type CanvasSelection = typeof CanvasSelectionValue.Type
 
+export type CanvasSelectionCommand =
+  | { readonly _tag: "clear" }
+  | {
+    readonly _tag: "item"
+    readonly item: CanvasItemRef
+    readonly additive: boolean
+  }
+
 export type CanvasInputTarget =
   | { readonly _tag: "camera" }
   | { readonly _tag: "frame"; readonly frameId: FrameId }
 
 const cameraTarget: CanvasInputTarget = { _tag: "camera" }
 
+const makeCanvasSelection = Schema.decodeUnknownSync(CanvasSelectionValue)
+
+const hasCanvasItem = (
+  selection: CanvasSelection,
+  item: CanvasItemRef
+): boolean => {
+  const key = itemKey(item)
+  return selection.some((selected) => itemKey(selected) === key)
+}
+
+const applyCanvasSelectionCommand = (
+  current: CanvasSelection | undefined,
+  command: CanvasSelectionCommand
+): CanvasSelection => {
+  switch (command._tag) {
+    case "clear":
+      return makeCanvasSelection([])
+    case "item": {
+      if (!command.additive) return makeCanvasSelection([command.item])
+      const selection = current ?? makeCanvasSelection([])
+      if (!hasCanvasItem(selection, command.item)) {
+        return makeCanvasSelection([...selection, command.item])
+      }
+      const key = itemKey(command.item)
+      return makeCanvasSelection(
+        selection.filter((selected) => itemKey(selected) !== key)
+      )
+    }
+  }
+}
+
 export const CanvasSelection = {
-  make: Schema.decodeUnknownSync(CanvasSelectionValue),
+  make: makeCanvasSelection,
   schema: CanvasSelectionValue,
-  has: (selection: CanvasSelection, item: CanvasItemRef): boolean => {
-    const key = itemKey(item)
-    return selection.some((selected) => itemKey(selected) === key)
-  },
+  has: hasCanvasItem,
+  apply: applyCanvasSelectionCommand,
   inputTarget: (selection: CanvasSelection | undefined): CanvasInputTarget => {
     if (selection === undefined || selection.length !== 1) return cameraTarget
     const item = selection[0]

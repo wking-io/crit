@@ -30,6 +30,7 @@ import {
   ReplicaBoard,
   type FrameRepresentationResolver
 } from "../src/index.js"
+import { requiredBoard } from "./required-board.js"
 
 Object.defineProperty(globalThis, "IS_REACT_ACT_ENVIRONMENT", { value: true })
 notifyManager.setNotifyFunction((callback) => act(callback))
@@ -228,7 +229,7 @@ afterEach(async() => {
 describe("ReplicaBoard", () => {
   it("shows synchronized copy and the existing board", async() => {
     await act(async() => render(
-      <ReplicaBoard className="workspace" resolver={checkoutResolver} view={synchronized} />
+      <ReplicaBoard {...requiredBoard}  className="workspace" resolver={checkoutResolver} view={synchronized} />
     ))
     await waitFor(() => expect(container.querySelector("iframe")).not.toBeNull())
 
@@ -244,7 +245,7 @@ describe("ReplicaBoard", () => {
 
   it("keeps the empty-board copy when the replica is synchronized", async() => {
     await act(async() => render(
-      <ReplicaBoard resolver={unusedResolver} view={emptySynchronized} />
+      <ReplicaBoard {...requiredBoard}  resolver={unusedResolver} view={emptySynchronized} />
     ))
     const boardStatus = [...container.querySelectorAll("[role='status']")]
       .map((node) => node.textContent)
@@ -255,7 +256,7 @@ describe("ReplicaBoard", () => {
 
   it("lists mixed pending states in replica order", async() => {
     await act(async() => render(
-      <ReplicaBoard resolver={checkoutResolver} view={mixed} />
+      <ReplicaBoard {...requiredBoard}  resolver={checkoutResolver} view={mixed} />
     ))
     await waitFor(() => expect(container.querySelector("iframe")).not.toBeNull())
 
@@ -275,7 +276,7 @@ describe("ReplicaBoard", () => {
 
   it("still lists a conflicted add-frame that never landed on the board", async() => {
     await act(async() => render(
-      <ReplicaBoard resolver={checkoutResolver} view={missingFrame} />
+      <ReplicaBoard {...requiredBoard}  resolver={checkoutResolver} view={missingFrame} />
     ))
     await waitFor(() => expect(container.querySelector("iframe")).not.toBeNull())
 
@@ -291,12 +292,12 @@ describe("ReplicaBoard", () => {
 
   it("drops the queue when a later view is synchronized", async() => {
     await act(async() => render(
-      <ReplicaBoard resolver={checkoutResolver} view={mixed} />
+      <ReplicaBoard {...requiredBoard}  resolver={checkoutResolver} view={mixed} />
     ))
     expect(syncRegion()?.querySelector("ul")).not.toBeNull()
 
     await act(async() => render(
-      <ReplicaBoard resolver={checkoutResolver} view={synchronized} />
+      <ReplicaBoard {...requiredBoard}  resolver={checkoutResolver} view={synchronized} />
     ))
     const region = syncRegion()
     expect(region?.querySelector("[role='status']")?.textContent).toBe(

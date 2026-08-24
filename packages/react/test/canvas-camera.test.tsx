@@ -27,6 +27,7 @@ import {
   ReplicaBoard,
   type FrameRepresentationResolver
 } from "../src/index.js"
+import { requiredBoard } from "./required-board.js"
 
 Object.defineProperty(globalThis, "IS_REACT_ACT_ENVIRONMENT", { value: true })
 notifyManager.setNotifyFunction((callback) => act(callback))
@@ -229,21 +230,23 @@ describe("applyCanvasCameraIntent", () => {
 })
 
 describe("CanvasBoard camera", () => {
-  it("leaves the board untransformed when no camera is passed", async() => {
+  it("applies the identity camera on a world layer", async() => {
     await act(async() => render(
-      <CanvasBoard projection={projection} resolver={resolver} />
+      <CanvasBoard {...requiredBoard} projection={projection} resolver={resolver} />
     ))
     await waitFor(() => expect(container.querySelector("iframe")).not.toBeNull())
     const board = container.querySelector("[aria-label='Review']")
     expect(board).toBeInstanceOf(HTMLElement)
     if (!(board instanceof HTMLElement)) return
-    expect(worldLayer(board)).toBeUndefined()
+    const world = worldLayer(board)
+    if (!(world instanceof HTMLElement)) return
+    expect(world.style.transform).toBe("translate(0px, 0px) scale(1)")
     expect(board.querySelector("[aria-label='Checkout']")).toBeInstanceOf(HTMLElement)
   })
 
   it("applies translate then scale on a world layer", async() => {
     await act(async() => render(
-      <CanvasBoard camera={posed} projection={projection} resolver={resolver} />
+      <CanvasBoard {...requiredBoard}  camera={posed} projection={projection} resolver={resolver} />
     ))
     await waitFor(() => expect(container.querySelector("iframe")).not.toBeNull())
     const board = container.querySelector("[aria-label='Review']")
@@ -263,7 +266,7 @@ describe("CanvasBoard camera", () => {
 
   it("replaces the transform when the host passes a new camera", async() => {
     await act(async() => render(
-      <CanvasBoard camera={posed} projection={projection} resolver={resolver} />
+      <CanvasBoard {...requiredBoard}  camera={posed} projection={projection} resolver={resolver} />
     ))
     const board = container.querySelector("[aria-label='Review']")
     expect(board).toBeInstanceOf(HTMLElement)
@@ -273,7 +276,7 @@ describe("CanvasBoard camera", () => {
     expect(first.style.transform).toBe("translate(12px, -8px) scale(0.5)")
 
     await act(async() => render(
-      <CanvasBoard camera={recentered} projection={projection} resolver={resolver} />
+      <CanvasBoard {...requiredBoard}  camera={recentered} projection={projection} resolver={resolver} />
     ))
     const next = worldLayer(board)
     if (!(next instanceof HTMLElement)) return
@@ -282,10 +285,11 @@ describe("CanvasBoard camera", () => {
 })
 
 describe("CanvasBoard camera navigation", () => {
-  it("notifies the host of a wheel pan when navigation is armed", async() => {
+  it("notifies the host of a wheel pan", async() => {
     const onCameraChange = vi.fn()
     await act(async() => render(
       <CanvasBoard
+        {...requiredBoard}
         camera={resting}
         onCameraChange={onCameraChange}
         projection={projection}
@@ -310,6 +314,7 @@ describe("CanvasBoard camera navigation", () => {
     const onCameraChange = vi.fn()
     await act(async() => render(
       <CanvasBoard
+        {...requiredBoard}
         camera={resting}
         onCameraChange={onCameraChange}
         projection={projection}
@@ -349,6 +354,7 @@ describe("CanvasBoard camera navigation", () => {
     const onCameraChange = vi.fn()
     await act(async() => render(
       <CanvasBoard
+        {...requiredBoard}
         camera={resting}
         onCameraChange={onCameraChange}
         projection={projection}
@@ -399,6 +405,7 @@ describe("CanvasBoard camera navigation", () => {
     const onCameraChange = vi.fn()
     await act(async() => render(
       <CanvasBoard
+        {...requiredBoard}
         camera={resting}
         onCameraChange={onCameraChange}
         projection={projection}
@@ -442,6 +449,7 @@ describe("CanvasBoard camera navigation", () => {
     const onCameraChange = vi.fn()
     await act(async() => render(
       <CanvasBoard
+        {...requiredBoard}
         camera={resting}
         onCameraChange={onCameraChange}
         projection={projection}
@@ -480,49 +488,12 @@ describe("CanvasBoard camera navigation", () => {
     )
   })
 
-  it("does not steal wheel when the host omits camera", async() => {
-    const onCameraChange = vi.fn()
-    await act(async() => render(
-      <CanvasBoard
-        onCameraChange={onCameraChange}
-        projection={projection}
-        resolver={resolver}
-      />
-    ))
-    await waitFor(() => expect(container.querySelector("iframe")).not.toBeNull())
-    const board = container.querySelector("[aria-label='Review']")
-    expect(board).toBeInstanceOf(HTMLElement)
-    if (!(board instanceof HTMLElement)) return
-    stubBoardRect(board)
-
-    const event = dispatchWheel(window)
-
-    expect(event.defaultPrevented).toBe(false)
-    expect(onCameraChange).not.toHaveBeenCalled()
-  })
-
-  it("leaves the transform alone when the host omits onCameraChange", async() => {
-    await act(async() => render(
-      <CanvasBoard camera={resting} projection={projection} resolver={resolver} />
-    ))
-    await waitFor(() => expect(container.querySelector("iframe")).not.toBeNull())
-    const board = container.querySelector("[aria-label='Review']")
-    expect(board).toBeInstanceOf(HTMLElement)
-    if (!(board instanceof HTMLElement)) return
-    const world = worldLayer(board)
-    if (!(world instanceof HTMLElement)) return
-    expect(world.style.transform).toBe("translate(10px, 20px) scale(1)")
-    stubBoardRect(board)
-
-    expect(() => dispatchWheel(window)).not.toThrow()
-    expect(world.style.transform).toBe("translate(10px, 20px) scale(1)")
-  })
 })
 
 describe("ReplicaBoard camera", () => {
   it("keeps sync chrome outside the transformed world", async() => {
     await act(async() => render(
-      <ReplicaBoard camera={posed} resolver={resolver} view={view} />
+      <ReplicaBoard {...requiredBoard}  camera={posed} resolver={resolver} view={view} />
     ))
     await waitFor(() => expect(container.querySelector("iframe")).not.toBeNull())
     const chrome = container.querySelector("[aria-label='Review sync status']")
@@ -537,10 +508,11 @@ describe("ReplicaBoard camera", () => {
     expect(world.style.transform).toBe("translate(12px, -8px) scale(0.5)")
   })
 
-  it("forwards wheel navigation when camera and onCameraChange are both set", async() => {
+  it("forwards wheel navigation", async() => {
     const onCameraChange = vi.fn()
     await act(async() => render(
       <ReplicaBoard
+        {...requiredBoard}
         camera={resting}
         onCameraChange={onCameraChange}
         resolver={resolver}

@@ -8,10 +8,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import {
   CanvasCamera,
+  CanvasSelection,
   ReplicaSessionUnavailable,
   getCanvasCameraSession,
+  getCanvasSelectionSession,
   layerMemory,
   setCanvasCameraSession,
+  setCanvasSelectionSession,
   useReplicaSession,
   type ReplicaSessionHandle,
   type ReplicaSessionPorts,
@@ -134,11 +137,19 @@ afterEach(async() => {
 
 const savedCamera = CanvasCamera.make({ x: 12, y: -8, zoom: 0.5 })
 const defaultCamera = CanvasCamera.make({ x: 0, y: 0, zoom: 1 })
+const savedSelection = CanvasSelection.make([
+  { _tag: "frame", frameId: "frame_checkout" }
+])
+const defaultSelection = CanvasSelection.make([])
 
 describe("useReplicaSession", () => {
-  it("restores a saved camera when open succeeds", async() => {
+  it("restores a saved camera and selection when open succeeds", async() => {
     const run = makeRun()
     await run(setCanvasCameraSession({ camera: savedCamera, canvasId: canvasA }))
+    await run(setCanvasSelectionSession({
+      canvasId: canvasA,
+      selection: savedSelection
+    }))
     const replica = makeReplica([viewOne])
 
     await act(async() => render(
@@ -149,12 +160,13 @@ describe("useReplicaSession", () => {
       expect(latest?.session).toEqual({
         _tag: "ready",
         view: viewOne,
-        camera: savedCamera
+        camera: savedCamera,
+        selection: savedSelection
       })
     )
   })
 
-  it("uses the default camera when none is saved", async() => {
+  it("uses the default camera and selection when none are saved", async() => {
     const replica = makeReplica([viewOne])
 
     await act(async() => render(
@@ -165,7 +177,8 @@ describe("useReplicaSession", () => {
       expect(latest?.session).toEqual({
         _tag: "ready",
         view: viewOne,
-        camera: defaultCamera
+        camera: defaultCamera,
+        selection: defaultSelection
       })
     )
   })
@@ -200,7 +213,8 @@ describe("useReplicaSession", () => {
       expect(latest?.session).toEqual({
         _tag: "ready",
         view: viewOne,
-        camera: defaultCamera
+        camera: defaultCamera,
+        selection: defaultSelection
       })
     )
   })
@@ -208,6 +222,10 @@ describe("useReplicaSession", () => {
   it("keeps the last ready view when a refresh open fails", async() => {
     const run = makeRun()
     await run(setCanvasCameraSession({ camera: savedCamera, canvasId: canvasA }))
+    await run(setCanvasSelectionSession({
+      canvasId: canvasA,
+      selection: savedSelection
+    }))
     const replica = makeReplica([viewOne])
 
     await act(async() => render(
@@ -222,14 +240,19 @@ describe("useReplicaSession", () => {
       expect(latest?.session).toEqual({
         _tag: "ready",
         view: viewOne,
-        camera: savedCamera
+        camera: savedCamera,
+        selection: savedSelection
       })
     )
   })
 
-  it("re-opens on change and replaces the view without moving the camera", async() => {
+  it("re-opens on change and replaces the view without moving the camera or selection", async() => {
     const run = makeRun()
     await run(setCanvasCameraSession({ camera: savedCamera, canvasId: canvasA }))
+    await run(setCanvasSelectionSession({
+      canvasId: canvasA,
+      selection: savedSelection
+    }))
     const replica = makeReplica([viewOne])
 
     await act(async() => render(
@@ -244,7 +267,8 @@ describe("useReplicaSession", () => {
       expect(latest?.session).toEqual({
         _tag: "ready",
         view: viewTwo,
-        camera: savedCamera
+        camera: savedCamera,
+        selection: savedSelection
       })
     )
   })
@@ -265,11 +289,38 @@ describe("useReplicaSession", () => {
       expect(latest?.session).toEqual({
         _tag: "ready",
         view: viewOne,
-        camera: moved
+        camera: moved,
+        selection: defaultSelection
       })
     )
     await waitFor(async() =>
       expect(await run(getCanvasCameraSession({ canvasId: canvasA }))).toEqual(moved)
+    )
+  })
+
+  it("persists onSelectionChange through the selection session", async() => {
+    const run = makeRun()
+    const replica = makeReplica([viewOne])
+
+    await act(async() => render(
+      <Probe canvasId={canvasA} ports={replica.ports} run={run} />
+    ))
+    await waitFor(() => expect(latest?.session._tag).toBe("ready"))
+
+    await act(async() => latest?.onSelectionChange(savedSelection))
+
+    await waitFor(() =>
+      expect(latest?.session).toEqual({
+        _tag: "ready",
+        view: viewOne,
+        camera: defaultCamera,
+        selection: savedSelection
+      })
+    )
+    await waitFor(async() =>
+      expect(await run(getCanvasSelectionSession({ canvasId: canvasA }))).toEqual(
+        savedSelection
+      )
     )
   })
 
@@ -293,7 +344,8 @@ describe("useReplicaSession", () => {
       expect(latest?.session).toEqual({
         _tag: "ready",
         view: viewOther,
-        camera: defaultCamera
+        camera: defaultCamera,
+        selection: defaultSelection
       })
     )
   })

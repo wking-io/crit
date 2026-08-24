@@ -17,6 +17,7 @@ import {
   CanvasBoard,
   type FrameRepresentationResolver
 } from "../src/index.js"
+import { requiredBoard } from "./required-board.js"
 
 Object.defineProperty(globalThis, "IS_REACT_ACT_ENVIRONMENT", { value: true })
 notifyManager.setNotifyFunction((callback) => act(callback))
@@ -114,7 +115,7 @@ describe("CanvasBoard", () => {
     }
 
     await act(async() => render(
-      <CanvasBoard projection={projection} resolver={resolver} />
+      <CanvasBoard {...requiredBoard} projection={projection} resolver={resolver} />
     ))
     await waitFor(() => expect(container.querySelector("iframe")).not.toBeNull())
 
@@ -140,7 +141,7 @@ describe("CanvasBoard", () => {
       resolve: () => Effect.die("empty canvas must not resolve a Frame")
     }
     await act(async() => render(
-      <CanvasBoard projection={empty} resolver={resolver} />
+      <CanvasBoard {...requiredBoard} projection={empty} resolver={resolver} />
     ))
     expect(container.querySelector("[role='status']")?.textContent).toBe(
       "Empty has no Frames or Notes."

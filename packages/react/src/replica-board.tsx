@@ -11,9 +11,10 @@ import type { FrameRepresentationResolver } from "./frame-renderer.js"
 export interface ReplicaBoardProps {
   readonly view: ReplicaView
   readonly resolver: FrameRepresentationResolver
-  readonly camera?: CanvasCamera
-  readonly onCameraChange?: (camera: CanvasCamera) => void
-  readonly selection?: CanvasSelection
+  readonly camera: CanvasCamera
+  readonly onCameraChange: (camera: CanvasCamera) => void
+  readonly selection: CanvasSelection
+  readonly onSelectionChange: (selection: CanvasSelection) => void
   readonly className?: string
 }
 
@@ -93,6 +94,7 @@ export function ReplicaBoard({
   camera,
   className,
   onCameraChange,
+  onSelectionChange,
   resolver,
   selection,
   view
@@ -113,11 +115,12 @@ export function ReplicaBoard({
           : null}
       </section>
       <CanvasBoard
-        {...(camera === undefined ? {} : { camera })}
-        {...(onCameraChange === undefined ? {} : { onCameraChange })}
-        {...(selection === undefined ? {} : { selection })}
+        camera={camera}
+        onCameraChange={onCameraChange}
+        onSelectionChange={onSelectionChange}
         projection={view.projection}
         resolver={resolver}
+        selection={selection}
       />
     </div>
   )
