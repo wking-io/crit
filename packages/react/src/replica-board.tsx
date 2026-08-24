@@ -123,9 +123,9 @@ export function ReplicaBoard({
       <CanvasBoard
         camera={camera}
         onCameraChange={onCameraChange}
-        {...(onEffect === undefined ? {} : { onEffect })}
+        onEffect={onEffect}
         onSelectionChange={onSelectionChange}
-        {...(onSubmit === undefined ? {} : { onSubmit })}
+        onSubmit={onSubmit}
         projection={view.projection}
         resolver={resolver}
         selection={selection}

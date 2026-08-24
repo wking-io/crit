@@ -57,7 +57,7 @@ export const useReviewEffects = (args: {
   }, [])
 
   useEffect(() => {
-    if (!pauseOffscreen || typeof IntersectionObserver === "undefined") {
+    if (!pauseOffscreen) {
       setOffscreenFrames((current) =>
         current.size === 0 ? current : new Set()
       )

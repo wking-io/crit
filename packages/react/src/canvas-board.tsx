@@ -98,13 +98,13 @@ export function CanvasBoard({
   const inputTarget = CanvasSelection.inputTarget(selection)
   const itemDrag = useCanvasItemDrag({
     camera,
-    ...(onSubmit === undefined ? {} : { onSubmit })
+    onSubmit
   })
   const reviewEffects = useReviewEffects({
     frameElementsRef,
     frames: projection.frames,
-    selectedFrameRef,
-    ...(onEffect === undefined ? {} : { onEffect })
+    onEffect,
+    selectedFrameRef
   })
 
   useLayoutEffect(() => {
