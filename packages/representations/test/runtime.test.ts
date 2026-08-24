@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto"
+
 import {
   ApplicationRouteRepresentation,
   ArtifactRepresentation,
@@ -14,6 +16,7 @@ import {
   ApplicationBaseUrl,
   ApplicationBindingLookupFailure,
   ApplicationBindings,
+  ArtifactConflict,
   ArtifactCorrupt,
   ArtifactNotFound,
   ArtifactStore,
@@ -25,6 +28,10 @@ import { runRepresentationRuntimeConformance } from "../src/testing.js"
 
 const digest = Schema.decodeUnknownSync(Sha256Digest)(`sha256:${"1".repeat(64)}`)
 const decodeBaseUrl = Schema.decodeUnknownSync(ApplicationBaseUrl)
+
+const digestOf = (bytes: Uint8Array) => Schema.decodeUnknownSync(Sha256Digest)(
+  `sha256:${createHash("sha256").update(bytes).digest("hex")}`
+)
 
 const bindingsLayer = (
   applicationId: ReturnType<typeof Id.application>,
@@ -39,8 +46,19 @@ const memoryArtifactStore = () => {
   const stored = new Map<string, { readonly artifact: ArtifactRepresentation; readonly bytes: Uint8Array }>()
   return Layer.succeed(ArtifactStore, ArtifactStore.of({
     put: ({ artifactId, bytes }) => {
-      const artifact = ArtifactRepresentation.make({ artifactId, digest })
-      stored.set(artifactId, { artifact, bytes: Uint8Array.from(bytes) })
+      const owned = Uint8Array.from(bytes)
+      const suppliedDigest = digestOf(owned)
+      const existing = stored.get(artifactId)
+      if (existing !== undefined) {
+        if (existing.artifact.digest === suppliedDigest) return Effect.succeed(existing.artifact)
+        return Effect.fail(new ArtifactConflict({
+          artifactId,
+          storedDigest: existing.artifact.digest,
+          suppliedDigest
+        }))
+      }
+      const artifact = ArtifactRepresentation.make({ artifactId, digest: suppliedDigest })
+      stored.set(artifactId, { artifact, bytes: owned })
       return Effect.succeed(artifact)
     },
     read: (artifact) => {
@@ -56,6 +74,10 @@ const memoryArtifactStore = () => {
     }
   }))
 }
+
+const unboundBindings = Layer.succeed(ApplicationBindings, ApplicationBindings.of({
+  get: () => Effect.succeed(Option.none())
+}))
 
 describe("ApplicationBaseUrl", () => {
   const decode = Schema.decodeUnknownResult(ApplicationBaseUrl)
@@ -210,6 +232,59 @@ describe("RepresentationRuntime", () => {
     if (plan._tag !== "artifact-bytes") return
     expect(transferred).toBeDefined()
     expect(plan.bytes).toBe(transferred)
+  })
+
+  it("resolves captured artifact bytes with the same contents", async() => {
+    const artifactId = Id.artifact("artifact_runtime_capture")
+    const bytes = Uint8Array.from([2, 7, 1])
+    const runtime = RepresentationRuntimeLive.pipe(
+      Layer.provide(Layer.merge(memoryArtifactStore(), unboundBindings))
+    )
+    const plan = await Effect.runPromise(Effect.gen(function*() {
+      const service = yield* RepresentationRuntime
+      const captured = yield* service.capture({ artifactId, bytes })
+      return yield* service.resolve(captured)
+    }).pipe(Effect.provide(runtime)))
+    expect(plan._tag).toBe("artifact-bytes")
+    if (plan._tag !== "artifact-bytes") return
+    expect([...plan.bytes]).toEqual([2, 7, 1])
+  })
+
+  it("returns the same digest for a second identical capture", async() => {
+    const artifactId = Id.artifact("artifact_runtime_capture_idempotent")
+    const bytes = Uint8Array.from([4, 5, 6])
+    const runtime = RepresentationRuntimeLive.pipe(
+      Layer.provide(Layer.merge(memoryArtifactStore(), unboundBindings))
+    )
+    const digests = await Effect.runPromise(Effect.gen(function*() {
+      const service = yield* RepresentationRuntime
+      const first = yield* service.capture({ artifactId, bytes })
+      const second = yield* service.capture({ artifactId, bytes: Uint8Array.from([4, 5, 6]) })
+      return { first: first.digest, second: second.digest }
+    }).pipe(Effect.provide(runtime)))
+    expect(digests.second).toBe(digests.first)
+  })
+
+  it("fails a conflicting capture with ArtifactConflict", async() => {
+    const artifactId = Id.artifact("artifact_runtime_capture_conflict")
+    const runtime = RepresentationRuntimeLive.pipe(
+      Layer.provide(Layer.merge(memoryArtifactStore(), unboundBindings))
+    )
+    const result = await Effect.runPromise(Effect.gen(function*() {
+      const service = yield* RepresentationRuntime
+      const first = yield* service.capture({ artifactId, bytes: Uint8Array.from([4, 5, 6]) })
+      const conflict = yield* service.capture({
+        artifactId,
+        bytes: Uint8Array.from([6, 5, 4])
+      }).pipe(Effect.result)
+      return { first, conflict }
+    }).pipe(Effect.provide(runtime)))
+    expect(result.conflict._tag).toBe("Failure")
+    if (result.conflict._tag !== "Failure") return
+    expect(result.conflict.failure._tag).toBe("ArtifactConflict")
+    expect(result.conflict.failure.artifactId).toBe(artifactId)
+    expect(result.conflict.failure.storedDigest).toBe(result.first.digest)
+    expect(result.conflict.failure.suppliedDigest).not.toBe(result.first.digest)
   })
 
   it("keeps binding lookup and artifact I/O failures typed", async() => {
