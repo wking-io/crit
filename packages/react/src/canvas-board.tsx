@@ -1,4 +1,5 @@
 import {
+  type CanvasItemRef,
   type CanvasProjection,
   type Frame,
   type Note
@@ -10,6 +11,7 @@ import {
   type CanvasCamera,
   canvasCameraStyle
 } from "./canvas-camera.js"
+import { CanvasSelection } from "./canvas-selection.js"
 import {
   FrameRenderer,
   type FrameRepresentationResolver
@@ -20,8 +22,17 @@ export interface CanvasBoardProps {
   readonly projection: CanvasProjection
   readonly resolver: FrameRepresentationResolver
   readonly camera?: CanvasCamera
+  readonly selection?: CanvasSelection
   readonly className?: string
 }
+
+const ariaSelected = (
+  selection: CanvasSelection | undefined,
+  item: CanvasItemRef
+): true | undefined =>
+  selection !== undefined && CanvasSelection.has(selection, item)
+    ? true
+    : undefined
 
 const itemStyle = (
   geometry: Frame["geometry"] | Note["geometry"],
@@ -39,7 +50,8 @@ export function CanvasBoard({
   camera,
   className,
   projection,
-  resolver
+  resolver,
+  selection
 }: CanvasBoardProps): ReactElement {
   const frames = framesById(projection.frames)
   const notes = notesById(projection.notes)
@@ -50,12 +62,14 @@ export function CanvasBoard({
     )
     : projection.stack.map((item, zIndex) =>
       Match.value(item).pipe(Match.tagsExhaustive({
-        frame: ({ frameId }) => {
+        frame: (item) => {
+          const { frameId } = item
           const frame = frames.get(frameId)
           if (frame === undefined) return null
           return (
             <section
               aria-label={frame.title}
+              aria-selected={ariaSelected(selection, item)}
               key={frame.frameId}
               style={itemStyle(frame.geometry, zIndex)}
             >
@@ -63,11 +77,13 @@ export function CanvasBoard({
             </section>
           )
         },
-        note: ({ noteId }) => {
+        note: (item) => {
+          const { noteId } = item
           const note = notes.get(noteId)
           if (note === undefined) return null
           return (
             <article
+              aria-selected={ariaSelected(selection, item)}
               key={note.noteId}
               style={itemStyle(note.geometry, zIndex)}
             >
