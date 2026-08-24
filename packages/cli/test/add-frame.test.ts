@@ -3,14 +3,28 @@ import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 
-import { AuthoredText, Id, RootedRoute } from "@crit/domain"
-import { Schema } from "effect"
+import {
+  ApplicationRouteRepresentation,
+  ArtifactRepresentation,
+  AuthoredText,
+  Id,
+  RootedRoute,
+  Sha256Digest,
+  WebUrlRepresentation
+} from "@crit/domain"
+import { Option, Result, Schema } from "effect"
 import { afterEach, describe, expect, it } from "vitest"
 
 import {
-  applicationFrameCommand,
+  DEFAULT_FRAME_HEIGHT,
+  DEFAULT_FRAME_WIDTH,
+  frameCommand,
+  frameSourceLabel,
   inferredFrameTitle,
-  nextFrameGeometry
+  inferredTitle,
+  inferredWebUrlTitle,
+  nextFrameGeometry,
+  resolveFrameGeometry
 } from "../src/add-frame.js"
 
 const directories: Array<string> = []
@@ -80,6 +94,14 @@ const frameId = Id.frame("frame_checkout")
 const checkout = Schema.decodeUnknownSync(RootedRoute)("/checkout")
 const home = Schema.decodeUnknownSync(RootedRoute)("/")
 const checkoutTitle = Schema.decodeUnknownSync(AuthoredText)("Checkout")
+const pricingUrl = Schema.decodeUnknownSync(WebUrlRepresentation)({
+  _tag: "web-url",
+  url: "https://example.com/pricing"
+}).url
+const digest = Schema.decodeUnknownSync(Sha256Digest)(
+  "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+)
+const none = Option.none<number>()
 
 describe("inferredFrameTitle", () => {
   it("uses the last route segment", () => {
@@ -91,30 +113,55 @@ describe("inferredFrameTitle", () => {
   })
 })
 
-describe("applicationFrameCommand", () => {
-  it("stores an application-route representation", () => {
-    const command = applicationFrameCommand({
-      applicationId,
-      route: checkout,
-      title: inferredFrameTitle(checkout),
-      frameId,
-      geometry: nextFrameGeometry(0)
-    })
-    expect(command.title).toBe("checkout")
-    expect(command.representation).toEqual({
-      _tag: "application-route",
+describe("inferredTitle", () => {
+  it("uses the last web-url path segment", () => {
+    expect(inferredWebUrlTitle(pricingUrl)).toBe("pricing")
+    expect(inferredTitle(WebUrlRepresentation.make({ url: pricingUrl }))).toBe("pricing")
+  })
+
+  it("titles an artifact Untitled frame", () => {
+    expect(inferredTitle(ArtifactRepresentation.make({
+      artifactId: Id.artifact("artifact_capture"),
+      digest
+    }))).toBe("Untitled frame")
+  })
+})
+
+describe("frameCommand", () => {
+  it("stores the given representation", () => {
+    const representation = ApplicationRouteRepresentation.make({
       applicationId,
       route: checkout
     })
+    const command = frameCommand({
+      frameId,
+      title: inferredTitle(representation),
+      representation,
+      geometry: nextFrameGeometry({
+        frameCount: 0,
+        width: DEFAULT_FRAME_WIDTH,
+        height: DEFAULT_FRAME_HEIGHT
+      })
+    })
+    expect(command.title).toBe("checkout")
+    expect(command.representation).toEqual(representation)
+    expect(frameSourceLabel(representation)).toBe("/checkout")
   })
 
   it("keeps an explicit title", () => {
-    const command = applicationFrameCommand({
+    const representation = ApplicationRouteRepresentation.make({
       applicationId,
-      route: checkout,
-      title: checkoutTitle,
+      route: checkout
+    })
+    const command = frameCommand({
       frameId,
-      geometry: nextFrameGeometry(0)
+      title: checkoutTitle,
+      representation,
+      geometry: nextFrameGeometry({
+        frameCount: 0,
+        width: DEFAULT_FRAME_WIDTH,
+        height: DEFAULT_FRAME_HEIGHT
+      })
     })
     expect(command.title).toBe("Checkout")
   })
@@ -122,9 +169,54 @@ describe("applicationFrameCommand", () => {
 
 describe("nextFrameGeometry", () => {
   it("tiles the first three Frames", () => {
-    expect(nextFrameGeometry(0)).toEqual({ x: 0, y: 0, width: 1200, height: 800 })
-    expect(nextFrameGeometry(1)).toEqual({ x: 1240, y: 0, width: 1200, height: 800 })
-    expect(nextFrameGeometry(3)).toEqual({ x: 0, y: 840, width: 1200, height: 800 })
+    expect(nextFrameGeometry({
+      frameCount: 0,
+      width: DEFAULT_FRAME_WIDTH,
+      height: DEFAULT_FRAME_HEIGHT
+    })).toEqual({ x: 0, y: 0, width: 1200, height: 800 })
+    expect(nextFrameGeometry({
+      frameCount: 1,
+      width: DEFAULT_FRAME_WIDTH,
+      height: DEFAULT_FRAME_HEIGHT
+    })).toEqual({ x: 1240, y: 0, width: 1200, height: 800 })
+    expect(nextFrameGeometry({
+      frameCount: 3,
+      width: DEFAULT_FRAME_WIDTH,
+      height: DEFAULT_FRAME_HEIGHT
+    })).toEqual({ x: 0, y: 840, width: 1200, height: 800 })
+  })
+})
+
+describe("resolveFrameGeometry", () => {
+  it("uses an explicit position", () => {
+    const geometry = resolveFrameGeometry({
+      frameCount: 4,
+      x: Option.some(80),
+      y: Option.some(120),
+      width: Option.some(640),
+      height: Option.some(480)
+    })
+    expect(Result.getOrThrow(geometry)).toEqual({ x: 80, y: 120, width: 640, height: 480 })
+  })
+
+  it("rejects a partial position", () => {
+    expect(Option.getOrUndefined(Result.getFailure(resolveFrameGeometry({
+      frameCount: 0,
+      x: Option.some(80),
+      y: none,
+      width: none,
+      height: none
+    })))).toBe("x and y must be set together")
+  })
+
+  it("rejects a non-positive size", () => {
+    expect(Option.getOrUndefined(Result.getFailure(resolveFrameGeometry({
+      frameCount: 0,
+      x: Option.some(0),
+      y: Option.some(0),
+      width: Option.some(0),
+      height: none
+    })))).toBe("Invalid geometry")
   })
 })
 
@@ -148,6 +240,8 @@ describe("built crit-target add-frame", () => {
     const added = run(dataRoot, [
       "add-frame",
       "canvas_cli_frames",
+      "--type",
+      "application-route",
       "--route",
       "/checkout",
       "--root",
@@ -168,6 +262,8 @@ describe("built crit-target add-frame", () => {
     const second = run(dataRoot, [
       "add-frame",
       "canvas_cli_frames",
+      "--type",
+      "application-route",
       "--route",
       "/about",
       "--title",
@@ -185,7 +281,83 @@ describe("built crit-target add-frame", () => {
     await stop(started.child)
   })
 
-  it("prints the minted Frame id and route", async() => {
+  it("adds a web-url Frame at an explicit position", async() => {
+    const directory = mkdtempSync(join(tmpdir(), "crit-cli-add-frame-url-"))
+    directories.push(directory)
+    const dataRoot = join(directory, ".crit", "v1")
+    expect(spawnSync(process.execPath, [
+      join(import.meta.dirname, "..", "dist", "main.js"),
+      "init",
+      "--root",
+      directory
+    ], { encoding: "utf8" }).status).toBe(0)
+    const started = await startWithoutBrowser(dataRoot)
+    expect(run(dataRoot, ["create", "canvas_cli_frames", "--title", "Frames"]).status).toBe(0)
+    const added = run(dataRoot, [
+      "add-frame",
+      "canvas_cli_frames",
+      "--type",
+      "web-url",
+      "--url",
+      "https://example.com/pricing",
+      "--title",
+      "Pricing",
+      "--x",
+      "80",
+      "--y",
+      "40",
+      "--width",
+      "640",
+      "--height",
+      "480",
+      "--json"
+    ])
+    expect(added.status, added.stderr).toBe(0)
+    const frame = JSON.parse(added.stdout).projection.frames[0]
+    expect(frame.representation).toEqual({
+      _tag: "web-url",
+      url: "https://example.com/pricing"
+    })
+    expect(frame.title).toBe("Pricing")
+    expect(frame.geometry).toEqual({ x: 80, y: 40, width: 640, height: 480 })
+    await stop(started.child)
+  })
+
+  it("adds an artifact Frame", async() => {
+    const directory = mkdtempSync(join(tmpdir(), "crit-cli-add-frame-artifact-"))
+    directories.push(directory)
+    const dataRoot = join(directory, ".crit", "v1")
+    expect(spawnSync(process.execPath, [
+      join(import.meta.dirname, "..", "dist", "main.js"),
+      "init",
+      "--root",
+      directory
+    ], { encoding: "utf8" }).status).toBe(0)
+    const started = await startWithoutBrowser(dataRoot)
+    expect(run(dataRoot, ["create", "canvas_cli_frames", "--title", "Frames"]).status).toBe(0)
+    const added = run(dataRoot, [
+      "add-frame",
+      "canvas_cli_frames",
+      "--type",
+      "artifact",
+      "--artifact-id",
+      "artifact_capture",
+      "--digest",
+      "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "--json"
+    ])
+    expect(added.status, added.stderr).toBe(0)
+    const frame = JSON.parse(added.stdout).projection.frames[0]
+    expect(frame.representation).toEqual({
+      _tag: "artifact",
+      artifactId: "artifact_capture",
+      digest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    })
+    expect(frame.title).toBe("Untitled frame")
+    await stop(started.child)
+  })
+
+  it("prints the minted Frame id and source", async() => {
     const directory = mkdtempSync(join(tmpdir(), "crit-cli-add-frame-human-"))
     directories.push(directory)
     const dataRoot = join(directory, ".crit", "v1")
@@ -201,6 +373,8 @@ describe("built crit-target add-frame", () => {
     const added = run(dataRoot, [
       "add-frame",
       "canvas_cli_frames",
+      "--type",
+      "application-route",
       "--route",
       "/checkout",
       "--root",
@@ -226,6 +400,8 @@ describe("built crit-target add-frame", () => {
     const missing = run(dataRoot, [
       "add-frame",
       "canvas_cli_missing",
+      "--type",
+      "application-route",
       "--route",
       "/checkout",
       "--root",
@@ -240,11 +416,41 @@ describe("built crit-target add-frame", () => {
     const result = run(join(tmpdir(), "crit-cli-add-frame-unused"), [
       "add-frame",
       "canvas_cli_frames",
+      "--type",
+      "application-route",
       "--route",
       "products"
     ])
     expect(result.status).not.toBe(0)
     expect(result.stderr).toContain("Invalid route: products")
+  })
+
+  it("rejects a localhost web-url", () => {
+    const result = run(join(tmpdir(), "crit-cli-add-frame-localhost"), [
+      "add-frame",
+      "canvas_cli_frames",
+      "--type",
+      "web-url",
+      "--url",
+      "http://localhost:3000/app"
+    ])
+    expect(result.status).not.toBe(0)
+    expect(result.stderr).toContain("Invalid url: http://localhost:3000/app")
+  })
+
+  it("rejects x without y before talking to the daemon", () => {
+    const result = run(join(tmpdir(), "crit-cli-add-frame-partial-xy"), [
+      "add-frame",
+      "canvas_cli_frames",
+      "--type",
+      "web-url",
+      "--url",
+      "https://example.com/pricing",
+      "--x",
+      "80"
+    ])
+    expect(result.status).not.toBe(0)
+    expect(result.stderr).toContain("x and y must be set together")
   })
 
   it("reports a stopped daemon", async() => {
@@ -263,6 +469,8 @@ describe("built crit-target add-frame", () => {
     const stopped = run(dataRoot, [
       "add-frame",
       "canvas_cli_frames",
+      "--type",
+      "application-route",
       "--route",
       "/checkout",
       "--root",
