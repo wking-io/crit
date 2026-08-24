@@ -27,11 +27,13 @@ import {
 import { ReplicaModel, ReplicaView } from "@crit/replica"
 import { LocalApiUnauthorized, LocalApiVersionUnsupported } from "@crit/replica/http"
 import { ApplicationBaseUrl } from "@crit/representations"
-import { Console, Context, Crypto, Effect, Layer, Match, Option, Redacted, Result, Schema, type Effect as EffectType } from "effect"
+import { Console, Context, Crypto, Effect, FileSystem, Layer, Match, Option, Path, Redacted, Result, Schema, type Effect as EffectType } from "effect"
 import { Argument, Command, Flag } from "effect/unstable/cli"
 
 import { frameCommand, frameSourceLabel, resolveFrameGeometry } from "./add-frame.js"
+import { HOST_ORIGIN, resolveHostRoot, startHostApp } from "./host-app.js"
 import { CanvasLayout, canvasLayout, formatCanvasLayout } from "./layout.js"
+import { PROJECT_SKILL_RELATIVE_PATH, projectSkillSource } from "./project-skill.js"
 
 class CliOperationalFailure extends Schema.TaggedError<CliOperationalFailure>()(
   "CliOperationalFailure",
@@ -110,7 +112,7 @@ const formatProjectManifestFailure = Match.typeTags<ProjectManifestFailure, stri
     `Unable to ${operation} Crit project manifest at ${path} (${reason})`
 })
 
-const crit = Command.make("crit-target").pipe(
+const crit = Command.make("crit").pipe(
   Command.withDescription("Crit local development tools")
 )
 
@@ -130,6 +132,22 @@ const init = Command.make(
         message: formatProjectManifestFailure(failure)
       }))
     )
+    const pathService = yield* Path.Path
+    const fs = yield* FileSystem.FileSystem
+    const skillPath = pathService.join(root, PROJECT_SKILL_RELATIVE_PATH)
+    const skillExists = yield* fs.exists(skillPath)
+    if (!skillExists) {
+      yield* fs.makeDirectory(pathService.dirname(skillPath), { recursive: true }).pipe(
+        Effect.mapError((cause) => new CliOperationalFailure({
+          message: `Unable to create Crit skill directory (${String(cause)})`
+        }))
+      )
+      yield* fs.writeFileString(skillPath, projectSkillSource).pipe(
+        Effect.mapError((cause) => new CliOperationalFailure({
+          message: `Unable to write Crit skill (${String(cause)})`
+        }))
+      )
+    }
     if (asJson) {
       return yield* Console.log(JSON.stringify(
         Schema.encodeSync(ProjectManifestInitialization)(result)
@@ -137,8 +155,9 @@ const init = Command.make(
     }
     yield* Console.log(`${result._tag}  ${result.path}`)
     yield* Console.log(`Application  ${result.manifest.applicationId}`)
+    yield* Console.log(`Skill  ${skillPath}`)
   })
-).pipe(Command.withDescription("Initialize Crit project identity"))
+).pipe(Command.withDescription("Initialize Crit project identity and local agent skill"))
 
 const dev = Command.make(
   "dev",
@@ -155,9 +174,12 @@ const dev = Command.make(
     browserOrigin: Flag.string("browser-origin").pipe(
       Flag.withDescription("Loopback origin hosting the Crit browser application"),
       Flag.optional
+    ),
+    noHost: Flag.boolean("no-host").pipe(
+      Flag.withDescription("Do not start the Crit browser application")
     )
   },
-  Effect.fn(function*({ applicationOrigin, browserOrigin, dataRoot: root, root: projectRoot }) {
+  Effect.fn(function*({ applicationOrigin, browserOrigin, dataRoot: root, noHost, root: projectRoot }) {
     const application = yield* Option.match(applicationOrigin, {
       onNone: () => Effect.succeed(undefined),
       onSome: (origin) => decode(ApplicationBaseUrl, origin, "application origin").pipe(
@@ -166,7 +188,24 @@ const dev = Command.make(
     })
     yield* Effect.scoped(Effect.gen(function*() {
       const applicationOptions = application === undefined ? {} : { application }
-      const developmentLayer = Option.match(browserOrigin, {
+      const resolvedBrowserOrigin = yield* Option.match(browserOrigin, {
+        onSome: (origin) => Effect.succeed(Option.some(origin)),
+        onNone: () => noHost
+          ? Effect.succeed(Option.none<string>())
+          : Effect.gen(function*() {
+            const hostRoot = resolveHostRoot()
+            if (hostRoot === undefined) {
+              return yield* Effect.fail(new CliOperationalFailure({
+                message: "Unable to find the Crit browser application"
+              }))
+            }
+            yield* startHostApp(hostRoot).pipe(
+              Effect.mapError((failure) => new CliOperationalFailure({ message: failure.message }))
+            )
+            return Option.some(HOST_ORIGIN)
+          })
+      })
+      const developmentLayer = Option.match(resolvedBrowserOrigin, {
         onNone: () => LocalDevelopment.layer({ dataRoot: root, ...applicationOptions }),
         onSome: (origin) => LocalDevelopment.layer({
           dataRoot: root,
@@ -184,7 +223,7 @@ const dev = Command.make(
       return yield* Effect.never
     }))
   })
-).pipe(Command.withDescription("Run the project-local Crit daemon"))
+).pipe(Command.withDescription("Run the project-local Crit daemon and browser application"))
 
 const status = Command.make("status", { dataRoot, json }, ({ dataRoot: root, json: asJson }) =>
   Effect.scoped(inspectLocalDaemon({ dataRoot: root }).pipe(
