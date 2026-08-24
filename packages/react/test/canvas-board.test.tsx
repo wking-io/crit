@@ -94,6 +94,16 @@ const render = (element: ReactElement) => root.render(
   </QueryClientProvider>
 )
 const waitFor = (assertion: () => void) => act(async() => vi.waitFor(assertion))
+const pointer = (
+  target: Element,
+  type: "pointerdown" | "pointermove" | "pointerup",
+  clientX: number,
+  clientY: number
+) => target.dispatchEvent(new MouseEvent(type, {
+  bubbles: true,
+  clientX,
+  clientY
+}))
 
 beforeEach(() => {
   container = document.createElement("div")
@@ -236,6 +246,88 @@ describe("CanvasBoard", () => {
       _tag: "remove-note",
       noteId: "note_price",
       expectedUpdatedByChangeId: "change_1"
+    }])
+  })
+
+  it("submits selected Frame geometry after a pointer move", async() => {
+    const onSubmit = vi.fn()
+    const resolver: FrameRepresentationResolver = {
+      resolve: () => Effect.succeed(IframeRenderPlan.make({
+        representation: projection.frames[0]!.representation,
+        url
+      }) satisfies RenderPlan)
+    }
+    await act(async() => render(
+      <CanvasBoard
+        {...requiredBoard}
+        onSubmit={onSubmit}
+        projection={projection}
+        resolver={resolver}
+        selection={CanvasSelection.make([{
+          _tag: "frame",
+          frameId: "frame_checkout"
+        }])}
+      />
+    ))
+    const frame = container.querySelector("[aria-label='Checkout']")
+    const board = container.querySelector("[aria-label='Review']")
+    if (!(frame instanceof HTMLElement) || !(board instanceof HTMLElement)) {
+      throw new Error("Review Frame missing")
+    }
+
+    await act(async() => {
+      pointer(frame, "pointerdown", 100, 100)
+      pointer(board, "pointermove", 120, 130)
+      pointer(board, "pointerup", 120, 130)
+    })
+
+    expect(onSubmit).toHaveBeenCalledWith([{
+      _tag: "set-frame-geometry",
+      frameId: "frame_checkout",
+      expectedChangedByChangeId: "change_1",
+      geometry: { x: 60, y: 110, width: 320, height: 200 }
+    }])
+  })
+
+  it("submits selected Note geometry after pointer resize", async() => {
+    const onSubmit = vi.fn()
+    const resolver: FrameRepresentationResolver = {
+      resolve: () => Effect.succeed(IframeRenderPlan.make({
+        representation: projection.frames[0]!.representation,
+        url
+      }) satisfies RenderPlan)
+    }
+    await act(async() => render(
+      <CanvasBoard
+        {...requiredBoard}
+        onSubmit={onSubmit}
+        projection={projection}
+        resolver={resolver}
+        selection={CanvasSelection.make([{
+          _tag: "note",
+          noteId: "note_price"
+        }])}
+      />
+    ))
+    const resize = container.querySelector(
+      "[aria-label='Resize Check the price']"
+    )
+    const board = container.querySelector("[aria-label='Review']")
+    if (!(resize instanceof HTMLElement) || !(board instanceof HTMLElement)) {
+      throw new Error("Note resize handle missing")
+    }
+
+    await act(async() => {
+      pointer(resize, "pointerdown", 100, 100)
+      pointer(board, "pointermove", 130, 120)
+      pointer(board, "pointerup", 130, 120)
+    })
+
+    expect(onSubmit).toHaveBeenCalledWith([{
+      _tag: "set-note-geometry",
+      noteId: "note_price",
+      expectedChangedByChangeId: "change_1",
+      geometry: { x: 400, y: 80, width: 190, height: 100 }
     }])
   })
 })
