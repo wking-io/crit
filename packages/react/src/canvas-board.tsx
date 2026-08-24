@@ -4,10 +4,18 @@ import {
   type Frame,
   type Note
 } from "@crit/domain"
+import { connectCanvasInput } from "@crit/frame-bridge"
 import { Match } from "effect"
-import type { CSSProperties, ReactElement } from "react"
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  type CSSProperties,
+  type ReactElement
+} from "react"
 
 import {
+  applyCanvasCameraIntent,
   type CanvasCamera,
   canvasCameraStyle
 } from "./canvas-camera.js"
@@ -23,6 +31,7 @@ export interface CanvasBoardProps {
   readonly projection: CanvasProjection
   readonly resolver: FrameRepresentationResolver
   readonly camera?: CanvasCamera
+  readonly onCameraChange?: (camera: CanvasCamera) => void
   readonly selection?: CanvasSelection
   readonly className?: string
 }
@@ -50,10 +59,42 @@ const itemStyle = (
 export function CanvasBoard({
   camera,
   className,
+  onCameraChange,
   projection,
   resolver,
   selection
 }: CanvasBoardProps): ReactElement {
+  const rootRef = useRef<HTMLElement>(null)
+  const navigationRef = useRef({ camera, onCameraChange })
+  const navigationArmed = camera !== undefined && onCameraChange !== undefined
+
+  useLayoutEffect(() => {
+    navigationRef.current = { camera, onCameraChange }
+  }, [camera, onCameraChange])
+
+  useEffect(() => {
+    if (!navigationArmed) return
+    const root = rootRef.current
+    if (root === null) return
+    return connectCanvasInput({
+      target: window,
+      root,
+      onIntent: (intent) => {
+        const latest = navigationRef.current
+        if (latest.camera === undefined || latest.onCameraChange === undefined) {
+          return
+        }
+        latest.onCameraChange(
+          applyCanvasCameraIntent(
+            latest.camera,
+            intent,
+            root.getBoundingClientRect()
+          )
+        )
+      }
+    })
+  }, [navigationArmed])
+
   const frames = framesById(projection.frames)
   const notes = notesById(projection.notes)
 
@@ -118,6 +159,7 @@ export function CanvasBoard({
 
   return (
     <section
+      ref={rootRef}
       aria-label={projection.title}
       aria-multiselectable={hasItems ? true : undefined}
       className={className}

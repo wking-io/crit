@@ -1,4 +1,5 @@
 import { decodeCanvasProjection } from "@crit/domain"
+import type { FrameInputIntent } from "@crit/protocol"
 import { ReplicaView } from "@crit/replica"
 import {
   IframeRenderPlan,
@@ -15,6 +16,7 @@ import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import {
+  applyCanvasCameraIntent,
   CanvasBoard,
   CanvasCamera,
   ReplicaBoard,
@@ -118,11 +120,91 @@ afterEach(async() => {
   vi.restoreAllMocks()
 })
 
+const origin = { left: 10, top: 20 }
+const resting = CanvasCamera.make({ x: 10, y: 20, zoom: 1 })
+const wheel = {
+  type: "wheel",
+  clientX: 110,
+  clientY: 220,
+  deltaX: 12,
+  deltaY: -8,
+  ctrlKey: false,
+  metaKey: false
+} satisfies Extract<FrameInputIntent, { readonly type: "wheel" }>
+
+const dispatchWheel = (target: Window) => {
+  const event = new Event("wheel", { cancelable: true })
+  Object.defineProperties(event, {
+    clientX: { value: 20 },
+    clientY: { value: 30 },
+    ctrlKey: { value: false },
+    deltaX: { value: 4 },
+    deltaY: { value: 8 },
+    metaKey: { value: false }
+  })
+  target.dispatchEvent(event)
+  return event
+}
+
+const stubBoardRect = (board: HTMLElement) => {
+  vi.spyOn(board, "getBoundingClientRect").mockReturnValue(
+    new DOMRect(0, 0, 800, 600)
+  )
+}
+
 describe("CanvasCamera", () => {
   it("rejects zoom that is not a positive finite number", () => {
     for (const zoom of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
       expect(() => CanvasCamera.make({ x: 0, y: 0, zoom })).toThrow()
     }
+  })
+})
+
+describe("applyCanvasCameraIntent", () => {
+  it("pans an unmodified wheel by its deltas", () => {
+    expect(applyCanvasCameraIntent(resting, wheel, origin)).toEqual(
+      CanvasCamera.make({ x: -2, y: 28, zoom: 1 })
+    )
+  })
+
+  it("zooms a ctrl-wheel about the pointer", () => {
+    const zoomed = applyCanvasCameraIntent(resting, {
+      ...wheel,
+      ctrlKey: true,
+      deltaX: 0,
+      deltaY: -100
+    }, origin)
+    expect(zoomed.zoom).toBeCloseTo(1.1)
+    expect((100 - zoomed.x) / zoomed.zoom).toBeCloseTo(90)
+    expect((200 - zoomed.y) / zoomed.zoom).toBeCloseTo(180)
+  })
+
+  it("pinches about the moving centroid", () => {
+    expect(applyCanvasCameraIntent(
+      CanvasCamera.make({ x: 0, y: 0, zoom: 1 }),
+      {
+        type: "pinch",
+        scaleFactor: 2,
+        clientX: 110,
+        clientY: 100,
+        deltaX: 10,
+        deltaY: 0
+      },
+      { left: 0, top: 0 }
+    )).toEqual(CanvasCamera.make({ x: -90, y: -100, zoom: 2 }))
+  })
+
+  it("leaves the camera unchanged for select and zoom-step", () => {
+    expect(applyCanvasCameraIntent(
+      resting,
+      { type: "select", additive: false },
+      origin
+    )).toBe(resting)
+    expect(applyCanvasCameraIntent(
+      resting,
+      { type: "zoom-step", direction: 1 },
+      origin
+    )).toBe(resting)
   })
 })
 
@@ -179,6 +261,70 @@ describe("CanvasBoard camera", () => {
   })
 })
 
+describe("CanvasBoard camera navigation", () => {
+  it("notifies the host of a wheel pan when navigation is armed", async() => {
+    const onCameraChange = vi.fn()
+    await act(async() => render(
+      <CanvasBoard
+        camera={resting}
+        onCameraChange={onCameraChange}
+        projection={projection}
+        resolver={resolver}
+      />
+    ))
+    await waitFor(() => expect(container.querySelector("iframe")).not.toBeNull())
+    const board = container.querySelector("[aria-label='Review']")
+    expect(board).toBeInstanceOf(HTMLElement)
+    if (!(board instanceof HTMLElement)) return
+    stubBoardRect(board)
+
+    const event = dispatchWheel(window)
+
+    expect(event.defaultPrevented).toBe(true)
+    expect(onCameraChange).toHaveBeenCalledWith(
+      CanvasCamera.make({ x: 6, y: 12, zoom: 1 })
+    )
+  })
+
+  it("does not steal wheel when the host omits camera", async() => {
+    const onCameraChange = vi.fn()
+    await act(async() => render(
+      <CanvasBoard
+        onCameraChange={onCameraChange}
+        projection={projection}
+        resolver={resolver}
+      />
+    ))
+    await waitFor(() => expect(container.querySelector("iframe")).not.toBeNull())
+    const board = container.querySelector("[aria-label='Review']")
+    expect(board).toBeInstanceOf(HTMLElement)
+    if (!(board instanceof HTMLElement)) return
+    stubBoardRect(board)
+
+    const event = dispatchWheel(window)
+
+    expect(event.defaultPrevented).toBe(false)
+    expect(onCameraChange).not.toHaveBeenCalled()
+  })
+
+  it("leaves the transform alone when the host omits onCameraChange", async() => {
+    await act(async() => render(
+      <CanvasBoard camera={resting} projection={projection} resolver={resolver} />
+    ))
+    await waitFor(() => expect(container.querySelector("iframe")).not.toBeNull())
+    const board = container.querySelector("[aria-label='Review']")
+    expect(board).toBeInstanceOf(HTMLElement)
+    if (!(board instanceof HTMLElement)) return
+    const world = worldLayer(board)
+    if (!(world instanceof HTMLElement)) return
+    expect(world.style.transform).toBe("translate(10px, 20px) scale(1)")
+    stubBoardRect(board)
+
+    expect(() => dispatchWheel(window)).not.toThrow()
+    expect(world.style.transform).toBe("translate(10px, 20px) scale(1)")
+  })
+})
+
 describe("ReplicaBoard camera", () => {
   it("keeps sync chrome outside the transformed world", async() => {
     await act(async() => render(
@@ -195,5 +341,29 @@ describe("ReplicaBoard camera", () => {
     expect(world.contains(chrome)).toBe(false)
     expect(chrome.style.transform).toBe("")
     expect(world.style.transform).toBe("translate(12px, -8px) scale(0.5)")
+  })
+
+  it("forwards wheel navigation when camera and onCameraChange are both set", async() => {
+    const onCameraChange = vi.fn()
+    await act(async() => render(
+      <ReplicaBoard
+        camera={resting}
+        onCameraChange={onCameraChange}
+        resolver={resolver}
+        view={view}
+      />
+    ))
+    await waitFor(() => expect(container.querySelector("iframe")).not.toBeNull())
+    const board = container.querySelector("[aria-label='Review']")
+    expect(board).toBeInstanceOf(HTMLElement)
+    if (!(board instanceof HTMLElement)) return
+    stubBoardRect(board)
+
+    const event = dispatchWheel(window)
+
+    expect(event.defaultPrevented).toBe(true)
+    expect(onCameraChange).toHaveBeenCalledWith(
+      CanvasCamera.make({ x: 6, y: 12, zoom: 1 })
+    )
   })
 })
