@@ -67,6 +67,9 @@ export function CanvasBoard({
           const frame = frames.get(frameId)
           if (frame === undefined) return null
           return (
+            // Canvas items are not listbox options. The camera world layer
+            // would sit between any listbox and these nodes.
+            // react-doctor-disable-next-line react-doctor/role-supports-aria-props
             <section
               aria-label={frame.title}
               aria-selected={ariaSelected(selection, item)}
@@ -82,6 +85,9 @@ export function CanvasBoard({
           const note = notes.get(noteId)
           if (note === undefined) return null
           return (
+            // Canvas items are not listbox options. The camera world layer
+            // would sit between any listbox and these nodes.
+            // react-doctor-disable-next-line react-doctor/role-supports-aria-props
             <article
               aria-selected={ariaSelected(selection, item)}
               key={note.noteId}
