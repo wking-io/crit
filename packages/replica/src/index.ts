@@ -5,6 +5,7 @@ export {
   ChangeIdGenerationFailure,
   Conflicted,
   LocalChangeRejected,
+  PendingAuthor,
   PendingChange,
   PendingState,
   Ready,

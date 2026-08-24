@@ -1,5 +1,12 @@
 import { CanvasAuthority, VerifiedInvocation } from "@crit/authority"
-import { CanvasChangeFailureSchema, CanvasCommandBatch, CanvasId, CanvasProjection, ChangeId } from "@crit/domain"
+import {
+  CanvasChangeFailureSchema,
+  CanvasCommandBatch,
+  CanvasId,
+  CanvasProjection,
+  ChangeId,
+  PersonSnapshot
+} from "@crit/domain"
 import {
   AcceptedCanvasChangeSchema,
   CursorSchema,
@@ -20,10 +27,22 @@ export const Blocked = Schema.TaggedStruct("blocked", { blockedBy: Schema.NonEmp
 export const PendingState = Schema.Union([Ready, AcceptedUnconfirmed, Conflicted, Blocked])
 export type PendingState = typeof PendingState.Type
 
+const DisplayName = PersonSnapshot.fields.displayName
+
+export const PersonPendingAuthor = Schema.TaggedStruct("person", {
+  displayName: DisplayName
+})
+export const AgentPendingAuthor = Schema.TaggedStruct("agent", {
+  displayName: DisplayName
+})
+export const PendingAuthor = Schema.Union([PersonPendingAuthor, AgentPendingAuthor])
+export type PendingAuthor = typeof PendingAuthor.Type
+
 export const PendingChange = Schema.Struct({
   proposal: ProposedCanvasChangeSchema,
   dependencies: Schema.Array(ChangeId),
-  state: PendingState
+  state: PendingState,
+  author: PendingAuthor
 })
 export type PendingChange = typeof PendingChange.Type
 

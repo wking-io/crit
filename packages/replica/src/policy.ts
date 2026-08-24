@@ -6,18 +6,21 @@ import {
   type ProposedCanvasChange,
   type SubmitChangeReceipt
 } from "@crit/protocol"
-import { Result, Schema } from "effect"
+import { Match, Result, Schema } from "effect"
 
 import {
   AcceptedUnconfirmed,
+  AgentPendingAuthor,
   Blocked,
   ChangeIdAlreadyPresent,
   Conflicted,
   LocalChangeRejected,
+  PersonPendingAuthor,
   Ready,
   ReplicaDiverged,
   ReplicaInvariantFailure,
   ReplicaView,
+  type PendingAuthor,
   type PendingRecord,
   type ReplicaChange,
   type ReplicaState
@@ -25,6 +28,12 @@ import {
 
 const decodeNonEmptyChangeIds = Schema.decodeUnknownSync(Schema.NonEmptyArray(ChangeId))
 const active = (record: PendingRecord) => record.state._tag === "ready" || record.state._tag === "accepted-unconfirmed"
+
+const pendingAuthor = (invocation: PendingRecord["invocation"]): PendingAuthor =>
+  Match.value(invocation).pipe(Match.tagsExhaustive({
+    person: ({ principal }) => PersonPendingAuthor.make({ displayName: principal.person.displayName }),
+    agent: ({ principal }) => AgentPendingAuthor.make({ displayName: principal.agent.displayName })
+  }))
 
 const rebuild = (state: ReplicaState) => {
   const replay = CanvasEngine.replay(state.genesisProjection, state.accepted)
@@ -71,7 +80,12 @@ const view = (state: ReplicaState) => Result.map(rebuild(state), ({ state: rebui
   canvasId: rebuilt.canvasId,
   acknowledgedCursor: rebuilt.acknowledgedCursor,
   projection,
-  pending: rebuilt.pending.map(({ proposal, dependencies, state }) => ({ proposal, dependencies, state }))
+  pending: rebuilt.pending.map(({ proposal, invocation, dependencies, state }) => ({
+    proposal,
+    dependencies,
+    state,
+    author: pendingAuthor(invocation)
+  }))
 }))
 
 const initialize = (authority: AuthorityView): ReplicaState => ({
