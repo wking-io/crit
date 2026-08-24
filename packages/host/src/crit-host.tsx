@@ -10,8 +10,6 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { Match } from "effect"
 import { useState, type ReactElement } from "react"
 
-import { NewFrameForm } from "./new-frame-form.js"
-
 export interface CritHostProps {
   readonly canvasId: CanvasId
   readonly ports: ReplicaSessionPorts
@@ -20,7 +18,7 @@ export interface CritHostProps {
 }
 
 function CritHostSession({ canvasId, ports, resolver, run }: CritHostProps): ReactElement {
-  const { onCameraChange, onSelectionChange, session, submit } = useReplicaSession({
+  const { onCameraChange, onSelectionChange, session } = useReplicaSession({
     canvasId,
     ports,
     run
@@ -28,20 +26,14 @@ function CritHostSession({ canvasId, ports, resolver, run }: CritHostProps): Rea
   return Match.value(session).pipe(Match.tagsExhaustive({
     loading: () => <p role="status">Connecting to Crit…</p>,
     ready: ({ camera, selection, view }) => (
-      <>
-        <NewFrameForm
-          frameCount={view.projection.frames.length}
-          submit={submit}
-        />
-        <ReplicaBoard
-          camera={camera}
-          onCameraChange={onCameraChange}
-          onSelectionChange={onSelectionChange}
-          resolver={resolver}
-          selection={selection}
-          view={view}
-        />
-      </>
+      <ReplicaBoard
+        camera={camera}
+        onCameraChange={onCameraChange}
+        onSelectionChange={onSelectionChange}
+        resolver={resolver}
+        selection={selection}
+        view={view}
+      />
     ),
     unavailable: ({ reason }) => <p role="alert">{reason}</p>
   }))
