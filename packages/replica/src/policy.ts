@@ -1,5 +1,8 @@
 import { type AuthorityView, type ChangeRejected } from "@crit/authority"
-import { CanvasEngine, ChangeId } from "@crit/domain"
+import {
+  CanvasEngine,
+  ChangeId
+} from "@crit/domain"
 import {
   ChangeValue,
   type ChangePage,

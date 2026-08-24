@@ -2,7 +2,7 @@ export const PROJECT_SKILL_RELATIVE_PATH = ".agents/skills/crit/SKILL.md"
 
 export const projectSkillSource = `---
 name: crit
-description: Uses Crit to put project pages and captures on a Canvas as Frames, Notes, and comment threads, then hand the work to a person for review. Use when the user asks to add a Frame, lay out a Canvas, capture a page, leave a Note, reply to a review comment, mark ready-for-review, or inspect Crit.
+description: Uses Crit to put project pages and captures on a Canvas as Frames, then hand the work to a person for review. Use when the user asks to add a Frame, lay out a Canvas, capture a page, mark ready-for-review, or inspect Crit.
 ---
 
 # Crit
@@ -43,13 +43,11 @@ crit add-frame <canvas-id> --type application-route --route /path --title Title 
 
 ## Canvas
 
-A Canvas holds Frames, Notes, and comment threads.
+A Canvas holds Frames.
 
 - Frame. A titled box that shows a page, a public URL, or a capture.
-- Note. Canvas commentary. May attach to a Frame.
-- Comment thread. Review on a Frame, or on an element inside a live Frame.
 
-Reuse IDs. Edit in place. Deleting and recreating a Frame drops its comments and review.
+Reuse IDs. Edit in place. Deleting and recreating a Frame drops its review state.
 
 ## Representations
 
@@ -65,15 +63,13 @@ Project pages are application-route Frames. Localhost is not a web-url.
 2. Place new Frames in empty space. Do not stack them.
 3. Add a Frame as you create each page or prototype.
 4. Batch related edits in one change when the client allows it.
-5. Notes carry working commentary. Comments carry review.
-6. Capture into an artifact Frame when the review should freeze that render.
-7. Set \`ready-for-review\` when a person should look. Status values are \`in-progress\`, \`ready-for-review\`, \`changes-requested\`, and \`approved\`. \`approved\` is for after a person assessed it.
-8. Reply to comment threads. Ask before removing another actor's review content.
-9. Leave camera, selection, and browser chrome to people.
+5. Capture into an artifact Frame when the review should freeze that render.
+6. Set \`ready-for-review\` when a person should look. Status values are \`in-progress\`, \`ready-for-review\`, \`changes-requested\`, and \`approved\`. \`approved\` is for after a person assessed it.
+7. Leave camera, selection, and browser chrome to people.
 
 ## Live pages
 
-Element comments and input inside an application Frame need the Frame Bridge in the app. Turn it on for local development. Leave ordinary production builds off. Use the official adapter. Production HTML must not contain \`data-crit-frame-input-bridge\` or \`data-crit-frame-comment-bridge\`.
+Input inside an application Frame needs the Frame Bridge in the app. Turn it on for local development. Leave ordinary production builds off. Use the official adapter. Production HTML must not contain \`data-crit-frame-input-bridge\`.
 
 ## Shared work
 
@@ -81,5 +77,5 @@ When a shared Crit connection is available, use that MCP. It exposes \`search\` 
 
 ## Done
 
-\`layout\` shows the intended Frames and Notes at the intended geometry. The person has the bootstrap URL if they need to review.
+\`layout\` shows the intended Frames at the intended geometry. The person has the bootstrap URL if they need to review.
 `

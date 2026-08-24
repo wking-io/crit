@@ -37,13 +37,6 @@ const populated = () => {
           status: "in-progress",
           geometry: { x: 0, y: 0, width: 1200, height: 800 }
         },
-        {
-          _tag: "add-note",
-          noteId: "note_copy",
-          text: "Tighten copy",
-          geometry: { x: 1300, y: 40, width: 280, height: 160 },
-          attachedFrameId: null
-        }
       ]
     })
   )
@@ -54,7 +47,7 @@ const populated = () => {
 }
 
 describe("canvasLayout", () => {
-  it("lists Frame and Note geometry", () => {
+  it("lists Frame geometry", () => {
     const layout = canvasLayout(populated())
     expect(layout).toEqual({
       canvasId,
@@ -66,19 +59,12 @@ describe("canvasLayout", () => {
           title: "Checkout",
           geometry: { x: 0, y: 0, width: 1200, height: 800 },
           representation: "application-route"
-        },
-        {
-          _tag: "note",
-          noteId: "note_copy",
-          text: "Tighten copy",
-          geometry: { x: 1300, y: 40, width: 280, height: 160 }
         }
       ]
     })
     expect(formatCanvasLayout(layout)).toBe([
       "canvas_layout  Board",
-      "frame  frame_checkout  Checkout  0 0 1200 800",
-      "note  note_copy  Tighten copy  1300 40 280 160"
+      "frame  frame_checkout  Checkout  0 0 1200 800"
     ].join("\n"))
   })
 

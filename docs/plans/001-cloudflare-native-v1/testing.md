@@ -32,7 +32,7 @@ Prove that the server ignores client-supplied actor and timestamp fields. Prove 
 
 ### Local workflow
 
-Start the host application and `crit dev`. Create a Canvas, add a live Frame, add a Note and comment through the UI, make another change through a local agent, restart both processes, and confirm that all work returns.
+Start the host application and `crit dev`. Create a Canvas, add a live Frame through the UI, make another change through a local agent, restart both processes, and confirm that all work returns.
 
 ### Collaboration workflow
 
@@ -44,7 +44,7 @@ Resolve one `application-route` Frame to localhost in the developer UI and to a 
 
 ### Agent workflow
 
-Connect an MCP client to `/mcp`. Complete OAuth with the default Workspace. Use `search`, then `execute` to add a Frame and Note. Confirm that the ledger identifies the Agent, delegating Person, OAuth client, grant, execution, and reported harness or model separately. Revoke the grant and confirm that the next call fails.
+Connect an MCP client to `/mcp`. Complete OAuth with the default Workspace. Use `search`, then `execute` to add a Frame. Confirm that the ledger identifies the Agent, delegating Person, OAuth client, grant, execution, and reported harness or model separately. Revoke the grant and confirm that the next call fails.
 
 ### Installation workflow
 

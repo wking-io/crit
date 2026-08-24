@@ -18,7 +18,7 @@ export interface CritHostProps {
 }
 
 function CritHostSession({ canvasId, ports, resolver, run }: CritHostProps): ReactElement {
-  const { onCameraChange, onSelectionChange, session } = useReplicaSession({
+  const { onCameraChange, onSelectionChange, session, submit } = useReplicaSession({
     canvasId,
     ports,
     run
@@ -30,6 +30,9 @@ function CritHostSession({ canvasId, ports, resolver, run }: CritHostProps): Rea
         camera={camera}
         onCameraChange={onCameraChange}
         onSelectionChange={onSelectionChange}
+        onSubmit={(commands) => {
+          void submit(commands)
+        }}
         resolver={resolver}
         selection={selection}
         view={view}

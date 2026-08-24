@@ -1,32 +1,7 @@
 # Comments
 
-Comments are a stable v1 Canvas capability for people and Agents.
+Comments are not in v1.
 
-## Domain
+The rewrite used to carry Comment Threads, element anchors, and a Frame comment bridge. That model is gone. Do not add those types back by porting the alpha or the deleted rewrite code.
 
-A Comment Thread belongs to one Canvas and targets a Frame. A thread contains:
-
-- A stable ID.
-- Its Frame ID.
-- An optional normalized visual or element anchor.
-- Ordered messages with stable IDs and Actor snapshots.
-- Open or resolved state.
-- Creation and resolution provenance.
-
-Comments are semantic Canvas commands and become canonical only when their containing change is accepted. Clients do not supply trusted Actor identity or timestamps.
-
-Workspace policy authorizes commenting and resolution. Canvas creation and thread authorship do not grant special authority. Product policy may allow an author to edit their own message, but identity comparison uses the server-stamped Actor.
-
-## Live and captured Frames
-
-For a live Application Route, the Frame Bridge reports route, revision, selectors, fingerprints, normalized geometry, and anchor health. The UI must show when an anchor is stale or cannot be resolved.
-
-For an Artifact, the immutable artifact digest identifies the rendered content. Frame-level normalized anchors are supported. DOM-element anchors require a stable DOM map stored with the capture; otherwise the UI degrades them visibly instead of guessing.
-
-## Agent authorship
-
-An Agent-authored comment names the Agent as author. Its accepted change also records the delegating Person, OAuth client, grant, execution, and optional reported runtime metadata. The UI must not present the delegating Person as the author.
-
-## Verification
-
-Tests cover create, reply, edit, resolve, reopen, anchor degradation, deleted Frames, offline replay, Agent attribution, unauthorized access, and hostile Frame Bridge messages.
+When comments return, design them from the current Frames-only Canvas, not from the old Note and Thread commands.

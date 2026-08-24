@@ -447,7 +447,7 @@ const layout = Command.make("layout", {
     return yield* Console.log(JSON.stringify(Schema.encodeSync(CanvasLayout)(current)))
   }
   yield* Console.log(formatCanvasLayout(current))
-})).pipe(Command.withDescription("Print Canvas Frame and Note geometry"))
+})).pipe(Command.withDescription("Print Canvas Frame geometry"))
 
 export const command = crit.pipe(Command.withSubcommands([init, dev, status, create, open, addFrame, layout]))
 

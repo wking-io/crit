@@ -1,0 +1,150 @@
+import { decodeCanvasProjection } from "@crit/domain"
+import { act, type ReactElement } from "react"
+import { createRoot, type Root } from "react-dom/client"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+
+import { CanvasSelection } from "../src/canvas-selection.js"
+import { ReviewChrome } from "../src/review-chrome.js"
+import type { ReviewSelection } from "../src/review-actions.js"
+
+Object.defineProperty(globalThis, "IS_REACT_ACT_ENVIRONMENT", { value: true })
+
+const projection = decodeCanvasProjection({
+  schemaVersion: 3,
+  canvasId: "canvas_review",
+  title: "Review",
+  frames: [{
+    frameId: "frame_checkout",
+    title: "Checkout",
+    representation: { _tag: "web-url", url: "https://example.com" },
+    status: "in-progress",
+    geometry: { x: 40, y: 80, width: 320, height: 200 },
+    createdByChangeId: "change_1",
+    updatedByChangeId: "change_1",
+    titleChangedByChangeId: "change_1",
+    representationChangedByChangeId: "change_1",
+    statusChangedByChangeId: "change_1",
+    geometryChangedByChangeId: "change_1"
+  }],
+  stack: [
+    { _tag: "frame", frameId: "frame_checkout" }
+  ],
+  stackChangedByChangeId: "change_1",
+  issuedIds: {
+    frameIds: ["frame_checkout"]
+  }
+})
+
+const selection = (
+  items: Parameters<typeof CanvasSelection.make>[0]
+): ReviewSelection => ({
+  _tag: "items",
+  items: CanvasSelection.make(items)
+})
+
+let container: HTMLDivElement
+let root: Root
+
+const render = (element: ReactElement) => root.render(element)
+
+const button = (label: string) => {
+  const match = container.querySelector(`[aria-label="${label}"]`)
+  if (!(match instanceof HTMLButtonElement)) {
+    throw new Error(`Button missing: ${label}`)
+  }
+  return match
+}
+
+beforeEach(() => {
+  container = document.createElement("div")
+  document.body.append(container)
+  root = createRoot(container)
+})
+
+afterEach(async() => {
+  await act(async() => root.unmount())
+  container.remove()
+  vi.restoreAllMocks()
+})
+
+describe("ReviewChrome", () => {
+  it("submits remove, status, and stack batches", async() => {
+    const onSubmit = vi.fn()
+    await act(async() => render(
+      <ReviewChrome
+        onSubmit={onSubmit}
+        projection={projection}
+        selection={selection([
+          { _tag: "frame", frameId: "frame_checkout" }
+        ])}
+      />
+    ))
+
+    await act(async() => button("Set status to approved").click())
+    expect(onSubmit).toHaveBeenLastCalledWith([{
+      _tag: "set-frame-status",
+      frameId: "frame_checkout",
+      expectedChangedByChangeId: "change_1",
+      status: "approved"
+    }])
+
+    await act(async() => button("Bring to front").click())
+    expect(onSubmit).toHaveBeenLastCalledWith([{
+      _tag: "place-canvas-item",
+      item: { _tag: "frame", frameId: "frame_checkout" },
+      after: null,
+      expectedStackChangeId: "change_1"
+    }])
+
+    await act(async() => button("Remove").click())
+    expect(onSubmit).toHaveBeenLastCalledWith([{
+      _tag: "remove-frame",
+      frameId: "frame_checkout",
+      expectedUpdatedByChangeId: "change_1"
+    }])
+
+    expect(container.querySelector("[aria-label='Enter fullscreen']"))
+      .toBeInstanceOf(HTMLButtonElement)
+    expect(container.querySelector("[aria-label='Exit fullscreen']")).toBeNull()
+  })
+
+  it("submits an add-frame batch from the form", async() => {
+    vi.spyOn(crypto, "randomUUID")
+      .mockReturnValue("00000000-0000-4000-8000-000000000001")
+    const onSubmit = vi.fn()
+    await act(async() => render(
+      <ReviewChrome
+        onSubmit={onSubmit}
+        projection={projection}
+        selection={selection([])}
+      />
+    ))
+    const input = container.querySelector("[aria-label='Frame URL']")
+    const form = container.querySelector("form[aria-label='Add frame']")
+    if (!(input instanceof HTMLInputElement) || !(form instanceof HTMLFormElement)) {
+      throw new Error("Add Frame form missing")
+    }
+
+    await act(async() => {
+      const setValue = Object.getOwnPropertyDescriptor(
+        HTMLInputElement.prototype,
+        "value"
+      )?.set
+      setValue?.call(input, "https://example.org/review")
+      input.dispatchEvent(new Event("input", { bubbles: true }))
+    })
+    await act(async() => form.requestSubmit())
+
+    expect(onSubmit).toHaveBeenCalledWith([{
+      _tag: "add-frame",
+      frameId: "frame_00000000000040008000000000000001",
+      title: "https://example.org/review",
+      representation: {
+        _tag: "web-url",
+        url: "https://example.org/review"
+      },
+      status: "in-progress",
+      geometry: { x: 80, y: 80, width: 1280, height: 832 }
+    }])
+  })
+})

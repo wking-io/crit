@@ -120,3 +120,9 @@ export const decodeReportedRuntime = (input: Schema.Json) =>
     ReportedRuntime,
     { onExcessProperty: "error" }
   )(input)
+
+export const actorFromAttribution = (attribution: AcceptedAttribution): ActorSnapshot =>
+  attribution._tag === "person" ? attribution.person : attribution.agent
+
+export const actorFromPrincipal = (principal: Principal): ActorSnapshot =>
+  principal._tag === "person" ? principal.person : principal.agent

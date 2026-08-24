@@ -9,6 +9,16 @@ import {
   decodeCanvasProjection
 } from "../src/index.js"
 
+const emptyProjection = {
+  schemaVersion: 3,
+  canvasId: "canvas_checkout",
+  title: "Checkout",
+  frames: [],
+  stack: [],
+  stackChangedByChangeId: null,
+  issuedIds: { frameIds: [] }
+} as const
+
 const fixture = () => JSON.parse(
   readFileSync(new URL("fixtures/replay.json", import.meta.url), "utf8")
 )
@@ -24,22 +34,11 @@ const decodedFixture = () => {
 
 describe("CanvasProjection", () => {
   it("strictly decodes the current persisted schema version", () => {
-    expect(decodeCanvasProjection({
-      schemaVersion: 2,
-      canvasId: "canvas_checkout",
-      title: "Checkout",
-      frames: [], notes: [], threads: [], stack: [], stackChangedByChangeId: null,
-      issuedIds: { frameIds: [], noteIds: [], threadIds: [], commentIds: [] }
-    })).toEqual({
-      schemaVersion: 2,
-      canvasId: "canvas_checkout",
-      title: "Checkout",
-      frames: [], notes: [], threads: [], stack: [], stackChangedByChangeId: null,
-      issuedIds: { frameIds: [], noteIds: [], threadIds: [], commentIds: [] }
-    })
+    expect(decodeCanvasProjection(emptyProjection)).toEqual(emptyProjection)
 
     for (const input of [
-      { schemaVersion: 2, canvasId: "canvas_checkout", title: "Checkout" },
+      { schemaVersion: 3, canvasId: "canvas_checkout", title: "Checkout" },
+      { schemaVersion: 2, canvasId: "canvas_checkout", title: "Checkout", frames: [], stack: [], stackChangedByChangeId: null, issuedIds: { frameIds: [] } },
       { schemaVersion: 1, canvasId: "canvas_checkout", title: " Checkout " },
       { schemaVersion: 1, canvasId: "canvas_checkout", title: "Checkout", cursor: "forged" }
     ]) {
@@ -66,13 +65,7 @@ describe("CanvasEngine.apply", () => {
   })
 
   it("rejects a later stale command without exposing a partial projection", () => {
-    const initial = decodeCanvasProjection({
-      schemaVersion: 2,
-      canvasId: "canvas_checkout",
-      title: "Checkout",
-      frames: [], notes: [], threads: [], stack: [], stackChangedByChangeId: null,
-      issuedIds: { frameIds: [], noteIds: [], threadIds: [], commentIds: [] }
-    })
+    const initial = decodeCanvasProjection(emptyProjection)
     const change = decodeCanvasChange({
       canvasId: "canvas_checkout",
       changeId: "change_stale",
@@ -96,13 +89,7 @@ describe("CanvasEngine.apply", () => {
   })
 
   it("accepts a no-op and preserves the same immutable projection", () => {
-    const initial = decodeCanvasProjection({
-      schemaVersion: 2,
-      canvasId: "canvas_checkout",
-      title: "Checkout",
-      frames: [], notes: [], threads: [], stack: [], stackChangedByChangeId: null,
-      issuedIds: { frameIds: [], noteIds: [], threadIds: [], commentIds: [] }
-    })
+    const initial = decodeCanvasProjection(emptyProjection)
     const change = decodeCanvasChange({
       canvasId: "canvas_checkout",
       changeId: "change_noop",
