@@ -1,5 +1,6 @@
-import { Id, decodeCanvasProjection } from "@crit/domain"
+import { CanvasChangeFailureSchema, Id, decodeCanvasProjection } from "@crit/domain"
 import {
+  ReplicaChangeRejected,
   ReplicaSessionUnavailable,
   layerMemory,
   type FrameRepresentationResolver,
@@ -71,6 +72,28 @@ let root: Root
 const render = (element: ReactElement) => root.render(<StrictMode>{element}</StrictMode>)
 const waitFor = (assertion: () => void) => act(async() => vi.waitFor(assertion))
 
+const addFrameButton = () =>
+  [...container.querySelectorAll("button")].find((button) => button.textContent === "Add Frame")
+
+const fillInput = (name: string, value: string) => {
+  const input = container.querySelector(`input[name='${name}']`)
+  if (!(input instanceof HTMLInputElement)) {
+    throw new Error(`missing ${name} input`)
+  }
+  const assigned = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set
+  if (assigned === undefined) {
+    throw new Error("input value setter missing")
+  }
+  assigned.call(input, value)
+  input.dispatchEvent(new Event("input", { bubbles: true }))
+}
+
+const readyPorts = (change: ReplicaSessionPorts["change"]): ReplicaSessionPorts => ({
+  open: () => Effect.succeed(view),
+  subscribe: () => () => undefined,
+  change
+})
+
 beforeEach(() => {
   container = document.createElement("div")
   document.body.append(container)
@@ -99,6 +122,7 @@ describe("CritHost", () => {
       <CritHost canvasId={canvasId} ports={ports} resolver={resolver} run={makeRun()} />
     ))
     expect(container.querySelector("[role='status']")?.textContent).toBe("Connecting to Crit…")
+    expect(addFrameButton()).toBeUndefined()
 
     await act(async() => release())
 
@@ -126,5 +150,109 @@ describe("CritHost", () => {
     await waitFor(() =>
       expect(container.querySelector("[role='alert']")?.textContent).toBe("replica missing")
     )
+    expect(addFrameButton()).toBeUndefined()
+  })
+
+  it("shows Add Frame once the replica is ready", async() => {
+    await act(async() => render(
+      <CritHost
+        canvasId={canvasId}
+        ports={readyPorts(() => Effect.succeed(view))}
+        resolver={resolver}
+        run={makeRun()}
+      />
+    ))
+
+    await waitFor(() => expect(addFrameButton()).toBeInstanceOf(HTMLButtonElement))
+  })
+
+  it("submits an add-frame command for a valid URL", async() => {
+    const change = vi.fn(() => Effect.succeed(view))
+    await act(async() => render(
+      <CritHost
+        canvasId={canvasId}
+        ports={readyPorts(change)}
+        resolver={resolver}
+        run={makeRun()}
+      />
+    ))
+    await waitFor(() => expect(addFrameButton()).toBeInstanceOf(HTMLButtonElement))
+
+    await act(async() => addFrameButton()?.click())
+    await act(async() => {
+      fillInput("url", "https://example.com/checkout")
+      container.querySelector("form")?.requestSubmit()
+    })
+
+    await waitFor(() => expect(change).toHaveBeenCalledTimes(1))
+    const payload = change.mock.calls[0]?.[0]
+    expect(payload?.canvasId).toBe(canvasId)
+    expect(payload?.commands).toEqual([{
+      _tag: "add-frame",
+      frameId: payload?.commands[0]?.frameId,
+      title: "checkout",
+      representation: { _tag: "web-url", url: "https://example.com/checkout" },
+      status: "in-progress",
+      geometry: { x: 1240, y: 0, width: 1200, height: 800 }
+    }])
+    expect(payload?.commands[0]?.frameId).toMatch(/^frame_[a-f0-9]{32}$/)
+    expect(addFrameButton()).toBeInstanceOf(HTMLButtonElement)
+  })
+
+  it("shows an alert for an invalid URL and does not call change", async() => {
+    const change = vi.fn(() => Effect.die("change must not run"))
+    await act(async() => render(
+      <CritHost
+        canvasId={canvasId}
+        ports={readyPorts(change)}
+        resolver={resolver}
+        run={makeRun()}
+      />
+    ))
+    await waitFor(() => expect(addFrameButton()).toBeInstanceOf(HTMLButtonElement))
+
+    await act(async() => addFrameButton()?.click())
+    await act(async() => {
+      fillInput("url", "not-a-url")
+      container.querySelector("form")?.requestSubmit()
+    })
+
+    expect(container.querySelector("[role='alert']")?.textContent).toBe("Enter a valid frame URL")
+    expect(change).not.toHaveBeenCalled()
+    expect(container.querySelector("form")).toBeInstanceOf(HTMLFormElement)
+  })
+
+  it("keeps the form open when the daemon rejects the frame", async() => {
+    const change = vi.fn(() => Effect.fail(new ReplicaChangeRejected({
+      canvasId,
+      failure: Schema.decodeUnknownSync(CanvasChangeFailureSchema)({
+        _tag: "entity-not-found",
+        commandIndex: 0,
+        entity: "frame",
+        id: "frame_missing"
+      })
+    })))
+    await act(async() => render(
+      <CritHost
+        canvasId={canvasId}
+        ports={readyPorts(change)}
+        resolver={resolver}
+        run={makeRun()}
+      />
+    ))
+    await waitFor(() => expect(addFrameButton()).toBeInstanceOf(HTMLButtonElement))
+
+    await act(async() => addFrameButton()?.click())
+    await act(async() => {
+      fillInput("url", "https://example.com/checkout")
+      container.querySelector("form")?.requestSubmit()
+    })
+
+    await waitFor(() =>
+      expect(container.querySelector("[role='alert']")?.textContent)
+        .toBe("The daemon rejected this frame.")
+    )
+    expect(container.querySelector("form")).toBeInstanceOf(HTMLFormElement)
+    expect(addFrameButton()).toBeUndefined()
   })
 })
