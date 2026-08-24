@@ -67,17 +67,15 @@ export function CanvasBoard({
           const frame = frames.get(frameId)
           if (frame === undefined) return null
           return (
-            // Canvas items are not listbox options. The camera world layer
-            // would sit between any listbox and these nodes.
-            // react-doctor-disable-next-line react-doctor/role-supports-aria-props
-            <section
+            <div
               aria-label={frame.title}
               aria-selected={ariaSelected(selection, item)}
               key={frame.frameId}
+              role="option"
               style={itemStyle(frame.geometry, zIndex)}
             >
               <FrameRenderer frame={frame} resolver={resolver} />
-            </section>
+            </div>
           )
         },
         note: (item) => {
@@ -85,28 +83,31 @@ export function CanvasBoard({
           const note = notes.get(noteId)
           if (note === undefined) return null
           return (
-            // Canvas items are not listbox options. The camera world layer
-            // would sit between any listbox and these nodes.
-            // react-doctor-disable-next-line react-doctor/role-supports-aria-props
-            <article
+            <div
+              aria-label={note.text}
               aria-selected={ariaSelected(selection, item)}
               key={note.noteId}
+              role="option"
               style={itemStyle(note.geometry, zIndex)}
             >
               {note.text}
-            </article>
+            </div>
           )
         }
       }))
     )
 
+  const hasItems = projection.stack.length > 0
+
   return (
     <section
       aria-label={projection.title}
+      aria-multiselectable={hasItems ? true : undefined}
       className={className}
+      role={hasItems ? "listbox" : undefined}
       style={{ position: "relative" }}
     >
-      {camera === undefined || projection.stack.length === 0
+      {camera === undefined || !hasItems
         ? items
         : <div style={canvasCameraStyle(camera)}>{items}</div>}
     </section>

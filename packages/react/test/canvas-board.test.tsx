@@ -120,7 +120,7 @@ describe("CanvasBoard", () => {
 
     const board = container.querySelector("[aria-label='Review']")
     const frame = container.querySelector("[aria-label='Checkout']")
-    const note = container.querySelector("article")
+    const note = container.querySelector("[aria-label='Check the price']")
     expect(board).not.toBeNull()
     expect(frame).toBeInstanceOf(HTMLElement)
     if (!(frame instanceof HTMLElement)) return
@@ -146,6 +146,6 @@ describe("CanvasBoard", () => {
       "Empty has no Frames or Notes."
     )
     expect(container.querySelector("iframe")).toBeNull()
-    expect(container.querySelector("article")).toBeNull()
+    expect(container.querySelector("[aria-label='Check the price']")).toBeNull()
   })
 })

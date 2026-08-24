@@ -176,7 +176,7 @@ describe("CanvasBoard selection", () => {
     )
 
     const frame = container.querySelector("[aria-label='Checkout']")
-    const note = container.querySelector("article")
+    const note = container.querySelector("[aria-label='Check the price']")
     expect(frame).toBeInstanceOf(HTMLElement)
     expect(note).toBeInstanceOf(HTMLElement)
     if (!(frame instanceof HTMLElement) || !(note instanceof HTMLElement)) return
@@ -194,7 +194,7 @@ describe("CanvasBoard selection", () => {
     )
 
     const frame = container.querySelector("[aria-label='Checkout']")
-    const note = container.querySelector("article")
+    const note = container.querySelector("[aria-label='Check the price']")
     expect(frame).toBeInstanceOf(HTMLElement)
     expect(note).toBeInstanceOf(HTMLElement)
     if (!(frame instanceof HTMLElement) || !(note instanceof HTMLElement)) return
@@ -222,7 +222,7 @@ describe("CanvasBoard selection", () => {
       <CanvasBoard projection={projection} resolver={resolver} />
     )
     const omitted = [...container.querySelectorAll(
-      "section[aria-label='Checkout'], article"
+      "[aria-label='Checkout'], [aria-label='Check the price']"
     )].map((item) => item.getAttribute("aria-selected"))
 
     await renderReady(
@@ -233,7 +233,7 @@ describe("CanvasBoard selection", () => {
       />
     )
     const empty = [...container.querySelectorAll(
-      "section[aria-label='Checkout'], article"
+      "[aria-label='Checkout'], [aria-label='Check the price']"
     )].map((item) => item.getAttribute("aria-selected"))
 
     expect(empty).toEqual(omitted)
