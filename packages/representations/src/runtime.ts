@@ -11,7 +11,9 @@ import { Context, Data, Effect, Layer, Match, Option, Result, Schema } from "eff
 
 import {
   ArtifactStore,
-  ArtifactStoreIoFailure
+  ArtifactStoreIoFailure,
+  type ArtifactConflict,
+  type PutArtifact
 } from "./store.js"
 
 const applicationBaseUrlFailure = (value: string) => {
@@ -95,6 +97,9 @@ export type RepresentationRuntimeFailure =
   | ArtifactStoreIoFailure
 
 export interface RepresentationRuntimeService {
+  readonly capture: (
+    input: PutArtifact
+  ) => Effect.Effect<ArtifactRepresentation, ArtifactConflict | ArtifactStoreIoFailure>
   readonly resolve: (
     representation: RepresentationRef
   ) => Effect.Effect<RenderPlan, RepresentationRuntimeFailure>
@@ -165,7 +170,10 @@ const makeRuntime = Effect.gen(function*() {
     artifact: resolveArtifact
   }))
 
-  return RepresentationRuntime.of({ resolve })
+  return RepresentationRuntime.of({
+    capture: artifacts.put,
+    resolve
+  })
 })
 
 export const RepresentationRuntimeLive: Layer.Layer<
