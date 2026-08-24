@@ -8,7 +8,7 @@ export {
   sessionPreferenceKey,
   setSessionPreference
 } from "./browser-session.js"
-export { CanvasCamera } from "./canvas-camera.js"
+export { applyCanvasCameraIntent, CanvasCamera } from "./canvas-camera.js"
 export {
   getCanvasCameraSession,
   removeCanvasCameraSession,
