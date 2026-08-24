@@ -38,6 +38,19 @@ describe("HostRoot", () => {
     )
   })
 
+  it("renders the same invalid-fragment copy after a remount", async() => {
+    await act(async() => render(<HostRoot fragment="#crit=" />))
+    await act(async() => root.unmount())
+    container.remove()
+    container = document.createElement("div")
+    document.body.append(container)
+    root = createRoot(container)
+    await act(async() => render(<HostRoot fragment="#crit=" />))
+    expect(container.querySelector("[role='alert']")?.textContent).toBe(
+      "Unable to connect to Crit."
+    )
+  })
+
   it("builds clients from a valid fragment and reports an unreachable daemon", async() => {
     const descriptor = LocalBrowserConnection.make({
       baseUrl: "http://127.0.0.1:49152",
