@@ -1,7 +1,7 @@
 import { Match } from "effect"
 import { AtomRegistry } from "effect/unstable/reactivity"
 import {
-  useEffect,
+  useCallback,
   useRef,
   useSyncExternalStore,
   type ReactElement
@@ -13,28 +13,29 @@ import { hostScreenAtom, localCanvasId, type HostScreen } from "./host-atoms.js"
 export { localCanvasId }
 
 function useHostScreen(fragment: string): HostScreen {
-  const slot = useRef<{
-    readonly registry: AtomRegistry.AtomRegistry
-    live: boolean
-  }>({
-    registry: AtomRegistry.make(),
-    live: true
-  })
-  const registry = (): AtomRegistry.AtomRegistry => {
-    if (!slot.current.live) {
-      slot.current = { registry: AtomRegistry.make(), live: true }
+  const lease = useRef<AtomRegistry.AtomRegistry | null>(null)
+  const acquire = () => {
+    if (lease.current === null) {
+      lease.current = AtomRegistry.make()
     }
-    return slot.current.registry
+    return lease.current
   }
-  useEffect(() => () => {
-    slot.current.registry.dispose()
-    slot.current.live = false
-  }, [])
   const atom = hostScreenAtom(fragment)
+  const subscribe = useCallback((onStoreChange: () => void) => {
+    const registry = acquire()
+    const unsubscribe = registry.subscribe(atom, onStoreChange)
+    return () => {
+      unsubscribe()
+      registry.dispose()
+      if (lease.current === registry) {
+        lease.current = null
+      }
+    }
+  }, [atom])
   return useSyncExternalStore(
-    (onStoreChange) => registry().subscribe(atom, onStoreChange),
-    () => registry().get(atom),
-    () => registry().get(atom)
+    subscribe,
+    () => acquire().get(atom),
+    () => acquire().get(atom)
   )
 }
 

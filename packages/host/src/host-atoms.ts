@@ -48,40 +48,31 @@ const connectingScreen: HostScreen = { _tag: "connecting" }
 export const hostScreenAtom = Atom.family((fragment: string): Atom.Atom<HostScreen> => {
   const connection = hostConnectionFromFragment(fragment)
   if (Result.isFailure(connection)) {
-    return Atom.make((): HostScreen => invalidScreen)
+    return Atom.keepAlive(Atom.make((): HostScreen => invalidScreen))
   }
   const runtime = Atom.runtime(hostLayer(connection.success))
   const boot = runtime.atom(Effect.gen(function*() {
     const client = yield* LocalCanvasClient
     const resolver = yield* LocalRepresentationClient
     const store = yield* KeyValueStore.KeyValueStore
+    yield* Effect.ignore(ensureLocalCanvas({
+      canvasId: localCanvasId,
+      client,
+      title: localCanvasTitle
+    }))
     const run: ReplicaSessionRun = (effect) =>
       Effect.runPromise(Effect.provideService(effect, KeyValueStore.KeyValueStore, store))
     return {
-      client,
-      props: {
-        canvasId: localCanvasId,
-        ports: localReplicaSessionPorts(client),
-        resolver,
-        run
-      }
+      canvasId: localCanvasId,
+      ports: localReplicaSessionPorts(client),
+      resolver,
+      run
     }
   }))
-  const prepare = runtime.atom((get) =>
-    get.result(boot).pipe(
-      Effect.flatMap((value) => ensureLocalCanvas({
-        canvasId: localCanvasId,
-        client: value.client,
-        title: localCanvasTitle
-      })),
-      Effect.ignore
-    )
-  )
-  return Atom.make((get): HostScreen => {
+  return Atom.keepAlive(Atom.make((get): HostScreen => {
     const bootResult = get(boot)
     if (AsyncResult.isFailure(bootResult)) return invalidScreen
     if (!AsyncResult.isSuccess(bootResult)) return connectingScreen
-    if (AsyncResult.isInitial(get(prepare))) return connectingScreen
-    return { _tag: "ready", props: bootResult.value.props }
-  })
+    return { _tag: "ready", props: bootResult.value }
+  }))
 })
