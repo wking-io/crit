@@ -91,7 +91,8 @@ describe("CritHost", () => {
     })
     const ports: ReplicaSessionPorts = {
       open: () => Effect.promise(() => gate.then(() => view)),
-      subscribe: () => () => undefined
+      subscribe: () => () => undefined,
+      change: () => Effect.die("change must not run")
     }
 
     await act(async() => render(
@@ -114,7 +115,8 @@ describe("CritHost", () => {
         canvasId: requested,
         reason: "replica missing"
       })),
-      subscribe: () => () => undefined
+      subscribe: () => () => undefined,
+      change: () => Effect.die("change must not run")
     }
 
     await act(async() => render(

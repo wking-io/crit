@@ -1,7 +1,12 @@
-import { Id, decodeCanvasProjection } from "@crit/domain"
+import {
+  CanvasChangeFailureSchema,
+  Id,
+  decodeCanvasCommandBatch,
+  decodeCanvasProjection
+} from "@crit/domain"
 import type { CanvasId } from "@crit/domain"
 import { ReplicaView } from "@crit/replica"
-import { Effect, Layer, Schema } from "effect"
+import { Effect, Layer, Result, Schema } from "effect"
 import { StrictMode, act, type ReactElement } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
@@ -9,6 +14,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import {
   CanvasCamera,
   CanvasSelection,
+  ReplicaChangeRejected,
   ReplicaSessionUnavailable,
   getCanvasCameraSession,
   getCanvasSelectionSession,
@@ -69,6 +75,72 @@ const viewOne = makeView({ canvasId: canvasA, cursor: "cursor_one" })
 const viewTwo = makeView({ canvasId: canvasA, cursor: "cursor_two" })
 const viewOther = makeView({ canvasId: canvasB, cursor: "cursor_other" })
 
+const addFrame = decodeCanvasCommandBatch([{
+  _tag: "add-frame",
+  frameId: "frame_added",
+  title: "Added",
+  representation: { _tag: "web-url", url: "https://example.com/added" },
+  status: "in-progress",
+  geometry: { x: 400, y: 80, width: 320, height: 200 }
+}])
+
+const viewAfterAdd = Schema.decodeUnknownSync(ReplicaView)({
+  _tag: "replica-view",
+  canvasId: canvasA,
+  acknowledgedCursor: "cursor_after_add",
+  projection: decodeCanvasProjection({
+    schemaVersion: 2,
+    canvasId: canvasA,
+    title: "Review",
+    frames: [{
+      frameId: "frame_added",
+      title: "Added",
+      representation: { _tag: "web-url", url: "https://example.com/added" },
+      status: "in-progress",
+      geometry: { x: 400, y: 80, width: 320, height: 200 },
+      createdByChangeId: "change_2",
+      updatedByChangeId: "change_2",
+      titleChangedByChangeId: "change_2",
+      representationChangedByChangeId: "change_2",
+      statusChangedByChangeId: "change_2",
+      geometryChangedByChangeId: "change_2"
+    }, {
+      frameId: "frame_checkout",
+      title: "Checkout",
+      representation: { _tag: "web-url", url: "https://example.com/checkout" },
+      status: "in-progress",
+      geometry: { x: 40, y: 80, width: 320, height: 200 },
+      createdByChangeId: "change_1",
+      updatedByChangeId: "change_1",
+      titleChangedByChangeId: "change_1",
+      representationChangedByChangeId: "change_1",
+      statusChangedByChangeId: "change_1",
+      geometryChangedByChangeId: "change_1"
+    }],
+    notes: [],
+    threads: [],
+    stack: [
+      { _tag: "frame", frameId: "frame_checkout" },
+      { _tag: "frame", frameId: "frame_added" }
+    ],
+    stackChangedByChangeId: "change_2",
+    issuedIds: {
+      frameIds: ["frame_added", "frame_checkout"],
+      noteIds: [],
+      threadIds: [],
+      commentIds: []
+    }
+  }),
+  pending: []
+})
+
+const rejectedFailure = Schema.decodeUnknownSync(CanvasChangeFailureSchema)({
+  _tag: "entity-not-found",
+  commandIndex: 0,
+  entity: "frame",
+  id: "frame_missing"
+})
+
 const makeRun = (): ReplicaSessionRun => {
   const services = Effect.runSync(Effect.scoped(Layer.build(layerMemory)))
   return (effect) => Effect.runPromise(Effect.provide(effect, services))
@@ -92,6 +164,12 @@ const makeReplica = (initial: ReadonlyArray<ReplicaView>) => {
       return () => {
         set.delete(onChanged)
       }
+    },
+    change: ({ canvasId }) => {
+      const view = views.get(canvasId)
+      return view === undefined
+        ? Effect.fail(new ReplicaSessionUnavailable({ canvasId, reason: "replica missing" }))
+        : Effect.succeed(view)
     }
   }
   return {
@@ -348,5 +426,160 @@ describe("useReplicaSession", () => {
         selection: defaultSelection
       })
     )
+  })
+
+  it("replaces the ready view from submit and keeps camera and selection", async() => {
+    const run = makeRun()
+    await run(setCanvasCameraSession({ camera: savedCamera, canvasId: canvasA }))
+    await run(setCanvasSelectionSession({
+      canvasId: canvasA,
+      selection: savedSelection
+    }))
+    const replica = makeReplica([viewOne])
+
+    await act(async() => render(
+      <Probe canvasId={canvasA} ports={replica.ports} run={run} />
+    ))
+    await waitFor(() => expect(latest?.session._tag).toBe("ready"))
+
+    replica.views.set(canvasA, viewAfterAdd)
+    let submitted: Awaited<ReturnType<ReplicaSessionHandle["submit"]>> | undefined
+    await act(async() => {
+      submitted = await latest?.submit(addFrame)
+    })
+
+    expect(submitted).toEqual(Result.succeed(viewAfterAdd))
+    expect(latest?.session).toEqual({
+      _tag: "ready",
+      view: viewAfterAdd,
+      camera: savedCamera,
+      selection: savedSelection
+    })
+  })
+
+  it("keeps the last ready view when submit is rejected", async() => {
+    const run = makeRun()
+    await run(setCanvasCameraSession({ camera: savedCamera, canvasId: canvasA }))
+    await run(setCanvasSelectionSession({
+      canvasId: canvasA,
+      selection: savedSelection
+    }))
+    const replica = makeReplica([viewOne])
+    const rejected = new ReplicaChangeRejected({
+      canvasId: canvasA,
+      failure: rejectedFailure
+    })
+    const ports: ReplicaSessionPorts = {
+      open: replica.ports.open,
+      subscribe: replica.ports.subscribe,
+      change: () => Effect.fail(rejected)
+    }
+
+    await act(async() => render(
+      <Probe canvasId={canvasA} ports={ports} run={run} />
+    ))
+    await waitFor(() => expect(latest?.session._tag).toBe("ready"))
+
+    let submitted: Awaited<ReturnType<ReplicaSessionHandle["submit"]>> | undefined
+    await act(async() => {
+      submitted = await latest?.submit(addFrame)
+    })
+
+    expect(submitted).toEqual(Result.fail(rejected))
+    expect(latest?.session).toEqual({
+      _tag: "ready",
+      view: viewOne,
+      camera: savedCamera,
+      selection: savedSelection
+    })
+  })
+
+  it("still replaces the view from a later subscribe notify after submit", async() => {
+    const run = makeRun()
+    const replica = makeReplica([viewOne])
+
+    await act(async() => render(
+      <Probe canvasId={canvasA} ports={replica.ports} run={run} />
+    ))
+    await waitFor(() => expect(latest?.session._tag).toBe("ready"))
+
+    replica.views.set(canvasA, viewAfterAdd)
+    await act(async() => {
+      await latest?.submit(addFrame)
+    })
+    await waitFor(() =>
+      expect(latest?.session).toEqual({
+        _tag: "ready",
+        view: viewAfterAdd,
+        camera: defaultCamera,
+        selection: defaultSelection
+      })
+    )
+
+    replica.views.set(canvasA, viewTwo)
+    await act(async() => replica.notify(canvasA))
+
+    await waitFor(() =>
+      expect(latest?.session).toEqual({
+        _tag: "ready",
+        view: viewTwo,
+        camera: defaultCamera,
+        selection: defaultSelection
+      })
+    )
+  })
+
+  it("does not call change when submit runs before the replica is ready", async() => {
+    let release!: (view: typeof viewOne) => void
+    const gate = new Promise<typeof viewOne>((resolve) => {
+      release = resolve
+    })
+    const change = vi.fn(() => Effect.die("change must not run"))
+    const ports: ReplicaSessionPorts = {
+      open: () => Effect.promise(() => gate),
+      subscribe: () => () => undefined,
+      change
+    }
+
+    await act(async() => render(
+      <Probe canvasId={canvasA} ports={ports} run={makeRun()} />
+    ))
+    expect(latest?.session).toEqual({ _tag: "loading" })
+
+    let loadingSubmit: Awaited<ReturnType<ReplicaSessionHandle["submit"]>> | undefined
+    await act(async() => {
+      loadingSubmit = await latest?.submit(addFrame)
+    })
+    expect(loadingSubmit).toEqual(Result.fail(new ReplicaSessionUnavailable({
+      canvasId: canvasA,
+      reason: "The replica is not ready."
+    })))
+    expect(change).not.toHaveBeenCalled()
+
+    await act(async() => release(viewOne))
+    await waitFor(() => expect(latest?.session._tag).toBe("ready"))
+
+    const unavailable = makeReplica([])
+    const unavailableChange = vi.fn(() => Effect.die("change must not run"))
+    const unavailablePorts: ReplicaSessionPorts = {
+      open: unavailable.ports.open,
+      subscribe: unavailable.ports.subscribe,
+      change: unavailableChange
+    }
+
+    await act(async() => render(
+      <Probe canvasId={canvasA} ports={unavailablePorts} run={makeRun()} />
+    ))
+    await waitFor(() => expect(latest?.session._tag).toBe("unavailable"))
+
+    let unavailableSubmit: Awaited<ReturnType<ReplicaSessionHandle["submit"]>> | undefined
+    await act(async() => {
+      unavailableSubmit = await latest?.submit(addFrame)
+    })
+    expect(unavailableSubmit).toEqual(Result.fail(new ReplicaSessionUnavailable({
+      canvasId: canvasA,
+      reason: "The replica is not ready."
+    })))
+    expect(unavailableChange).not.toHaveBeenCalled()
   })
 })

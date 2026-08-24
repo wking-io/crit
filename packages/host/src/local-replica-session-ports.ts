@@ -1,5 +1,9 @@
 import type { LocalCanvasClientService, OpenFailure } from "@crit/client"
-import { ReplicaSessionUnavailable, type ReplicaSessionPorts } from "@crit/react"
+import {
+  ReplicaChangeRejected,
+  ReplicaSessionUnavailable,
+  type ReplicaSessionPorts
+} from "@crit/react"
 import { Effect, Fiber, Match, Stream } from "effect"
 import * as Socket from "effect/unstable/socket/Socket"
 
@@ -34,5 +38,18 @@ export const localReplicaSessionPorts = (
     return () => {
       Effect.runFork(Fiber.interrupt(fiber))
     }
-  }
+  },
+  change: ({ canvasId, commands }) =>
+    client.change({ _tag: "replica-change", canvasId, commands }).pipe(
+      Effect.map((receipt) => receipt.view),
+      Effect.mapError((failure) => {
+        if (failure._tag === "change-rejected") {
+          return new ReplicaChangeRejected({ canvasId, failure: failure.failure })
+        }
+        return new ReplicaSessionUnavailable({
+          canvasId,
+          reason: openFailureReason(failure)
+        })
+      })
+    )
 })
