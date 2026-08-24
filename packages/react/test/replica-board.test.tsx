@@ -9,6 +9,7 @@ import {
   Blocked,
   Conflicted,
   Ready,
+  PendingAuthor,
   ReplicaView,
   type PendingState
 } from "@crit/replica"
@@ -95,20 +96,15 @@ const decodeView = Schema.decodeUnknownSync(ReplicaView)
 
 const decodeFailure = Schema.decodeUnknownSync(CanvasChangeFailureSchema)
 
-const personAuthor: { readonly _tag: "person"; readonly displayName: string } = {
-  _tag: "person",
-  displayName: "Ada"
-}
-const agentAuthor: { readonly _tag: "agent"; readonly displayName: string } = {
-  _tag: "agent",
-  displayName: "Codex"
-}
+const decodeAuthor = Schema.decodeUnknownSync(PendingAuthor)
+const personAuthor = decodeAuthor({ _tag: "person", displayName: "Ada" })
+const agentAuthor = decodeAuthor({ _tag: "agent", displayName: "Codex" })
 
 const pendingChange = (
   changeId: string,
   state: PendingState,
   commands: ReturnType<typeof decodeCanvasCommandBatch>,
-  author: { readonly _tag: "person" | "agent"; readonly displayName: string },
+  author: typeof PendingAuthor.Type,
   dependencies: readonly string[] = []
 ) => ({
   proposal: {

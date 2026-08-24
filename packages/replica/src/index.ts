@@ -21,7 +21,6 @@ export {
   SyncResult
 } from "./model.js"
 export type {
-  PendingAuthor,
   ReplicaChangeFailure,
   ReplicaFailure,
   ReplicaOpenFailure,
