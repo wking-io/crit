@@ -3,11 +3,11 @@ import {
   ApplicationRouteRepresentation,
   AuthoredText,
   Geometry,
-  RootedRoute,
   type ApplicationId,
-  type FrameId
+  type FrameId,
+  type RootedRoute
 } from "@crit/domain"
-import { Result, Schema } from "effect"
+import { Schema } from "effect"
 
 export const nextFrameGeometry = (frameCount: number): typeof Geometry.Type =>
   Geometry.make({
@@ -17,48 +17,28 @@ export const nextFrameGeometry = (frameCount: number): typeof Geometry.Type =>
     height: 800
   })
 
-const defaultFrameTitle = (route: string): string => {
+export const inferredFrameTitle = (route: RootedRoute): AuthoredText => {
   const pathname = route.split("?")[0] ?? route
   const segments = pathname.split("/").filter((segment) => segment.length > 0)
-  return segments[segments.length - 1] ?? "Untitled frame"
-}
-
-const decodeOrReason = <S extends Schema.ConstraintDecoder<unknown>>(
-  schema: S,
-  value: unknown
-): Result.Result<S["Type"], { readonly reason: string }> => {
-  const decoded = Schema.decodeUnknownResult(schema)(value)
-  return Result.isSuccess(decoded)
-    ? Result.succeed(decoded.success)
-    : Result.fail({ reason: decoded.failure.message })
+  return Schema.decodeUnknownSync(AuthoredText)(
+    segments[segments.length - 1] ?? "Untitled frame"
+  )
 }
 
 export const applicationFrameCommand = (input: {
   applicationId: ApplicationId
-  route: string
-  title: string
+  route: RootedRoute
+  title: AuthoredText
   frameId: FrameId
   geometry: typeof Geometry.Type
-}): Result.Result<typeof AddFrameCommand.Type, { readonly reason: string }> => {
-  const route = decodeOrReason(RootedRoute, input.route)
-  if (Result.isFailure(route)) return Result.fail(route.failure)
-  const title = decodeOrReason(
-    AuthoredText,
-    input.title.length === 0 ? defaultFrameTitle(route.success) : input.title
-  )
-  if (Result.isFailure(title)) return Result.fail(title.failure)
-  const representation = decodeOrReason(ApplicationRouteRepresentation, {
-    _tag: "application-route",
-    applicationId: input.applicationId,
-    route: route.success
-  })
-  if (Result.isFailure(representation)) return Result.fail(representation.failure)
-  return decodeOrReason(AddFrameCommand, {
-    _tag: "add-frame",
+}): typeof AddFrameCommand.Type =>
+  AddFrameCommand.make({
     frameId: input.frameId,
-    title: title.success,
-    representation: representation.success,
+    title: input.title,
+    representation: ApplicationRouteRepresentation.make({
+      applicationId: input.applicationId,
+      route: input.route
+    }),
     status: "in-progress",
     geometry: input.geometry
   })
-}

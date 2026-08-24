@@ -3,11 +3,15 @@ import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 
-import { Id } from "@crit/domain"
-import { Result } from "effect"
+import { AuthoredText, Id, RootedRoute } from "@crit/domain"
+import { Schema } from "effect"
 import { afterEach, describe, expect, it } from "vitest"
 
-import { applicationFrameCommand, nextFrameGeometry } from "../src/add-frame.js"
+import {
+  applicationFrameCommand,
+  inferredFrameTitle,
+  nextFrameGeometry
+} from "../src/add-frame.js"
 
 const directories: Array<string> = []
 const children: Array<ReturnType<typeof spawn>> = []
@@ -73,63 +77,46 @@ const run = (dataRoot: string, args: ReadonlyArray<string>) => spawnSync(process
 
 const applicationId = Id.application("application_storefront")
 const frameId = Id.frame("frame_checkout")
+const checkout = Schema.decodeUnknownSync(RootedRoute)("/checkout")
+const home = Schema.decodeUnknownSync(RootedRoute)("/")
+const checkoutTitle = Schema.decodeUnknownSync(AuthoredText)("Checkout")
+
+describe("inferredFrameTitle", () => {
+  it("uses the last route segment", () => {
+    expect(inferredFrameTitle(checkout)).toBe("checkout")
+  })
+
+  it("titles a root route Untitled frame", () => {
+    expect(inferredFrameTitle(home)).toBe("Untitled frame")
+  })
+})
 
 describe("applicationFrameCommand", () => {
-  it("derives the last route segment when title is empty", () => {
+  it("stores an application-route representation", () => {
     const command = applicationFrameCommand({
       applicationId,
-      route: "/checkout",
-      title: "",
+      route: checkout,
+      title: inferredFrameTitle(checkout),
       frameId,
       geometry: nextFrameGeometry(0)
     })
-    expect(Result.isSuccess(command)).toBe(true)
-    if (Result.isFailure(command)) return
-    expect(command.success.title).toBe("checkout")
-    expect(command.success.representation).toEqual({
+    expect(command.title).toBe("checkout")
+    expect(command.representation).toEqual({
       _tag: "application-route",
       applicationId,
-      route: "/checkout"
+      route: checkout
     })
   })
 
   it("keeps an explicit title", () => {
     const command = applicationFrameCommand({
       applicationId,
-      route: "/checkout",
-      title: "Checkout",
+      route: checkout,
+      title: checkoutTitle,
       frameId,
       geometry: nextFrameGeometry(0)
     })
-    expect(Result.isSuccess(command)).toBe(true)
-    if (Result.isFailure(command)) return
-    expect(command.success.title).toBe("Checkout")
-  })
-
-  it("titles a root route Untitled frame", () => {
-    const command = applicationFrameCommand({
-      applicationId,
-      route: "/",
-      title: "",
-      frameId,
-      geometry: nextFrameGeometry(0)
-    })
-    expect(Result.isSuccess(command)).toBe(true)
-    if (Result.isFailure(command)) return
-    expect(command.success.title).toBe("Untitled frame")
-  })
-
-  it("rejects a route that is not rooted", () => {
-    const command = applicationFrameCommand({
-      applicationId,
-      route: "products",
-      title: "",
-      frameId,
-      geometry: nextFrameGeometry(0)
-    })
-    expect(Result.isFailure(command)).toBe(true)
-    if (Result.isSuccess(command)) return
-    expect(command.failure.reason.length).toBeGreaterThan(0)
+    expect(command.title).toBe("Checkout")
   })
 })
 

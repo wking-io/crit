@@ -16,10 +16,10 @@ import {
 import { ReplicaModel, ReplicaView } from "@crit/replica"
 import { LocalApiUnauthorized, LocalApiVersionUnsupported } from "@crit/replica/http"
 import { ApplicationBaseUrl } from "@crit/representations"
-import { Console, Context, Effect, Layer, Match, Option, Redacted, Result, Schema, type Effect as EffectType } from "effect"
+import { Console, Context, Effect, Layer, Match, Option, Redacted, Schema, type Effect as EffectType } from "effect"
 import { Argument, Command, Flag } from "effect/unstable/cli"
 
-import { applicationFrameCommand, nextFrameGeometry } from "./add-frame.js"
+import { applicationFrameCommand, inferredFrameTitle, nextFrameGeometry } from "./add-frame.js"
 
 class CliOperationalFailure extends Schema.TaggedError<CliOperationalFailure>()(
   "CliOperationalFailure",
@@ -229,10 +229,8 @@ const addFrame = Command.make("add-frame", {
   const id = yield* decode(CanvasId, canvasId, "canvas ID")
   const decodedRoute = yield* decode(RootedRoute, route, "route")
   const resolvedTitle = yield* Option.match(title, {
-    onNone: () => Effect.succeed(""),
-    onSome: (value) => value.length === 0
-      ? Effect.succeed("")
-      : decode(AuthoredText, value, "title")
+    onNone: () => Effect.succeed(inferredFrameTitle(decodedRoute)),
+    onSome: (value) => decode(AuthoredText, value, "title")
   })
   const manifest = yield* Effect.gen(function*() {
     const projectManifest = yield* LocalProjectManifest
@@ -260,12 +258,9 @@ const addFrame = Command.make("add-frame", {
       frameId,
       geometry: nextFrameGeometry(opened.projection.frames.length)
     })
-    if (Result.isFailure(command)) {
-      return yield* new CliOperationalFailure({ message: command.failure.reason })
-    }
     const changed = yield* client.change(ReplicaModel.change({
       canvasId: id,
-      commands: [command.success]
+      commands: [command]
     })).pipe(
       Effect.mapError((failure) => Match.value(failure).pipe(
         Match.when({ _tag: "canvas-not-found" }, ({ canvasId }) => new CliOperationalFailure({
