@@ -265,7 +265,6 @@ describe("CanvasBoard comment pins", () => {
         posted.push(message)
       }
     }
-    // SAFETY: jsdom's iframe window has no postMessage; the bridge only calls that method.
     const stubWindow = frameWindow as Window
     const contentWindow = vi.spyOn(HTMLIFrameElement.prototype, "contentWindow", "get")
       .mockReturnValue(stubWindow)

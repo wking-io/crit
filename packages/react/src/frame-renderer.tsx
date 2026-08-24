@@ -215,8 +215,6 @@ function LiveFrame({
   }, [onInputIntent, plan.url])
 
   return (
-    // Live review Frames stay unsandboxed so the reviewed page can run.
-    // react-doctor-disable-next-line react-doctor/iframe-missing-sandbox
     <iframe
       className={className}
       ref={iframeRef}
