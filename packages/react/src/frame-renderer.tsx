@@ -6,7 +6,9 @@ import {
 } from "@crit/domain"
 import {
   connectBridgedFrameComments,
-  connectBridgedFrameInput
+  connectBridgedFrameInput,
+  critFrameInputBridgeScript,
+  frameBridgeOriginFromHref
 } from "@crit/frame-bridge"
 import {
   FrameBridgeOrigin,
@@ -16,7 +18,7 @@ import {
 } from "@crit/protocol"
 import type { RenderPlan } from "@crit/representations"
 import { useQuery } from "@tanstack/react-query"
-import { Effect, Match, Schema } from "effect"
+import { Effect, Match, Option, Schema } from "effect"
 import {
   useEffect,
   useRef,
@@ -178,12 +180,37 @@ function LiveFrame({
     const iframe = iframeRef.current
     const origin = frameOrigin(plan.url)
     if (iframe === null || origin === undefined) return
-    return connectBridgedFrameInput({
+    const disconnect = connectBridgedFrameInput({
       target: window,
       frameElement: iframe,
       frameOrigin: origin,
       onIntent: onInputIntent
     })
+    const parentOrigin = Option.getOrUndefined(
+      frameBridgeOriginFromHref(window.location.href)
+    )
+    const inject = () => {
+      if (parentOrigin === undefined) return
+      try {
+        const frameDocument = iframe.contentDocument
+        if (
+          frameDocument === null ||
+          frameDocument.querySelector("script[data-crit-input-bridge]") !== null
+        ) return
+        const script = frameDocument.createElement("script")
+        script.dataset.critInputBridge = ""
+        script.textContent = critFrameInputBridgeScript({ parentOrigin })
+        frameDocument.documentElement.append(script)
+      } catch {
+        return
+      }
+    }
+    iframe.addEventListener("load", inject)
+    inject()
+    return () => {
+      iframe.removeEventListener("load", inject)
+      disconnect()
+    }
   }, [onInputIntent, plan.url])
 
   return (

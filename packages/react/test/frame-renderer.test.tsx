@@ -5,6 +5,10 @@ import {
   WebUrlRepresentation
 } from "@crit/domain"
 import {
+  FRAME_INPUT_BRIDGE_SCHEMA_VERSION,
+  FRAME_INPUT_BRIDGE_SOURCE
+} from "@crit/protocol"
+import {
   ApplicationUnavailableRenderPlan,
   ArtifactBytesRenderPlan,
   ArtifactUnavailableRenderPlan,
@@ -54,6 +58,14 @@ const render = (element: ReactElement) => root.render(
   <QueryClientProvider client={queryClient}>{element}</QueryClientProvider>
 )
 const waitFor = (assertion: () => void) => act(async() => vi.waitFor(assertion))
+const prepareFrameDocument = (iframe: HTMLIFrameElement) => {
+  const frameDocument = iframe.contentDocument
+  if (frameDocument === null) throw new Error("Expected a writable Frame document")
+  frameDocument.open()
+  frameDocument.write("<!doctype html><html><head></head><body></body></html>")
+  frameDocument.close()
+  return frameDocument
+}
 
 beforeEach(() => {
   container = document.createElement("div")
@@ -92,6 +104,104 @@ describe("FrameRenderer", () => {
     expect(iframe?.getAttribute("title")).toBe("Checkout")
     expect(iframe?.getAttribute("referrerpolicy")).toBe("no-referrer")
     expect(iframe?.hasAttribute("sandbox")).toBe(false)
+  })
+
+  it("injects and connects the input bridge for a same-origin live iframe", async() => {
+    const url = `${window.location.origin}/fixture`
+    const resolver: FrameRepresentationResolver = {
+      resolve: () => Effect.succeed(iframePlan(url))
+    }
+    const onInputIntent = vi.fn()
+
+    await act(async() => render(
+      <FrameRenderer
+        frame={frame("change_frame_input_bridge")}
+        onInputIntent={onInputIntent}
+        resolver={resolver}
+      />
+    ))
+    await waitFor(() => expect(container.querySelector("iframe")).not.toBeNull())
+    const iframe = container.querySelector("iframe")
+    if (iframe === null) throw new Error("Expected a live Frame")
+    const frameDocument = prepareFrameDocument(iframe)
+
+    iframe.dispatchEvent(new Event("load"))
+    iframe.dispatchEvent(new Event("load"))
+
+    const scripts = frameDocument.querySelectorAll(
+      "script[data-crit-input-bridge]"
+    )
+    expect(scripts).toHaveLength(1)
+    expect(scripts[0]?.textContent).toContain(FRAME_INPUT_BRIDGE_SOURCE)
+
+    const frameWindow = iframe.contentWindow
+    if (frameWindow === null) throw new Error("Expected a live Frame window")
+    await act(async() => {
+      window.dispatchEvent(new MessageEvent("message", {
+        origin: new URL(url).origin,
+        source: frameWindow,
+        data: {
+          source: FRAME_INPUT_BRIDGE_SOURCE,
+          schemaVersion: FRAME_INPUT_BRIDGE_SCHEMA_VERSION,
+          intent: { type: "select", additive: true }
+        }
+      }))
+    })
+
+    expect(onInputIntent).toHaveBeenCalledWith({
+      type: "select",
+      additive: true
+    })
+  })
+
+  it("does not inject the input bridge without an input callback", async() => {
+    const url = `${window.location.origin}/fixture-without-input`
+    const resolver: FrameRepresentationResolver = {
+      resolve: () => Effect.succeed(iframePlan(url))
+    }
+
+    await act(async() => render(
+      <FrameRenderer
+        frame={frame("change_frame_without_input_bridge")}
+        resolver={resolver}
+      />
+    ))
+    await waitFor(() => expect(container.querySelector("iframe")).not.toBeNull())
+    const iframe = container.querySelector("iframe")
+    if (iframe === null) throw new Error("Expected a live Frame")
+    const frameDocument = prepareFrameDocument(iframe)
+
+    iframe.dispatchEvent(new Event("load"))
+
+    expect(
+      frameDocument.querySelector("script[data-crit-input-bridge]")
+    ).toBeNull()
+  })
+
+  it("skips input bridge injection when the Frame document is blocked", async() => {
+    const resolver: FrameRepresentationResolver = {
+      resolve: () => Effect.succeed(iframePlan("https://example.com/blocked"))
+    }
+
+    await act(async() => render(
+      <FrameRenderer
+        frame={frame("change_frame_blocked_input_bridge")}
+        onInputIntent={() => undefined}
+        resolver={resolver}
+      />
+    ))
+    await waitFor(() => expect(container.querySelector("iframe")).not.toBeNull())
+    const iframe = container.querySelector("iframe")
+    if (iframe === null) throw new Error("Expected a live Frame")
+    Object.defineProperty(iframe, "contentDocument", {
+      configurable: true,
+      get: () => {
+        throw new DOMException("Blocked", "SecurityError")
+      }
+    })
+
+    expect(() => iframe.dispatchEvent(new Event("load"))).not.toThrow()
+    expect(container.querySelector("iframe")).toBe(iframe)
   })
 
   it.each([
