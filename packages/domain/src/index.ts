@@ -87,12 +87,22 @@ export {
   SetNoteGeometryCommand
 } from "./command.js"
 export {
+  proposeAddCommentThread,
+  proposeAddFrame,
   proposeAddNote,
+  proposeAttachNote,
   proposeBringToFront,
+  proposeDetachNote,
+  proposeEditComment,
+  proposeEditNote,
   proposeRemoveFrame,
   proposeRemoveNote,
+  proposeRenameCanvas,
+  proposeReplyToCommentThread,
   proposeSendToBack,
+  proposeSetCommentThreadResolution,
   proposeSetFrameGeometry,
+  proposeSetFrameRepresentation,
   proposeSetFrameStatus,
   proposeSetFrameTitle,
   proposeSetNoteColor,
