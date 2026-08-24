@@ -25,7 +25,7 @@ For an Artifact, the immutable artifact digest identifies the rendered content. 
 
 ## Agent authorship
 
-An Agent-authored comment names the Agent as author. Its accepted change also records the delegating Person, OAuth client, grant, execution, and optional reported runtime metadata. The UI must not present the delegating Person as the author.
+An Agent-authored comment names the Agent as author. Its accepted change also records the local Person who ran the Agent, the execution, and optional reported runtime metadata. The UI must not present that Person as the author. Agents author comments only during local work. Shared review comments come from People.
 
 ## Verification
 

@@ -67,14 +67,10 @@ const attribution = (invocation: VerifiedInvocation): AcceptedAttribution => inv
   : AgentAttribution.make(invocation.reportedRuntime === undefined ? {
       agent: invocation.principal.agent,
       delegatedBy: invocation.principal.delegatedBy,
-      oauthClientId: invocation.principal.oauthClientId,
-      grantId: invocation.principal.grantId,
       executionId: invocation.executionId
     } : {
       agent: invocation.principal.agent,
       delegatedBy: invocation.principal.delegatedBy,
-      oauthClientId: invocation.principal.oauthClientId,
-      grantId: invocation.principal.grantId,
       executionId: invocation.executionId,
       reportedRuntime: invocation.reportedRuntime
     })

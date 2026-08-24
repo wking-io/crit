@@ -1,6 +1,6 @@
 ---
 name: crit-identity
-description: Diagnoses Crit identity for local provenance or remote company authentication. Use when Crit reports missing local identity, Access login failure, or OAuth identity mismatch.
+description: Diagnoses Crit identity for local provenance or remote company authentication. Use when Crit reports missing local identity or Access login failure.
 ---
 
 # Crit identity
@@ -24,10 +24,9 @@ Cloudflare Access establishes the company account. Crit maps that verified ident
 - Verify the Installation hostname, Access session, Person mapping, and Workspace membership.
 - If the Person has several Workspaces, Crit selects the remembered accessible Workspace, then the default, then the only or earliest accessible Workspace.
 
-## Remote Agent identity
+## Local Agent identity
 
-An Agent uses Crit OAuth. Its grant records the delegating Person, OAuth client, Workspace, scopes, and stable Agent Actor.
+An Agent runs only through the local daemon. Crit records the Agent as author and the Person who ran it as the Delegating Person.
 
-- Reauthorize expired or revoked grants through Crit.
-- Do not copy bearer tokens into configuration, comments, or commands.
 - Treat harness, model, session, and task fields as reported runtime metadata, not proof of identity.
+- There is no remote Agent identity, MCP grant, or Crit OAuth client to repair.

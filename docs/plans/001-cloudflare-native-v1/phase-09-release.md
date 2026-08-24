@@ -6,7 +6,7 @@ Ship a repeatable customer-hosted installation and a coherent local-to-team work
 
 ## Build
 
-- Provide Wrangler configuration, D1 migrations, Durable Object migrations, R2 setup, Access instructions, hostname layout, OAuth setup, and deployment verification.
+- Provide Wrangler configuration, D1 migrations, Durable Object migrations, R2 setup, Access instructions, hostname layout, and deployment verification.
 - Add backup, export, restore, retention, key rotation, upgrade, and incident runbooks.
 - Add platform OTLP adapters, operational metrics, exporter retention guidance, and incident correlation. Document the metadata each platform exports and how operators control sampling and retention.
 - Add protocol negotiation and reject unsupported clients with actionable errors.
@@ -16,7 +16,7 @@ Ship a repeatable customer-hosted installation and a coherent local-to-team work
 ## Prove
 
 - A fresh customer Cloudflare account installs from the documented procedure.
-- A developer initializes locally, creates and reviews work offline, shares it, invites a teammate through company identity, resolves a shared preview, and continues offline.
-- A remote OAuth Agent comments and changes a Frame with correct provenance.
+- A developer initializes locally, creates and reviews work offline, shares it, and continues offline.
+- A teammate with no Crit install reviews the shared Canvas in the hosted UI, leaves a Note and comment, and the author's replica receives that work.
 - Backup and restore reproduce D1 control data, Canvas ledgers, and R2 artifacts.
 - Package, security, conformance, browser, and end-to-end release suites pass.

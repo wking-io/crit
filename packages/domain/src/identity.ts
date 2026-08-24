@@ -4,8 +4,6 @@ import {
   AgentId,
   AuthSubject,
   ExecutionId,
-  GrantId,
-  OAuthClientId,
   PersonId
 } from "./ids.js"
 import { NonBlankString } from "./text.js"
@@ -64,9 +62,7 @@ export type PersonPrincipal = typeof PersonPrincipal.Type
 export const AgentPrincipal = Schema.TaggedStruct("agent", {
   subject: AuthSubject,
   agent: AgentSnapshot,
-  delegatedBy: PersonSnapshot,
-  oauthClientId: OAuthClientId,
-  grantId: GrantId
+  delegatedBy: PersonSnapshot
 })
 export type AgentPrincipal = typeof AgentPrincipal.Type
 
@@ -84,8 +80,6 @@ export type PersonAttribution = typeof PersonAttribution.Type
 export const AgentAttribution = Schema.TaggedStruct("agent", {
   agent: AgentSnapshot,
   delegatedBy: PersonSnapshot,
-  oauthClientId: OAuthClientId,
-  grantId: GrantId,
   executionId: ExecutionId,
   reportedRuntime: Schema.optionalKey(ReportedRuntime)
 })

@@ -8,7 +8,7 @@ The alpha remains runnable as a behavior reference. The rewrite does not read it
 
 ## Product outcome
 
-Crit is a local-first collaborative review canvas for live applications. The UI is the primary viewing and review surface. People and agents both create and edit Frames, Notes, and comments.
+Crit is a local-first collaborative review canvas for live applications. Authors build canvases on their machine. After share, teammates review in the hosted UI. They do not install Crit.
 
 Local work is complete without an account:
 
@@ -25,15 +25,15 @@ npx crit login https://crit.acme.internal
 npx crit share checkout-redesign
 ```
 
-An Agent connects to the customer deployment's `/mcp` endpoint, completes OAuth, and uses the Code Mode `search` and `execute` tools.
+A teammate opens the hosted review UI, signs in with company Access, and leaves Notes and comments. Agents stay on the author's machine. Crit has no remote agent interface.
 
 ## System shape
 
 ```mermaid
 flowchart LR
-    subgraph Local["Developer machine"]
+    subgraph Local["Author machine"]
         App["Application and Frame Bridge"]
-        UI["Crit UI"]
+        UI["Local Crit UI"]
         Daemon["crit dev"]
         LocalDB["SQLite authority and replica"]
         LocalArtifacts["Local artifacts"]
@@ -44,25 +44,25 @@ flowchart LR
     end
 
     subgraph Shared["Customer Cloudflare account"]
-        Worker["Worker and Static Assets"]
+        Worker["Worker and hosted review UI"]
         Access["Cloudflare Access"]
         D1["D1 control plane"]
         CanvasDO["Canvas Durable Objects"]
-        R2["R2 artifacts and execution records"]
-        MCP["OAuth Code Mode MCP"]
+        R2["R2 artifacts"]
+        Reviewer["Teammate browser"]
         Access --> Worker
+        Reviewer --> Access
         Worker --> D1
         Worker --> CanvasDO
         Worker --> R2
-        Worker --> MCP
     end
 
     Daemon <--> Worker
 ```
 
-The canonical record is an ordered Canvas ledger. A local `CanvasReplica` records work immediately, keeps pending intent through restarts, and synchronizes it by stable change ID. The shared authority stamps order and verified attribution.
+The canonical record is an ordered Canvas ledger. A local `CanvasReplica` records work immediately, keeps pending intent through restarts, and synchronizes it by stable change ID. The shared authority stamps order and verified attribution. The hosted review UI talks to that authority directly. A reviewer has no local replica.
 
-Frames store logical Representations. An Application Route resolves to localhost for its developer and to a registered preview for a teammate. Canvas history never stores environment bindings or credentials.
+Frames store logical Representations. An Application Route resolves to localhost for its author and to a registered preview for a teammate. Canvas history never stores environment bindings or credentials.
 
 ## Target packages
 
@@ -77,7 +77,7 @@ packages/
 ├── react/            primary review UI
 ├── frame-bridge/     framework-neutral browser bridge
 ├── local/            daemon, SQLite, and local artifacts
-├── cloudflare/       Worker, Durable Objects, D1, R2, OAuth, and MCP
+├── cloudflare/       Worker, Durable Objects, D1, R2, Access, and hosted UI
 └── cli/              init, dev, login, share, sync, and Workspace commands
 ```
 
@@ -109,11 +109,6 @@ interface RepresentationRuntime {
   inspect(ref: RepresentationRef, context: InspectionContext): Promise<Inspection>
   capture(ref: RepresentationRef, context: CaptureContext): Promise<ArtifactRef>
 }
-
-interface CodeExecutionRuntime {
-  search(input: SearchInput, capability: CritCapability): Promise<JsonValue>
-  execute(input: ExecuteInput, capability: CritCapability): Promise<JsonValue>
-}
 ```
 
 Storage, transport, React, and Cloudflare types do not cross these boundaries.
@@ -127,7 +122,7 @@ Storage, transport, React, and Cloudflare types do not cross these boundaries.
 5. [Primary review UI](phase-05-review-ui.md)
 6. [Cloudflare authority and control plane](phase-06-cloudflare-platform.md)
 7. [Offline synchronization and sharing](phase-07-sync-and-sharing.md)
-8. [OAuth Code Mode MCP and provenance](phase-08-code-mode-mcp.md)
+8. [Hosted review](phase-08-hosted-review.md)
 9. [Installation, operations, and v1 release](phase-09-release.md)
 
 Each phase produces a working vertical proof. There are no compatibility phases and no deferred legacy-deletion phase.
@@ -151,12 +146,13 @@ It does not preserve alpha JSON, IndexedDB state, filesystem Canvas documents, U
 - Workspace is the authorization and collaboration boundary.
 - The first Workspace is the default. Login auto-selects an accessible Workspace; commands only switch.
 - One SQLite Durable Object owns each shared Canvas ledger and projection.
-- D1 is the control plane. R2 owns immutable artifacts and retained execution records.
+- D1 is the control plane. R2 owns immutable artifacts.
 - WebSockets notify. Cursor reads establish truth.
 - The Frame Bridge is off in ordinary production builds and previews. Shared review previews require exact opt-in.
-- MCP exposes only OAuth Code Mode `search` and `execute`.
-- Agent attribution identifies the Agent, delegating Person, client, grant, execution, and optional reported runtime metadata.
-- Cloudflare experimental Code Mode types remain behind `CodeExecutionRuntime`.
+- Teammates review in the hosted UI. They do not install Crit.
+- Agents author only through local tools. After share, review is human-led.
+- Crit has no MCP server, Code Mode runtime, or OAuth agent grants.
+- Agent attribution identifies the Agent, the local Person who ran it, the execution, and optional reported runtime metadata.
 - No CRDT, cross-Canvas transaction, automatic tunnel, unrestricted proxy, D1 ledger, Queue commit path, or multi-Organization tenancy.
 
 ## Verification

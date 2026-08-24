@@ -76,20 +76,21 @@ _Avoid_: Canvas Document, authoritative document
 
 **Person**: A human Actor associated with company identity for shared work and provisional local identity for local-only work.
 
-**Agent**: A non-human Actor that changes Crit through an authorized local tool or OAuth MCP grant.
+**Agent**: A non-human Actor that changes Crit through an authorized local tool on a developer's machine.
+_Avoid_: remote agent, MCP agent
 
-**Delegating Person**: The Person who authorized an Agent's OAuth grant. The Delegating Person is not the author of the Agent's work.
+**Delegating Person**: The Person who ran a local Agent. The Delegating Person is not the author of the Agent's work.
+_Avoid_: OAuth grant holder
 
-**Agent Grant**: A revocable OAuth authorization that fixes an Agent, a Delegating Person, a Workspace, and allowed Crit operations.
+**Agent Execution**: One local Agent run. It records the Agent, the Delegating Person, the execution identity, and optional reported runtime metadata.
 
-**Agent Execution**: One Code Mode or local agent run. It records verified grant facts and optional reported harness, model, session, and task metadata.
-
-**Reported Agent Runtime**: Harness, model, session, and task metadata supplied by an MCP client. Crit displays it separately from server-verified identity.
+**Reported Agent Runtime**: Harness, model, session, and task metadata supplied by a local Agent client. Crit displays it separately from server-verified identity.
 
 **Presence**: Ephemeral awareness of connected People and active Agent Executions. Presence is not Canvas history.
 
 **Frame Bridge**: The versioned browser protocol used for input relay, element anchors, route and revision reporting, highlighting, and authorized inspection.
 
-**Code Mode MCP**: Crit's remote agent interface. It uses OAuth and exposes `search` and `execute`.
+**Hosted Review UI**: The Crit review interface served from the customer Installation. People use it after share. They do not install Crit.
+_Avoid_: remote MCP, shared agent endpoint
 
 **Local Daemon**: The `crit dev` process that owns local SQLite state, local artifacts, local API endpoints, and synchronization.

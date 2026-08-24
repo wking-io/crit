@@ -23,11 +23,9 @@ const agent = Schema.decodeUnknownSync(AgentInvocation)({
   _tag: "agent",
   principal: {
     _tag: "agent",
-    subject: "oauth|replica-policy",
+    subject: "local-agent|replica-policy",
     agent: { _tag: "agent", agentId: "agent_replica_policy", displayName: "Codex" },
-    delegatedBy: person.principal.person,
-    oauthClientId: "oauth_client_replica_policy",
-    grantId: "grant_replica_policy"
+    delegatedBy: person.principal.person
   },
   executionId: "execution_replica_policy"
 })

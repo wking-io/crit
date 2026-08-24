@@ -1,6 +1,6 @@
 # Architecture
 
-Crit is a local-first collaborative review canvas for live web applications. People use the Crit UI to arrange and review Frames, Notes, and comments. Agents use the same semantic Canvas operations through local tools or an OAuth Code Mode MCP server.
+Crit is a local-first collaborative review canvas for live web applications. Authors use the Crit UI, CLI, and local agents to arrange and review Frames, Notes, and comments. After share, teammates review in the hosted UI. They do not install Crit. Agents do not operate on the shared installation.
 
 The target v1 is a clean rewrite. The current local-only alpha remains a behavior reference during the rewrite. Its persistence, identity, URL, and adapter interfaces do not constrain the new system.
 
@@ -9,7 +9,7 @@ The target v1 is a clean rewrite. The current local-only alpha remains a behavio
 Crit runs in two places:
 
 - `crit dev` provides complete local authoring, local agents, SQLite persistence, and local artifacts.
-- A customer-hosted Cloudflare deployment provides company identity, team sharing, canonical ordering, shared live Representations, and remote agents.
+- A customer-hosted Cloudflare deployment provides company identity, team sharing, canonical ordering, shared live Representations, and the hosted review UI.
 
 A developer can work without an account or network connection. Linking a Canvas adds synchronization. It does not replace local authoring.
 
@@ -29,7 +29,7 @@ packages/
 ├── host/             browser composition root (depends on react + client)
 ├── frame-bridge/     versioned browser bridge
 ├── local/            crit dev, SQLite, and filesystem artifacts
-├── cloudflare/       Worker, Durable Object, D1, R2, OAuth, and MCP
+├── cloudflare/       Worker, Durable Object, D1, R2, Access, and hosted UI
 └── cli/              local, sync, Workspace, and deployment commands
 ```
 
@@ -37,7 +37,7 @@ These boundaries are part of the rewrite contract. The old source tree is not mi
 
 ## Canvas domain
 
-`CanvasEngine` is the platform-neutral authority for Canvas rules. It accepts unauthored semantic commands and returns an atomic transition. It has no dependency on React, storage, transport, OAuth, or Cloudflare.
+`CanvasEngine` is the platform-neutral authority for Canvas rules. It accepts unauthored semantic commands and returns an atomic transition. It has no dependency on React, storage, transport, or Cloudflare.
 
 A Canvas projection contains:
 
@@ -69,7 +69,7 @@ The observed cursor is not an exact commit precondition. Commands carry exact co
 
 ## Local authority and replica
 
-`crit dev` is the only local state owner. The Crit UI, CLI, Vite adapter, and local agents connect to it. The daemon owns:
+`crit dev` is the only local state owner. The local Crit UI, CLI, Vite adapter, and local agents connect to it. The daemon owns:
 
 - A local SQLite Canvas authority.
 - The durable local replica state.
@@ -95,13 +95,12 @@ The remote ledger begins with the authenticated import. Crit does not label unve
 
 A Principal is the authenticated request identity. An Actor is the durable author of accepted work.
 
-People authenticate locally through a provisional local identity and remotely through Cloudflare Access. Agents authenticate remotely through an OAuth grant issued by Crit after company sign-in and consent.
+People authenticate locally through a provisional local identity and remotely through Cloudflare Access. Agents authenticate only through the local daemon on a developer's machine. There is no remote Agent principal.
 
 Human attribution records the Person who acted. Agent attribution records:
 
 - The durable Agent Actor.
-- The Person who delegated access.
-- The OAuth client and grant.
+- The Person who ran the local Agent.
 - The execution ID.
 - Optional client-reported harness, model, session, and task metadata.
 
@@ -130,7 +129,7 @@ A Frame points to a logical `RepresentationRef`:
 
 `RepresentationRuntime` resolves a reference for the current viewer. It returns an iframe plan, an artifact plan, or an unavailable state.
 
-An `application-route` can resolve to localhost for a developer and a registered preview Deployment for a teammate. Canvas state never stores machine bindings, deployment URLs, credentials, or iframe policy.
+An `application-route` can resolve to localhost for an author and a registered preview Deployment for a teammate. Canvas state never stores machine bindings, deployment URLs, credentials, or iframe policy.
 
 Local bindings belong to project and machine configuration. Shared Applications and Deployments belong to the Cloudflare control plane. Artifact bytes live in the local filesystem or R2.
 
@@ -153,34 +152,26 @@ The build requires an exact positive opt-in for a shared review preview. A missi
 
 The shared runtime uses:
 
-- One Worker deployment for the API, OAuth routes, MCP routing, and Workers Static Assets.
+- One Worker deployment for the API, hosted review UI, and Workers Static Assets.
 - Cloudflare Access for company identity.
-- D1 for installation settings, Workspaces, memberships, Teams, OAuth grants, Applications, Deployments, and the Canvas directory.
+- D1 for installation settings, Workspaces, memberships, Teams, Applications, Deployments, and the Canvas directory.
 - One SQLite Durable Object per Canvas for canonical changes, the projection, and hibernating WebSockets.
-- R2 for immutable artifacts and policy-retained Agent execution records.
+- R2 for immutable artifacts.
 
 D1 never stores canonical Canvas content. Queues never participate in Canvas ordering. A Queue is added only with a concrete idempotent background job.
 
 Each Canvas Durable Object performs one local SQLite transaction per accepted change. The transaction checks retry identity, applies the command batch, assigns a sequence, stores the change, and updates the projection. It performs no external I/O.
 
-## OAuth Code Mode MCP
-
-The remote MCP endpoint exposes only `search` and `execute`.
-
-`search` returns the relevant part of Crit's typed operation catalog. `execute` runs model-written code against a capability-limited `crit` client.
-
-Generated code runs in an isolated Cloudflare execution environment with no Crit bindings, secrets, OAuth tokens, arbitrary fetch, filesystem, D1, R2, or Durable Object namespace. One host callback accepts allowlisted operation IDs and schema-validated arguments. The host authorizes each operation.
-
-`CodeExecutionRuntime` isolates Cloudflare's experimental Code Mode package. The public MCP behavior and domain types do not depend on that package.
+The hosted review UI talks to the Worker and Canvas Durable Object directly. A reviewer has no local replica and does not run `crit dev`.
 
 ## Explicit v1 exclusions
 
-Crit v1 has no whole-Canvas CRDT, cross-Canvas transaction, automatic localhost tunnel, unrestricted URL proxy, multi-Organization tenancy, or storage-level MCP tool. Git and document diffs are not synchronization protocols.
+Crit v1 has no whole-Canvas CRDT, cross-Canvas transaction, automatic localhost tunnel, unrestricted URL proxy, multi-Organization tenancy, MCP server, Code Mode runtime, or OAuth agent grant. Git and document diffs are not synchronization protocols.
 
 ## Verification
 
 The rewrite keeps the old alpha runnable only as a behavior reference. New code does not read or write old runtime state.
 
-Shared conformance suites test the local SQLite authority and the Canvas Durable Object. End-to-end verification uses two offline replicas, one Cloudflare deployment, one shared preview, and one OAuth MCP client.
+Shared conformance suites test the local SQLite authority and the Canvas Durable Object. End-to-end verification uses two offline replicas, one Cloudflare deployment, one shared preview, and one hosted-review browser session with no local Crit install.
 
 The implementation plan lives in [`docs/plans/001-cloudflare-native-v1`](docs/plans/001-cloudflare-native-v1/overview.md).

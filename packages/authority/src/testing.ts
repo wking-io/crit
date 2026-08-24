@@ -60,11 +60,9 @@ const agent = Schema.decodeUnknownSync(AgentInvocation)({
   _tag: "agent",
   principal: {
     _tag: "agent",
-    subject: "oauth|conformance",
+    subject: "local-agent|conformance",
     agent: { _tag: "agent", agentId: "agent_conformance", displayName: "Conformance Agent" },
-    delegatedBy: person.principal.person,
-    oauthClientId: "oauth_client_conformance",
-    grantId: "grant_conformance"
+    delegatedBy: person.principal.person
   },
   executionId: "execution_conformance",
   reportedRuntime: {
@@ -332,7 +330,7 @@ const acceptedRetryScenario = (factory: AuthorityConformanceFactory): AuthorityC
       requireScenario(name, retry.change.cursor === first.change.cursor && retry.change.acceptedAt === first.change.acceptedAt, "retry was restamped")
       const changedSubject = Schema.decodeUnknownSync(VerifiedInvocation)({
         ...agent,
-        principal: { ...agent.principal, subject: "oauth|changed" }
+        principal: { ...agent.principal, subject: "local-agent|changed" }
       })
       const changedRuntime = Schema.decodeUnknownSync(VerifiedInvocation)({
         ...agent,

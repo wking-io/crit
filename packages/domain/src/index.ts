@@ -9,13 +9,11 @@ export {
   CommentThreadId,
   ExecutionId,
   FrameId,
-  GrantId,
   HttpUrl,
   Id,
   InstallationId,
   IsoTimestamp,
   NoteId,
-  OAuthClientId,
   PersonId,
   Sha256Digest,
   WorkspaceId
