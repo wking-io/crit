@@ -15,6 +15,7 @@ import {
   useLayoutEffect,
   useRef,
   type CSSProperties,
+  type PointerEvent as ReactPointerEvent,
   type ReactElement
 } from "react"
 
@@ -24,7 +25,10 @@ import {
   canvasCameraStyle
 } from "./canvas-camera.js"
 import { CommentPin } from "./canvas-comment-pin.js"
-import { CanvasSelection } from "./canvas-selection.js"
+import {
+  CanvasSelection,
+  type CanvasSelectionCommand
+} from "./canvas-selection.js"
 import {
   FrameRenderer,
   type FrameRepresentationResolver
@@ -37,6 +41,7 @@ export interface CanvasBoardProps {
   readonly camera?: CanvasCamera
   readonly onCameraChange?: (camera: CanvasCamera) => void
   readonly selection?: CanvasSelection
+  readonly onSelectionChange?: (selection: CanvasSelection) => void
   readonly className?: string
 }
 
@@ -60,10 +65,15 @@ const itemStyle = (
   zIndex
 })
 
+const isAdditiveSelection = (
+  event: Pick<ReactPointerEvent, "ctrlKey" | "metaKey" | "shiftKey">
+): boolean => event.ctrlKey || event.metaKey || event.shiftKey
+
 export function CanvasBoard({
   camera,
   className,
   onCameraChange,
+  onSelectionChange,
   projection,
   resolver,
   selection
@@ -71,12 +81,27 @@ export function CanvasBoard({
   const rootRef = useRef<HTMLElement>(null)
   const selectedFrameRef = useRef<HTMLDivElement>(null)
   const navigationRef = useRef({ camera, onCameraChange })
+  const selectionRef = useRef({ selection, onSelectionChange })
   const navigationArmed = camera !== undefined && onCameraChange !== undefined
+  const selectionArmed = onSelectionChange !== undefined
   const inputTarget = CanvasSelection.inputTarget(selection)
 
   useLayoutEffect(() => {
     navigationRef.current = { camera, onCameraChange }
   }, [camera, onCameraChange])
+
+  useLayoutEffect(() => {
+    selectionRef.current = { selection, onSelectionChange }
+  }, [onSelectionChange, selection])
+
+  const applySelectionCommand = useCallback(
+    (command: CanvasSelectionCommand) => {
+      const latest = selectionRef.current
+      if (latest.onSelectionChange === undefined) return
+      latest.onSelectionChange(CanvasSelection.apply(latest.selection, command))
+    },
+    []
+  )
 
   const applyCameraIntent = useCallback((intent: FrameInputIntent) => {
     const root = rootRef.current
@@ -137,9 +162,20 @@ export function CanvasBoard({
           const frameThreads = threads.filter(
             (thread) => thread.anchor._tag === "frame"
           )
-          const frameReceivesInput = navigationArmed && (
+          const frameReceivesInput = (navigationArmed || selectionArmed) && (
             inputTarget._tag === "camera" || inputTarget.frameId !== frameId
           )
+          const onFrameInputIntent = (intent: FrameInputIntent) => {
+            if (intent.type === "select") {
+              applySelectionCommand({
+                _tag: "item",
+                item,
+                additive: intent.additive
+              })
+              return
+            }
+            applyCameraIntent(intent)
+          }
           return (
             <div
               ref={
@@ -152,10 +188,21 @@ export function CanvasBoard({
               key={frame.frameId}
               role="option"
               style={itemStyle(frame.geometry, zIndex)}
+              {...(selectionArmed
+                ? {
+                  onPointerDown: (
+                    event: ReactPointerEvent<HTMLDivElement>
+                  ) => applySelectionCommand({
+                    _tag: "item",
+                    item,
+                    additive: isAdditiveSelection(event)
+                  })
+                }
+                : {})}
             >
               <FrameRenderer
                 {...(liveThreads.length === 0 ? {} : { commentThreads: liveThreads })}
-                {...(frameReceivesInput ? { onInputIntent: applyCameraIntent } : {})}
+                {...(frameReceivesInput ? { onInputIntent: onFrameInputIntent } : {})}
                 frame={frame}
                 resolver={resolver}
               />
@@ -176,6 +223,17 @@ export function CanvasBoard({
               key={note.noteId}
               role="option"
               style={itemStyle(note.geometry, zIndex)}
+              {...(selectionArmed
+                ? {
+                  onPointerDown: (
+                    event: ReactPointerEvent<HTMLDivElement>
+                  ) => applySelectionCommand({
+                    _tag: "item",
+                    item,
+                    additive: isAdditiveSelection(event)
+                  })
+                }
+                : {})}
             >
               {note.text}
             </div>
@@ -194,6 +252,18 @@ export function CanvasBoard({
       className={className}
       role={hasItems ? "listbox" : undefined}
       style={{ position: "relative" }}
+      {...(selectionArmed
+        ? {
+          onPointerDown: (event: ReactPointerEvent<HTMLElement>) => {
+            const target = event.target
+            if (
+              target instanceof Element &&
+              target.closest('[role="option"]') !== null
+            ) return
+            applySelectionCommand({ _tag: "clear" })
+          }
+        }
+        : {})}
     >
       {camera === undefined || !hasItems
         ? items

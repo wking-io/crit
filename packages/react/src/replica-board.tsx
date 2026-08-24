@@ -14,6 +14,7 @@ export interface ReplicaBoardProps {
   readonly camera?: CanvasCamera
   readonly onCameraChange?: (camera: CanvasCamera) => void
   readonly selection?: CanvasSelection
+  readonly onSelectionChange?: (selection: CanvasSelection) => void
   readonly className?: string
 }
 
@@ -93,6 +94,7 @@ export function ReplicaBoard({
   camera,
   className,
   onCameraChange,
+  onSelectionChange,
   resolver,
   selection,
   view
@@ -116,6 +118,7 @@ export function ReplicaBoard({
         {...(camera === undefined ? {} : { camera })}
         {...(onCameraChange === undefined ? {} : { onCameraChange })}
         {...(selection === undefined ? {} : { selection })}
+        {...(onSelectionChange === undefined ? {} : { onSelectionChange })}
         projection={view.projection}
         resolver={resolver}
       />
