@@ -45,10 +45,17 @@ const hostLayer = (descriptor: LocalBrowserConnectionDescriptor) => {
 const invalidScreen: HostScreen = { _tag: "invalid" }
 const connectingScreen: HostScreen = { _tag: "connecting" }
 
+const screenFromBoot = (boot: AsyncResult.AsyncResult<CritHostProps>): HostScreen =>
+  AsyncResult.match(boot, {
+    onFailure: () => invalidScreen,
+    onInitial: () => connectingScreen,
+    onSuccess: ({ value }) => ({ _tag: "ready", props: value })
+  })
+
 export const hostScreenAtom = Atom.family((fragment: string): Atom.Atom<HostScreen> => {
   const connection = hostConnectionFromFragment(fragment)
   if (Result.isFailure(connection)) {
-    return Atom.keepAlive(Atom.make((): HostScreen => invalidScreen))
+    return Atom.make((): HostScreen => invalidScreen)
   }
   const runtime = Atom.runtime(hostLayer(connection.success))
   const boot = runtime.atom(Effect.gen(function*() {
@@ -69,10 +76,5 @@ export const hostScreenAtom = Atom.family((fragment: string): Atom.Atom<HostScre
       run
     }
   }))
-  return Atom.keepAlive(Atom.make((get): HostScreen => {
-    const bootResult = get(boot)
-    if (AsyncResult.isFailure(bootResult)) return invalidScreen
-    if (!AsyncResult.isSuccess(bootResult)) return connectingScreen
-    return { _tag: "ready", props: bootResult.value }
-  }))
+  return Atom.map(boot, screenFromBoot)
 })
