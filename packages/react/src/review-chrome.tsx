@@ -223,6 +223,14 @@ export function ReviewChrome({
             onRun={run}
           />
         ))}
+      <details>
+        <summary>Help</summary>
+        <ul>
+          {available.map((entry) => (
+            <li key={entry.id}>{entry.label}</li>
+          ))}
+        </ul>
+      </details>
     </aside>
   )
 }

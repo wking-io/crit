@@ -119,6 +119,7 @@ afterEach(async() => {
   queryClient.clear()
   container.remove()
   vi.restoreAllMocks()
+  vi.unstubAllGlobals()
 })
 
 describe("CanvasBoard", () => {
@@ -329,5 +330,91 @@ describe("CanvasBoard", () => {
       expectedChangedByChangeId: "change_1",
       geometry: { x: 400, y: 80, width: 190, height: 100 }
     }])
+  })
+
+  it("handles open-url effects without submitting to the replica", async() => {
+    const onSubmit = vi.fn()
+    const open = vi.spyOn(window, "open").mockImplementation(() => null)
+    const resolver: FrameRepresentationResolver = {
+      resolve: () => Effect.succeed(IframeRenderPlan.make({
+        representation: projection.frames[0]!.representation,
+        url
+      }) satisfies RenderPlan)
+    }
+    await act(async() => render(
+      <CanvasBoard
+        {...requiredBoard}
+        onSubmit={onSubmit}
+        projection={projection}
+        resolver={resolver}
+        selection={CanvasSelection.make([{
+          _tag: "frame",
+          frameId: "frame_checkout"
+        }])}
+      />
+    ))
+    const openButton = container.querySelector(
+      "[aria-label='Open in new tab']"
+    )
+    if (!(openButton instanceof HTMLButtonElement)) {
+      throw new Error("Open URL action missing")
+    }
+
+    await act(async() => openButton.click())
+
+    expect(open).toHaveBeenCalledWith(url)
+    expect(onSubmit).not.toHaveBeenCalled()
+  })
+
+  it("pauses offscreen Frame renderers", async() => {
+    let callback: IntersectionObserverCallback | undefined
+    let observed: Element | undefined
+    class Observer {
+      constructor(next: IntersectionObserverCallback) {
+        callback = next
+      }
+      disconnect() {}
+      observe(target: Element) {
+        observed = target
+      }
+    }
+    vi.stubGlobal("IntersectionObserver", Observer)
+    const resolver: FrameRepresentationResolver = {
+      resolve: () => Effect.succeed(IframeRenderPlan.make({
+        representation: projection.frames[0]!.representation,
+        url
+      }) satisfies RenderPlan)
+    }
+    await act(async() => render(
+      <CanvasBoard
+        {...requiredBoard}
+        onSubmit={vi.fn()}
+        projection={projection}
+        resolver={resolver}
+        selection={CanvasSelection.make([{
+          _tag: "frame",
+          frameId: "frame_checkout"
+        }])}
+      />
+    ))
+    await waitFor(() => expect(container.querySelector("iframe")).not.toBeNull())
+    const pause = container.querySelector(
+      "[aria-label='Pause offscreen frames']"
+    )
+    if (!(pause instanceof HTMLButtonElement)) {
+      throw new Error("Pause action missing")
+    }
+
+    await act(async() => pause.click())
+    if (callback === undefined || observed === undefined) {
+      throw new Error("Frame observer missing")
+    }
+    await act(async() => callback?.(
+      [{ isIntersecting: false, target: observed } as IntersectionObserverEntry],
+      {} as IntersectionObserver
+    ))
+
+    expect(container.querySelector("iframe")).toBeNull()
+    expect(container.textContent).toContain("Checkout is paused.")
   })
 })

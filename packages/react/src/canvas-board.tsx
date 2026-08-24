@@ -42,6 +42,7 @@ import {
 import { framesById, notesById } from "./projection-index.js"
 import { ReviewChrome } from "./review-chrome.js"
 import type { ReviewClientEffect } from "./review-actions.js"
+import { applyReviewEffect } from "./review-effects.js"
 
 export interface CanvasBoardProps {
   readonly projection: CanvasProjection
@@ -144,8 +145,14 @@ export function CanvasBoard({
 }: CanvasBoardProps): ReactElement {
   const rootRef = useRef<HTMLElement>(null)
   const selectedFrameRef = useRef<HTMLDivElement>(null)
+  const frameElementsRef = useRef(new Map<string, HTMLDivElement>())
   const dragRef = useRef<CanvasDrag | null>(null)
   const [dragPreview, setDragPreview] = useState<DragPreview | null>(null)
+  const [fullscreen, setFullscreen] = useState(false)
+  const [offscreenFrames, setOffscreenFrames] = useState<ReadonlySet<string>>(
+    () => new Set()
+  )
+  const [pauseOffscreen, setPauseOffscreen] = useState(false)
   const navigationRef = useRef({ camera, onCameraChange })
   const selectionRef = useRef({ selection, onSelectionChange })
   const inputTarget = CanvasSelection.inputTarget(selection)
@@ -157,6 +164,44 @@ export function CanvasBoard({
   useLayoutEffect(() => {
     selectionRef.current = { selection, onSelectionChange }
   }, [onSelectionChange, selection])
+
+  useLayoutEffect(() => {
+    selectedFrameRef.current = inputTarget._tag === "frame"
+      ? frameElementsRef.current.get(inputTarget.frameId) ?? null
+      : null
+  }, [inputTarget])
+
+  useEffect(() => {
+    const changed = () => setFullscreen(document.fullscreenElement !== null)
+    changed()
+    document.addEventListener("fullscreenchange", changed)
+    return () => document.removeEventListener("fullscreenchange", changed)
+  }, [])
+
+  useEffect(() => {
+    if (!pauseOffscreen || typeof IntersectionObserver === "undefined") {
+      setOffscreenFrames((current) =>
+        current.size === 0 ? current : new Set()
+      )
+      return
+    }
+    const observer = new IntersectionObserver((entries) => {
+      setOffscreenFrames((current) => {
+        const next = new Set(current)
+        for (const entry of entries) {
+          const frameId = entry.target.getAttribute("data-frame-id")
+          if (frameId === null) continue
+          if (entry.isIntersecting) next.delete(frameId)
+          else next.add(frameId)
+        }
+        return next
+      })
+    })
+    for (const element of frameElementsRef.current.values()) {
+      observer.observe(element)
+    }
+    return () => observer.disconnect()
+  }, [pauseOffscreen, projection.frames])
 
   const applySelectionCommand = useCallback(
     (command: CanvasSelectionCommand) => {
@@ -271,6 +316,16 @@ export function CanvasBoard({
     dragRef.current = null
     setDragPreview(null)
   }
+  const handleReviewEffect = (effect: ReviewClientEffect) => {
+    if (onEffect !== undefined) {
+      onEffect(effect)
+      return
+    }
+    applyReviewEffect(effect, {
+      frameElement: selectedFrameRef.current,
+      setPauseOffscreen
+    })
+  }
 
   const items = projection.stack.length === 0
     ? (
@@ -306,13 +361,13 @@ export function CanvasBoard({
           }
           return (
             <div
-              ref={
-                inputTarget._tag === "frame" && inputTarget.frameId === frameId
-                  ? selectedFrameRef
-                  : undefined
-              }
+              ref={(element) => {
+                if (element === null) frameElementsRef.current.delete(frameId)
+                else frameElementsRef.current.set(frameId, element)
+              }}
               aria-label={frame.title}
               aria-selected={ariaSelected(selection, item)}
+              data-frame-id={frameId}
               data-review-status={frame.status}
               key={frame.frameId}
               role="option"
@@ -327,6 +382,7 @@ export function CanvasBoard({
                 {...(liveThreads.length === 0 ? {} : { commentThreads: liveThreads })}
                 {...(frameReceivesInput ? { onInputIntent: onFrameInputIntent } : {})}
                 frame={frame}
+                paused={pauseOffscreen && offscreenFrames.has(frameId)}
                 resolver={resolver}
               />
               {frameThreads.map((thread) => (
@@ -424,8 +480,10 @@ export function CanvasBoard({
         ? null
         : (
           <ReviewChrome
-            {...(onEffect === undefined ? {} : { onEffect })}
+            fullscreen={fullscreen}
+            onEffect={handleReviewEffect}
             onSubmit={onSubmit}
+            pauseOffscreen={pauseOffscreen}
             projection={projection}
             selection={{ _tag: "items", items: selection }}
           />

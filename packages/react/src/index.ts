@@ -70,3 +70,5 @@ export type {
   ReviewClientEffect,
   ReviewSelection
 } from "./review-actions.js"
+export { applyReviewEffect } from "./review-effects.js"
+export type { ReviewEffectContext } from "./review-effects.js"

@@ -45,6 +45,7 @@ export interface FrameRendererProps {
   readonly commentThreads?: readonly CommentThread[]
   readonly className?: string
   readonly onInputIntent?: (intent: FrameInputIntent) => void
+  readonly paused?: boolean
 }
 
 let nextResolverId = 0
@@ -263,6 +264,7 @@ export function FrameRenderer({
   commentThreads = noCommentThreads,
   frame,
   onInputIntent,
+  paused = false,
   resolver
 }: FrameRendererProps): ReactElement {
   const query = useQuery({
@@ -277,9 +279,14 @@ export function FrameRenderer({
       resolver.resolve(frame.representation),
       { signal }
     ),
+    enabled: !paused,
     retry: false,
     staleTime: Number.POSITIVE_INFINITY
   })
+
+  if (paused) {
+    return <div className={className} role="status">{frame.title} is paused.</div>
+  }
 
   if (query.isPending) {
     return <div className={className} role="status">Loading {frame.title}.</div>
