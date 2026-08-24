@@ -200,10 +200,42 @@ describe("CanvasBoard", () => {
         selection={CanvasSelection.make([{ _tag: "note", noteId: note.noteId }])}
       />
     ))
-    const green = container.querySelector("[aria-label='green']")
+    const green = container.querySelector(
+      "[aria-label='Set note color to green']"
+    )
     expect(green).toBeInstanceOf(HTMLButtonElement)
     if (!(green instanceof HTMLButtonElement)) return
     await act(async() => green.click())
     expect(onSubmit).toHaveBeenCalledWith([proposeSetNoteColor(note, "green")])
+  })
+
+  it("removes the selected item with Delete", async() => {
+    const onSubmit = vi.fn()
+    const resolver: FrameRepresentationResolver = {
+      resolve: () => Effect.succeed(IframeRenderPlan.make({
+        representation: projection.frames[0]!.representation,
+        url
+      }) satisfies RenderPlan)
+    }
+    const note = projection.notes[0]
+    if (note === undefined) throw new Error("Note missing")
+    await act(async() => render(
+      <CanvasBoard
+        {...requiredBoard}
+        onSubmit={onSubmit}
+        projection={projection}
+        resolver={resolver}
+        selection={CanvasSelection.make([{ _tag: "note", noteId: note.noteId }])}
+      />
+    ))
+
+    await act(async() => {
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Delete" }))
+    })
+    expect(onSubmit).toHaveBeenCalledWith([{
+      _tag: "remove-note",
+      noteId: "note_price",
+      expectedUpdatedByChangeId: "change_1"
+    }])
   })
 })

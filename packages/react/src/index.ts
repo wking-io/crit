@@ -16,6 +16,16 @@ export {
 } from "./canvas-camera-session.js"
 export { CanvasBoard } from "./canvas-board.js"
 export type { CanvasBoardProps } from "./canvas-board.js"
+export {
+  CanvasAlignment,
+  CanvasArrangement,
+  CanvasArrangementItem,
+  CanvasArrangementMove,
+  CanvasArrangementOperation,
+  CanvasArrangementPlan,
+  CanvasArrangementRequest,
+  CanvasArrangementUnavailable
+} from "./canvas-arrangement.js"
 export { CanvasSelection } from "./canvas-selection.js"
 export type { CanvasInputTarget } from "./canvas-selection.js"
 export {
@@ -29,6 +39,8 @@ export type {
   FrameRendererProps,
   FrameRepresentationResolver
 } from "./frame-renderer.js"
+export { FRAME_SIZE_PRESETS } from "./frame-breakpoints.js"
+export type { FrameSizePreset } from "./frame-breakpoints.js"
 export { ReplicaBoard } from "./replica-board.js"
 export type { ReplicaBoardProps } from "./replica-board.js"
 export {
@@ -42,3 +54,19 @@ export type {
   ReplicaSessionPorts,
   ReplicaSessionRun
 } from "./replica-session.js"
+export { ReviewChrome } from "./review-chrome.js"
+export type { ReviewChromeProps } from "./review-chrome.js"
+export {
+  ReviewActionInput,
+  availableReviewActions,
+  resolveReviewAction,
+  reviewActionPolicies
+} from "./review-actions.js"
+export type {
+  ReviewAction,
+  ReviewActionContext,
+  ReviewActionId,
+  ReviewActionPolicy,
+  ReviewClientEffect,
+  ReviewSelection
+} from "./review-actions.js"

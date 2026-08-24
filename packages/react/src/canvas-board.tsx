@@ -4,9 +4,7 @@ import {
   type CanvasProjection,
   type Frame,
   type Note,
-  type NoteColor,
-  type ReviewStatus,
-  proposeSetNoteColor
+  type ReviewStatus
 } from "@crit/domain"
 import {
   connectCanvasInput,
@@ -38,6 +36,8 @@ import {
   type FrameRepresentationResolver
 } from "./frame-renderer.js"
 import { framesById, notesById } from "./projection-index.js"
+import { ReviewChrome } from "./review-chrome.js"
+import type { ReviewClientEffect } from "./review-actions.js"
 
 export interface CanvasBoardProps {
   readonly projection: CanvasProjection
@@ -47,17 +47,9 @@ export interface CanvasBoardProps {
   readonly selection: CanvasSelection
   readonly onSelectionChange: (selection: CanvasSelection) => void
   readonly onSubmit?: (commands: CanvasCommandBatch) => void
+  readonly onEffect?: (effect: ReviewClientEffect) => void
   readonly className?: string
 }
-
-const NOTE_COLORS = [
-  "neutral",
-  "red",
-  "orange",
-  "green",
-  "blue",
-  "purple"
-] as const satisfies readonly NoteColor[]
 
 const ariaSelected = (
   selection: CanvasSelection,
@@ -92,6 +84,7 @@ export function CanvasBoard({
   camera,
   className,
   onCameraChange,
+  onEffect,
   onSelectionChange,
   onSubmit,
   projection,
@@ -228,7 +221,6 @@ export function CanvasBoard({
           const { noteId } = item
           const note = notes.get(noteId)
           if (note === undefined) return null
-          const selected = CanvasSelection.has(selection, item)
           return (
             <div
               aria-label={`${note.text} by ${note.author.displayName}`}
@@ -241,28 +233,6 @@ export function CanvasBoard({
               onPointerDown={(event) => selectItem(item, event)}
             >
               {note.text}
-              {selected && onSubmit !== undefined
-                ? (
-                  <div aria-label="Note color" role="group">
-                    {NOTE_COLORS.map((color) => (
-                      <button
-                        aria-label={color}
-                        aria-pressed={note.color === color}
-                        key={color}
-                        type="button"
-                        onPointerDown={(event) => event.stopPropagation()}
-                        onClick={(event) => {
-                          event.stopPropagation()
-                          if (note.color === color) return
-                          onSubmit([proposeSetNoteColor(note, color)])
-                        }}
-                      >
-                        {color}
-                      </button>
-                    ))}
-                  </div>
-                )
-                : null}
             </div>
           )
         }
@@ -288,6 +258,16 @@ export function CanvasBoard({
         applySelectionCommand({ _tag: "clear" })
       }}
     >
+      {onSubmit === undefined
+        ? null
+        : (
+          <ReviewChrome
+            {...(onEffect === undefined ? {} : { onEffect })}
+            onSubmit={onSubmit}
+            projection={projection}
+            selection={{ _tag: "items", items: selection }}
+          />
+        )}
       {hasItems
         ? <div style={canvasCameraStyle(camera)}>{items}</div>
         : items}

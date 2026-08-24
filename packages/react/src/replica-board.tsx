@@ -7,6 +7,7 @@ import type { CanvasCamera } from "./canvas-camera.js"
 import { CanvasBoard } from "./canvas-board.js"
 import type { CanvasSelection } from "./canvas-selection.js"
 import type { FrameRepresentationResolver } from "./frame-renderer.js"
+import type { ReviewClientEffect } from "./review-actions.js"
 
 export interface ReplicaBoardProps {
   readonly view: ReplicaView
@@ -16,6 +17,7 @@ export interface ReplicaBoardProps {
   readonly selection: CanvasSelection
   readonly onSelectionChange: (selection: CanvasSelection) => void
   readonly onSubmit?: (commands: CanvasCommandBatch) => void
+  readonly onEffect?: (effect: ReviewClientEffect) => void
   readonly className?: string
 }
 
@@ -98,6 +100,7 @@ export function ReplicaBoard({
   camera,
   className,
   onCameraChange,
+  onEffect,
   onSelectionChange,
   onSubmit,
   resolver,
@@ -122,6 +125,7 @@ export function ReplicaBoard({
       <CanvasBoard
         camera={camera}
         onCameraChange={onCameraChange}
+        {...(onEffect === undefined ? {} : { onEffect })}
         onSelectionChange={onSelectionChange}
         {...(onSubmit === undefined ? {} : { onSubmit })}
         projection={view.projection}
