@@ -1,4 +1,4 @@
-import type { CanvasId } from "@crit/domain"
+import type { CanvasChangeFailure, CanvasCommandBatch, CanvasId } from "@crit/domain"
 import type { ReplicaView } from "@crit/replica"
 import { Data, Effect, Result } from "effect"
 import type { KeyValueStore } from "effect/unstable/persistence"
@@ -20,9 +20,18 @@ export class ReplicaSessionUnavailable extends Data.TaggedError("ReplicaSessionU
   readonly reason: string
 }> {}
 
+export class ReplicaChangeRejected extends Data.TaggedError("ReplicaChangeRejected")<{
+  readonly canvasId: CanvasId
+  readonly failure: CanvasChangeFailure
+}> {}
+
 export interface ReplicaSessionPorts {
   readonly open: (canvasId: CanvasId) => Effect.Effect<ReplicaView, ReplicaSessionUnavailable>
   readonly subscribe: (canvasId: CanvasId, onChanged: () => void) => () => void
+  readonly change: (input: {
+    readonly canvasId: CanvasId
+    readonly commands: CanvasCommandBatch
+  }) => Effect.Effect<ReplicaView, ReplicaSessionUnavailable | ReplicaChangeRejected>
 }
 
 export type ReplicaSession =
@@ -43,6 +52,9 @@ export interface ReplicaSessionHandle {
   readonly session: ReplicaSession
   readonly onCameraChange: (camera: CanvasCamera) => void
   readonly onSelectionChange: (selection: CanvasSelection) => void
+  readonly submit: (
+    commands: CanvasCommandBatch
+  ) => Promise<Result.Result<ReplicaView, ReplicaSessionUnavailable | ReplicaChangeRejected>>
 }
 
 const loading: ReplicaSession = { _tag: "loading" }
@@ -131,5 +143,24 @@ export const useReplicaSession = (args: {
     void run(Effect.ignore(setCanvasSelectionSession({ canvasId, selection })))
   }, [canvasId, run, session])
 
-  return { session, onCameraChange, onSelectionChange }
+  const submit = useCallback((commands: CanvasCommandBatch) => {
+    if (session._tag !== "ready") {
+      return Promise.resolve(Result.fail(new ReplicaSessionUnavailable({
+        canvasId,
+        reason: "The replica is not ready."
+      })))
+    }
+    return run(Effect.result(ports.change({ canvasId, commands }))).then((changed) => {
+      if (Result.isSuccess(changed)) {
+        setSession((previous) =>
+          previous._tag === "ready"
+            ? ready(changed.success, previous.camera, previous.selection)
+            : ready(changed.success, defaultCamera, defaultSelection)
+        )
+      }
+      return changed
+    })
+  }, [canvasId, ports, run, session])
+
+  return { session, onCameraChange, onSelectionChange, submit }
 }
