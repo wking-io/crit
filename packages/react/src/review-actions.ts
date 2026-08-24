@@ -235,7 +235,7 @@ const arrangementAction = (
     })
   )))
   if (plan === undefined) return null
-  const byId = new Map(selected.map((frame) => [frame.frameId, frame]))
+  const byId = new Map<string, Frame>(selected.map((frame) => [frame.frameId, frame]))
   return reviewBatch(plan.moves.flatMap((move) => {
     const frame = byId.get(move.id)
     if (frame === undefined) return []
