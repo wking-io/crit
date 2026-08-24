@@ -17,6 +17,8 @@
   },
   "dependencies": {
     "@crit/domain": "*",
+    "@crit/frame-bridge": "*",
+    "@crit/protocol": "*",
     "@crit/replica": "*",
     "@crit/representations": "*",
     "@tanstack/react-query": "^5.102.1",

@@ -9,6 +9,7 @@ export default defineConfig({
     alias: {
       "@crit/authority": fileURLToPath(new URL("../authority/src/index.ts", import.meta.url)),
       "@crit/domain": fileURLToPath(new URL("../domain/src/index.ts", import.meta.url)),
+      "@crit/frame-bridge": fileURLToPath(new URL("../frame-bridge/src/index.ts", import.meta.url)),
       "@crit/protocol": fileURLToPath(new URL("../protocol/src/index.ts", import.meta.url)),
       "@crit/replica": fileURLToPath(new URL("../replica/src/index.ts", import.meta.url)),
       "@crit/representations": fileURLToPath(new URL("../representations/src/index.ts", import.meta.url))

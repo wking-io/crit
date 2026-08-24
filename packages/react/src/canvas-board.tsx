@@ -70,6 +70,12 @@ export function CanvasBoard({
           const threads = projection.threads.filter(
             (thread) => thread.anchor.frameId === frameId
           )
+          const liveThreads = threads.filter(
+            (thread) => thread.anchor._tag === "element"
+          )
+          const frameThreads = threads.filter(
+            (thread) => thread.anchor._tag === "frame"
+          )
           return (
             <div
               aria-label={frame.title}
@@ -78,8 +84,12 @@ export function CanvasBoard({
               role="option"
               style={itemStyle(frame.geometry, zIndex)}
             >
-              <FrameRenderer frame={frame} resolver={resolver} />
-              {threads.map((thread) => (
+              <FrameRenderer
+                {...(liveThreads.length === 0 ? {} : { commentThreads: liveThreads })}
+                frame={frame}
+                resolver={resolver}
+              />
+              {frameThreads.map((thread) => (
                 <CommentPin key={thread.threadId} thread={thread} />
               ))}
             </div>

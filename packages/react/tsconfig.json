@@ -9,6 +9,8 @@
     "baseUrl": ".",
     "paths": {
       "@crit/domain": ["../domain/src/index.ts"],
+      "@crit/frame-bridge": ["../frame-bridge/src/index.ts"],
+      "@crit/protocol": ["../protocol/src/index.ts"],
       "@crit/replica": ["../replica/src/index.ts"],
       "@crit/representations": ["../representations/src/index.ts"]
     }
@@ -16,6 +18,8 @@
   "include": ["src"],
   "references": [
     { "path": "../domain" },
+    { "path": "../frame-bridge" },
+    { "path": "../protocol" },
     { "path": "../replica" },
     { "path": "../representations" }
   ]

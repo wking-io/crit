@@ -8,15 +8,19 @@ import {
   QueryClient,
   QueryClientProvider
 } from "@tanstack/react-query"
-import { Effect } from "effect"
+import { Effect, Option } from "effect"
 import { StrictMode, act, type ReactElement } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import {
+  decodeFrameCommentDownMessage,
+  type FrameCommentDownMessage
+} from "@crit/protocol"
+
+import {
   CanvasBoard,
   CanvasCamera,
-  commentPinPoint,
   type FrameRepresentationResolver
 } from "../src/index.js"
 
@@ -81,6 +85,7 @@ const threadedProjection = decodeCanvasProjection({
         tagName: "button",
         evidence: [{ kind: "test-id", value: "checkout-total" }]
       },
+      point: { x: 0.5, y: 0.25 },
       fallback: { x: 0.75, y: 0.2 }
     },
     resolved: false,
@@ -192,19 +197,6 @@ afterEach(async() => {
   vi.restoreAllMocks()
 })
 
-describe("commentPinPoint", () => {
-  it("uses the point for Frame anchors and fallback for element anchors", () => {
-    expect(commentPinPoint(threadedProjection.threads[1]!.anchor)).toEqual({
-      x: 0.25,
-      y: 0.5
-    })
-    expect(commentPinPoint(threadedProjection.threads[0]!.anchor)).toEqual({
-      x: 0.75,
-      y: 0.2
-    })
-  })
-})
-
 describe("CanvasBoard comment pins", () => {
   it("renders no pins when the projection has no threads", async() => {
     await renderReady(<CanvasBoard projection={projection} resolver={resolver} />)
@@ -247,16 +239,47 @@ describe("CanvasBoard comment pins", () => {
     expect(pin.getAttribute("data-resolved")).toBe("true")
   })
 
-  it("uses an element anchor's fallback point", async() => {
+  it("does not paint an element thread on the Frame chrome", async() => {
     await renderReady(
       <CanvasBoard projection={threadedProjection} resolver={resolver} />
     )
 
-    const pin = container.querySelector("[aria-label='Inspect the total']")
-    expect(pin).toBeInstanceOf(HTMLElement)
-    if (!(pin instanceof HTMLElement)) return
-    expect(pin.style.left).toBe("75%")
-    expect(pin.style.top).toBe("20%")
+    const frame = container.querySelector("[aria-label='Checkout']")
+    expect(frame).toBeInstanceOf(HTMLElement)
+    if (!(frame instanceof HTMLElement)) return
+    expect(frame.querySelector("[aria-label='Inspect the total']")).toBeNull()
+    expect(frame.querySelector("[aria-label='Review checkout spacing']"))
+      .toBeInstanceOf(HTMLElement)
+  })
+
+  it("configures live element pins on the Frame comment bridge", async() => {
+    const posted: FrameCommentDownMessage[] = []
+    const frameWindow = {
+      postMessage(message: unknown) {
+        const decoded = decodeFrameCommentDownMessage(message)
+        if (Option.isSome(decoded)) posted.push(decoded.value)
+      }
+    }
+    // SAFETY: jsdom's iframe window has no postMessage; the bridge only calls that method.
+    const stubWindow = frameWindow as Window
+    const contentWindow = vi.spyOn(HTMLIFrameElement.prototype, "contentWindow", "get")
+      .mockReturnValue(stubWindow)
+
+    await renderReady(
+      <CanvasBoard projection={threadedProjection} resolver={resolver} />
+    )
+    await waitFor(() => expect(posted.length).toBeGreaterThan(0))
+
+    const pin = posted.at(-1)?.event.pins[0]
+    expect(pin?.id).toBe("thread_element")
+    expect(pin?.anchor).toMatchObject({
+      kind: "element",
+      documentUrl: url,
+      selector: "[data-total]",
+      point: { x: 0.5, y: 0.25 }
+    })
+    expect(pin?.anchor.point).not.toEqual({ x: 0.75, y: 0.2 })
+    contentWindow.mockRestore()
   })
 
   it("keeps pins inside the transformed camera world", async() => {
