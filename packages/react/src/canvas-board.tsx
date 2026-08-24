@@ -11,6 +11,7 @@ import {
   type CanvasCamera,
   canvasCameraStyle
 } from "./canvas-camera.js"
+import { CommentPin } from "./canvas-comment-pin.js"
 import { CanvasSelection } from "./canvas-selection.js"
 import {
   FrameRenderer,
@@ -66,6 +67,9 @@ export function CanvasBoard({
           const { frameId } = item
           const frame = frames.get(frameId)
           if (frame === undefined) return null
+          const threads = projection.threads.filter(
+            (thread) => thread.anchor.frameId === frameId
+          )
           return (
             <div
               aria-label={frame.title}
@@ -75,6 +79,9 @@ export function CanvasBoard({
               style={itemStyle(frame.geometry, zIndex)}
             >
               <FrameRenderer frame={frame} resolver={resolver} />
+              {threads.map((thread) => (
+                <CommentPin key={thread.threadId} thread={thread} />
+              ))}
             </div>
           )
         },

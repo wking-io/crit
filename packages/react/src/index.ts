@@ -16,6 +16,7 @@ export {
 } from "./canvas-camera-session.js"
 export { CanvasBoard } from "./canvas-board.js"
 export type { CanvasBoardProps } from "./canvas-board.js"
+export { commentPinPoint } from "./canvas-comment-pin.js"
 export { CanvasSelection } from "./canvas-selection.js"
 export { FrameRenderer } from "./frame-renderer.js"
 export type {
