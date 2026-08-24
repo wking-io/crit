@@ -29,6 +29,7 @@ export const ElementAnchor = Schema.TaggedStruct("element", {
   representationChangedByChangeId: ChangeId,
   selector: NonBlankString,
   fingerprint: ElementFingerprint,
+  point: NormalizedPoint,
   fallback: NormalizedPoint
 })
 

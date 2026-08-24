@@ -1,12 +1,21 @@
 import {
+  type CommentThread,
   type Frame,
+  type HttpUrl,
   type RepresentationRef
 } from "@crit/domain"
+import { connectBridgedFrameComments } from "@crit/frame-bridge"
+import {
+  FrameBridgeOrigin,
+  FrameCommentPinSchema,
+  type FrameCommentPin
+} from "@crit/protocol"
 import type { RenderPlan } from "@crit/representations"
 import { useQuery } from "@tanstack/react-query"
-import { Effect, Match } from "effect"
+import { Effect, Match, Schema } from "effect"
 import {
   useEffect,
+  useRef,
   useState,
   type ReactElement
 } from "react"
@@ -22,9 +31,12 @@ export interface FrameRepresentationResolver {
   ) => Effect.Effect<RenderPlan, unknown>
 }
 
+const noCommentThreads: readonly CommentThread[] = []
+
 export interface FrameRendererProps {
   readonly frame: FrameRendererFrame
   readonly resolver: FrameRepresentationResolver
+  readonly commentThreads?: readonly CommentThread[]
   readonly className?: string
 }
 
@@ -89,22 +101,100 @@ function ArtifactDownload({
   >Download {title}</a>
 }
 
-const ResolvedFrame = ({
+const frameOrigin = (url: string): FrameBridgeOrigin | undefined => {
+  try {
+    return Schema.decodeUnknownSync(FrameBridgeOrigin)(new URL(url).origin)
+  } catch {
+    return undefined
+  }
+}
+
+const liveCommentPins = (
+  threads: readonly CommentThread[],
+  documentUrl: HttpUrl
+): readonly FrameCommentPin[] =>
+  threads.flatMap((thread) => {
+    if (thread.anchor._tag !== "element") return []
+    return [Schema.decodeUnknownSync(FrameCommentPinSchema)({
+      id: thread.threadId,
+      anchor: {
+        kind: "element",
+        documentUrl,
+        selector: thread.anchor.selector,
+        fingerprint: thread.anchor.fingerprint,
+        point: thread.anchor.point
+      }
+    })]
+  })
+
+function LiveFrame({
   className,
+  commentThreads,
   plan,
   title
 }: {
   readonly className: string | undefined
-  readonly plan: RenderPlan
+  readonly commentThreads: readonly CommentThread[]
+  readonly plan: Extract<RenderPlan, { readonly _tag: "iframe" }>
   readonly title: Frame["title"]
-}): ReactElement => Match.value(plan).pipe(Match.tagsExhaustive({
-  iframe: (iframe) => (
+}): ReactElement {
+  const iframeRef = useRef<HTMLIFrameElement>(null)
+
+  useEffect(() => {
+    const iframe = iframeRef.current
+    const origin = frameOrigin(plan.url)
+    if (iframe === null || origin === undefined) return
+    const bridge = connectBridgedFrameComments({
+      target: window,
+      frameElement: iframe,
+      frameOrigin: origin,
+      onEvent: () => undefined
+    })
+    const configure = () => {
+      bridge.configure({
+        activeId: null,
+        color: "#111111",
+        enabled: false,
+        pins: liveCommentPins(commentThreads, plan.url)
+      })
+    }
+    iframe.addEventListener("load", configure)
+    configure()
+    return () => {
+      iframe.removeEventListener("load", configure)
+      bridge.disconnect()
+    }
+  }, [commentThreads, plan.url])
+
+  return (
     // Live review Frames stay unsandboxed so the reviewed page can run.
     // react-doctor-disable-next-line react-doctor/iframe-missing-sandbox
     <iframe
       className={className}
+      ref={iframeRef}
       referrerPolicy="no-referrer"
-      src={iframe.url}
+      src={plan.url}
+      title={title}
+    />
+  )
+}
+
+const ResolvedFrame = ({
+  className,
+  commentThreads,
+  plan,
+  title
+}: {
+  readonly className: string | undefined
+  readonly commentThreads: readonly CommentThread[]
+  readonly plan: RenderPlan
+  readonly title: Frame["title"]
+}): ReactElement => Match.value(plan).pipe(Match.tagsExhaustive({
+  iframe: (iframe) => (
+    <LiveFrame
+      className={className}
+      commentThreads={commentThreads}
+      plan={iframe}
       title={title}
     />
   ),
@@ -120,6 +210,7 @@ const ResolvedFrame = ({
 
 export function FrameRenderer({
   className,
+  commentThreads = noCommentThreads,
   frame,
   resolver
 }: FrameRendererProps): ReactElement {
@@ -147,5 +238,12 @@ export function FrameRenderer({
     return <div className={className} role="alert">Could not load {frame.title}.</div>
   }
 
-  return <ResolvedFrame className={className} plan={query.data} title={frame.title} />
+  return (
+    <ResolvedFrame
+      className={className}
+      commentThreads={commentThreads}
+      plan={query.data}
+      title={frame.title}
+    />
+  )
 }

@@ -21,7 +21,7 @@ describe("authored Canvas content", () => {
     const first = apply(empty(), "change_create", [
       { _tag: "add-frame", frameId: "frame_b", title: "Checkout", representation, status: "in-progress", geometry: geometry(10, 20) },
       { _tag: "add-note", noteId: "note_b", text: "Tighten copy", geometry: geometry(15, 25), attachedFrameId: "frame_b" },
-      { _tag: "add-comment-thread", threadId: "thread_b", commentId: "comment_b", body: "Why?", anchor: { _tag: "element", frameId: "frame_b", representationChangedByChangeId: "change_create", selector: "#buy", fingerprint: { tagName: "button", evidence: [{ kind: "id", value: "buy" }] }, fallback: { x: 0.5, y: 0.5 } } }
+      { _tag: "add-comment-thread", threadId: "thread_b", commentId: "comment_b", body: "Why?", anchor: { _tag: "element", frameId: "frame_b", representationChangedByChangeId: "change_create", selector: "#buy", fingerprint: { tagName: "button", evidence: [{ kind: "id", value: "buy" }] }, point: { x: 0.5, y: 0.25 }, fallback: { x: 0.5, y: 0.5 } } }
     ])
     expect(first).toMatchObject({
       stackChangedByChangeId: "change_create",
@@ -83,11 +83,13 @@ describe("authored Canvas content", () => {
     expect(() => decodeCanvasProjection(projection)).toThrow()
   })
 
-  it("validates element fingerprints and normalized fallback points at command decode", () => {
-    const base = { _tag: "element", frameId: "frame_a", representationChangedByChangeId: "change_a", selector: "#buy", fingerprint: { tagName: "button", evidence: [{ kind: "id", value: "buy" }] }, fallback: { x: 0, y: 1 } }
+  it("validates element fingerprints and normalized points at command decode", () => {
+    const base = { _tag: "element", frameId: "frame_a", representationChangedByChangeId: "change_a", selector: "#buy", fingerprint: { tagName: "button", evidence: [{ kind: "id", value: "buy" }] }, point: { x: 0.5, y: 0.25 }, fallback: { x: 0, y: 1 } }
     expect(() => change("change_anchor", [{ _tag: "add-comment-thread", threadId: "thread_a", commentId: "comment_a", body: "Body", anchor: base }])).not.toThrow()
     const badAnchors = [
       { ...base, selector: " " },
+      { ...base, point: { x: -0.01, y: 0 } },
+      { ...base, point: { x: 0, y: 1.01 } },
       { ...base, fallback: { x: -0.01, y: 0 } },
       { ...base, fallback: { x: 0, y: 1.01 } },
       { ...base, fingerprint: { ...base.fingerprint, tagName: "BUTTON" } },
@@ -101,7 +103,7 @@ describe("authored Canvas content", () => {
   it("retains element anchors when a Frame representation changes but rejects stale new anchors", () => {
     const anchored = apply(empty(), "change_create", [
       { _tag: "add-frame", frameId: "frame_a", title: "Frame", representation, status: "in-progress", geometry: geometry() },
-      { _tag: "add-comment-thread", threadId: "thread_a", commentId: "comment_z", body: "Old anchor", anchor: { _tag: "element", frameId: "frame_a", representationChangedByChangeId: "change_create", selector: "#buy", fingerprint: { tagName: "button", evidence: [{ kind: "id", value: "buy" }] }, fallback: { x: 0.5, y: 0.5 } } }
+      { _tag: "add-comment-thread", threadId: "thread_a", commentId: "comment_z", body: "Old anchor", anchor: { _tag: "element", frameId: "frame_a", representationChangedByChangeId: "change_create", selector: "#buy", fingerprint: { tagName: "button", evidence: [{ kind: "id", value: "buy" }] }, point: { x: 0.5, y: 0.25 }, fallback: { x: 0.5, y: 0.5 } } }
     ])
     const changed = apply(anchored, "change_representation", [{ _tag: "set-frame-representation", frameId: "frame_a", expectedChangedByChangeId: "change_create", representation: { ...representation, route: "/cart" } }])
     expect(changed.threads[0]?.anchor).toMatchObject({ representationChangedByChangeId: "change_create" })
@@ -182,7 +184,7 @@ describe("authored Canvas content", () => {
       { ...valid, stack: [...valid.stack, item] },
       { ...valid, threads: [{ ...thread, anchor: { _tag: "frame", frameId: "frame_missing", point: { x: 0.5, y: 0.5 } } }] },
       { ...valid, threads: [{ ...thread, comments: [...thread.comments, thread.comments[0]] }] },
-      { ...valid, threads: [{ ...thread, anchor: { _tag: "element", frameId: "frame_a", representationChangedByChangeId: "change_create", selector: "#x", fingerprint: { tagName: "button", evidence: [] }, fallback: { x: 0, y: 0 } } }] }
+      { ...valid, threads: [{ ...thread, anchor: { _tag: "element", frameId: "frame_a", representationChangedByChangeId: "change_create", selector: "#x", fingerprint: { tagName: "button", evidence: [] }, point: { x: 0, y: 0 }, fallback: { x: 0, y: 0 } } }] }
     ]
     for (const value of corruptions) expect(() => decodeCanvasProjection(value)).toThrow()
   })
