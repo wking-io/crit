@@ -2,6 +2,7 @@ import {
   type CanvasCommandBatch,
   type CanvasItemRef,
   type CanvasProjection,
+  type CommentThreadId,
   type Frame,
   type Geometry,
   type Note,
@@ -153,9 +154,15 @@ export function CanvasBoard({
     () => new Set()
   )
   const [pauseOffscreen, setPauseOffscreen] = useState(false)
+  const [selectedThreadId, setSelectedThreadId] =
+    useState<CommentThreadId | null>(null)
   const navigationRef = useRef({ camera, onCameraChange })
   const selectionRef = useRef({ selection, onSelectionChange })
   const inputTarget = CanvasSelection.inputTarget(selection)
+  const activeThreadId = selectedThreadId !== null &&
+      projection.threads.some((thread) => thread.threadId === selectedThreadId)
+    ? selectedThreadId
+    : null
 
   useLayoutEffect(() => {
     navigationRef.current = { camera, onCameraChange }
@@ -249,11 +256,14 @@ export function CanvasBoard({
   const selectItem = (
     item: CanvasItemRef,
     event: ReactPointerEvent<HTMLDivElement>
-  ) => applySelectionCommand({
-    _tag: "item",
-    item,
-    additive: isAdditiveSelection(event)
-  })
+  ) => {
+    setSelectedThreadId(null)
+    applySelectionCommand({
+      _tag: "item",
+      item,
+      additive: isAdditiveSelection(event)
+    })
+  }
   const beginDrag = (
     item: CanvasItem,
     mode: DragMode,
@@ -386,7 +396,14 @@ export function CanvasBoard({
                 resolver={resolver}
               />
               {frameThreads.map((thread) => (
-                <CommentPin key={thread.threadId} thread={thread} />
+                <CommentPin
+                  key={thread.threadId}
+                  {...(onSubmit === undefined
+                    ? {}
+                    : { onSelect: () => setSelectedThreadId(thread.threadId) })}
+                  selected={activeThreadId === thread.threadId}
+                  thread={thread}
+                />
               ))}
               {CanvasSelection.has(selection, item) && onSubmit !== undefined
                 ? (
@@ -471,6 +488,7 @@ export function CanvasBoard({
           target instanceof Element &&
           target.closest('[role="option"]') !== null
         ) return
+        setSelectedThreadId(null)
         applySelectionCommand({ _tag: "clear" })
       }}
       onPointerMove={updateDrag}
@@ -485,7 +503,9 @@ export function CanvasBoard({
             onSubmit={onSubmit}
             pauseOffscreen={pauseOffscreen}
             projection={projection}
-            selection={{ _tag: "items", items: selection }}
+            selection={activeThreadId === null
+              ? { _tag: "items", items: selection }
+              : { _tag: "comment-thread", threadId: activeThreadId }}
           />
         )}
       {hasItems
