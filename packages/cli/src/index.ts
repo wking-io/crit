@@ -1,4 +1,4 @@
-import { CanvasId, CanvasTitle } from "@crit/domain"
+import { AuthoredText, CanvasId, CanvasTitle, Id, RootedRoute } from "@crit/domain"
 import {
   inspectLocalDaemon,
   LocalDaemonIdentityMismatch,
@@ -13,11 +13,13 @@ import {
   type ProjectManifestFailure,
   type LocalDaemonInspection
 } from "@crit/local"
-import { ReplicaView } from "@crit/replica"
+import { ReplicaModel, ReplicaView } from "@crit/replica"
 import { LocalApiUnauthorized, LocalApiVersionUnsupported } from "@crit/replica/http"
 import { ApplicationBaseUrl } from "@crit/representations"
-import { Console, Context, Effect, Layer, Match, Option, Redacted, Schema, type Effect as EffectType } from "effect"
+import { Console, Context, Effect, Layer, Match, Option, Redacted, Result, Schema, type Effect as EffectType } from "effect"
 import { Argument, Command, Flag } from "effect/unstable/cli"
+
+import { applicationFrameCommand, nextFrameGeometry } from "./add-frame.js"
 
 class CliOperationalFailure extends Schema.TaggedError<CliOperationalFailure>()(
   "CliOperationalFailure",
@@ -216,6 +218,73 @@ const open = Command.make("open", {
   yield* printView(view, asJson)
 })).pipe(Command.withDescription("Open a Canvas through the local daemon"))
 
-export const command = crit.pipe(Command.withSubcommands([init, dev, status, create, open]))
+const addFrame = Command.make("add-frame", {
+  dataRoot,
+  json,
+  canvasId: Argument.string("canvas-id"),
+  route: Flag.string("route"),
+  title: Flag.string("title").pipe(Flag.optional),
+  root: Flag.directory("root", { mustExist: true }).pipe(Flag.withDefault("."))
+}, ({ canvasId, dataRoot: root, json: asJson, route, title, root: projectRoot }) => Effect.gen(function*() {
+  const id = yield* decode(CanvasId, canvasId, "canvas ID")
+  const decodedRoute = yield* decode(RootedRoute, route, "route")
+  const resolvedTitle = yield* Option.match(title, {
+    onNone: () => Effect.succeed(""),
+    onSome: (value) => value.length === 0
+      ? Effect.succeed("")
+      : decode(AuthoredText, value, "title")
+  })
+  const manifest = yield* Effect.gen(function*() {
+    const projectManifest = yield* LocalProjectManifest
+    return yield* projectManifest.read
+  }).pipe(
+    Effect.provide(LocalProjectManifest.layer({ root: projectRoot })),
+    Effect.mapError((failure) => new CliOperationalFailure({
+      message: formatProjectManifestFailure(failure)
+    }))
+  )
+  const added = yield* connected(root, ({ client }) => Effect.gen(function*() {
+    const opened = yield* client.open(id).pipe(
+      Effect.mapError((failure) => Match.value(failure).pipe(
+        Match.when({ _tag: "canvas-not-found" }, ({ canvasId }) => new CliOperationalFailure({
+          message: `Canvas not found: ${canvasId}`
+        })),
+        Match.orElse(() => new CliOperationalFailure({ message: "Unable to add Frame" }))
+      ))
+    )
+    const frameId = Id.frame(`frame_${crypto.randomUUID().replaceAll("-", "")}`)
+    const command = applicationFrameCommand({
+      applicationId: manifest.applicationId,
+      route: decodedRoute,
+      title: resolvedTitle,
+      frameId,
+      geometry: nextFrameGeometry(opened.projection.frames.length)
+    })
+    if (Result.isFailure(command)) {
+      return yield* new CliOperationalFailure({ message: command.failure.reason })
+    }
+    const changed = yield* client.change(ReplicaModel.change({
+      canvasId: id,
+      commands: [command.success]
+    })).pipe(
+      Effect.mapError((failure) => Match.value(failure).pipe(
+        Match.when({ _tag: "canvas-not-found" }, ({ canvasId }) => new CliOperationalFailure({
+          message: `Canvas not found: ${canvasId}`
+        })),
+        Match.when({ _tag: "change-rejected" }, () => new CliOperationalFailure({
+          message: "Unable to add Frame"
+        })),
+        Match.orElse(() => new CliOperationalFailure({ message: "Unable to add Frame" }))
+      ))
+    )
+    return { frameId, view: changed.view }
+  }))
+  if (asJson) {
+    return yield* Console.log(JSON.stringify(Schema.encodeSync(ReplicaView)(added.view)))
+  }
+  yield* Console.log(`${added.frameId}  ${decodedRoute}`)
+})).pipe(Command.withDescription("Add a Frame to a Canvas through the local daemon"))
+
+export const command = crit.pipe(Command.withSubcommands([init, dev, status, create, open, addFrame]))
 
 export const main = Command.run(command, { version: "0.0.0" })
