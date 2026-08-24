@@ -1,9 +1,12 @@
 import {
+  type CanvasCommandBatch,
   type CanvasItemRef,
   type CanvasProjection,
   type Frame,
   type Note,
-  type ReviewStatus
+  type NoteColor,
+  type ReviewStatus,
+  proposeSetNoteColor
 } from "@crit/domain"
 import {
   connectCanvasInput,
@@ -43,8 +46,18 @@ export interface CanvasBoardProps {
   readonly onCameraChange: (camera: CanvasCamera) => void
   readonly selection: CanvasSelection
   readonly onSelectionChange: (selection: CanvasSelection) => void
+  readonly onSubmit?: (commands: CanvasCommandBatch) => void
   readonly className?: string
 }
+
+const NOTE_COLORS = [
+  "neutral",
+  "red",
+  "orange",
+  "green",
+  "blue",
+  "purple"
+] as const satisfies readonly NoteColor[]
 
 const ariaSelected = (
   selection: CanvasSelection,
@@ -80,6 +93,7 @@ export function CanvasBoard({
   className,
   onCameraChange,
   onSelectionChange,
+  onSubmit,
   projection,
   resolver,
   selection
@@ -214,6 +228,7 @@ export function CanvasBoard({
           const { noteId } = item
           const note = notes.get(noteId)
           if (note === undefined) return null
+          const selected = CanvasSelection.has(selection, item)
           return (
             <div
               aria-label={`${note.text} by ${note.author.displayName}`}
@@ -226,6 +241,28 @@ export function CanvasBoard({
               onPointerDown={(event) => selectItem(item, event)}
             >
               {note.text}
+              {selected && onSubmit !== undefined
+                ? (
+                  <div aria-label="Note color" role="group">
+                    {NOTE_COLORS.map((color) => (
+                      <button
+                        aria-label={color}
+                        aria-pressed={note.color === color}
+                        key={color}
+                        type="button"
+                        onPointerDown={(event) => event.stopPropagation()}
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          if (note.color === color) return
+                          onSubmit([proposeSetNoteColor(note, color)])
+                        }}
+                      >
+                        {color}
+                      </button>
+                    ))}
+                  </div>
+                )
+                : null}
             </div>
           )
         }

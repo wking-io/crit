@@ -86,6 +86,18 @@ export {
   SetNoteColorCommand,
   SetNoteGeometryCommand
 } from "./command.js"
+export {
+  proposeAddNote,
+  proposeBringToFront,
+  proposeRemoveFrame,
+  proposeRemoveNote,
+  proposeSendToBack,
+  proposeSetFrameGeometry,
+  proposeSetFrameStatus,
+  proposeSetFrameTitle,
+  proposeSetNoteColor,
+  proposeSetNoteGeometry
+} from "./intent.js"
 export { CanvasChangeFailureSchema, CanvasEngine, engineChange, engineChangeFromAccepted } from "./engine.js"
 export type {
   AuthoredEngineChange,

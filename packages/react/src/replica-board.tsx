@@ -1,4 +1,4 @@
-import type { CanvasChangeFailure } from "@crit/domain"
+import type { CanvasChangeFailure, CanvasCommandBatch } from "@crit/domain"
 import type { ReplicaView } from "@crit/replica"
 import { Match } from "effect"
 import type { ReactElement } from "react"
@@ -15,6 +15,7 @@ export interface ReplicaBoardProps {
   readonly onCameraChange: (camera: CanvasCamera) => void
   readonly selection: CanvasSelection
   readonly onSelectionChange: (selection: CanvasSelection) => void
+  readonly onSubmit?: (commands: CanvasCommandBatch) => void
   readonly className?: string
 }
 
@@ -98,6 +99,7 @@ export function ReplicaBoard({
   className,
   onCameraChange,
   onSelectionChange,
+  onSubmit,
   resolver,
   selection,
   view
@@ -121,6 +123,7 @@ export function ReplicaBoard({
         camera={camera}
         onCameraChange={onCameraChange}
         onSelectionChange={onSelectionChange}
+        {...(onSubmit === undefined ? {} : { onSubmit })}
         projection={view.projection}
         resolver={resolver}
         selection={selection}

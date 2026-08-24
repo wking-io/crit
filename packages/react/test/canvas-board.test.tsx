@@ -1,4 +1,4 @@
-import { decodeCanvasProjection } from "@crit/domain"
+import { decodeCanvasProjection, proposeSetNoteColor } from "@crit/domain"
 import {
   IframeRenderPlan,
   type RenderPlan
@@ -15,6 +15,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import {
   CanvasBoard,
+  CanvasSelection,
   type FrameRepresentationResolver
 } from "../src/index.js"
 import { requiredBoard } from "./required-board.js"
@@ -178,5 +179,31 @@ describe("CanvasBoard", () => {
     if (!(frame instanceof HTMLElement)) return
     expect(frame.getAttribute("data-review-status")).toBe("ready-for-review")
     expect(frame.textContent).toContain("Ready for review")
+  })
+
+  it("submits a Note Color change for the selected Note", async() => {
+    const onSubmit = vi.fn()
+    const resolver: FrameRepresentationResolver = {
+      resolve: () => Effect.succeed(IframeRenderPlan.make({
+        representation: projection.frames[0]!.representation,
+        url
+      }) satisfies RenderPlan)
+    }
+    const note = projection.notes[0]
+    if (note === undefined) throw new Error("Note missing")
+    await act(async() => render(
+      <CanvasBoard
+        {...requiredBoard}
+        onSubmit={onSubmit}
+        projection={projection}
+        resolver={resolver}
+        selection={CanvasSelection.make([{ _tag: "note", noteId: note.noteId }])}
+      />
+    ))
+    const green = container.querySelector("[aria-label='green']")
+    expect(green).toBeInstanceOf(HTMLButtonElement)
+    if (!(green instanceof HTMLButtonElement)) return
+    await act(async() => green.click())
+    expect(onSubmit).toHaveBeenCalledWith([proposeSetNoteColor(note, "green")])
   })
 })
