@@ -4,9 +4,13 @@ import {
   type Frame,
   type Note
 } from "@crit/domain"
-import { connectCanvasInput } from "@crit/frame-bridge"
+import {
+  connectCanvasInput,
+  type FrameInputIntent
+} from "@crit/frame-bridge"
 import { Match } from "effect"
 import {
+  useCallback,
   useEffect,
   useLayoutEffect,
   useRef,
@@ -72,6 +76,23 @@ export function CanvasBoard({
     navigationRef.current = { camera, onCameraChange }
   }, [camera, onCameraChange])
 
+  const applyCameraIntent = useCallback((intent: FrameInputIntent) => {
+    const root = rootRef.current
+    if (root === null) return
+    const latest = navigationRef.current
+    if (latest.camera === undefined || latest.onCameraChange === undefined) {
+      return
+    }
+    const nextCamera = applyCanvasCameraIntent(
+      latest.camera,
+      intent,
+      root.getBoundingClientRect()
+    )
+    if (nextCamera !== latest.camera) {
+      latest.onCameraChange(nextCamera)
+    }
+  }, [])
+
   useEffect(() => {
     if (!navigationArmed) return
     const root = rootRef.current
@@ -79,21 +100,9 @@ export function CanvasBoard({
     return connectCanvasInput({
       target: window,
       root,
-      onIntent: (intent) => {
-        const latest = navigationRef.current
-        if (latest.camera === undefined || latest.onCameraChange === undefined) {
-          return
-        }
-        latest.onCameraChange(
-          applyCanvasCameraIntent(
-            latest.camera,
-            intent,
-            root.getBoundingClientRect()
-          )
-        )
-      }
+      onIntent: applyCameraIntent
     })
-  }, [navigationArmed])
+  }, [applyCameraIntent, navigationArmed])
 
   const frames = framesById(projection.frames)
   const notes = notesById(projection.notes)
@@ -127,6 +136,7 @@ export function CanvasBoard({
             >
               <FrameRenderer
                 {...(liveThreads.length === 0 ? {} : { commentThreads: liveThreads })}
+                {...(navigationArmed ? { onInputIntent: applyCameraIntent } : {})}
                 frame={frame}
                 resolver={resolver}
               />

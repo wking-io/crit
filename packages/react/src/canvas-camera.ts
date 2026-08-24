@@ -34,6 +34,14 @@ const MIN_ZOOM = 0.05
 const MAX_ZOOM = 8
 const PAN_SPEED = 1
 const ZOOM_SPEED = 1
+const ZOOM_STEPS = [0.05, 0.1, 0.25, 0.5, 1, 2, 4, 8]
+
+type CanvasCameraBox = {
+  readonly left: number
+  readonly top: number
+  readonly width: number
+  readonly height: number
+}
 
 const clampInclusive = (value: number, min: number, max: number): number =>
   Math.min(max, Math.max(min, value))
@@ -55,10 +63,33 @@ const cameraAtPoint = (
   })
 }
 
+const zoomStep = (
+  zoom: number,
+  direction: -1 | 1,
+  steps: ReadonlyArray<number>
+): number => {
+  if (direction === 1) {
+    for (let index = 1; index < steps.length; index += 1) {
+      const previous = steps[index - 1]!
+      const next = steps[index]!
+      if (next - zoom <= (next - previous) / 2) continue
+      return next
+    }
+    return steps[steps.length - 1]!
+  }
+  for (let index = steps.length - 1; index > 0; index -= 1) {
+    const previous = steps[index - 1]!
+    const next = steps[index]!
+    if (next - zoom >= (next - previous) / 2) continue
+    return previous
+  }
+  return steps[0]!
+}
+
 const applyWheel = (
   camera: CanvasCamera,
   intent: Extract<FrameInputIntent, { readonly type: "wheel" }>,
-  origin: { readonly left: number; readonly top: number }
+  origin: CanvasCameraBox
 ): CanvasCamera => {
   const deltaX = Number.isFinite(intent.deltaX) ? intent.deltaX : 0
   const deltaY = Number.isFinite(intent.deltaY) ? intent.deltaY : 0
@@ -82,7 +113,7 @@ const applyWheel = (
 const applyPinch = (
   camera: CanvasCamera,
   intent: Extract<FrameInputIntent, { readonly type: "pinch" }>,
-  origin: { readonly left: number; readonly top: number }
+  origin: CanvasCameraBox
 ): CanvasCamera => {
   if (!Number.isFinite(intent.scaleFactor) || intent.scaleFactor <= 0) {
     return camera
@@ -100,10 +131,23 @@ const applyPinch = (
   })
 }
 
+const applyZoomStep = (
+  camera: CanvasCamera,
+  intent: Extract<FrameInputIntent, { readonly type: "zoom-step" }>,
+  origin: CanvasCameraBox
+): CanvasCamera => {
+  if (origin.width <= 0 || origin.height <= 0) return camera
+  return cameraAtPoint(
+    camera,
+    zoomStep(camera.zoom, intent.direction, ZOOM_STEPS),
+    { x: origin.width / 2, y: origin.height / 2 }
+  )
+}
+
 export const applyCanvasCameraIntent = (
   camera: CanvasCamera,
   intent: FrameInputIntent,
-  origin: { readonly left: number; readonly top: number }
+  origin: CanvasCameraBox
 ): CanvasCamera =>
   Match.value(intent).pipe(
     Match.discriminatorsExhaustive("type")({
@@ -112,6 +156,6 @@ export const applyCanvasCameraIntent = (
       select: () => camera,
       delete: () => camera,
       tool: () => camera,
-      "zoom-step": () => camera
+      "zoom-step": (zoomIntent) => applyZoomStep(camera, zoomIntent, origin)
     })
   )

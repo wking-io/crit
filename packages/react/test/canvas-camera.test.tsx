@@ -1,5 +1,9 @@
 import { decodeCanvasProjection } from "@crit/domain"
-import type { FrameInputIntent } from "@crit/protocol"
+import {
+  FRAME_INPUT_BRIDGE_SCHEMA_VERSION,
+  FRAME_INPUT_BRIDGE_SOURCE,
+  type FrameInputIntent
+} from "@crit/protocol"
 import { ReplicaView } from "@crit/replica"
 import {
   IframeRenderPlan,
@@ -120,7 +124,7 @@ afterEach(async() => {
   vi.restoreAllMocks()
 })
 
-const origin = { left: 10, top: 20 }
+const origin = { left: 10, top: 20, width: 800, height: 600 }
 const resting = CanvasCamera.make({ x: 10, y: 20, zoom: 1 })
 const wheel = {
   type: "wheel",
@@ -190,19 +194,34 @@ describe("applyCanvasCameraIntent", () => {
         deltaX: 10,
         deltaY: 0
       },
-      { left: 0, top: 0 }
+      { left: 0, top: 0, width: 200, height: 100 }
     )).toEqual(CanvasCamera.make({ x: -90, y: -100, zoom: 2 }))
   })
 
-  it("leaves the camera unchanged for select and zoom-step", () => {
-    expect(applyCanvasCameraIntent(
-      resting,
-      { type: "select", additive: false },
-      origin
-    )).toBe(resting)
+  it("zooms one step about the board center", () => {
+    const zoomed = applyCanvasCameraIntent(
+      CanvasCamera.make({ x: 0, y: 0, zoom: 1 }),
+      { type: "zoom-step", direction: 1 },
+      { left: 0, top: 0, width: 200, height: 100 }
+    )
+
+    expect(zoomed).toEqual(CanvasCamera.make({ x: -100, y: -50, zoom: 2 }))
+    expect((100 - zoomed.x) / zoomed.zoom).toBe(100)
+    expect((50 - zoomed.y) / zoomed.zoom).toBe(50)
+  })
+
+  it("returns the same camera for a zoom step on an empty board", () => {
     expect(applyCanvasCameraIntent(
       resting,
       { type: "zoom-step", direction: 1 },
+      { left: 0, top: 0, width: 0, height: 100 }
+    )).toBe(resting)
+  })
+
+  it("leaves the camera unchanged for selection", () => {
+    expect(applyCanvasCameraIntent(
+      resting,
+      { type: "select", additive: false },
       origin
     )).toBe(resting)
   })
@@ -281,6 +300,45 @@ describe("CanvasBoard camera navigation", () => {
     const event = dispatchWheel(window)
 
     expect(event.defaultPrevented).toBe(true)
+    expect(onCameraChange).toHaveBeenCalledWith(
+      CanvasCamera.make({ x: 6, y: 12, zoom: 1 })
+    )
+  })
+
+  it("notifies the host of a bridged Frame wheel pan", async() => {
+    const onCameraChange = vi.fn()
+    await act(async() => render(
+      <CanvasBoard
+        camera={resting}
+        onCameraChange={onCameraChange}
+        projection={projection}
+        resolver={resolver}
+      />
+    ))
+    await waitFor(() => expect(container.querySelector("iframe")).not.toBeNull())
+    const board = container.querySelector("[aria-label='Review']")
+    const iframe = container.querySelector("iframe")
+    expect(board).toBeInstanceOf(HTMLElement)
+    expect(iframe).toBeInstanceOf(HTMLIFrameElement)
+    if (!(board instanceof HTMLElement) ||
+      !(iframe instanceof HTMLIFrameElement)) return
+    stubBoardRect(board)
+    const frameWindow = iframe.contentWindow
+    expect(frameWindow).not.toBeNull()
+    if (frameWindow === null) return
+
+    await act(async() => {
+      window.dispatchEvent(new MessageEvent("message", {
+        origin: new URL(url).origin,
+        source: frameWindow,
+        data: {
+          source: FRAME_INPUT_BRIDGE_SOURCE,
+          schemaVersion: FRAME_INPUT_BRIDGE_SCHEMA_VERSION,
+          intent: { type: "wheel", ...wheel, deltaX: 4, deltaY: 8 }
+        }
+      }))
+    })
+
     expect(onCameraChange).toHaveBeenCalledWith(
       CanvasCamera.make({ x: 6, y: 12, zoom: 1 })
     )
