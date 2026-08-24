@@ -12,6 +12,7 @@ import {
   canvasCameraStyle
 } from "./canvas-camera.js"
 import { CommentPin } from "./canvas-comment-pin.js"
+import { CanvasHover } from "./canvas-hover.js"
 import { CanvasSelection } from "./canvas-selection.js"
 import {
   FrameRenderer,
@@ -24,6 +25,7 @@ export interface CanvasBoardProps {
   readonly resolver: FrameRepresentationResolver
   readonly camera?: CanvasCamera
   readonly selection?: CanvasSelection
+  readonly hover?: CanvasHover
   readonly className?: string
 }
 
@@ -32,6 +34,14 @@ const ariaSelected = (
   item: CanvasItemRef
 ): true | undefined =>
   selection !== undefined && CanvasSelection.has(selection, item)
+    ? true
+    : undefined
+
+const dataHovered = (
+  hover: CanvasHover | undefined,
+  item: CanvasItemRef
+): true | undefined =>
+  hover !== undefined && CanvasHover.matches(hover, item)
     ? true
     : undefined
 
@@ -50,6 +60,7 @@ const itemStyle = (
 export function CanvasBoard({
   camera,
   className,
+  hover,
   projection,
   resolver,
   selection
@@ -80,6 +91,7 @@ export function CanvasBoard({
             <div
               aria-label={frame.title}
               aria-selected={ariaSelected(selection, item)}
+              data-hovered={dataHovered(hover, item)}
               key={frame.frameId}
               role="option"
               style={itemStyle(frame.geometry, zIndex)}
@@ -103,6 +115,7 @@ export function CanvasBoard({
             <div
               aria-label={note.text}
               aria-selected={ariaSelected(selection, item)}
+              data-hovered={dataHovered(hover, item)}
               key={note.noteId}
               role="option"
               style={itemStyle(note.geometry, zIndex)}

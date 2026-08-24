@@ -5,6 +5,7 @@ import type { ReactElement } from "react"
 
 import type { CanvasCamera } from "./canvas-camera.js"
 import { CanvasBoard } from "./canvas-board.js"
+import type { CanvasHover } from "./canvas-hover.js"
 import type { CanvasSelection } from "./canvas-selection.js"
 import type { FrameRepresentationResolver } from "./frame-renderer.js"
 
@@ -13,6 +14,7 @@ export interface ReplicaBoardProps {
   readonly resolver: FrameRepresentationResolver
   readonly camera?: CanvasCamera
   readonly selection?: CanvasSelection
+  readonly hover?: CanvasHover
   readonly className?: string
 }
 
@@ -91,6 +93,7 @@ const statusTone = (status: ReplicaBoardStatus): "status" | "alert" =>
 export function ReplicaBoard({
   camera,
   className,
+  hover,
   resolver,
   selection,
   view
@@ -112,6 +115,7 @@ export function ReplicaBoard({
       </section>
       <CanvasBoard
         {...(camera === undefined ? {} : { camera })}
+        {...(hover === undefined ? {} : { hover })}
         {...(selection === undefined ? {} : { selection })}
         projection={view.projection}
         resolver={resolver}
