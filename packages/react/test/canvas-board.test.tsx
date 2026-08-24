@@ -362,7 +362,11 @@ describe("CanvasBoard", () => {
 
     await act(async() => openButton.click())
 
-    expect(open).toHaveBeenCalledWith(url)
+    expect(open).toHaveBeenCalledWith(
+      url,
+      "_blank",
+      "noopener,noreferrer"
+    )
     expect(onSubmit).not.toHaveBeenCalled()
   })
 

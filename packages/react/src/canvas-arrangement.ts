@@ -189,9 +189,11 @@ const arrangeGrid = (
   const bounds = boundsOf(items)
   const { columns, rows } = selectGridLayout(ordered, bounds)
   const columnWidths = Array.from({ length: columns }, (_, column) =>
-    Math.max(...ordered
-      .filter((_, index) => index % columns === column)
-      .map((item) => item.width))
+    ordered.reduce(
+      (width, item, index) =>
+        index % columns === column ? Math.max(width, item.width) : width,
+      0
+    )
   )
   const rowHeights = Array.from({ length: rows }, (_, row) =>
     Math.max(...ordered

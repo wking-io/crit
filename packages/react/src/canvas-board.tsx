@@ -4,11 +4,8 @@ import {
   type CanvasProjection,
   type CommentThreadId,
   type Frame,
-  type Geometry,
   type Note,
-  type ReviewStatus,
-  proposeSetFrameGeometry,
-  proposeSetNoteGeometry
+  type ReviewStatus
 } from "@crit/domain"
 import {
   connectCanvasInput,
@@ -32,6 +29,7 @@ import {
   canvasCameraStyle
 } from "./canvas-camera.js"
 import { CommentPin } from "./canvas-comment-pin.js"
+import { useCanvasItemDrag } from "./canvas-item-drag.js"
 import {
   CanvasSelection,
   type CanvasSelectionCommand
@@ -43,7 +41,7 @@ import {
 import { framesById, notesById } from "./projection-index.js"
 import { ReviewChrome } from "./review-chrome.js"
 import type { ReviewClientEffect } from "./review-actions.js"
-import { applyReviewEffect } from "./review-effects.js"
+import { useReviewEffects } from "./review-effects.js"
 
 export interface CanvasBoardProps {
   readonly projection: CanvasProjection
@@ -75,53 +73,6 @@ const itemStyle = (
   zIndex
 })
 
-type DragMode = "move" | "resize"
-
-type CanvasItem = Frame | Note
-
-type CanvasDrag = {
-  readonly item: CanvasItem
-  readonly mode: DragMode
-  readonly pointerId: number
-  readonly startClientX: number
-  readonly startClientY: number
-}
-
-type DragPreview = {
-  readonly itemKey: string
-  readonly geometry: Geometry
-}
-
-const canvasItemKey = (item: CanvasItem): string =>
-  "frameId" in item ? `frame:${item.frameId}` : `note:${item.noteId}`
-
-const dragGeometry = (
-  drag: CanvasDrag,
-  clientX: number,
-  clientY: number,
-  zoom: number
-): Geometry => {
-  const deltaX = (clientX - drag.startClientX) / zoom
-  const deltaY = (clientY - drag.startClientY) / zoom
-  return drag.mode === "move"
-    ? {
-      ...drag.item.geometry,
-      x: drag.item.geometry.x + deltaX,
-      y: drag.item.geometry.y + deltaY
-    }
-    : {
-      ...drag.item.geometry,
-      width: Math.max(1, drag.item.geometry.width + deltaX),
-      height: Math.max(1, drag.item.geometry.height + deltaY)
-    }
-}
-
-const sameGeometry = (left: Geometry, right: Geometry): boolean =>
-  left.x === right.x &&
-  left.y === right.y &&
-  left.width === right.width &&
-  left.height === right.height
-
 const isAdditiveSelection = (
   event: Pick<ReactPointerEvent, "ctrlKey" | "metaKey" | "shiftKey">
 ): boolean => event.ctrlKey || event.metaKey || event.shiftKey
@@ -147,18 +98,22 @@ export function CanvasBoard({
   const rootRef = useRef<HTMLElement>(null)
   const selectedFrameRef = useRef<HTMLDivElement>(null)
   const frameElementsRef = useRef(new Map<string, HTMLDivElement>())
-  const dragRef = useRef<CanvasDrag | null>(null)
-  const [dragPreview, setDragPreview] = useState<DragPreview | null>(null)
-  const [fullscreen, setFullscreen] = useState(false)
-  const [offscreenFrames, setOffscreenFrames] = useState<ReadonlySet<string>>(
-    () => new Set()
-  )
-  const [pauseOffscreen, setPauseOffscreen] = useState(false)
   const [selectedThreadId, setSelectedThreadId] =
     useState<CommentThreadId | null>(null)
   const navigationRef = useRef({ camera, onCameraChange })
   const selectionRef = useRef({ selection, onSelectionChange })
   const inputTarget = CanvasSelection.inputTarget(selection)
+  const itemDrag = useCanvasItemDrag({
+    camera,
+    selection,
+    ...(onSubmit === undefined ? {} : { onSubmit })
+  })
+  const reviewEffects = useReviewEffects({
+    frameElementsRef,
+    frames: projection.frames,
+    selectedFrameRef,
+    ...(onEffect === undefined ? {} : { onEffect })
+  })
   const activeThreadId = selectedThreadId !== null &&
       projection.threads.some((thread) => thread.threadId === selectedThreadId)
     ? selectedThreadId
@@ -177,38 +132,6 @@ export function CanvasBoard({
       ? frameElementsRef.current.get(inputTarget.frameId) ?? null
       : null
   }, [inputTarget])
-
-  useEffect(() => {
-    const changed = () => setFullscreen(document.fullscreenElement !== null)
-    changed()
-    document.addEventListener("fullscreenchange", changed)
-    return () => document.removeEventListener("fullscreenchange", changed)
-  }, [])
-
-  useEffect(() => {
-    if (!pauseOffscreen || typeof IntersectionObserver === "undefined") {
-      setOffscreenFrames((current) =>
-        current.size === 0 ? current : new Set()
-      )
-      return
-    }
-    const observer = new IntersectionObserver((entries) => {
-      setOffscreenFrames((current) => {
-        const next = new Set(current)
-        for (const entry of entries) {
-          const frameId = entry.target.getAttribute("data-frame-id")
-          if (frameId === null) continue
-          if (entry.isIntersecting) next.delete(frameId)
-          else next.add(frameId)
-        }
-        return next
-      })
-    })
-    for (const element of frameElementsRef.current.values()) {
-      observer.observe(element)
-    }
-    return () => observer.disconnect()
-  }, [pauseOffscreen, projection.frames])
 
   const applySelectionCommand = useCallback(
     (command: CanvasSelectionCommand) => {
@@ -264,79 +187,6 @@ export function CanvasBoard({
       additive: isAdditiveSelection(event)
     })
   }
-  const beginDrag = (
-    item: CanvasItem,
-    mode: DragMode,
-    event: ReactPointerEvent<HTMLElement>
-  ) => {
-    const itemRef: CanvasItemRef = "frameId" in item
-      ? { _tag: "frame", frameId: item.frameId }
-      : { _tag: "note", noteId: item.noteId }
-    if (
-      onSubmit === undefined ||
-      !CanvasSelection.has(selection, itemRef)
-    ) return
-    event.preventDefault()
-    event.currentTarget.setPointerCapture?.(event.pointerId)
-    dragRef.current = {
-      item,
-      mode,
-      pointerId: event.pointerId,
-      startClientX: event.clientX,
-      startClientY: event.clientY
-    }
-    setDragPreview({
-      itemKey: canvasItemKey(item),
-      geometry: item.geometry
-    })
-  }
-  const geometryFor = (item: CanvasItem): Geometry =>
-    dragPreview?.itemKey === canvasItemKey(item)
-      ? dragPreview.geometry
-      : item.geometry
-  const updateDrag = (event: ReactPointerEvent<HTMLElement>) => {
-    const drag = dragRef.current
-    if (drag === null || drag.pointerId !== event.pointerId) return
-    setDragPreview({
-      itemKey: canvasItemKey(drag.item),
-      geometry: dragGeometry(drag, event.clientX, event.clientY, camera.zoom)
-    })
-  }
-  const finishDrag = (event: ReactPointerEvent<HTMLElement>) => {
-    const drag = dragRef.current
-    if (drag === null || drag.pointerId !== event.pointerId) return
-    const geometry = dragGeometry(
-      drag,
-      event.clientX,
-      event.clientY,
-      camera.zoom
-    )
-    dragRef.current = null
-    setDragPreview(null)
-    if (onSubmit === undefined || sameGeometry(geometry, drag.item.geometry)) {
-      return
-    }
-    onSubmit([
-      "frameId" in drag.item
-        ? proposeSetFrameGeometry(drag.item, geometry)
-        : proposeSetNoteGeometry(drag.item, geometry)
-    ])
-  }
-  const cancelDrag = () => {
-    dragRef.current = null
-    setDragPreview(null)
-  }
-  const handleReviewEffect = (effect: ReviewClientEffect) => {
-    if (onEffect !== undefined) {
-      onEffect(effect)
-      return
-    }
-    applyReviewEffect(effect, {
-      frameElement: selectedFrameRef.current,
-      setPauseOffscreen
-    })
-  }
-
   const items = projection.stack.length === 0
     ? (
       <p role="status">{`${projection.title} has no Frames or Notes.`}</p>
@@ -381,10 +231,10 @@ export function CanvasBoard({
               data-review-status={frame.status}
               key={frame.frameId}
               role="option"
-              style={itemStyle(geometryFor(frame), zIndex)}
+              style={itemStyle(itemDrag.geometryFor(frame), zIndex)}
               onPointerDown={(event) => {
                 selectItem(item, event)
-                beginDrag(frame, "move", event)
+                itemDrag.begin(frame, "move", event)
               }}
             >
               {reviewStatusLabel[frame.status]}
@@ -392,7 +242,7 @@ export function CanvasBoard({
                 {...(liveThreads.length === 0 ? {} : { commentThreads: liveThreads })}
                 {...(frameReceivesInput ? { onInputIntent: onFrameInputIntent } : {})}
                 frame={frame}
-                paused={pauseOffscreen && offscreenFrames.has(frameId)}
+                paused={reviewEffects.isFramePaused(frameId)}
                 resolver={resolver}
               />
               {frameThreads.map((thread) => (
@@ -407,21 +257,21 @@ export function CanvasBoard({
               ))}
               {CanvasSelection.has(selection, item) && onSubmit !== undefined
                 ? (
-                  <button
+                  <span
                     aria-label={`Resize ${frame.title}`}
                     style={{
                       bottom: 0,
+                      cursor: "se-resize",
                       position: "absolute",
                       right: 0
                     }}
-                    type="button"
                     onPointerDown={(event) => {
                       event.stopPropagation()
-                      beginDrag(frame, "resize", event)
+                      itemDrag.begin(frame, "resize", event)
                     }}
                   >
                     Resize
-                  </button>
+                  </span>
                 )
                 : null}
             </div>
@@ -439,30 +289,30 @@ export function CanvasBoard({
               data-note-color={note.color}
               key={note.noteId}
               role="option"
-              style={itemStyle(geometryFor(note), zIndex)}
+              style={itemStyle(itemDrag.geometryFor(note), zIndex)}
               onPointerDown={(event) => {
                 selectItem(item, event)
-                beginDrag(note, "move", event)
+                itemDrag.begin(note, "move", event)
               }}
             >
               {note.text}
               {CanvasSelection.has(selection, item) && onSubmit !== undefined
                 ? (
-                  <button
+                  <span
                     aria-label={`Resize ${note.text}`}
                     style={{
                       bottom: 0,
+                      cursor: "se-resize",
                       position: "absolute",
                       right: 0
                     }}
-                    type="button"
                     onPointerDown={(event) => {
                       event.stopPropagation()
-                      beginDrag(note, "resize", event)
+                      itemDrag.begin(note, "resize", event)
                     }}
                   >
                     Resize
-                  </button>
+                  </span>
                 )
                 : null}
             </div>
@@ -481,7 +331,7 @@ export function CanvasBoard({
       className={className}
       role={hasItems ? "listbox" : undefined}
       style={{ position: "relative" }}
-      onPointerCancel={cancelDrag}
+      onPointerCancel={itemDrag.cancel}
       onPointerDown={(event) => {
         const target = event.target
         if (
@@ -491,17 +341,17 @@ export function CanvasBoard({
         setSelectedThreadId(null)
         applySelectionCommand({ _tag: "clear" })
       }}
-      onPointerMove={updateDrag}
-      onPointerUp={finishDrag}
+      onPointerMove={itemDrag.update}
+      onPointerUp={itemDrag.finish}
     >
       {onSubmit === undefined
         ? null
         : (
           <ReviewChrome
-            fullscreen={fullscreen}
-            onEffect={handleReviewEffect}
+            fullscreen={reviewEffects.fullscreen}
+            onEffect={reviewEffects.handle}
             onSubmit={onSubmit}
-            pauseOffscreen={pauseOffscreen}
+            pauseOffscreen={reviewEffects.pauseOffscreen}
             projection={projection}
             selection={activeThreadId === null
               ? { _tag: "items", items: selection }

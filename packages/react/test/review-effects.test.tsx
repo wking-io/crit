@@ -42,7 +42,11 @@ describe("applyReviewEffect", () => {
       { frameElement: null, setPauseOffscreen: vi.fn() }
     )
 
-    expect(open).toHaveBeenCalledWith("https://example.com")
+    expect(open).toHaveBeenCalledWith(
+      "https://example.com",
+      "_blank",
+      "noopener,noreferrer"
+    )
   })
 
   it("copies node ids", () => {

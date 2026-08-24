@@ -198,9 +198,10 @@ export function ReviewChrome({
       onPointerDown={(event) => event.stopPropagation()}
     >
       <div aria-label="Review actions" role="toolbar">
-        {available
-          .filter(({ id }) => !formActionIds.has(id))
-          .map((entry) => (
+        {available.map((entry) =>
+          formActionIds.has(entry.id)
+            ? null
+            : (
             <button
               aria-label={entry.label}
               key={entry.id}
@@ -209,7 +210,8 @@ export function ReviewChrome({
             >
               {entry.label}
             </button>
-          ))}
+            )
+        )}
       </div>
       {formActions
         .filter(({ id }) => availableIds.has(id))
