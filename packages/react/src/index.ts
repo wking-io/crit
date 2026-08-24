@@ -26,3 +26,10 @@ export type {
 } from "./frame-renderer.js"
 export { ReplicaBoard } from "./replica-board.js"
 export type { ReplicaBoardProps } from "./replica-board.js"
+export { ReplicaSessionUnavailable, useReplicaSession } from "./replica-session.js"
+export type {
+  ReplicaSession,
+  ReplicaSessionHandle,
+  ReplicaSessionPorts,
+  ReplicaSessionRun
+} from "./replica-session.js"
