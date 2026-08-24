@@ -5,16 +5,20 @@ import { afterEach, describe, expect, it } from "vitest"
 
 import {
   CanvasCamera,
+  CanvasSelection,
   SessionStorageUnavailable,
   getCanvasCameraSession,
+  getCanvasSelectionSession,
   getSessionPreference,
   layerMemory,
   layerSessionStorage,
   layerStorage,
   removeCanvasCameraSession,
+  removeCanvasSelectionSession,
   removeSessionPreference,
   sessionPreferenceKey,
   setCanvasCameraSession,
+  setCanvasSelectionSession,
   setSessionPreference
 } from "../src/index.js"
 
@@ -220,6 +224,52 @@ describe("canvas camera session", () => {
     expect(
       globalThis.sessionStorage.getItem(
         sessionPreferenceKey({ canvasId: canvasA, name: "camera" })
+      )
+    ).toContain("\"schemaVersion\":1")
+  })
+})
+
+describe("canvas selection session", () => {
+  afterEach(() => {
+    globalThis.sessionStorage.removeItem(
+      sessionPreferenceKey({ canvasId: canvasA, name: "selection" })
+    )
+  })
+
+  it("restores a selection for one canvas after a reload of the same store", async() => {
+    const selection = CanvasSelection.make([
+      { _tag: "frame", frameId: "frame_checkout" }
+    ])
+    const values = await run(Effect.gen(function*() {
+      yield* setCanvasSelectionSession({ canvasId: canvasA, selection })
+      return {
+        saved: yield* getCanvasSelectionSession({ canvasId: canvasA }),
+        other: yield* getCanvasSelectionSession({ canvasId: canvasB })
+      }
+    }))
+    expect(values.saved).toEqual(selection)
+    expect(values.other).toBeUndefined()
+    const cleared = await run(Effect.gen(function*() {
+      yield* removeCanvasSelectionSession({ canvasId: canvasA })
+      return yield* getCanvasSelectionSession({ canvasId: canvasA })
+    }))
+    expect(cleared).toBeUndefined()
+  })
+
+  it("uses sessionStorage when the host provides that layer", async() => {
+    const selection = CanvasSelection.make([
+      { _tag: "note", noteId: "note_price" }
+    ])
+    const saved = await Effect.runPromise(
+      setCanvasSelectionSession({ canvasId: canvasA, selection }).pipe(
+        Effect.andThen(getCanvasSelectionSession({ canvasId: canvasA })),
+        Effect.provide(layerSessionStorage)
+      )
+    )
+    expect(saved).toEqual(selection)
+    expect(
+      globalThis.sessionStorage.getItem(
+        sessionPreferenceKey({ canvasId: canvasA, name: "selection" })
       )
     ).toContain("\"schemaVersion\":1")
   })
