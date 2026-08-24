@@ -149,7 +149,16 @@ export function ReviewChrome({
   projection,
   selection
 }: ReviewChromeProps): ReactElement {
-  const available = availableReviewActions({ projection, selection })
+  const context = {
+    projection,
+    selection,
+    input: ReviewActionInput.none,
+    fullscreen,
+    pauseOffscreen
+  }
+  const available = availableReviewActions(context).filter((entry) =>
+    resolveReviewAction(entry.id, context) !== null || formActionIds.has(entry.id)
+  )
   const availableIds = new Set<string>(available.map(({ id }) => id))
   const run = (
     id: ReviewActionId,

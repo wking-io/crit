@@ -121,6 +121,10 @@ describe("ReviewChrome", () => {
       frameId: "frame_checkout",
       expectedUpdatedByChangeId: "change_1"
     }])
+
+    expect(container.querySelector("[aria-label='Enter fullscreen']"))
+      .toBeInstanceOf(HTMLButtonElement)
+    expect(container.querySelector("[aria-label='Exit fullscreen']")).toBeNull()
   })
 
   it("submits an add-note batch from the form", async() => {

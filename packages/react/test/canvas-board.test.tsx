@@ -250,6 +250,42 @@ describe("CanvasBoard", () => {
     }])
   })
 
+  it("submits Frame geometry from the first pointer drag", async() => {
+    const onSubmit = vi.fn()
+    const resolver: FrameRepresentationResolver = {
+      resolve: () => Effect.succeed(IframeRenderPlan.make({
+        representation: projection.frames[0]!.representation,
+        url
+      }) satisfies RenderPlan)
+    }
+    await act(async() => render(
+      <CanvasBoard
+        {...requiredBoard}
+        onSubmit={onSubmit}
+        projection={projection}
+        resolver={resolver}
+      />
+    ))
+    const frame = container.querySelector("[aria-label='Checkout']")
+    const board = container.querySelector("[aria-label='Review']")
+    if (!(frame instanceof HTMLElement) || !(board instanceof HTMLElement)) {
+      throw new Error("Review Frame missing")
+    }
+
+    await act(async() => {
+      pointer(frame, "pointerdown", 100, 100)
+      pointer(board, "pointermove", 120, 130)
+      pointer(board, "pointerup", 120, 130)
+    })
+
+    expect(onSubmit).toHaveBeenCalledWith([{
+      _tag: "set-frame-geometry",
+      frameId: "frame_checkout",
+      expectedChangedByChangeId: "change_1",
+      geometry: { x: 60, y: 110, width: 320, height: 200 }
+    }])
+  })
+
   it("submits selected Frame geometry after a pointer move", async() => {
     const onSubmit = vi.fn()
     const resolver: FrameRepresentationResolver = {

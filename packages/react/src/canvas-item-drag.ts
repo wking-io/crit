@@ -1,6 +1,5 @@
 import {
   type CanvasCommandBatch,
-  type CanvasItemRef,
   type Frame,
   type Geometry,
   type Note,
@@ -14,7 +13,6 @@ import {
 } from "react"
 
 import type { CanvasCamera } from "./canvas-camera.js"
-import { CanvasSelection, type CanvasSelection as Selection } from "./canvas-selection.js"
 
 type CanvasItem = Frame | Note
 type DragMode = "move" | "resize"
@@ -34,11 +32,6 @@ type DragPreview = {
 
 const itemKey = (item: CanvasItem): string =>
   "frameId" in item ? `frame:${item.frameId}` : `note:${item.noteId}`
-
-const itemRef = (item: CanvasItem): CanvasItemRef =>
-  "frameId" in item
-    ? { _tag: "frame", frameId: item.frameId }
-    : { _tag: "note", noteId: item.noteId }
 
 const dragGeometry = (
   drag: CanvasDrag,
@@ -70,7 +63,6 @@ const sameGeometry = (left: Geometry, right: Geometry): boolean =>
 
 export const useCanvasItemDrag = (args: {
   readonly camera: CanvasCamera
-  readonly selection: Selection
   readonly onSubmit?: (commands: CanvasCommandBatch) => void
 }) => {
   const dragRef = useRef<CanvasDrag | null>(null)
@@ -81,10 +73,7 @@ export const useCanvasItemDrag = (args: {
     mode: DragMode,
     event: ReactPointerEvent<HTMLElement>
   ) => {
-    if (
-      args.onSubmit === undefined ||
-      !CanvasSelection.has(args.selection, itemRef(item))
-    ) return
+    if (args.onSubmit === undefined) return
     event.preventDefault()
     event.currentTarget.setPointerCapture?.(event.pointerId)
     dragRef.current = {

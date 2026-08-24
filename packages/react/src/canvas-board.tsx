@@ -105,7 +105,6 @@ export function CanvasBoard({
   const inputTarget = CanvasSelection.inputTarget(selection)
   const itemDrag = useCanvasItemDrag({
     camera,
-    selection,
     ...(onSubmit === undefined ? {} : { onSubmit })
   })
   const reviewEffects = useReviewEffects({
