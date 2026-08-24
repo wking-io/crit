@@ -4,11 +4,15 @@ import {
   type HttpUrl,
   type RepresentationRef
 } from "@crit/domain"
-import { connectBridgedFrameComments } from "@crit/frame-bridge"
+import {
+  connectBridgedFrameComments,
+  connectBridgedFrameInput
+} from "@crit/frame-bridge"
 import {
   FrameBridgeOrigin,
   FrameCommentPinSchema,
-  type FrameCommentPin
+  type FrameCommentPin,
+  type FrameInputIntent
 } from "@crit/protocol"
 import type { RenderPlan } from "@crit/representations"
 import { useQuery } from "@tanstack/react-query"
@@ -38,6 +42,7 @@ export interface FrameRendererProps {
   readonly resolver: FrameRepresentationResolver
   readonly commentThreads?: readonly CommentThread[]
   readonly className?: string
+  readonly onInputIntent?: (intent: FrameInputIntent) => void
 }
 
 let nextResolverId = 0
@@ -130,11 +135,13 @@ const liveCommentPins = (
 function LiveFrame({
   className,
   commentThreads,
+  onInputIntent,
   plan,
   title
 }: {
   readonly className: string | undefined
   readonly commentThreads: readonly CommentThread[]
+  readonly onInputIntent?: (intent: FrameInputIntent) => void
   readonly plan: Extract<RenderPlan, { readonly _tag: "iframe" }>
   readonly title: Frame["title"]
 }): ReactElement {
@@ -166,6 +173,19 @@ function LiveFrame({
     }
   }, [commentThreads, plan.url])
 
+  useEffect(() => {
+    if (onInputIntent === undefined) return
+    const iframe = iframeRef.current
+    const origin = frameOrigin(plan.url)
+    if (iframe === null || origin === undefined) return
+    return connectBridgedFrameInput({
+      target: window,
+      frameElement: iframe,
+      frameOrigin: origin,
+      onIntent: onInputIntent
+    })
+  }, [onInputIntent, plan.url])
+
   return (
     // Live review Frames stay unsandboxed so the reviewed page can run.
     // react-doctor-disable-next-line react-doctor/iframe-missing-sandbox
@@ -182,11 +202,13 @@ function LiveFrame({
 const ResolvedFrame = ({
   className,
   commentThreads,
+  onInputIntent,
   plan,
   title
 }: {
   readonly className: string | undefined
   readonly commentThreads: readonly CommentThread[]
+  readonly onInputIntent?: (intent: FrameInputIntent) => void
   readonly plan: RenderPlan
   readonly title: Frame["title"]
 }): ReactElement => Match.value(plan).pipe(Match.tagsExhaustive({
@@ -194,6 +216,7 @@ const ResolvedFrame = ({
     <LiveFrame
       className={className}
       commentThreads={commentThreads}
+      {...(onInputIntent === undefined ? {} : { onInputIntent })}
       plan={iframe}
       title={title}
     />
@@ -212,6 +235,7 @@ export function FrameRenderer({
   className,
   commentThreads = noCommentThreads,
   frame,
+  onInputIntent,
   resolver
 }: FrameRendererProps): ReactElement {
   const query = useQuery({
@@ -242,6 +266,7 @@ export function FrameRenderer({
     <ResolvedFrame
       className={className}
       commentThreads={commentThreads}
+      {...(onInputIntent === undefined ? {} : { onInputIntent })}
       plan={query.data}
       title={frame.title}
     />

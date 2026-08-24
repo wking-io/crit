@@ -93,6 +93,36 @@ describe("Frame input relay", () => {
     expect(intents).toEqual([{ type: "wheel", ...wheel }])
   })
 
+  it("lets the Canvas ignore a wheel over a selected Frame", () => {
+    const target = gestureHost()
+    const root = new EventTarget()
+    Object.defineProperty(root, "getBoundingClientRect", {
+      value: () => ({ bottom: 600, left: 0, right: 800, top: 0 })
+    })
+    const intents: Array<unknown> = []
+    const disconnect = connectCanvasInput({
+      target: canvasInputWindow(target),
+      root: canvasInputRoot(root),
+      ignore: ({ clientX, clientY }) => clientX < 50 && clientY < 50,
+      onIntent: (intent) => intents.push(intent)
+    })
+    const event = new Event("wheel", { cancelable: true })
+    Object.defineProperties(event, {
+      clientX: { value: 20 },
+      clientY: { value: 30 },
+      ctrlKey: { value: false },
+      deltaX: { value: 4 },
+      deltaY: { value: 8 },
+      metaKey: { value: false }
+    })
+
+    target.dispatchEvent(event)
+    disconnect()
+
+    expect(event.defaultPrevented).toBe(false)
+    expect(intents).toEqual([])
+  })
+
   it("routes trackpad pan and zoom across Frame content", () => {
     const relay = createFrameInputRelay()
 

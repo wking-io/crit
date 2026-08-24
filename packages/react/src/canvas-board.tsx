@@ -4,9 +4,13 @@ import {
   type Frame,
   type Note
 } from "@crit/domain"
-import { connectCanvasInput } from "@crit/frame-bridge"
+import {
+  connectCanvasInput,
+  type FrameInputIntent
+} from "@crit/frame-bridge"
 import { Match } from "effect"
 import {
+  useCallback,
   useEffect,
   useLayoutEffect,
   useRef,
@@ -65,12 +69,31 @@ export function CanvasBoard({
   selection
 }: CanvasBoardProps): ReactElement {
   const rootRef = useRef<HTMLElement>(null)
+  const selectedFrameRef = useRef<HTMLDivElement>(null)
   const navigationRef = useRef({ camera, onCameraChange })
   const navigationArmed = camera !== undefined && onCameraChange !== undefined
+  const inputTarget = CanvasSelection.inputTarget(selection)
 
   useLayoutEffect(() => {
     navigationRef.current = { camera, onCameraChange }
   }, [camera, onCameraChange])
+
+  const applyCameraIntent = useCallback((intent: FrameInputIntent) => {
+    const root = rootRef.current
+    if (root === null) return
+    const latest = navigationRef.current
+    if (latest.camera === undefined || latest.onCameraChange === undefined) {
+      return
+    }
+    const nextCamera = applyCanvasCameraIntent(
+      latest.camera,
+      intent,
+      root.getBoundingClientRect()
+    )
+    if (nextCamera !== latest.camera) {
+      latest.onCameraChange(nextCamera)
+    }
+  }, [])
 
   useEffect(() => {
     if (!navigationArmed) return
@@ -79,21 +102,18 @@ export function CanvasBoard({
     return connectCanvasInput({
       target: window,
       root,
-      onIntent: (intent) => {
-        const latest = navigationRef.current
-        if (latest.camera === undefined || latest.onCameraChange === undefined) {
-          return
-        }
-        latest.onCameraChange(
-          applyCanvasCameraIntent(
-            latest.camera,
-            intent,
-            root.getBoundingClientRect()
-          )
-        )
+      onIntent: applyCameraIntent,
+      ignore: ({ clientX, clientY }) => {
+        const frame = selectedFrameRef.current
+        if (frame === null) return false
+        const rect = frame.getBoundingClientRect()
+        return clientX >= rect.left &&
+          clientX <= rect.right &&
+          clientY >= rect.top &&
+          clientY <= rect.bottom
       }
     })
-  }, [navigationArmed])
+  }, [applyCameraIntent, navigationArmed])
 
   const frames = framesById(projection.frames)
   const notes = notesById(projection.notes)
@@ -117,8 +137,16 @@ export function CanvasBoard({
           const frameThreads = threads.filter(
             (thread) => thread.anchor._tag === "frame"
           )
+          const frameReceivesInput = navigationArmed && (
+            inputTarget._tag === "camera" || inputTarget.frameId !== frameId
+          )
           return (
             <div
+              ref={
+                inputTarget._tag === "frame" && inputTarget.frameId === frameId
+                  ? selectedFrameRef
+                  : undefined
+              }
               aria-label={frame.title}
               aria-selected={ariaSelected(selection, item)}
               key={frame.frameId}
@@ -127,6 +155,7 @@ export function CanvasBoard({
             >
               <FrameRenderer
                 {...(liveThreads.length === 0 ? {} : { commentThreads: liveThreads })}
+                {...(frameReceivesInput ? { onInputIntent: applyCameraIntent } : {})}
                 frame={frame}
                 resolver={resolver}
               />

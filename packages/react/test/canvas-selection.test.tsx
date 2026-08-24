@@ -155,6 +155,19 @@ describe("CanvasSelection", () => {
     expect(CanvasSelection.has(checkoutSelection, priceNote)).toBe(false)
     expect(CanvasSelection.has(checkoutSelection, unknownSelection[0]!)).toBe(false)
   })
+
+  it("gives Frame input only to a sole selected Frame", () => {
+    expect(CanvasSelection.inputTarget(undefined)).toEqual({ _tag: "camera" })
+    expect(CanvasSelection.inputTarget(emptySelection)).toEqual({ _tag: "camera" })
+    expect(CanvasSelection.inputTarget(bothSelection)).toEqual({ _tag: "camera" })
+    expect(CanvasSelection.inputTarget(CanvasSelection.make([priceNote]))).toEqual(
+      { _tag: "camera" }
+    )
+    expect(CanvasSelection.inputTarget(checkoutSelection)).toEqual({
+      _tag: "frame",
+      frameId: "frame_checkout"
+    })
+  })
 })
 
 describe("CanvasBoard selection", () => {

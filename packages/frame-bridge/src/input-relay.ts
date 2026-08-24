@@ -66,8 +66,14 @@ export const connectCanvasInput = (input: {
   readonly target: Window
   readonly root: HTMLElement
   readonly onIntent: (intent: FrameInputIntent) => void
+  readonly ignore?: (point: {
+    readonly clientX: number
+    readonly clientY: number
+  }) => boolean
 }) => {
   const relay = createFrameInputRelay()
+  const ignored = (clientX: number, clientY: number) =>
+    input.ignore?.({ clientX, clientY }) === true
   const captureWheel = (event: WheelEvent) => {
     const rect = input.root.getBoundingClientRect()
     if (
@@ -76,6 +82,7 @@ export const connectCanvasInput = (input: {
       event.clientY < rect.top ||
       event.clientY > rect.bottom
     ) return
+    if (ignored(event.clientX, event.clientY)) return
     const decision = relay.wheel(event)
     if (!decision.handled) return
     event.preventDefault()
@@ -92,21 +99,26 @@ export const connectCanvasInput = (input: {
     }
   }
   const captureGestureStart = (event: NativeGestureEvent) => {
+    if (ignored(event.clientX ?? 0, event.clientY ?? 0)) return
     event.preventDefault()
     event.stopPropagation()
     relay.gestureStart(event.scale, gesturePoint(event))
   }
   const captureGestureChange = (event: NativeGestureEvent) => {
+    if (ignored(event.clientX ?? 0, event.clientY ?? 0)) return
     event.preventDefault()
     event.stopPropagation()
     input.onIntent(relay.gestureChange(event.scale, gesturePoint(event)))
   }
   const captureGestureEnd = (event: NativeGestureEvent) => {
+    if (ignored(event.clientX ?? 0, event.clientY ?? 0)) return
     event.preventDefault()
     event.stopPropagation()
     relay.gestureEnd()
   }
   const captureTouchStart = (event: TouchEvent) => {
+    const first = event.touches[0]
+    if (first !== undefined && ignored(first.clientX, first.clientY)) return
     if (!relay.touchStart(touchPoints(event))) return
     event.preventDefault()
     event.stopPropagation()
