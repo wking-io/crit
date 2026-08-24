@@ -39,6 +39,7 @@ const startWithoutBrowser = (dataRoot: string) => new Promise<{
   const child = spawn(process.execPath, [
     join(import.meta.dirname, "..", "dist", "main.js"),
     "dev",
+    "--no-host",
     "--data-root",
     dataRoot
   ], { stdio: ["ignore", "pipe", "pipe"] })

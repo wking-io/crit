@@ -66,6 +66,12 @@ describe("built crit-target init", () => {
     expect(second._tag).toBe("unchanged")
     expect(second.manifest).toEqual(first.manifest)
     expect(readFileSync(path.join(root, "crit.manifest.json"), "utf8")).toBe(firstBytes)
+    const skillPath = path.join(root, ".agents", "skills", "crit", "SKILL.md")
+    expect(readFileSync(skillPath, "utf8")).toContain("crit add-frame")
+    writeFileSync(skillPath, "agent owned\n")
+    const again = run()
+    expect(again.status, again.stderr).toBe(0)
+    expect(readFileSync(skillPath, "utf8")).toBe("agent owned\n")
   })
 
   it("converges concurrent processes on one project identity", async() => {

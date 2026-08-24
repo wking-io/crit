@@ -5,6 +5,7 @@
   "type": "module",
   "sideEffects": false,
   "bin": {
+    "crit": "dist/main.js",
     "crit-target": "dist/main.js"
   },
   "exports": {
@@ -20,7 +21,8 @@
     "@crit/replica": "*",
     "@crit/representations": "*",
     "@effect/platform-node": "4.0.0-rc.109",
-    "effect": "4.0.0-rc.109"
+    "effect": "4.0.0-rc.109",
+    "vite": "7.3.6"
   },
   "devDependencies": {
     "vitest": "4.1.0"
