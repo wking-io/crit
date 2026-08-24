@@ -27,7 +27,7 @@ import {
 import { ReplicaModel, ReplicaView } from "@crit/replica"
 import { LocalApiUnauthorized, LocalApiVersionUnsupported } from "@crit/replica/http"
 import { ApplicationBaseUrl } from "@crit/representations"
-import { Console, Context, Effect, Layer, Match, Option, Redacted, Result, Schema, type Effect as EffectType } from "effect"
+import { Console, Context, Crypto, Effect, Layer, Match, Option, Redacted, Result, Schema, type Effect as EffectType } from "effect"
 import { Argument, Command, Flag } from "effect/unstable/cli"
 
 import { frameCommand, frameSourceLabel, resolveFrameGeometry } from "./add-frame.js"
@@ -347,6 +347,11 @@ const addFrame = Command.make("add-frame", {
     onFailure: (message) => Effect.fail(new CliOperationalFailure({ message })),
     onSuccess: Effect.succeed
   })
+  const crypto = yield* Crypto.Crypto
+  const frameId = yield* crypto.randomUUIDv4.pipe(
+    Effect.map((uuid) => Id.frame(`frame_${uuid.replaceAll("-", "")}`)),
+    Effect.mapError((cause) => new CliOperationalFailure({ message: cause.message }))
+  )
   const added = yield* connected(root, ({ client }) => Effect.gen(function*() {
     yield* client.open(id).pipe(
       Effect.mapError((failure) => Match.value(failure).pipe(
@@ -356,7 +361,6 @@ const addFrame = Command.make("add-frame", {
         Match.orElse(() => new CliOperationalFailure({ message: "Unable to add Frame" }))
       ))
     )
-    const frameId = Id.frame(`frame_${crypto.randomUUID().replaceAll("-", "")}`)
     const command = frameCommand({
       frameId,
       title: resolvedTitle,
