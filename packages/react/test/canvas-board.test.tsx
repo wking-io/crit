@@ -24,47 +24,49 @@ notifyManager.setNotifyFunction((callback) => act(callback))
 notifyManager.setScheduler(queueMicrotask)
 
 const url = "https://example.com/checkout"
-const projection = decodeCanvasProjection({
-  schemaVersion: 2,
-  canvasId: "canvas_review",
-  title: "Review",
-  frames: [{
-    frameId: "frame_checkout",
-    title: "Checkout",
-    representation: { _tag: "web-url", url },
-    status: "in-progress",
-    geometry: { x: 40, y: 80, width: 320, height: 200 },
-    createdByChangeId: "change_1",
-    updatedByChangeId: "change_1",
-    titleChangedByChangeId: "change_1",
-    representationChangedByChangeId: "change_1",
-    statusChangedByChangeId: "change_1",
-    geometryChangedByChangeId: "change_1"
-  }],
-  notes: [{
-    noteId: "note_price",
-    text: "Check the price",
-    geometry: { x: 400, y: 80, width: 160, height: 80 },
-    attachedFrameId: "frame_checkout",
-    createdByChangeId: "change_1",
-    updatedByChangeId: "change_1",
-    textChangedByChangeId: "change_1",
-    geometryChangedByChangeId: "change_1",
-    attachmentChangedByChangeId: "change_1"
-  }],
-  threads: [],
-  stack: [
-    { _tag: "frame", frameId: "frame_checkout" },
-    { _tag: "note", noteId: "note_price" }
-  ],
-  stackChangedByChangeId: "change_1",
-  issuedIds: {
-    frameIds: ["frame_checkout"],
-    noteIds: ["note_price"],
-    threadIds: [],
-    commentIds: []
-  }
-})
+const reviewProjection = (status: "in-progress" | "ready-for-review") =>
+  decodeCanvasProjection({
+    schemaVersion: 2,
+    canvasId: "canvas_review",
+    title: "Review",
+    frames: [{
+      frameId: "frame_checkout",
+      title: "Checkout",
+      representation: { _tag: "web-url", url },
+      status,
+      geometry: { x: 40, y: 80, width: 320, height: 200 },
+      createdByChangeId: "change_1",
+      updatedByChangeId: "change_1",
+      titleChangedByChangeId: "change_1",
+      representationChangedByChangeId: "change_1",
+      statusChangedByChangeId: "change_1",
+      geometryChangedByChangeId: "change_1"
+    }],
+    notes: [{
+      noteId: "note_price",
+      text: "Check the price",
+      geometry: { x: 400, y: 80, width: 160, height: 80 },
+      attachedFrameId: "frame_checkout",
+      createdByChangeId: "change_1",
+      updatedByChangeId: "change_1",
+      textChangedByChangeId: "change_1",
+      geometryChangedByChangeId: "change_1",
+      attachmentChangedByChangeId: "change_1"
+    }],
+    threads: [],
+    stack: [
+      { _tag: "frame", frameId: "frame_checkout" },
+      { _tag: "note", noteId: "note_price" }
+    ],
+    stackChangedByChangeId: "change_1",
+    issuedIds: {
+      frameIds: ["frame_checkout"],
+      noteIds: ["note_price"],
+      threadIds: [],
+      commentIds: []
+    }
+  })
+const projection = reviewProjection("in-progress")
 
 const empty = decodeCanvasProjection({
   schemaVersion: 2,
@@ -130,6 +132,8 @@ describe("CanvasBoard", () => {
     expect(frame.style.width).toBe("320px")
     expect(frame.style.height).toBe("200px")
     expect(frame.style.zIndex).toBe("0")
+    expect(frame.getAttribute("data-review-status")).toBe("in-progress")
+    expect(frame.textContent).toContain("In progress")
     expect(note?.textContent).toBe("Check the price")
     expect(note?.style.left).toBe("400px")
     expect(note?.style.zIndex).toBe("1")
@@ -148,5 +152,26 @@ describe("CanvasBoard", () => {
     )
     expect(container.querySelector("iframe")).toBeNull()
     expect(container.querySelector("[aria-label='Check the price']")).toBeNull()
+  })
+
+  it("paints the Frame review-status label from the closed table", async() => {
+    const ready = reviewProjection("ready-for-review")
+    const resolver: FrameRepresentationResolver = {
+      resolve: () => Effect.succeed(IframeRenderPlan.make({
+        representation: ready.frames[0]!.representation,
+        url
+      }) satisfies RenderPlan)
+    }
+
+    await act(async() => render(
+      <CanvasBoard {...requiredBoard} projection={ready} resolver={resolver} />
+    ))
+    await waitFor(() => expect(container.querySelector("iframe")).not.toBeNull())
+
+    const frame = container.querySelector("[aria-label='Checkout']")
+    expect(frame).toBeInstanceOf(HTMLElement)
+    if (!(frame instanceof HTMLElement)) return
+    expect(frame.getAttribute("data-review-status")).toBe("ready-for-review")
+    expect(frame.textContent).toContain("Ready for review")
   })
 })
