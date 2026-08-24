@@ -20,6 +20,7 @@ import {
   CanvasCamera,
   type FrameRepresentationResolver
 } from "../src/index.js"
+import { requiredBoard } from "./required-board.js"
 
 Object.defineProperty(globalThis, "IS_REACT_ACT_ENVIRONMENT", { value: true })
 notifyManager.setNotifyFunction((callback) => act(callback))
@@ -196,7 +197,7 @@ afterEach(async() => {
 
 describe("CanvasBoard comment pins", () => {
   it("renders no pins when the projection has no threads", async() => {
-    await renderReady(<CanvasBoard projection={projection} resolver={resolver} />)
+    await renderReady(<CanvasBoard {...requiredBoard}  projection={projection} resolver={resolver} />)
 
     const frame = container.querySelector("[aria-label='Checkout']")
     expect(frame).toBeInstanceOf(HTMLElement)
@@ -207,7 +208,7 @@ describe("CanvasBoard comment pins", () => {
 
   it("places a Frame-anchored thread inside its Frame", async() => {
     await renderReady(
-      <CanvasBoard projection={threadedProjection} resolver={resolver} />
+      <CanvasBoard {...requiredBoard}  projection={threadedProjection} resolver={resolver} />
     )
 
     const frame = container.querySelector("[aria-label='Checkout']")
@@ -227,7 +228,7 @@ describe("CanvasBoard comment pins", () => {
 
   it("marks a resolved thread in its label and data attribute", async() => {
     await renderReady(
-      <CanvasBoard projection={threadedProjection} resolver={resolver} />
+      <CanvasBoard {...requiredBoard}  projection={threadedProjection} resolver={resolver} />
     )
 
     const pin = container.querySelector("[aria-label='Resolved: Confirm tax copy']")
@@ -238,7 +239,7 @@ describe("CanvasBoard comment pins", () => {
 
   it("does not paint an element thread on the Frame chrome", async() => {
     await renderReady(
-      <CanvasBoard projection={threadedProjection} resolver={resolver} />
+      <CanvasBoard {...requiredBoard}  projection={threadedProjection} resolver={resolver} />
     )
 
     const frame = container.querySelector("[aria-label='Checkout']")
@@ -262,7 +263,7 @@ describe("CanvasBoard comment pins", () => {
       .mockReturnValue(stubWindow)
 
     await renderReady(
-      <CanvasBoard projection={threadedProjection} resolver={resolver} />
+      <CanvasBoard {...requiredBoard}  projection={threadedProjection} resolver={resolver} />
     )
     await waitFor(() => expect(posted.length).toBeGreaterThan(0))
 
@@ -281,6 +282,7 @@ describe("CanvasBoard comment pins", () => {
   it("keeps pins inside the transformed camera world", async() => {
     await renderReady(
       <CanvasBoard
+        {...requiredBoard}
         camera={camera}
         projection={threadedProjection}
         resolver={resolver}

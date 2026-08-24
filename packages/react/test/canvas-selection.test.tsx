@@ -25,6 +25,7 @@ import {
   ReplicaBoard,
   type FrameRepresentationResolver
 } from "../src/index.js"
+import { requiredBoard } from "./required-board.js"
 
 Object.defineProperty(globalThis, "IS_REACT_ACT_ENVIRONMENT", { value: true })
 notifyManager.setNotifyFunction((callback) => act(callback))
@@ -222,17 +223,10 @@ describe("CanvasSelection", () => {
 })
 
 describe("CanvasBoard selection", () => {
-  it("omits aria-selected when no selection is passed", async() => {
-    await renderReady(
-      <CanvasBoard projection={projection} resolver={resolver} />
-    )
-
-    expect(container.querySelector("[aria-selected='true']")).toBeNull()
-  })
-
   it("marks only the selected Checkout Frame", async() => {
     await renderReady(
       <CanvasBoard
+        {...requiredBoard}
         projection={projection}
         resolver={resolver}
         selection={checkoutSelection}
@@ -251,6 +245,7 @@ describe("CanvasBoard selection", () => {
   it("marks both selected items", async() => {
     await renderReady(
       <CanvasBoard
+        {...requiredBoard}
         projection={projection}
         resolver={resolver}
         selection={bothSelection}
@@ -269,6 +264,7 @@ describe("CanvasBoard selection", () => {
   it("ignores selected refs that are absent from the projection", async() => {
     await renderReady(
       <CanvasBoard
+        {...requiredBoard}
         projection={projection}
         resolver={resolver}
         selection={unknownSelection}
@@ -281,16 +277,10 @@ describe("CanvasBoard selection", () => {
     expect(frame.hasAttribute("aria-selected")).toBe(false)
   })
 
-  it("paints an empty selection like an omitted selection", async() => {
-    await renderReady(
-      <CanvasBoard projection={projection} resolver={resolver} />
-    )
-    const omitted = [...container.querySelectorAll(
-      "[aria-label='Checkout'], [aria-label='Check the price']"
-    )].map((item) => item.getAttribute("aria-selected"))
-
+  it("paints an empty selection without aria-selected", async() => {
     await renderReady(
       <CanvasBoard
+        {...requiredBoard}
         projection={projection}
         resolver={resolver}
         selection={emptySelection}
@@ -300,7 +290,6 @@ describe("CanvasBoard selection", () => {
       "[aria-label='Checkout'], [aria-label='Check the price']"
     )].map((item) => item.getAttribute("aria-selected"))
 
-    expect(empty).toEqual(omitted)
     expect(empty).toEqual([null, null])
   })
 
@@ -308,6 +297,7 @@ describe("CanvasBoard selection", () => {
     const onSelectionChange = vi.fn()
     await renderReady(
       <CanvasBoard
+        {...requiredBoard}
         onSelectionChange={onSelectionChange}
         projection={projection}
         resolver={resolver}
@@ -327,6 +317,7 @@ describe("CanvasBoard selection", () => {
     const onSelectionChange = vi.fn()
     await renderReady(
       <CanvasBoard
+        {...requiredBoard}
         onSelectionChange={onSelectionChange}
         projection={projection}
         resolver={resolver}
@@ -351,6 +342,7 @@ describe("CanvasBoard selection", () => {
       const onSelectionChange = vi.fn()
       await renderReady(
         <CanvasBoard
+        {...requiredBoard}
           onSelectionChange={onSelectionChange}
           projection={projection}
           resolver={resolver}
@@ -367,6 +359,7 @@ describe("CanvasBoard selection", () => {
 
       await renderReady(
         <CanvasBoard
+        {...requiredBoard}
           onSelectionChange={onSelectionChange}
           projection={projection}
           resolver={resolver}
@@ -385,6 +378,7 @@ describe("CanvasBoard selection", () => {
     const onSelectionChange = vi.fn()
     await renderReady(
       <CanvasBoard
+        {...requiredBoard}
         onCameraChange={onCameraChange}
         onSelectionChange={onSelectionChange}
         projection={projection}
@@ -415,21 +409,11 @@ describe("CanvasBoard selection", () => {
     expect(onCameraChange).not.toHaveBeenCalled()
   })
 
-  it("leaves pointer down inert when the host omits selection changes", async() => {
-    await renderReady(
-      <CanvasBoard projection={projection} resolver={resolver} />
-    )
-    const frame = container.querySelector("[aria-label='Checkout']")
-    expect(frame).toBeInstanceOf(HTMLElement)
-    if (!(frame instanceof HTMLElement)) return
-
-    expect(() => pointerDown(frame)).not.toThrow()
-  })
-
   it("clears selection on empty listbox chrome pointer down", async() => {
     const onSelectionChange = vi.fn()
     await renderReady(
       <CanvasBoard
+        {...requiredBoard}
         onSelectionChange={onSelectionChange}
         projection={projection}
         resolver={resolver}
@@ -452,6 +436,7 @@ describe("ReplicaBoard selection", () => {
     const onSelectionChange = vi.fn()
     await renderReady(
       <ReplicaBoard
+        {...requiredBoard}
         onSelectionChange={onSelectionChange}
         resolver={resolver}
         selection={checkoutSelection}
@@ -477,6 +462,7 @@ describe("ReplicaBoard selection", () => {
   it("keeps selected items in the camera world and sync chrome outside it", async() => {
     await renderReady(
       <ReplicaBoard
+        {...requiredBoard}
         camera={camera}
         resolver={resolver}
         selection={checkoutSelection}
