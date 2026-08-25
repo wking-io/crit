@@ -164,7 +164,7 @@ describe("ReviewChrome", () => {
       title: "Checkout",
       representation: capturedArtifact,
       status: "in-progress",
-      geometry: { x: 400, y: 80, width: 320, height: 200 }
+      geometry: { x: -320, y: 80, width: 320, height: 200 }
     }])
 
     await act(async() => press("S"))
@@ -175,7 +175,7 @@ describe("ReviewChrome", () => {
       title: "Checkout",
       representation: capturedArtifact,
       status: "in-progress",
-      geometry: { x: 400, y: 80, width: 320, height: 200 }
+      geometry: { x: -320, y: 80, width: 320, height: 200 }
     }])
   })
 

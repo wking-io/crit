@@ -43,7 +43,7 @@ const snapshotCommand = (
   status: "in-progress",
   geometry: {
     ...source.geometry,
-    x: source.geometry.x + source.geometry.width + 40
+    x: source.geometry.x - source.geometry.width - 40
   }
 })
 
