@@ -1,6 +1,6 @@
 import * as SqliteClient from "@effect/sql-sqlite-node/SqliteClient"
 import * as SqliteMigrator from "@effect/sql-sqlite-node/SqliteMigrator"
-import { Cause, Data, Effect, Schedule, Schema } from "effect"
+import { Cause, Data, Effect, Layer, Schedule, Schema } from "effect"
 import * as Reactivity from "effect/unstable/reactivity/Reactivity"
 import * as SqlClient from "effect/unstable/sql/SqlClient"
 import * as SqlError from "effect/unstable/sql/SqlError"
@@ -109,3 +109,8 @@ export const makeDatabase = (options: SqliteLocalOptions) => Effect.gen(function
   path: options.path,
   reason: Cause.pretty(cause)
 }))))
+
+export const localDatabaseLayer = (
+  options: SqliteLocalOptions
+): Layer.Layer<SqliteClient.SqliteClient, LocalDatabaseOpenFailure> =>
+  Layer.effect(SqliteClient.SqliteClient, makeDatabase(options))

@@ -27,10 +27,10 @@ import type {
 import { DurableObject } from "cloudflare:workers"
 import { Cause, Effect, Exit, Result, Schema } from "effect"
 
-import { makeStorageSqlite } from "./durable-sqlite.js"
+import { DurableSqliteStorage } from "./durable-sqlite.js"
 import {
   createOneCanvas,
-  makeOneCanvas
+  OneCanvasLoader
 } from "./one-canvas.js"
 import { applyAuthoritySchema } from "./schema.js"
 import { DurableSqlRowLimitExceeded } from "./stored-json.js"
@@ -119,7 +119,10 @@ export class CanvasDurableObject extends DurableObject {
   constructor(ctx: DurableObjectState, env: Cloudflare.Env) {
     super(ctx, env)
     ctx.blockConcurrencyWhile(async () => {
-      Effect.runSync(applyAuthoritySchema(makeStorageSqlite(ctx.storage)))
+      Effect.runSync(Effect.gen(function*() {
+        const storageSqlite = yield* DurableSqliteStorage
+        return yield* applyAuthoritySchema(storageSqlite.fromStorage(ctx.storage))
+      }).pipe(Effect.provide(DurableSqliteStorage.layer)))
     })
   }
 
@@ -129,13 +132,17 @@ export class CanvasDurableObject extends DurableObject {
 
   private async result<A, E>(
     testClockId: string | undefined,
-    effect: Effect.Effect<A, E, AuthorityClock>,
+    effect: Effect.Effect<A, E, AuthorityClock | DurableSqliteStorage | OneCanvasLoader>,
     requestId: string
   ): Promise<DurableObjectResult<A, E>> {
     const clock = testClockId === undefined
       ? AuthorityClockLive
       : callbackClock(this.ctx, testClockId)
-    const program = effect.pipe(Effect.provide(clock))
+    const program = effect.pipe(
+      Effect.provide(clock),
+      Effect.provide(DurableSqliteStorage.layer),
+      Effect.provide(OneCanvasLoader.layer)
+    )
     if (testClockId === undefined) return runResult(program)
     this.activeRequests.add(requestId)
     const canceled = Effect.promise(async () => {
@@ -163,11 +170,14 @@ export class CanvasDurableObject extends DurableObject {
     testClockId?: string,
     requestId = crypto.randomUUID()
   ): Promise<DurableObjectResult<AuthorityView, CreateCanvasFailure>> {
-    const sqlite = makeStorageSqlite(this.ctx.storage)
+    const storage = this.ctx.storage
     const canvasId = this.canvasId
     return this.result(testClockId, Effect.gen(function*() {
+      const storageSqlite = yield* DurableSqliteStorage
+      const canvases = yield* OneCanvasLoader
       const clock = yield* AuthorityClock
-      const existing = yield* Effect.result(makeOneCanvas({ canvasId, sqlite, clock }))
+      const sqlite = storageSqlite.fromStorage(storage)
+      const existing = yield* Effect.result(canvases.open({ canvasId, sqlite, clock }))
       if (Result.isSuccess(existing)) {
         return yield* Effect.fail(AuthorityFailure.canvasAlreadyExists({ canvasId }))
       }
@@ -186,11 +196,14 @@ export class CanvasDurableObject extends DurableObject {
     testClockId?: string,
     requestId = crypto.randomUUID()
   ): Promise<DurableObjectResult<AuthorityView, OpenCanvasFailure>> {
-    const sqlite = makeStorageSqlite(this.ctx.storage)
+    const storage = this.ctx.storage
     const canvasId = this.canvasId
     return this.result(testClockId, Effect.gen(function*() {
+      const storageSqlite = yield* DurableSqliteStorage
+      const canvases = yield* OneCanvasLoader
       const clock = yield* AuthorityClock
-      const canvas = yield* makeOneCanvas({ canvasId, sqlite, clock })
+      const sqlite = storageSqlite.fromStorage(storage)
+      const canvas = yield* canvases.open({ canvasId, sqlite, clock })
       return yield* canvas.open()
     }), requestId)
   }
@@ -201,11 +214,14 @@ export class CanvasDurableObject extends DurableObject {
     testClockId?: string,
     requestId = crypto.randomUUID()
   ): Promise<DurableObjectResult<SubmitChangeReceipt, SubmitCanvasChangeFailure>> {
-    const sqlite = makeStorageSqlite(this.ctx.storage)
+    const storage = this.ctx.storage
     const canvasId = this.canvasId
     return this.result(testClockId, Effect.gen(function*() {
+      const storageSqlite = yield* DurableSqliteStorage
+      const canvases = yield* OneCanvasLoader
       const clock = yield* AuthorityClock
-      const canvas = yield* makeOneCanvas({ canvasId, sqlite, clock })
+      const sqlite = storageSqlite.fromStorage(storage)
+      const canvas = yield* canvases.open({ canvasId, sqlite, clock })
       return yield* canvas.submit(
         DomainValue.detach(proposal),
         DomainValue.detach(invocation)
@@ -218,11 +234,14 @@ export class CanvasDurableObject extends DurableObject {
     testClockId?: string,
     requestId = crypto.randomUUID()
   ): Promise<DurableObjectResult<ChangePage, CursorNotFound | CanvasNotFound>> {
-    const sqlite = makeStorageSqlite(this.ctx.storage)
+    const storage = this.ctx.storage
     const canvasId = this.canvasId
     return this.result(testClockId, Effect.gen(function*() {
+      const storageSqlite = yield* DurableSqliteStorage
+      const canvases = yield* OneCanvasLoader
       const clock = yield* AuthorityClock
-      const canvas = yield* makeOneCanvas({ canvasId, sqlite, clock })
+      const sqlite = storageSqlite.fromStorage(storage)
+      const canvas = yield* canvases.open({ canvasId, sqlite, clock })
       return yield* canvas.changesAfter(DomainValue.detach(query))
     }), requestId)
   }

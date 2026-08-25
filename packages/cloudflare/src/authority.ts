@@ -11,10 +11,10 @@ import { AuthorityPolicy } from "@crit/authority/adapter"
 import { DomainValue, type CanvasId } from "@crit/domain"
 import { Effect, Layer, Scope, SynchronizedRef } from "effect"
 
-import { makeDatabase } from "./database.js"
+import { CloudflareDatabase } from "./database.js"
 import {
   createOneCanvas,
-  makeOneCanvas,
+  OneCanvasLoader,
   type OneCanvas
 } from "./one-canvas.js"
 
@@ -26,6 +26,8 @@ export interface CloudflareCanvasAuthorityOptions {
 
 const make = (options: CloudflareCanvasAuthorityOptions) => Effect.gen(function*() {
   const clock = yield* AuthorityClock
+  const database = yield* CloudflareDatabase
+  const canvasLoader = yield* OneCanvasLoader
   const scope = yield* Effect.scope
   const registry = yield* SynchronizedRef.make<Registry>(new Map())
 
@@ -39,8 +41,8 @@ const make = (options: CloudflareCanvasAuthorityOptions) => Effect.gen(function*
     if (!existsSync(path)) {
       return Effect.fail(AuthorityFailure.canvasNotFound({ canvasId }))
     }
-    return makeDatabase({ path }).pipe(
-      Effect.flatMap((sqlite) => makeOneCanvas({ canvasId, sqlite, clock })),
+    return database.open({ path }).pipe(
+      Effect.flatMap((sqlite) => canvasLoader.open({ canvasId, sqlite, clock })),
       Effect.provideService(Scope.Scope, scope),
       Effect.catchTag("CloudflareDatabaseOpenFailure", Effect.die),
       Effect.map((isolate) => [isolate, new Map(canvases).set(canvasId, isolate)])
@@ -64,7 +66,7 @@ const make = (options: CloudflareCanvasAuthorityOptions) => Effect.gen(function*
             invocation: ownedInvocation,
             createdAt
           })
-          return makeDatabase({ path }).pipe(
+          return database.open({ path }).pipe(
             Effect.flatMap((sqlite) => createOneCanvas({ view, sqlite, clock })),
             Effect.provideService(Scope.Scope, scope),
             Effect.catchTag("CloudflareDatabaseOpenFailure", Effect.die),
@@ -103,5 +105,8 @@ const make = (options: CloudflareCanvasAuthorityOptions) => Effect.gen(function*
 
 export const CloudflareCanvasAuthority = {
   layer: (options: CloudflareCanvasAuthorityOptions) =>
-    Layer.effect(CanvasAuthority, make(options))
+    Layer.effect(CanvasAuthority, make(options)).pipe(
+      Layer.provide(CloudflareDatabase.layer),
+      Layer.provide(OneCanvasLoader.layer)
+    )
 }

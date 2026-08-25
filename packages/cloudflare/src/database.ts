@@ -1,5 +1,5 @@
 import * as SqliteClient from "@effect/sql-sqlite-node/SqliteClient"
-import { Cause, Data, Effect, Schedule } from "effect"
+import { Cause, Context, Data, Effect, Layer, Schedule } from "effect"
 import * as Reactivity from "effect/unstable/reactivity/Reactivity"
 import { isSqlError, type SqlError } from "effect/unstable/sql/SqlError"
 
@@ -43,3 +43,13 @@ export const makeDatabase = (options: CloudflareDatabaseOptions) => Effect.gen(f
   path: options.path,
   reason: Cause.pretty(cause)
 }))))
+
+export class CloudflareDatabase extends Context.Service<CloudflareDatabase, {
+  readonly open: (
+    options: CloudflareDatabaseOptions
+  ) => Effect.Effect<DurableSqlite, CloudflareDatabaseOpenFailure>
+}>()("@crit/cloudflare/CloudflareDatabase") {
+  static readonly layer = Layer.succeed(CloudflareDatabase, {
+    open: makeDatabase
+  })
+}

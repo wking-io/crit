@@ -1,4 +1,4 @@
-import { Context, Effect, Exit, type Cause } from "effect"
+import { Context, Effect, Exit, Layer, type Cause } from "effect"
 import {
   classifySqliteError,
   SqlError
@@ -83,4 +83,12 @@ export const makeStorageSqlite = (
     }))
 
   return { transact, sql, unsafe }
+}
+
+export class DurableSqliteStorage extends Context.Service<DurableSqliteStorage, {
+  readonly fromStorage: (storage: DurableObjectStorage) => DurableSqlite
+}>()("@crit/cloudflare/DurableSqliteStorage") {
+  static readonly layer = Layer.succeed(DurableSqliteStorage, {
+    fromStorage: makeStorageSqlite
+  })
 }

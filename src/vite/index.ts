@@ -25,8 +25,8 @@ import {
   type ResolvedCritManifest
 } from "../discovery/index.js"
 import {
+  CritHttp,
   DEFAULT_CRIT_API_PATH,
-  makeCritHttpHandler,
   parseCritHttpRoute
 } from "../http/contract.js"
 import { FileSystemCanvasRepository } from "../node/file-system-canvas-repository.js"
@@ -590,19 +590,21 @@ export const crit = (options: CritVitePluginOptions = {}): Plugin => {
         documentLayer,
         agentActivityLayer,
         archiveLayer,
-        snapshotServiceLayer
+        snapshotServiceLayer,
+        CritHttp.layer
       )
     )
     const services = runtime.runPromise(
       Effect.all({
         activity: AgentActivityStore,
         documents: CanvasRepository,
-        snapshots: SnapshotService
+        snapshots: SnapshotService,
+        http: CritHttp
       }).pipe(
-        Effect.map(({ activity, documents, snapshots }) => ({
+        Effect.map(({ activity, documents, snapshots, http }) => ({
           documents,
           snapshots,
-          handler: makeCritHttpHandler({
+          handler: http.handler({
             client: CanvasRepositoryCritClient.make(documents, {
               currentAuthor: () =>
                 authorIdentity.resolve(resolvedRoot).pipe(
