@@ -8,13 +8,14 @@ import {
 } from "../src/index.js"
 import { describe, expect, it } from "vitest"
 
-const fixture = async(name: string): Promise<unknown> => JSON.parse(
-  await readFile(new URL(`fixtures/${name}.json`, import.meta.url), "utf8")
+const fixtureContents = (name: string) => readFile(
+  new URL(`fixtures/${name}.json`, import.meta.url),
+  "utf8"
 )
 
 describe("ShareCanvasWire", () => {
   it("round-trips the versioned fixture", async() => {
-    const input = await fixture("share-canvas")
+    const input: unknown = JSON.parse(await fixtureContents("share-canvas"))
     const decoded = decodeShareCanvasWire(input)
 
     expect(encodeShareCanvasWire(decoded)).toEqual(input)
@@ -89,7 +90,7 @@ describe("ShareCanvasWire", () => {
 
 describe("CanvasSharedWire", () => {
   it("round-trips the versioned fixture", async() => {
-    const input = await fixture("canvas-shared")
+    const input: unknown = JSON.parse(await fixtureContents("canvas-shared"))
     const decoded = decodeCanvasSharedWire(input)
 
     expect(encodeCanvasSharedWire(decoded)).toEqual(input)
