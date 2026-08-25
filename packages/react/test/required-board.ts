@@ -1,4 +1,7 @@
 import { CanvasCamera, CanvasSelection } from "../src/index.js"
+import { installIntersectionObserver } from "./intersection-observer.js"
+
+installIntersectionObserver()
 
 export const defaultCamera = CanvasCamera.make({ x: 0, y: 0, zoom: 1 })
 export const defaultSelection = CanvasSelection.make([])
