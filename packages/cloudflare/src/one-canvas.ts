@@ -1,11 +1,10 @@
 import {
   AuthorityFailure,
   AuthorityView,
-  ChangeIdReused,
-  ChangeRejected,
   CursorNotFound,
   type AuthorityClock,
   type ChangesAfter,
+  type SubmitCanvasChangeFailure,
   type VerifiedInvocation
 } from "@crit/authority"
 import {
@@ -39,7 +38,7 @@ export interface OneCanvas {
   readonly submit: (
     proposal: OneCanvasProposal,
     invocation: VerifiedInvocation
-  ) => Effect.Effect<SubmitChangeReceipt, CursorNotFound | ChangeIdReused | ChangeRejected>
+  ) => Effect.Effect<SubmitChangeReceipt, SubmitCanvasChangeFailure>
   readonly changesAfter: (
     query: OneCanvasChangesAfter
   ) => Effect.Effect<ChangePage, CursorNotFound>
