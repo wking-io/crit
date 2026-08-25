@@ -21,6 +21,11 @@ export {
   decodeCritProjectManifestV2,
   encodeCritProjectManifestV2
 } from "./manifest.js"
+export {
+  AccessAuthenticatedPersonWire,
+  decodeAccessAuthenticatedPersonWire,
+  encodeAccessAuthenticatedPersonWire
+} from "./identity.js"
 export type {
   AcceptedCanvasChange,
   ChangePage,
