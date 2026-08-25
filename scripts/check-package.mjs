@@ -107,10 +107,24 @@ try {
 
   const archive = path.join(temporary, report.filename)
   const consumer = path.join(temporary, "consumer")
+  const rootManifest = JSON.parse(
+    await readFile(path.join(root, "package.json"), "utf8")
+  )
   await mkdir(path.join(consumer, "src"), { recursive: true })
   await writeFile(
     path.join(consumer, "package.json"),
-    `${JSON.stringify({ private: true, type: "module" }, null, 2)}\n`
+    `${JSON.stringify({
+      private: true,
+      type: "module",
+      overrides: {
+        effect: rootManifest.dependencies.effect,
+        "@effect/platform-node": rootManifest.dependencies["@effect/platform-node"]
+      }
+    }, null, 2)}\n`
+  )
+  await writeFile(
+    path.join(consumer, ".npmrc"),
+    "install-strategy=nested\n"
   )
   await run(
     npm,
@@ -120,10 +134,21 @@ try {
       "--ignore-scripts",
       "--no-audit",
       "--no-fund",
-      archive,
-      "react",
-      "react-dom",
-      "vite"
+      archive
+    ],
+    { cwd: consumer, env: npmEnvironment }
+  )
+  await run(
+    npm,
+    [
+      "install",
+      "--package-lock=false",
+      "--ignore-scripts",
+      "--no-audit",
+      "--no-fund",
+      `react@${rootManifest.devDependencies.react}`,
+      `react-dom@${rootManifest.devDependencies["react-dom"]}`,
+      `vite@${rootManifest.devDependencies.vite}`
     ],
     { cwd: consumer, env: npmEnvironment }
   )
