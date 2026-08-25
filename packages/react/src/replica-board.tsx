@@ -88,11 +88,6 @@ const connectedPersonCopy = (
   person: PresenceRoster["people"][number]
 ): string => person.person.displayName
 
-const activeAgentExecutionCopy = (
-  execution: PresenceRoster["agentRuns"][number]
-): string =>
-  `${execution.agent.displayName}, run by ${execution.delegatedBy.displayName}`
-
 const outstandingHeadline = (
   title: ReplicaView["projection"]["title"],
   changes: readonly [PendingChange, ...PendingChange[]]
@@ -135,8 +130,7 @@ export function ReplicaBoard({
   view
 }: ReplicaBoardProps): ReactElement {
   const status = statusFromPending(view.pending)
-  const showPresence = presence !== undefined &&
-    (presence.people.length > 0 || presence.agentRuns.length > 0)
+  const showPresence = presence !== undefined && presence.people.length > 0
   return (
     <div className={className}>
       {showPresence
@@ -148,11 +142,6 @@ export function ReplicaBoard({
             <ul>
               {presence.people.map((person) => (
                 <li key={presenceKey(person)}>{connectedPersonCopy(person)}</li>
-              ))}
-              {presence.agentRuns.map((execution) => (
-                <li key={presenceKey(execution)}>
-                  {activeAgentExecutionCopy(execution)}
-                </li>
               ))}
             </ul>
           </section>

@@ -142,28 +142,13 @@ const presence = decodePresenceRoster({
       personId: "person_presence",
       displayName: "Ada"
     }
-  }],
-  agentRuns: [{
-    _tag: "active-agent-execution",
-    agent: {
-      _tag: "agent",
-      agentId: "agent_presence",
-      displayName: "Cursor"
-    },
-    delegatedBy: {
-      _tag: "person",
-      personId: "person_delegating",
-      displayName: "Will"
-    },
-    executionId: "execution_presence"
   }]
 })
 
 const emptyPresence = decodePresenceRoster({
   _tag: "presence-roster",
   canvasId: projection.canvasId,
-  people: [],
-  agentRuns: []
+  people: []
 })
 
 const mixed = decodeView({
@@ -251,7 +236,7 @@ afterEach(async() => {
 })
 
 describe("ReplicaBoard", () => {
-  it("lists connected people and delegated Agent runs", async() => {
+  it("lists connected people", async() => {
     await act(async() => render(
       <ReplicaBoard
         {...requiredBoard}
@@ -263,10 +248,8 @@ describe("ReplicaBoard", () => {
     const region = container.querySelector("[aria-label='Review presence']")
     expect(region?.getAttribute("role")).toBe("status")
     expect([...region?.querySelectorAll("li") ?? []].map((row) => row.textContent))
-      .toEqual([
-        "Ada",
-        "Cursor, run by Will"
-      ])
+      .toEqual(["Ada"])
+    expect(region?.textContent).not.toContain("run by")
     expect(region?.textContent).not.toContain("Proposed by")
   })
 

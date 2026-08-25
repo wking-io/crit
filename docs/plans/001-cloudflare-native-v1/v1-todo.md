@@ -36,6 +36,7 @@ Plan: [phase 6](phase-06-cloudflare-platform.md), [phase 7](phase-07-sync-and-sh
 - [ ] Worker, static assets, Access, D1, R2 artifacts. `packages/cloudflare` has the one-Canvas SQLite authority and a workerd Durable Object. The hosted Worker is still missing.
 - [ ] Hosted review UI served from the Worker.
 - [ ] Teammate signs in with Access, views Frames and shared previews, and sets review status. No Crit install.
+- [ ] Presence of Access-authenticated people viewing a shared Canvas. Local review does not attend.
 - [ ] Author's local replica receives the reviewer's accepted changes.
 
 ### Agents
@@ -77,7 +78,6 @@ Local Frames authoring on one machine.
 - Review UI no longer adds Frames
 - Contextual help and keyboard shortcuts from the review action table
 - Snapshot a live Frame into a new artifact Frame (`S`)
-- Presence of the local Person and local Agent runs (`crit attend`)
 
 ## Out of v1
 

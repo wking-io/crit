@@ -23,8 +23,6 @@ import {
   LocalApiOriginRejected,
   LocalApiUnauthorized,
   LocalApiVersionUnsupported,
-  ConnectedPersonClaim,
-  PresenceLeaseReceipt,
   localApiToken
 } from "@crit/replica/http"
 import { ReplicaModel } from "@crit/replica"
@@ -473,79 +471,6 @@ describe("LocalDaemon", () => {
         expect(opened.projection.title).toBe("Changed")
         expect(opened.pending).toHaveLength(0)
       }))
-    }))))
-
-  it("announces and departs presence over HTTP while the socket carries rosters", () =>
-    Effect.runPromise(Effect.scoped(Effect.gen(function*() {
-      const databasePath = yield* tempDatabasePath
-      const token = "presence-token-with-at-least-32-characters"
-      const { baseUrl, client } = yield* clientFor({ databasePath, token })
-      const canvasId = Id.canvas("canvas_daemon_presence")
-      yield* client.create(AuthorityModel.createCanvas({
-        canvasId,
-        title: "Presence"
-      }))
-
-      const rosters = yield* client.attendPresence(
-        canvasId,
-        ConnectedPersonClaim.make({})
-      ).pipe(Effect.provide(Socket.layerWebSocketConstructorGlobal))
-      const pull = yield* Stream.toPull(rosters)
-      expect((yield* pull)[0]?.people).toEqual([{
-        _tag: "connected-person",
-        person: invocation.principal.person
-      }])
-
-      const announced = yield* Effect.promise(() => fetch(
-        `${baseUrl}/api/v1/presence/announce`,
-        {
-          method: "POST",
-          headers: rawHeaders(token),
-          body: JSON.stringify({
-            _tag: "announce-presence",
-            canvasId,
-            claim: {
-              _tag: "active-agent-execution",
-              agent: {
-                _tag: "agent",
-                agentId: "agent_daemon_presence",
-                displayName: "Daemon Agent"
-              },
-              executionId: "execution_daemon_presence"
-            }
-          })
-        }
-      ))
-      expect(announced.status).toBe(200)
-      const receipt = Schema.decodeUnknownSync(PresenceLeaseReceipt)(
-        yield* Effect.promise(() => announced.json())
-      )
-      const withAgent = (yield* pull)[0]
-      expect(withAgent?.agentRuns).toEqual([{
-        _tag: "active-agent-execution",
-        agent: {
-          _tag: "agent",
-          agentId: "agent_daemon_presence",
-          displayName: "Daemon Agent"
-        },
-        delegatedBy: invocation.principal.person,
-        executionId: "execution_daemon_presence"
-      }])
-
-      const departed = yield* Effect.promise(() => fetch(
-        `${baseUrl}/api/v1/presence/depart`,
-        {
-          method: "POST",
-          headers: rawHeaders(token),
-          body: JSON.stringify({
-            _tag: "depart-presence",
-            canvasId,
-            leaseId: receipt.leaseId
-          })
-        }
-      ))
-      expect(departed.status).toBe(200)
-      expect((yield* pull)[0]?.agentRuns).toEqual([])
     }))))
 
   it("rejects invalid bearer credentials", () => Effect.runPromise(Effect.scoped(Effect.gen(function*() {

@@ -37,11 +37,9 @@ crit create <canvas-id> --title Title
 crit open <canvas-id>
 crit layout <canvas-id>
 crit add-frame <canvas-id> --type application-route --route /path --title Title --x 0 --y 0
-crit attend <canvas-id> --agent-id ID --agent-name Name --execution-id ID
 \`\`\`
 
 \`--type\`, \`--title\`, \`--x\`, and \`--y\` are required on add-frame. Width and height default to 1200x800.
-Agents should attend while they work on that Canvas.
 
 ## Canvas
 

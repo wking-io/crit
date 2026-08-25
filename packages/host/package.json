@@ -12,7 +12,6 @@
     "@crit/client": "*",
     "@crit/domain": "*",
     "@crit/react": "*",
-    "@crit/replica": "*",
     "@effect/atom-react": "4.0.0-rc.109",
     "@tanstack/react-query": "^5.102.1",
     "effect": "4.0.0-rc.109",
@@ -21,6 +20,7 @@
     "scheduler": "0.27.0"
   },
   "devDependencies": {
+    "@crit/replica": "*",
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
     "jsdom": "^26.1.0",

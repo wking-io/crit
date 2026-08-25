@@ -35,8 +35,7 @@ describe("PresenceChanged", () => {
           personId: "person_notification",
           displayName: "Presence Person"
         }
-      }],
-      agentRuns: []
+      }]
     }
     expect(Schema.decodeUnknownSync(PresenceChangedSchema)({
       kind: "presence-changed",

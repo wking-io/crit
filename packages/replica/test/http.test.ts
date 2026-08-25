@@ -3,11 +3,8 @@ import { Schema } from "effect"
 import { describe, expect, it } from "vitest"
 
 import {
-  AnnouncePresence,
-  DepartPresence,
   LocalReplicaSocketHello,
-  LocalReplicaSocketServerFrame,
-  PresenceLeaseReceipt
+  LocalReplicaSocketServerFrame
 } from "../src/http.js"
 
 describe("local replica socket frames", () => {
@@ -37,49 +34,5 @@ describe("local replica socket frames", () => {
       schemaVersion: 1,
       canvasId
     })).toEqual({ kind: "subscription-ready", schemaVersion: 1, canvasId })
-  })
-
-  it("decodes presence claims, leases, and socket rosters", () => {
-    const canvasId = Id.canvas("canvas_socket_presence")
-    const leaseId = "lease_0123456789abcdef0123456789abcdef"
-    const claim = {
-      _tag: "active-agent-execution",
-      agent: {
-        _tag: "agent",
-        agentId: "agent_socket",
-        displayName: "Socket Agent"
-      },
-      executionId: "execution_socket"
-    }
-    expect(Schema.decodeUnknownSync(AnnouncePresence)({
-      _tag: "announce-presence",
-      canvasId,
-      claim
-    })).toEqual({ _tag: "announce-presence", canvasId, claim })
-    expect(Schema.decodeUnknownSync(DepartPresence)({
-      _tag: "depart-presence",
-      canvasId,
-      leaseId
-    })).toEqual({ _tag: "depart-presence", canvasId, leaseId })
-    expect(Schema.decodeUnknownSync(PresenceLeaseReceipt)({
-      leaseId,
-      expiresAt: "2026-08-25T05:00:30.000Z"
-    })).toEqual({
-      leaseId,
-      expiresAt: "2026-08-25T05:00:30.000Z"
-    })
-    expect(Schema.decodeUnknownSync(LocalReplicaSocketServerFrame)({
-      kind: "presence-changed",
-      schemaVersion: 1,
-      roster: {
-        _tag: "presence-roster",
-        canvasId,
-        people: [],
-        agentRuns: []
-      }
-    })).toMatchObject({
-      kind: "presence-changed",
-      roster: { canvasId }
-    })
   })
 })
