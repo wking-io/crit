@@ -107,7 +107,7 @@ describe("ChangeProtocol", () => {
       "FRAME_INPUT_BRIDGE_SCHEMA_VERSION", "FRAME_INPUT_BRIDGE_SOURCE",
       "FrameBridgeOrigin",
       "FrameInputBridgeMessageSchema", "FrameInputIntentSchema",
-      "ProposedCanvasChangeSchema", "ProtocolValue", "ReplicaChangedSchema", "SequenceSchema",
+      "PresenceChangedSchema", "ProposedCanvasChangeSchema", "ProtocolValue", "ReplicaChangedSchema", "SequenceSchema",
       "SubmitChangeReceiptSchema", "decodeCritProjectManifestV2",
       "decodeFrameInputBridgeMessage", "encodeCritProjectManifestV2"
     ])

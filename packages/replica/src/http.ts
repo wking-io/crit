@@ -5,8 +5,18 @@ import {
   CreateCanvas,
   VerifiedInvocation
 } from "@crit/authority"
-import { CanvasId, InstallationId } from "@crit/domain"
-import { ReplicaChangedSchema } from "@crit/protocol"
+import {
+  AgentSnapshot,
+  CanvasId,
+  ExecutionId,
+  InstallationId,
+  IsoTimestamp,
+  ReportedRuntime
+} from "@crit/domain"
+import {
+  PresenceChangedSchema,
+  ReplicaChangedSchema
+} from "@crit/protocol"
 import { Context, Schema } from "effect"
 import {
   HttpApi,
@@ -44,7 +54,8 @@ export type LocalReplicaSocketReady = typeof LocalReplicaSocketReady.Type
 
 export const LocalReplicaSocketServerFrame = Schema.Union([
   LocalReplicaSocketReady,
-  ReplicaChangedSchema
+  ReplicaChangedSchema,
+  PresenceChangedSchema
 ])
 export type LocalReplicaSocketServerFrame = typeof LocalReplicaSocketServerFrame.Type
 
@@ -98,6 +109,58 @@ export class AuthenticatedInvocation extends Context.Service<
   typeof VerifiedInvocation.Type
 >()("@crit/replica/http/AuthenticatedInvocation") {}
 
+export const PresenceLeaseId = Schema.String.check(
+  Schema.isPattern(/^lease_[0-9a-f]{32}$/)
+).pipe(Schema.brand("PresenceLeaseId"))
+export type PresenceLeaseId = typeof PresenceLeaseId.Type
+
+export const ConnectedPersonClaim = Schema.TaggedStruct("connected-person", {})
+export type ConnectedPersonClaim = typeof ConnectedPersonClaim.Type
+
+export const ActiveAgentExecutionClaim = Schema.TaggedStruct("active-agent-execution", {
+  agent: AgentSnapshot,
+  executionId: ExecutionId,
+  reportedRuntime: Schema.optionalKey(ReportedRuntime)
+})
+export type ActiveAgentExecutionClaim = typeof ActiveAgentExecutionClaim.Type
+
+export const PresenceClaim = Schema.Union([
+  ConnectedPersonClaim,
+  ActiveAgentExecutionClaim
+])
+export type PresenceClaim = typeof PresenceClaim.Type
+
+export const AnnouncePresence = Schema.TaggedStruct("announce-presence", {
+  canvasId: CanvasId,
+  claim: PresenceClaim,
+  leaseId: Schema.optionalKey(PresenceLeaseId)
+})
+export type AnnouncePresence = typeof AnnouncePresence.Type
+
+export const DepartPresence = Schema.TaggedStruct("depart-presence", {
+  canvasId: CanvasId,
+  leaseId: PresenceLeaseId
+})
+export type DepartPresence = typeof DepartPresence.Type
+
+export const PresenceLeaseReceipt = Schema.Struct({
+  leaseId: PresenceLeaseId,
+  expiresAt: IsoTimestamp
+})
+export type PresenceLeaseReceipt = typeof PresenceLeaseReceipt.Type
+
+export class PresenceClaimMismatch extends Schema.TaggedError<PresenceClaimMismatch>()(
+  "PresenceClaimMismatch",
+  { message: Schema.String },
+  { httpApiStatus: 409 }
+) {}
+
+export class PresenceLeaseNotFound extends Schema.TaggedError<PresenceLeaseNotFound>()(
+  "PresenceLeaseNotFound",
+  { leaseId: PresenceLeaseId },
+  { httpApiStatus: 404 }
+) {}
+
 export class LocalApiAuthorization extends HttpApiMiddleware.Service<LocalApiAuthorization, {
   readonly provides: AuthenticatedInvocation
   readonly requires: never
@@ -139,4 +202,24 @@ export class LocalCanvasApiGroup extends HttpApiGroup.make("canvas", { topLevel:
   .middleware(LocalApiAuthorization)
   .prefix(localApiPathPrefix) {}
 
-export class LocalCanvasApi extends HttpApi.make("crit-local").add(LocalCanvasApiGroup) {}
+export class LocalPresenceApiGroup extends HttpApiGroup.make("presence", { topLevel: true })
+  .add(
+    HttpApiEndpoint.post("announce", "/presence/announce", {
+      payload: AnnouncePresence,
+      success: PresenceLeaseReceipt,
+      error: [
+        PresenceClaimMismatch.pipe(HttpApiSchema.status(409)),
+        PresenceLeaseNotFound.pipe(HttpApiSchema.status(404))
+      ]
+    }),
+    HttpApiEndpoint.post("depart", "/presence/depart", {
+      payload: DepartPresence,
+      success: Schema.Void
+    })
+  )
+  .middleware(LocalApiAuthorization)
+  .prefix(localApiPathPrefix) {}
+
+export class LocalCanvasApi extends HttpApi.make("crit-local")
+  .add(LocalCanvasApiGroup)
+  .add(LocalPresenceApiGroup) {}

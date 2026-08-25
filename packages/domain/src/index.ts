@@ -43,6 +43,16 @@ export {
 } from "./identity.js"
 
 export {
+  ActiveAgentExecution,
+  ConnectedPerson,
+  PresenceKey,
+  PresenceParticipant,
+  PresenceRoster,
+  decodePresenceRoster,
+  presenceKey
+} from "./presence.js"
+
+export {
   ApplicationRouteRepresentation,
   ArtifactRepresentation,
   LiveRepresentation,
