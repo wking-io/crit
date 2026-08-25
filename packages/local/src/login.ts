@@ -188,7 +188,6 @@ export const loginToInstallation = (
   return yield* bindAccessPerson({
     dataRoot: options.dataRoot,
     email: AccessPersonEmail.make({
-      _tag: "access",
       address: wire.address
     })
   })

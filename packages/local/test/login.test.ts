@@ -42,9 +42,8 @@ const installationFrom = (dataRoot: string) => decodeStored(
   readFileSync(join(dataRoot, "installation.json"), "utf8")
 )
 
-const accessEmail = (address: string) => Schema.decodeUnknownSync(AccessPersonEmail)({
-  _tag: "access",
-  address
+const accessEmail = (address: string) => AccessPersonEmail.make({
+  address: Schema.decodeUnknownSync(EmailAddress)(address)
 })
 
 const identityServer = (
