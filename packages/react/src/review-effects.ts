@@ -16,7 +16,7 @@ export const applyReviewEffect = (
   context: ReviewEffectContext
 ): void => {
   switch (effect._tag) {
-    case "open-url":
+    case "openUrl":
       window.open(effect.url, "_blank", "noopener,noreferrer")
       return
     case "fullscreen":
