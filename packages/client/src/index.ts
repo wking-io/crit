@@ -60,7 +60,7 @@ export type LocalClientOptions = Data.TaggedEnum<{
     readonly token: LocalApiToken
     readonly origin?: string
   }
-  readonly "browser-session": {
+  readonly browserSession: {
     readonly baseUrl: string
     readonly browserPath: `/${string}/`
   }
@@ -141,7 +141,7 @@ const localUrl = (options: LocalClientOptions, path: `/${string}`) =>
 const withBrowserCredentials = <A, E, R>(
   options: LocalClientOptions,
   effect: Effect.Effect<A, E, R>
-) => options._tag === "browser-session"
+) => options._tag === "browserSession"
   ? Effect.provideService(effect, FetchHttpClient.RequestInit, { credentials: "include" })
   : effect
 

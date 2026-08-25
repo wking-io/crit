@@ -73,8 +73,8 @@ const decode = (
 
 const options = (
   descriptor: LocalBrowserConnectionDescriptor
-): Extract<LocalClientOptions, { readonly _tag: "browser-session" }> => ({
-  _tag: "browser-session",
+): Extract<LocalClientOptions, { readonly _tag: "browserSession" }> => ({
+  _tag: "browserSession",
   baseUrl: descriptor.baseUrl,
   browserPath: descriptor.browserPath
 })

@@ -44,7 +44,7 @@ export type SnapshotRequest = readonly [
 ]
 
 export type ReviewClientEffect = Data.TaggedEnum<{
-  readonly "open-url": { readonly url: string }
+  readonly openUrl: { readonly url: string }
   readonly fullscreen: { readonly target: "frame" | "exit" }
   readonly copy: { readonly text: string }
 }>
@@ -401,7 +401,7 @@ const openUrlPolicy = policy({
     const frame = selectedFrame(selection, projection)
     return frame?.representation._tag === "web-url"
       ? ReviewAction.effect({
-        effect: ReviewClientEffect["open-url"]({ url: frame.representation.url })
+        effect: ReviewClientEffect.openUrl({ url: frame.representation.url })
       })
       : null
   }

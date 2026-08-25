@@ -30,7 +30,7 @@ describe("LocalBrowserConnection", () => {
     expect(decoded).toEqual(Result.succeed(descriptor))
     if (Result.isSuccess(decoded)) {
       expect(LocalBrowserConnection.options(decoded.success)).toEqual({
-        _tag: "browser-session",
+        _tag: "browserSession",
         baseUrl: "http://127.0.0.1:49152",
         browserPath: "/browser/0123456789abcdef0123456789abcdef/"
       })
