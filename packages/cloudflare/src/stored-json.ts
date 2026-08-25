@@ -1,4 +1,3 @@
-import { completeStoredPerson } from "@crit/domain"
 import { Data, Effect, Schema } from "effect"
 
 export const durableObjectSqlRowLimitBytes = 2 * 1024 * 1024
@@ -28,9 +27,7 @@ const parseJson = (value: string): Schema.Json =>
 export const decodeStored = <S extends Schema.ConstraintDecoder<unknown>>(
   schema: S,
   value: string
-): S["Type"] => Schema.decodeUnknownSync(schema, { onExcessProperty: "error" })(
-  completeStoredPerson(parseJson(value))
-)
+): S["Type"] => Schema.decodeUnknownSync(schema, { onExcessProperty: "error" })(parseJson(value))
 
 export const encodeStored = <S extends Schema.ConstraintEncoder<unknown>>(
   schema: S,

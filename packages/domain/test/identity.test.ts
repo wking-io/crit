@@ -6,7 +6,6 @@ import {
   ActorSnapshot,
   actorFromAttribution,
   actorFromPrincipal,
-  completeStoredPerson,
   Id,
   Principal,
   ReportedRuntime,
@@ -81,18 +80,19 @@ describe("ActorSnapshot", () => {
     expect(() => decodeActorSnapshot({ ...agent, email: "will@example.com" })).toThrow()
   })
 
-  it("completes a stored Person snapshot that lacks email", () => {
-    expect(completeStoredPerson({
+  it("completes a stored Person inside a principal when email is missing", () => {
+    expect(decodePrincipal({
       _tag: "person",
-      personId: "person_will",
-      displayName: "Will King"
-    })).toEqual(person)
-    expect(completeStoredPerson({
-      _tag: "person",
-      displayName: "Ada"
+      subject: "oidc|will",
+      person: {
+        _tag: "person",
+        personId: person.personId,
+        displayName: person.displayName
+      }
     })).toEqual({
       _tag: "person",
-      displayName: "Ada"
+      subject: "oidc|will",
+      person
     })
   })
 })

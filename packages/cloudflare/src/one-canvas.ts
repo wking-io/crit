@@ -20,7 +20,6 @@ import {
   CanvasId,
   CanvasProjection,
   ChangeId,
-  completeStoredPerson,
   DomainValue,
   IsoTimestamp
 } from "@crit/domain"
@@ -100,7 +99,7 @@ const decodeProtocol = <A>(
   value: string,
   decode: (input: Schema.Json) => Result.Result<A, ProtocolFailure>
 ): A => {
-  const result = decode(completeStoredPerson(parseJson(value)))
+  const result = decode(parseJson(value))
   if (Result.isFailure(result)) throw new StoredProtocolDecodeFailure({ failure: result.failure })
   return result.success
 }

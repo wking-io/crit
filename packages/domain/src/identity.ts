@@ -1,4 +1,4 @@
-import { Schema } from "effect"
+import { Schema, SchemaGetter } from "effect"
 
 import {
   AgentId,
@@ -39,6 +39,25 @@ export const PersonSnapshot = Schema.TaggedStruct("person", {
 })
 export type PersonSnapshot = typeof PersonSnapshot.Type
 
+const StoredPersonSnapshot = Schema.TaggedStruct("person", {
+  personId: PersonId,
+  displayName: DisplayName,
+  email: Schema.optionalKey(PersonEmail)
+})
+
+const PersonSnapshotFromStored = StoredPersonSnapshot.pipe(
+  Schema.decodeTo(PersonSnapshot, {
+    decode: SchemaGetter.transform((stored) =>
+      PersonSnapshot.make({
+        personId: stored.personId,
+        displayName: stored.displayName,
+        email: stored.email ?? UnspecifiedPersonEmail.make({})
+      })
+    ),
+    encode: SchemaGetter.transform((person: PersonSnapshot) => person)
+  })
+)
+
 export const AgentSnapshot = Schema.TaggedStruct("agent", {
   agentId: AgentId,
   displayName: DisplayName
@@ -75,14 +94,14 @@ export type ReportedRuntime = typeof ReportedRuntime.Type
 
 export const PersonPrincipal = Schema.TaggedStruct("person", {
   subject: AuthSubject,
-  person: PersonSnapshot
+  person: PersonSnapshotFromStored
 })
 export type PersonPrincipal = typeof PersonPrincipal.Type
 
 export const AgentPrincipal = Schema.TaggedStruct("agent", {
   subject: AuthSubject,
   agent: AgentSnapshot,
-  delegatedBy: PersonSnapshot
+  delegatedBy: PersonSnapshotFromStored
 })
 export type AgentPrincipal = typeof AgentPrincipal.Type
 
@@ -93,13 +112,13 @@ export const Principal = Schema.Union([
 export type Principal = typeof Principal.Type
 
 export const PersonAttribution = Schema.TaggedStruct("person", {
-  person: PersonSnapshot
+  person: PersonSnapshotFromStored
 })
 export type PersonAttribution = typeof PersonAttribution.Type
 
 export const AgentAttribution = Schema.TaggedStruct("agent", {
   agent: AgentSnapshot,
-  delegatedBy: PersonSnapshot,
+  delegatedBy: PersonSnapshotFromStored,
   executionId: ExecutionId,
   reportedRuntime: Schema.optionalKey(ReportedRuntime)
 })
@@ -134,29 +153,6 @@ export const decodeReportedRuntime = (input: Schema.Json) =>
     ReportedRuntime,
     { onExcessProperty: "error" }
   )(input)
-
-const isJsonRecord = (value: unknown): value is { readonly [key: string]: unknown } =>
-  typeof value === "object" && value !== null && !Array.isArray(value)
-
-export const completeStoredPerson = (input: unknown): Schema.Json => {
-  const walk = (value: unknown): unknown => {
-    if (Array.isArray(value)) return value.map(walk)
-    if (!isJsonRecord(value)) return value
-    const nested = Object.fromEntries(
-      Object.entries(value).map(([key, child]) => [key, walk(child)])
-    )
-    if (
-      nested._tag === "person" &&
-      typeof nested.personId === "string" &&
-      typeof nested.displayName === "string" &&
-      !Object.hasOwn(nested, "email")
-    ) {
-      return { ...nested, email: { _tag: "unspecified" } }
-    }
-    return nested
-  }
-  return Schema.decodeUnknownSync(Schema.Json)(walk(input))
-}
 
 export const actorFromAttribution = (attribution: AcceptedAttribution): ActorSnapshot =>
   attribution._tag === "person" ? attribution.person : attribution.agent

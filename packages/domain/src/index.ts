@@ -36,7 +36,6 @@ export {
   PersonSnapshot,
   Principal,
   ReportedRuntime,
-  completeStoredPerson,
   decodeAcceptedAttribution,
   decodeActorSnapshot,
   decodePrincipal,

@@ -5,6 +5,7 @@ import {
   Id,
   InstallationId,
   PersonPrincipal,
+  PersonEmail,
   PersonSnapshot,
   ProvisionalPersonEmail,
   UnspecifiedPersonEmail
@@ -109,21 +110,21 @@ const personEmail = (address: EmailAddress | undefined) =>
     ? UnspecifiedPersonEmail.make({})
     : ProvisionalPersonEmail.make({ address })
 
+const InstallationEmailProbe = Schema.Struct({
+  principal: Schema.Struct({
+    person: Schema.Struct({
+      email: Schema.optionalKey(PersonEmail)
+    })
+  })
+})
+
 const installationLacksPersonEmail = (value: string): boolean => {
-  try {
-    const parsed: unknown = JSON.parse(value)
-    return typeof parsed === "object" &&
-      parsed !== null &&
-      "principal" in parsed &&
-      typeof parsed.principal === "object" &&
-      parsed.principal !== null &&
-      "person" in parsed.principal &&
-      typeof parsed.principal.person === "object" &&
-      parsed.principal.person !== null &&
-      !Object.hasOwn(parsed.principal.person, "email")
-  } catch {
-    return false
-  }
+  const json = Schema.decodeUnknownSync(Schema.Json)(JSON.parse(value))
+  const probe = Schema.decodeUnknownOption(
+    InstallationEmailProbe,
+    { onExcessProperty: "ignore" }
+  )(json)
+  return Option.isNone(probe) || probe.value.principal.person.email === undefined
 }
 
 export class LocalDevelopment extends Context.Service<
