@@ -47,7 +47,12 @@ const stateFor = (canvasId: ReturnType<typeof Id.canvas>, title: string) => Repl
   canvasId,
   createdAt: Schema.decodeUnknownSync(IsoTimestamp)("2026-08-22T00:00:00.000Z"),
   createdBy: PersonAttribution.make({
-    person: { _tag: "person", personId: "person_sqlite_replica", displayName: "Replica" }
+    person: {
+      _tag: "person",
+      personId: "person_sqlite_replica",
+      displayName: "Replica",
+      email: { _tag: "unspecified" }
+    }
   }),
   cursor: ProtocolValue.cursor(`cursor_${canvasId}`),
   projection: emptyCanvasProjection(canvasId, title)
@@ -58,7 +63,12 @@ const invocation = Schema.decodeUnknownSync(PersonInvocation)({
   principal: {
     _tag: "person",
     subject: "oidc|sqlite-replica",
-    person: { _tag: "person", personId: "person_sqlite_replica", displayName: "Replica" }
+    person: {
+      _tag: "person",
+      personId: "person_sqlite_replica",
+      displayName: "Replica",
+      email: { _tag: "unspecified" }
+    }
   }
 })
 

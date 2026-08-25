@@ -51,7 +51,8 @@ const invocation = Schema.decodeUnknownSync(PersonInvocation)({
     person: {
       _tag: "person",
       personId: "person_daemon_test",
-      displayName: "Daemon Test"
+      displayName: "Daemon Test",
+      email: { _tag: "unspecified" }
     }
   }
 })
@@ -569,7 +570,12 @@ describe("LocalDaemon", () => {
             principal: {
               _tag: "person",
               subject: "local|attacker",
-              person: { _tag: "person", personId: "person_attacker", displayName: "Attacker" }
+              person: {
+                _tag: "person",
+                personId: "person_attacker",
+                displayName: "Attacker",
+                email: { _tag: "unspecified" }
+              }
             }
           }
         })

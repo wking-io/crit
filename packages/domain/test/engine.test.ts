@@ -189,7 +189,14 @@ describe("CanvasEngine.replay", () => {
       sequence: index + 1,
       cursor: `cursor_${index + 1}`,
       acceptedAt: "2026-08-21T12:00:00.000Z",
-      attribution: { _tag: "person", person: { personId: "person_one", displayName: "One" } }
+      attribution: {
+        _tag: "person",
+        person: {
+          personId: "person_one",
+          displayName: "One",
+          email: { _tag: "unspecified" }
+        }
+      }
     }))
 
     expect(CanvasEngine.replay(initial, acceptedValues)).toEqual({

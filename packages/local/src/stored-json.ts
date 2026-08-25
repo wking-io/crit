@@ -1,3 +1,4 @@
+import { completeStoredPerson } from "@crit/domain"
 import { Schema } from "effect"
 
 const parseJson = (value: string): Schema.Json =>
@@ -6,7 +7,9 @@ const parseJson = (value: string): Schema.Json =>
 export const decodeStored = <S extends Schema.ConstraintDecoder<unknown>>(
   schema: S,
   value: string
-): S["Type"] => Schema.decodeUnknownSync(schema, { onExcessProperty: "error" })(parseJson(value))
+): S["Type"] => Schema.decodeUnknownSync(schema, { onExcessProperty: "error" })(
+  completeStoredPerson(parseJson(value))
+)
 
 export const encodeStored = <S extends Schema.ConstraintEncoder<unknown>>(
   schema: S,

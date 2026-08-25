@@ -1,5 +1,14 @@
 import { AuthorityModel } from "@crit/authority"
-import { AuthSubject, Id, InstallationId, PersonPrincipal, PersonSnapshot } from "@crit/domain"
+import {
+  AuthSubject,
+  EmailAddress,
+  Id,
+  InstallationId,
+  PersonPrincipal,
+  PersonSnapshot,
+  ProvisionalPersonEmail,
+  UnspecifiedPersonEmail
+} from "@crit/domain"
 import {
   localApiToken,
   LocalDaemonInstanceNonce,
@@ -75,6 +84,7 @@ export interface LocalDevelopmentOptions {
   readonly allowedOrigins?: ReadonlySet<string>
   readonly browserOrigin?: string
   readonly application?: LocalProjectApplicationBindingsOptions
+  readonly provisionalEmail?: EmailAddress
 }
 
 export interface LocalDevelopmentService {
@@ -93,6 +103,28 @@ const DatabaseOpenFailure = Schema.Struct({
   reason: Schema.String
 })
 const TaggedFailure = Schema.Struct({ _tag: Schema.String })
+
+const personEmail = (address: EmailAddress | undefined) =>
+  address === undefined
+    ? UnspecifiedPersonEmail.make({})
+    : ProvisionalPersonEmail.make({ address })
+
+const installationLacksPersonEmail = (value: string): boolean => {
+  try {
+    const parsed: unknown = JSON.parse(value)
+    return typeof parsed === "object" &&
+      parsed !== null &&
+      "principal" in parsed &&
+      typeof parsed.principal === "object" &&
+      parsed.principal !== null &&
+      "person" in parsed.principal &&
+      typeof parsed.principal.person === "object" &&
+      parsed.principal.person !== null &&
+      !Object.hasOwn(parsed.principal.person, "email")
+  } catch {
+    return false
+  }
+}
 
 export class LocalDevelopment extends Context.Service<
   LocalDevelopment,
@@ -124,13 +156,14 @@ export class LocalDevelopment extends Context.Service<
             Schema.is(TaggedFailure)(cause) ? cause._tag : "Application binding failed"
           ))
         )
-      const readInstallation = fs.readFileString(installationPath).pipe(
-        Effect.mapError((cause) => fail("read installation", installationPath, String(cause))),
-        Effect.flatMap((value) => Effect.try({
-          try: () => decodeStored(LocalInstallation, value),
-          catch: (cause) => fail("decode installation", installationPath, String(cause))
-        }))
+      const readInstallationText = fs.readFileString(installationPath).pipe(
+        Effect.mapError((cause) => fail("read installation", installationPath, String(cause)))
       )
+      const decodeInstallation = (value: string) => Effect.try({
+        try: () => decodeStored(LocalInstallation, value),
+        catch: (cause) => fail("decode installation", installationPath, String(cause))
+      })
+      const readInstallation = readInstallationText.pipe(Effect.flatMap(decodeInstallation))
 
       yield* fs.makeDirectory(options.dataRoot, { recursive: true, mode: 0o700 }).pipe(
         Effect.flatMap(() => fs.chmod(options.dataRoot, 0o700)),
@@ -140,7 +173,8 @@ export class LocalDevelopment extends Context.Service<
       const exists = yield* fs.exists(installationPath).pipe(
         Effect.mapError((cause) => fail("inspect installation", installationPath, String(cause)))
       )
-      const installation = exists
+      const provisionalEmail = options.provisionalEmail
+      const storedInstallation = exists
         ? yield* readInstallation
         : yield* Effect.gen(function*() {
           const randomBytes = (size: number) => crypto.randomBytes(size).pipe(
@@ -157,7 +191,8 @@ export class LocalDevelopment extends Context.Service<
               subject: Schema.decodeUnknownSync(AuthSubject)(`local|installation_${suffix}`),
               person: PersonSnapshot.make({
                 personId: Id.person(`person_${suffix}`),
-                displayName: "Local Crit User"
+                displayName: "Local Crit User",
+                email: personEmail(provisionalEmail)
               })
             }),
             bearerSecret: Encoding.encodeBase64Url(secretBytes),
@@ -174,6 +209,44 @@ export class LocalDevelopment extends Context.Service<
             Effect.mapError((cause) => fail("create installation", installationPath, String(cause)))
           )
           return yield* publish.pipe(Effect.as(candidate), Effect.catch(() => readInstallation))
+        })
+
+      const storedText = exists ? yield* readInstallationText : undefined
+      const currentEmail = storedInstallation.principal.person.email
+      const nextEmail = currentEmail._tag === "provisional"
+        ? currentEmail
+        : personEmail(provisionalEmail)
+      const shouldRewrite = storedText !== undefined && (
+        installationLacksPersonEmail(storedText) ||
+        (currentEmail._tag === "unspecified" && nextEmail._tag === "provisional")
+      )
+      const installation = !shouldRewrite
+        ? storedInstallation
+        : yield* Effect.gen(function*() {
+          const rewritten = {
+            ...storedInstallation,
+            principal: PersonPrincipal.make({
+              ...storedInstallation.principal,
+              person: PersonSnapshot.make({
+                ...storedInstallation.principal.person,
+                email: nextEmail
+              })
+            })
+          }
+          const temporaryPath = path.join(
+            options.dataRoot,
+            `.installation-email-${storedInstallation.installationId}.tmp`
+          )
+          return yield* Effect.scoped(Effect.gen(function*() {
+            const file = yield* fs.open(temporaryPath, { flag: "wx", mode: 0o600 })
+            yield* file.writeAll(new TextEncoder().encode(encodeStored(LocalInstallation, rewritten)))
+            yield* file.sync
+            yield* fs.rename(temporaryPath, installationPath)
+          })).pipe(
+            Effect.ensuring(fs.remove(temporaryPath, { force: true }).pipe(Effect.ignore)),
+            Effect.as(rewritten),
+            Effect.catch(() => Effect.succeed(storedInstallation))
+          )
         })
 
       yield* fs.chmod(installationPath, 0o600).pipe(

@@ -66,7 +66,7 @@ _Avoid_: Canvas Document, authoritative document
 
 **Actor**: The durable author of an accepted change. An Actor is either a Person or an Agent.
 
-**Person**: A human Actor associated with company identity for shared work and provisional local identity for local-only work.
+**Person**: A human Actor associated with company identity for shared work and provisional local identity for local-only work. The Person record always includes an email state. Local work may be unspecified or carry a provisional address.
 
 **Agent**: A non-human Actor that changes Crit through an authorized local tool on a developer's machine.
 _Avoid_: remote agent, MCP agent

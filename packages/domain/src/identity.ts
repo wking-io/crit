@@ -13,9 +13,29 @@ const RuntimeName = NonBlankString
 const RuntimeVersion = NonBlankString
 const ExternalReference = NonBlankString
 
+export const EmailAddress = Schema.Trimmed.check(
+  Schema.isPattern(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)
+).pipe(Schema.brand("EmailAddress"))
+export type EmailAddress = typeof EmailAddress.Type
+
+export const UnspecifiedPersonEmail = Schema.TaggedStruct("unspecified", {})
+export type UnspecifiedPersonEmail = typeof UnspecifiedPersonEmail.Type
+
+export const ProvisionalPersonEmail = Schema.TaggedStruct("provisional", {
+  address: EmailAddress
+})
+export type ProvisionalPersonEmail = typeof ProvisionalPersonEmail.Type
+
+export const PersonEmail = Schema.Union([
+  UnspecifiedPersonEmail,
+  ProvisionalPersonEmail
+])
+export type PersonEmail = typeof PersonEmail.Type
+
 export const PersonSnapshot = Schema.TaggedStruct("person", {
   personId: PersonId,
-  displayName: DisplayName
+  displayName: DisplayName,
+  email: PersonEmail
 })
 export type PersonSnapshot = typeof PersonSnapshot.Type
 
@@ -114,6 +134,29 @@ export const decodeReportedRuntime = (input: Schema.Json) =>
     ReportedRuntime,
     { onExcessProperty: "error" }
   )(input)
+
+const isJsonRecord = (value: unknown): value is { readonly [key: string]: unknown } =>
+  typeof value === "object" && value !== null && !Array.isArray(value)
+
+export const completeStoredPerson = (input: unknown): Schema.Json => {
+  const walk = (value: unknown): unknown => {
+    if (Array.isArray(value)) return value.map(walk)
+    if (!isJsonRecord(value)) return value
+    const nested = Object.fromEntries(
+      Object.entries(value).map(([key, child]) => [key, walk(child)])
+    )
+    if (
+      nested._tag === "person" &&
+      typeof nested.personId === "string" &&
+      typeof nested.displayName === "string" &&
+      !Object.hasOwn(nested, "email")
+    ) {
+      return { ...nested, email: { _tag: "unspecified" } }
+    }
+    return nested
+  }
+  return Schema.decodeUnknownSync(Schema.Json)(walk(input))
+}
 
 export const actorFromAttribution = (attribution: AcceptedAttribution): ActorSnapshot =>
   attribution._tag === "person" ? attribution.person : attribution.agent

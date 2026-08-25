@@ -53,7 +53,12 @@ const person = Schema.decodeUnknownSync(PersonInvocation)({
   principal: {
     _tag: "person",
     subject: "oidc|conformance",
-    person: { _tag: "person", personId: "person_conformance", displayName: "Conformance" }
+    person: {
+      _tag: "person",
+      personId: "person_conformance",
+      displayName: "Conformance",
+      email: { _tag: "unspecified" }
+    }
   }
 })
 const agent = Schema.decodeUnknownSync(AgentInvocation)({

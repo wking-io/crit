@@ -66,7 +66,7 @@ describe("ChangeProtocol", () => {
     const fields = [
       "subject", "actor", "author", "person", "agent", "editedAt", "at", "time",
       "digest", "hash", "acceptedAt", "attribution", "sequence", "cursor",
-      "personId", "agentId", "executionId", "delegatedBy",
+      "personId", "agentId", "executionId", "delegatedBy", "email", "address",
       "reportedRuntime", "harness", "model", "source", "sessionId", "taskId", "displayName"
     ]
     for (const field of fields) {

@@ -31,6 +31,7 @@ import { Console, Context, Crypto, Effect, FileSystem, Layer, Match, Option, Pat
 import { Argument, Command, Flag } from "effect/unstable/cli"
 
 import { frameCommand, frameSourceLabel, resolveFrameGeometry } from "./add-frame.js"
+import { resolveProvisionalEmail } from "./git-email.js"
 import { HOST_ORIGIN, resolveHostRoot, startHostApp } from "./host-app.js"
 import { CanvasLayout, canvasLayout, formatCanvasLayout } from "./layout.js"
 import { PROJECT_SKILL_RELATIVE_PATH, projectSkillSource } from "./project-skill.js"
@@ -188,6 +189,12 @@ const dev = Command.make(
     })
     yield* Effect.scoped(Effect.gen(function*() {
       const applicationOptions = application === undefined ? {} : { application }
+      const emailOptions = yield* Effect.promise(() => resolveProvisionalEmail(projectRoot)).pipe(
+        Effect.map((email) => Option.match(email, {
+          onNone: () => ({}),
+          onSome: (provisionalEmail) => ({ provisionalEmail })
+        }))
+      )
       const resolvedBrowserOrigin = yield* Option.match(browserOrigin, {
         onSome: (origin) => Effect.succeed(Option.some(origin)),
         onNone: () => noHost
@@ -206,10 +213,11 @@ const dev = Command.make(
           })
       })
       const developmentLayer = Option.match(resolvedBrowserOrigin, {
-        onNone: () => LocalDevelopment.layer({ dataRoot: root, ...applicationOptions }),
+        onNone: () => LocalDevelopment.layer({ dataRoot: root, ...applicationOptions, ...emailOptions }),
         onSome: (origin) => LocalDevelopment.layer({
           dataRoot: root,
           ...applicationOptions,
+          ...emailOptions,
           browserOrigin: origin
         })
       })

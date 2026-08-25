@@ -20,7 +20,12 @@ const person = Schema.decodeUnknownSync(PersonInvocation)({
   principal: {
     _tag: "person",
     subject: "oidc|replica-conformance",
-    person: { _tag: "person", personId: "person_replica_conformance", displayName: "Replica" }
+    person: {
+      _tag: "person",
+      personId: "person_replica_conformance",
+      displayName: "Replica",
+      email: { _tag: "unspecified" }
+    }
   }
 })
 const addFrame = (frameId: string, title: string) => decodeCanvasCommandBatch([{
