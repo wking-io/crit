@@ -87,7 +87,6 @@ const RetryRow = Schema.Struct({
   rejected_failure_json: Schema.NullOr(JsonText)
 })
 const CursorRow = Schema.Struct({ cursor: Schema.String })
-const FoundRow = Schema.Struct({ found: Schema.Number })
 const SequenceRow = Schema.Struct({ sequence: Schema.Number })
 
 const encodeProtocol = (value: Schema.Json) =>
@@ -141,7 +140,7 @@ const bindDatabase = (args: {
 
   const readCanvas = (): Effect.Effect<CanvasRecord | undefined, SqlError> =>
     Effect.gen(function*() {
-      const rows = yield* sql<typeof CanvasRow.Encoded>`SELECT * FROM canvases`
+      const rows = yield* sql`SELECT * FROM canvases`
       if (rows.length === 0) return undefined
       if (rows.length !== 1) throw new Error("one-canvas database contains multiple canvases")
       const row = Schema.decodeUnknownSync(CanvasRow, { onExcessProperty: "error" })(rows[0])
@@ -156,7 +155,7 @@ const bindDatabase = (args: {
         throw new Error("stored Canvas checkpoint facts disagree")
       }
       if (row.current_sequence > 0) {
-        const heads = yield* sql<typeof CursorRow.Encoded>`SELECT cursor FROM accepted_changes
+        const heads = yield* sql`SELECT cursor FROM accepted_changes
           WHERE canvas_id = ${row.canvas_id} AND sequence = ${row.current_sequence}`
         if (heads.length !== 1) throw new Error("stored Canvas checkpoint head is missing")
         const head = Schema.decodeUnknownSync(CursorRow)(heads[0])
@@ -180,7 +179,7 @@ const bindDatabase = (args: {
   const readRetry = (
     proposal: ProposedCanvasChange
   ): Effect.Effect<RetryRecord | undefined, SqlError> => Effect.gen(function*() {
-    const rows = yield* sql<typeof RetryRow.Encoded>`SELECT * FROM retry_reservations
+    const rows = yield* sql`SELECT * FROM retry_reservations
       WHERE canvas_id = ${args.canvasId} AND change_id = ${proposal.changeId}`
     if (rows.length === 0) return undefined
     const row = Schema.decodeUnknownSync(RetryRow, { onExcessProperty: "error" })(rows[0])
@@ -193,7 +192,7 @@ const bindDatabase = (args: {
       authorizationSubject: Schema.decodeUnknownSync(AuthSubject)(row.authorization_subject)
     }
     if (row.accepted_sequence !== null) {
-      const acceptedRows = yield* sql<typeof AcceptedRow.Encoded>`SELECT * FROM accepted_changes
+      const acceptedRows = yield* sql`SELECT * FROM accepted_changes
         WHERE canvas_id = ${args.canvasId} AND sequence = ${row.accepted_sequence}`
       if (acceptedRows.length !== 1) throw new Error("accepted retry target is missing")
       const stored = Schema.decodeUnknownSync(AcceptedRow, { onExcessProperty: "error" })(acceptedRows[0])
@@ -220,7 +219,7 @@ const bindDatabase = (args: {
     if (canvas === undefined) throw new Error("one-canvas database is missing its Canvas")
     let observedCursorKnown = proposal.observedCursor === null || proposal.observedCursor === canvas.genesisCursor
     if (!observedCursorKnown && proposal.observedCursor !== null) {
-      const knownRows = yield* sql<typeof FoundRow.Encoded>`
+      const knownRows = yield* sql`
         SELECT 1 AS found FROM accepted_changes
         WHERE canvas_id = ${args.canvasId} AND cursor = ${proposal.observedCursor}`
       observedCursorKnown = knownRows.length > 0
@@ -319,7 +318,7 @@ const bindDatabase = (args: {
       if (canvas === undefined) throw new Error("one-canvas database is missing its Canvas")
       let position = 0
       if (boundQuery.after !== null && boundQuery.after !== canvas.genesisCursor) {
-        const positions = yield* sql<typeof SequenceRow.Encoded>`SELECT sequence FROM accepted_changes
+        const positions = yield* sql`SELECT sequence FROM accepted_changes
           WHERE canvas_id = ${args.canvasId} AND cursor = ${boundQuery.after}`
         if (positions.length === 0) {
           return yield* Effect.fail(AuthorityFailure.cursorNotFound({
@@ -329,7 +328,7 @@ const bindDatabase = (args: {
         }
         position = Schema.decodeUnknownSync(SequenceRow)(positions[0]).sequence
       }
-      const rows = yield* sql<typeof AcceptedRow.Encoded>`SELECT * FROM accepted_changes
+      const rows = yield* sql`SELECT * FROM accepted_changes
         WHERE canvas_id = ${args.canvasId} AND sequence > ${position}
         ORDER BY sequence LIMIT ${boundQuery.limit}`
       const changes = rows.map((row) => readAccepted(

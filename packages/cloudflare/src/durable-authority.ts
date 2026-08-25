@@ -14,7 +14,10 @@ import {
 } from "@crit/protocol"
 import { Effect, Layer, Schema } from "effect"
 
-import { CanvasDurableObject } from "./canvas-object.js"
+import {
+  CanvasDurableObject,
+  type DurableObjectResult
+} from "./canvas-object.js"
 import { DurableSqlRowLimitExceeded } from "./stored-json.js"
 
 export interface DurableObjectAuthorityOptions {
@@ -31,28 +34,22 @@ const ChangesAfterFailure = Schema.Union([
   CanvasNotFound,
   CursorNotFound
 ])
-const ResultEnvelope = Schema.Union([
-  Schema.TaggedStruct("success", { value: Schema.Unknown }),
-  Schema.TaggedStruct("failure", { error: Schema.Unknown }),
-  Schema.TaggedStruct("defect", { message: Schema.String }),
-  Schema.TaggedStruct("interrupted", {}),
-  Schema.TaggedStruct("durable-sql-row-limit-exceeded", {
-    bytes: Schema.Number,
-    limit: Schema.Number
-  })
-])
 
-const decodeResult = <A, E>(
-  input: unknown,
-  decodeSuccess: (input: unknown) => A,
-  decodeFailure: (input: unknown) => E
-): Effect.Effect<A, E> => {
-  const result = Schema.decodeUnknownSync(ResultEnvelope)(input)
+const foldResult = <
+  A,
+  E,
+  Value extends Schema.ConstraintDecoder<unknown>,
+  Error extends Schema.ConstraintDecoder<unknown>
+>(
+  result: DurableObjectResult<A, E>,
+  value: Value,
+  error: Error
+): Effect.Effect<Value["Type"], Error["Type"]> => {
   switch (result._tag) {
     case "success":
-      return Effect.succeed(decodeSuccess(result.value))
+      return Effect.succeed(Schema.decodeUnknownSync(value)(result.value))
     case "failure":
-      return Effect.fail(decodeFailure(result.error))
+      return Effect.fail(Schema.decodeUnknownSync(error)(result.error))
     case "defect":
       return Effect.die(new Error(result.message))
     case "interrupted":
@@ -65,27 +62,33 @@ const decodeResult = <A, E>(
   }
 }
 
-const fromResult = <A, E>(
-  request: (requestId: string) => Promise<unknown>,
-  cancel: (requestId: string) => Promise<void>,
-  decodeSuccess: (input: unknown) => A,
-  decodeFailure: (input: unknown) => E
-): Effect.Effect<A, E> => Effect.callback<A, E>((resume) => {
-  const requestId = crypto.randomUUID()
-  request(requestId).then(
-    (result) => {
-      try {
-        resume(decodeResult(result, decodeSuccess, decodeFailure))
-      } catch (cause) {
-        resume(Effect.die(cause))
-      }
-    },
-    (cause) => resume(Effect.die(cause))
-  )
-  return Effect.promise(() => cancel(requestId)).pipe(
-    Effect.catchCause(() => Effect.void)
-  )
-})
+const fromResult = <
+  A,
+  E,
+  Value extends Schema.ConstraintDecoder<unknown>,
+  Error extends Schema.ConstraintDecoder<unknown>
+>(
+  request: (requestId: string) => Promise<DurableObjectResult<A, E>>,
+  cancel: (requestId: string) => void,
+  value: Value,
+  error: Error
+): Effect.Effect<Value["Type"], Error["Type"]> =>
+  Effect.callback((resume) => {
+    const requestId = crypto.randomUUID()
+    request(requestId).then(
+      (result) => {
+        try {
+          resume(foldResult(result, value, error))
+        } catch (cause) {
+          resume(Effect.die(cause))
+        }
+      },
+      (cause) => resume(Effect.die(cause))
+    )
+    return Effect.sync(() => {
+      cancel(requestId)
+    }).pipe(Effect.catchCause(() => Effect.void))
+  })
 
 const make = (
   namespace: DurableObjectNamespace<CanvasDurableObject>,
@@ -99,14 +102,19 @@ const make = (
       const ownedCommand = DomainValue.detach(command)
       const ownedInvocation = DomainValue.detach(invocation)
       const stub = stubFor(ownedCommand.canvasId)
-      return fromResult((requestId) => stub.create(
-        ownedCommand,
-        ownedInvocation,
-        options.testClockId,
-        requestId
-      ), (requestId) => stubFor(ownedCommand.canvasId).cancel(requestId),
-      Schema.decodeUnknownSync(AuthorityView),
-      Schema.decodeUnknownSync(CanvasAlreadyExists))
+      return fromResult(
+        (requestId) => stub.create(
+          ownedCommand,
+          ownedInvocation,
+          options.testClockId,
+          requestId
+        ),
+        (requestId) => {
+          stubFor(ownedCommand.canvasId).cancel(requestId)
+        },
+        AuthorityView,
+        CanvasAlreadyExists
+      )
     })
 
   const open: CanvasAuthority["Service"]["open"] = (canvasId) =>
@@ -114,9 +122,11 @@ const make = (
       const stub = stubFor(canvasId)
       return fromResult(
         (requestId) => stub.open(options.testClockId, requestId),
-        (requestId) => stubFor(canvasId).cancel(requestId),
-        Schema.decodeUnknownSync(AuthorityView),
-        Schema.decodeUnknownSync(CanvasNotFound)
+        (requestId) => {
+          stubFor(canvasId).cancel(requestId)
+        },
+        AuthorityView,
+        CanvasNotFound
       )
     })
 
@@ -126,14 +136,19 @@ const make = (
       const ownedInvocation = DomainValue.detach(invocation)
       const { canvasId, ...oneCanvasProposal } = ownedProposal
       const stub = stubFor(canvasId)
-      return fromResult((requestId) => stub.submit(
-        oneCanvasProposal,
-        ownedInvocation,
-        options.testClockId,
-        requestId
-      ), (requestId) => stubFor(canvasId).cancel(requestId),
-      Schema.decodeUnknownSync(SubmitChangeReceiptSchema),
-      Schema.decodeUnknownSync(SubmitFailure))
+      return fromResult(
+        (requestId) => stub.submit(
+          oneCanvasProposal,
+          ownedInvocation,
+          options.testClockId,
+          requestId
+        ),
+        (requestId) => {
+          stubFor(canvasId).cancel(requestId)
+        },
+        SubmitChangeReceiptSchema,
+        SubmitFailure
+      )
     })
 
   const changesAfter: CanvasAuthority["Service"]["changesAfter"] = (query) =>
@@ -141,13 +156,18 @@ const make = (
       const ownedQuery = DomainValue.detach(query)
       const { canvasId, ...oneCanvasQuery } = ownedQuery
       const stub = stubFor(canvasId)
-      return fromResult((requestId) => stub.changesAfter(
-        oneCanvasQuery,
-        options.testClockId,
-        requestId
-      ), (requestId) => stubFor(canvasId).cancel(requestId),
-      Schema.decodeUnknownSync(ChangePageSchema),
-      Schema.decodeUnknownSync(ChangesAfterFailure))
+      return fromResult(
+        (requestId) => stub.changesAfter(
+          oneCanvasQuery,
+          options.testClockId,
+          requestId
+        ),
+        (requestId) => {
+          stubFor(canvasId).cancel(requestId)
+        },
+        ChangePageSchema,
+        ChangesAfterFailure
+      )
     })
 
   return { create, open, submit, changesAfter }

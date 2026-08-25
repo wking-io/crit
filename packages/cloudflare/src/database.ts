@@ -29,10 +29,8 @@ export const makeDatabase = (options: CloudflareDatabaseOptions) => Effect.gen(f
   )
   const sqlite: DurableSqlite = {
     sql,
-    unsafe: <A>(query: string, ...args: unknown[]) => sql.unsafe(query, args).pipe(
-      Effect.map((rows) => rows as unknown as ReadonlyArray<A>)
-    ),
-    transact: <A, E, R>(body: Effect.Effect<A, E, R>) => retryTransaction(sql, body)
+    unsafe: (query, ...args) => sql.unsafe(query, args),
+    transact: (body) => retryTransaction(sql, body)
   }
   yield* applyAuthoritySchema(sqlite).pipe(
     Effect.retry({
