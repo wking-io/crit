@@ -34,7 +34,7 @@ Do not send credentials, tokens, private reasoning, or storage bindings in Canva
 
 ## Workspaces
 
-Crit automatically selects an accessible Workspace. Use Workspace commands only when the user asks to switch. Switching affects future links and browsing; it does not move an already linked Canvas.
+Workspace exists in the data model. v1 does not expose it. Do not offer workspace commands or ask the user to switch Workspaces.
 
 ## Presence and history
 

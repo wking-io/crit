@@ -21,8 +21,8 @@ Local-only work may use repository Git name and email as provisional provenance.
 Cloudflare Access establishes the company account. Crit maps that verified identity to a Person and applies Workspace policy.
 
 - Do not repair remote identity by changing Git configuration.
-- Verify the Installation hostname, Access session, Person mapping, and Workspace membership.
-- If the Person has several Workspaces, Crit selects the remembered accessible Workspace, then the default, then the only or earliest accessible Workspace.
+- Verify the Installation hostname, Access session, Person mapping, and membership on the implicit default Workspace.
+- v1 does not expose workspace switching. Do not offer Workspace commands.
 
 ## Local Agent identity
 

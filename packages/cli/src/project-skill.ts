@@ -73,7 +73,7 @@ Input inside an application Frame needs the Frame Bridge in the app. Turn it on 
 
 ## Shared work
 
-When a shared Crit connection is available, use that MCP. It exposes \`search\` and \`execute\`. Same Canvas rules. Same IDs.
+After share, people review in the hosted UI. They do not install Crit. Do not review a shared Canvas as an Agent. Crit has no remote MCP.
 
 ## Done
 

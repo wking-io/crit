@@ -16,7 +16,7 @@ Ship a repeatable customer-hosted installation and a coherent local-to-team work
 ## Prove
 
 - A fresh customer Cloudflare account installs from the documented procedure.
-- A developer initializes locally, creates and reviews work offline, shares it, invites a teammate through company identity, resolves a shared preview, and continues offline.
+- A developer initializes locally, creates and reviews work offline, shares it, invites a teammate through company identity, resolves a shared preview, and continues offline. v1 does not prove Workspace switching.
 - A teammate with no Crit install opens the hosted UI, reviews Frames, and the author's replica receives any accepted Frame changes.
 - Backup and restore reproduce D1 control data, Canvas ledgers, and R2 artifacts.
 - Package, security, conformance, browser, and end-to-end release suites pass.

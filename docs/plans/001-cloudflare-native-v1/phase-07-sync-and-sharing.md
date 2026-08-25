@@ -10,7 +10,7 @@ Let multiple local replicas work offline and converge through the Cloudflare aut
 - Use WebSocket hints to trigger cursor repair.
 - Implement idempotent first share with stable share and import IDs plus a projection digest.
 - Preserve local history in a local audit export. Begin remote history with an authenticated import receipt.
-- Make Workspace switching affect future links only.
+- v1 uses the Installation's implicit default Workspace. Do not ship workspace-switching product.
 
 ## Prove
 
@@ -18,4 +18,3 @@ Let multiple local replicas work offline and converge through the Cloudflare aut
 - Lost, duplicate, and reordered socket notifications repair through cursor pulls.
 - Independent changes survive; content collisions become recoverable conflicts with dependent pending work preserved.
 - Repeated share returns one remote Canvas. A changed digest under the same share ID fails.
-- Existing linked Canvases stay in their original Workspace after a switch.

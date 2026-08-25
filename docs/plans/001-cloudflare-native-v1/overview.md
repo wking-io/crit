@@ -78,7 +78,7 @@ packages/
 ├── frame-bridge/     framework-neutral browser bridge
 ├── local/            daemon, SQLite, and local artifacts
 ├── cloudflare/       Worker, Durable Objects, D1, R2, Access, and hosted UI
-└── cli/              init, dev, login, share, sync, and Workspace commands
+└── cli/              init, dev, login, share, and sync
 ```
 
 These are ownership boundaries from the first commit. We may begin in one repository, but we do not reproduce the alpha dependency graph inside them.
@@ -144,8 +144,10 @@ It does not preserve alpha JSON, IndexedDB state, filesystem Canvas documents, U
 ## Fixed v1 decisions
 
 - One Installation is the tenant. There is no Organization model.
-- Workspace is the authorization and collaboration boundary.
-- The first Workspace is the default. Login auto-selects an accessible Workspace; commands only switch.
+- Workspace remains in the data model as the authorization boundary. v1 does not expose Workspaces or ship workspace commands.
+- Authors add Frames through the CLI or local agents. The review UI does not add Frames.
+- A Frame's Representation is set at create. Snapshot adds a new artifact Frame. There is no generic representation-change action.
+- Contextual help and keyboard shortcuts use TanStack Hotkeys.
 - One SQLite Durable Object owns each shared Canvas ledger and projection.
 - D1 is the control plane. R2 owns immutable artifacts.
 - WebSockets notify. Cursor reads establish truth.
@@ -159,4 +161,4 @@ It does not preserve alpha JSON, IndexedDB state, filesystem Canvas documents, U
 
 ## Verification
 
-[The testing plan](testing.md) defines the shared conformance suites and end-to-end release proof. [The decision record](decision-record.md) captures the settled choices. [The synthesis](synthesis.md) explains why a clean rewrite replaced the earlier migration strategy.
+[The v1 todo](v1-todo.md) is the current done and remaining inventory. [The testing plan](testing.md) defines the shared conformance suites and end-to-end release proof. [The decision record](decision-record.md) captures the settled choices. [The synthesis](synthesis.md) explains why a clean rewrite replaced the earlier migration strategy.
