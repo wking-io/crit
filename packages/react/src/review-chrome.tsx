@@ -1,6 +1,6 @@
 import type { CanvasCommandBatch, CanvasProjection } from "@crit/domain"
+import { useHotkeys } from "@tanstack/react-hotkeys"
 import {
-  useEffect,
   useState,
   type FormEvent,
   type ReactElement
@@ -10,12 +10,18 @@ import {
   ReviewActionInput,
   availableReviewActions,
   resolveReviewAction,
+  reviewActionPolicies,
   type ReviewAction,
   type ReviewActionId,
   type ReviewActionInput as ReviewActionInputValue,
   type ReviewClientEffect,
   type ReviewSelection
 } from "./review-actions.js"
+import {
+  ReviewHelpPanel,
+  ReviewHelpSurface,
+  reviewActionHelpTarget
+} from "./review-help.js"
 
 export interface ReviewChromeProps {
   readonly projection: CanvasProjection
@@ -23,36 +29,31 @@ export interface ReviewChromeProps {
   readonly onSubmit: (commands: CanvasCommandBatch) => void
   readonly onEffect?: (effect: ReviewClientEffect) => void
   readonly fullscreen?: boolean
-  readonly pauseOffscreen?: boolean
 }
 
 const formActions = [
   {
-    id: "add-frame",
-    label: "Add frame",
-    inputLabel: "Frame URL",
-    inputTag: "url"
-  },
-  {
     id: "rename-canvas",
-    label: "Rename canvas",
-    inputLabel: "Canvas title",
-    inputTag: "text"
+    inputLabel: "Canvas title"
   },
   {
     id: "set-frame-title",
-    label: "Set frame title",
-    inputLabel: "Frame title",
-    inputTag: "text"
+    inputLabel: "Frame title"
   }
 ] as const satisfies readonly {
   readonly id: ReviewActionId
-  readonly label: string
   readonly inputLabel: string
-  readonly inputTag: "text" | "url"
 }[]
 
-const formActionIds = new Set<string>(formActions.map(({ id }) => id))
+const formPolicies = formActions.map((entry) => {
+  const policy = reviewActionPolicies.find((candidate) => candidate.id === entry.id)
+  if (policy === undefined) {
+    throw new Error(`Missing form policy: ${entry.id}`)
+  }
+  return { ...entry, policy }
+})
+
+const formActionIds = new Set<string>(formPolicies.map(({ id }) => id))
 
 const dispatchReviewAction = (
   action: ReviewAction,
@@ -67,55 +68,46 @@ const dispatchReviewAction = (
 }
 
 function ReviewActionForm({
-  id,
   inputLabel,
-  inputTag,
-  label,
-  onRun
+  onRun,
+  policy
 }: {
-  readonly id: ReviewActionId
   readonly inputLabel: string
-  readonly inputTag: "text" | "url"
-  readonly label: string
   readonly onRun: (
     id: ReviewActionId,
     input: ReviewActionInputValue
   ) => boolean
+  readonly policy: (typeof reviewActionPolicies)[number]
 }): ReactElement {
   const [value, setValue] = useState("")
   const submit = (event: FormEvent) => {
     event.preventDefault()
-    const input = inputTag === "url"
-      ? { _tag: "url" as const, url: value }
-      : { _tag: "text" as const, text: value }
-    if (onRun(id, input)) setValue("")
+    if (onRun(policy.id, { _tag: "text", text: value })) setValue("")
   }
   return (
-    <form aria-label={label} onSubmit={submit}>
+    <form
+      aria-label={policy.label}
+      {...reviewActionHelpTarget(policy)}
+      onSubmit={submit}
+    >
       <label>
         {inputLabel}
         <input
           aria-label={inputLabel}
-          type={inputTag}
+          type="text"
           value={value}
           onChange={(event) => setValue(event.currentTarget.value)}
         />
       </label>
-      <button type="submit">{label}</button>
+      <button type="submit">{policy.label}</button>
     </form>
   )
 }
-
-const isTextEntry = (target: EventTarget | null): boolean =>
-  target instanceof HTMLInputElement ||
-  target instanceof HTMLTextAreaElement ||
-  (target instanceof HTMLElement && target.isContentEditable)
 
 export function ReviewChrome({
   fullscreen = false,
   onEffect,
   onSubmit,
-  pauseOffscreen = false,
   projection,
   selection
 }: ReviewChromeProps): ReactElement {
@@ -123,13 +115,17 @@ export function ReviewChrome({
     projection,
     selection,
     input: ReviewActionInput.none,
-    fullscreen,
-    pauseOffscreen
+    fullscreen
   }
-  const available = availableReviewActions(context).filter((entry) =>
-    resolveReviewAction(entry.id, context) !== null || formActionIds.has(entry.id)
+  const available = availableReviewActions(context)
+  const runnable = available.filter((entry) =>
+    resolveReviewAction(entry.id, context) !== null
   )
-  const availableIds = new Set<string>(available.map(({ id }) => id))
+  const runnableIds = new Set<string>(runnable.map(({ id }) => id))
+  const toolbarActions = runnable.filter((entry) => !formActionIds.has(entry.id))
+  const visibleForms = formPolicies.filter(({ policy }) =>
+    policy.available(selection, projection)
+  )
   const run = (
     id: ReviewActionId,
     input: ReviewActionInputValue = ReviewActionInput.none
@@ -138,27 +134,27 @@ export function ReviewChrome({
       projection,
       selection,
       input,
-      fullscreen,
-      pauseOffscreen
+      fullscreen
     })
     if (action === null) return false
     dispatchReviewAction(action, onSubmit, onEffect)
     return true
   }
 
-  useEffect(() => {
-    const remove = (event: KeyboardEvent) => {
-      if (
-        event.key !== "Delete" ||
-        isTextEntry(event.target) ||
-        !availableIds.has("remove")
-      ) return
-      event.preventDefault()
-      run("remove")
-    }
-    window.addEventListener("keydown", remove)
-    return () => window.removeEventListener("keydown", remove)
-  })
+  useHotkeys(
+    reviewActionPolicies.flatMap((policy) =>
+      policy.shortcuts.map((hotkey) => ({
+        hotkey,
+        callback: () => {
+          run(policy.id)
+        },
+        options: {
+          enabled: runnableIds.has(policy.id),
+          ignoreInputs: hotkey !== "Escape"
+        }
+      }))
+    )
+  )
 
   return (
     <aside
@@ -176,42 +172,30 @@ export function ReviewChrome({
       }}
       onPointerDown={(event) => event.stopPropagation()}
     >
-      <div aria-label="Review actions" role="toolbar">
-        {available.map((entry) =>
-          formActionIds.has(entry.id)
-            ? null
-            : (
+      <ReviewHelpSurface>
+        <div aria-label="Review actions" role="toolbar">
+          {toolbarActions.map((entry) => (
             <button
               aria-label={entry.label}
               key={entry.id}
               type="button"
+              {...reviewActionHelpTarget(entry)}
               onClick={() => run(entry.id)}
             >
               {entry.label}
             </button>
-            )
-        )}
-      </div>
-      {formActions
-        .filter(({ id }) => availableIds.has(id))
-        .map((entry) => (
+          ))}
+        </div>
+        {visibleForms.map((entry) => (
           <ReviewActionForm
-            id={entry.id}
             inputLabel={entry.inputLabel}
-            inputTag={entry.inputTag}
             key={entry.id}
-            label={entry.label}
             onRun={run}
+            policy={entry.policy}
           />
         ))}
-      <details>
-        <summary>Help</summary>
-        <ul>
-          {available.map((entry) => (
-            <li key={entry.id}>{entry.label}</li>
-          ))}
-        </ul>
-      </details>
+        <ReviewHelpPanel />
+      </ReviewHelpSurface>
     </aside>
   )
 }

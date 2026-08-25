@@ -9,7 +9,6 @@ import type { ReviewClientEffect } from "./review-actions.js"
 
 export interface ReviewEffectContext {
   readonly frameElement: HTMLElement | null
-  readonly setPauseOffscreen: (value: boolean) => void
 }
 
 export const applyReviewEffect = (
@@ -31,9 +30,6 @@ export const applyReviewEffect = (
       return
     case "copy":
       void navigator.clipboard?.writeText(effect.text)
-      return
-    case "set-preference":
-      context.setPauseOffscreen(effect.value)
   }
 }
 
@@ -47,7 +43,6 @@ export const useReviewEffects = (args: {
   const [offscreenFrames, setOffscreenFrames] = useState<ReadonlySet<string>>(
     () => new Set()
   )
-  const [pauseOffscreen, setPauseOffscreen] = useState(false)
 
   useEffect(() => {
     const changed = () => setFullscreen(document.fullscreenElement !== null)
@@ -57,12 +52,6 @@ export const useReviewEffects = (args: {
   }, [])
 
   useEffect(() => {
-    if (!pauseOffscreen) {
-      setOffscreenFrames((current) =>
-        current.size === 0 ? current : new Set()
-      )
-      return
-    }
     const observer = new IntersectionObserver((entries) => {
       setOffscreenFrames((current) => {
         const next = new Set(current)
@@ -79,7 +68,7 @@ export const useReviewEffects = (args: {
       observer.observe(element)
     }
     return () => observer.disconnect()
-  }, [args.frameElementsRef, args.frames, pauseOffscreen])
+  }, [args.frameElementsRef, args.frames])
 
   const handle = (effect: ReviewClientEffect) => {
     if (args.onEffect !== undefined) {
@@ -87,16 +76,13 @@ export const useReviewEffects = (args: {
       return
     }
     applyReviewEffect(effect, {
-      frameElement: args.selectedFrameRef.current,
-      setPauseOffscreen
+      frameElement: args.selectedFrameRef.current
     })
   }
 
   return {
     fullscreen,
     handle,
-    isFramePaused: (frameId: string) =>
-      pauseOffscreen && offscreenFrames.has(frameId),
-    pauseOffscreen
+    isFramePaused: (frameId: string) => offscreenFrames.has(frameId)
   }
 }

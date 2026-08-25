@@ -188,7 +188,11 @@ describe("CanvasBoard", () => {
     ))
 
     await act(async() => {
-      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Delete" }))
+      document.dispatchEvent(new KeyboardEvent("keydown", {
+        key: "Delete",
+        bubbles: true,
+        cancelable: true
+      }))
     })
     expect(onSubmit).toHaveBeenCalledWith([{
       _tag: "remove-frame",
@@ -343,14 +347,6 @@ describe("CanvasBoard", () => {
       />
     ))
     await waitFor(() => expect(container.querySelector("iframe")).not.toBeNull())
-    const pause = container.querySelector(
-      "[aria-label='Pause offscreen frames']"
-    )
-    if (!(pause instanceof HTMLButtonElement)) {
-      throw new Error("Pause action missing")
-    }
-
-    await act(async() => pause.click())
     if (callback === undefined || observed === undefined) {
       throw new Error("Frame observer missing")
     }

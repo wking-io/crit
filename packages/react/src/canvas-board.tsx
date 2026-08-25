@@ -274,7 +274,6 @@ export function CanvasBoard({
             fullscreen={reviewEffects.fullscreen}
             onEffect={reviewEffects.handle}
             onSubmit={onSubmit}
-            pauseOffscreen={reviewEffects.pauseOffscreen}
             projection={projection}
             selection={{ _tag: "items", items: selection }}
           />

@@ -8,16 +8,13 @@ This file is the current inventory. Phase docs own the prove. [Decision record](
 
 ## Next
 
-- [ ] Contextual help box and keyboard shortcuts with TanStack Hotkeys (`@tanstack/react-hotkeys`). Wire shortcuts through one command table so the help box and the handlers stay in sync. Alpha behavior reference: `src/react/canvas-help.tsx`. Plan: [phase 5](phase-05-review-ui.md).
-- [ ] Remove Add frame from the review UI. CLI and local agents add Frames. The chrome still has the form.
+- [ ] Snapshot a live Frame into a new artifact Frame. Specific action, not a generic representation change. Runtime `capture` exists. There is no product action. Plan: [phase 5](phase-05-review-ui.md).
 
 ## Remaining
 
 ### Local review
 
 Plan: [phase 5](phase-05-review-ui.md), [phase 3](phase-03-local-daemon-and-cli.md), [phase 4](phase-04-representations-and-bridge.md).
-
-- [ ] Snapshot a live Frame into a new artifact Frame. Specific action, not a generic representation change. Runtime `capture` exists. There is no product action.
 - [ ] Presence of people and local Agent runs.
 - [ ] Person vs Agent authorship in the UI. Pending changes show a local display name. Agent work must not look like the Person who ran the Agent did it.
 - [ ] Shared pending, conflict, unavailable, and offline states. Local pending/conflict/sync exists.
@@ -71,13 +68,15 @@ Local Frames authoring on one machine.
 - Atomic command batches with recoverable local conflicts
 - Camera, pan, zoom, saved camera and selection
 - Align, distribute, arrange grid, breakpoint presets
-- Pause offscreen, fullscreen, open `web-url` in a new tab, copy Frame ID
+- Offscreen Frames pause themselves, fullscreen, open `web-url` in a new tab, copy Frame ID
 - `application-route`, `web-url`, and digest-bound `artifact` in domain, CLI, and local resolve
 - Local Application binding from the manifest and `--application-origin`
 - Unavailable render for unbound app or missing/corrupt artifact
 - Frame Bridge input relay
 - Local SQLite authority, replica, restart-safe pending work
 - Person and Agent as domain Actors
+- Review UI no longer adds Frames
+- Contextual help and keyboard shortcuts from the review action table
 
 ## Out of v1
 

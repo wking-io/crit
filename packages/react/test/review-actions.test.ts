@@ -1,15 +1,22 @@
 import { decodeCanvasProjection } from "@crit/domain"
-import { describe, expect, it, vi } from "vitest"
+import { describe, expect, it } from "vitest"
 
 import { CanvasSelection } from "../src/canvas-selection.js"
 import {
   ReviewActionInput,
   availableReviewActions,
   resolveReviewAction,
+  reviewActionPolicies,
   type ReviewActionContext,
   type ReviewActionId,
   type ReviewSelection
 } from "../src/review-actions.js"
+
+const policyById = (id: ReviewActionId) => {
+  const policy = reviewActionPolicies.find((entry) => entry.id === id)
+  if (policy === undefined) throw new Error(`Missing policy: ${id}`)
+  return policy
+}
 
 const projection = decodeCanvasProjection({
   schemaVersion: 3,
@@ -68,8 +75,7 @@ const context = (
   projection,
   selection,
   input,
-  fullscreen: false,
-  pauseOffscreen: false
+  fullscreen: false
 })
 
 const commandsFor = (
@@ -90,6 +96,13 @@ describe("review actions", () => {
     expect(ids).toContain("remove")
     expect(ids).toContain("set-frame-status-approved")
     expect(ids).not.toContain("set-frame-status-in-progress")
+    const none = availableReviewActions({
+      projection,
+      selection: itemSelection([])
+    }).map((entry) => entry.id)
+    expect(none).not.toContain("set-frame-status-approved")
+    expect(none).not.toContain("set-frame-status-changes-requested")
+    expect(none).not.toContain("enter-fullscreen")
   })
 
   it("builds mutation batches for status, title, remove, and stacking", () => {
@@ -125,21 +138,41 @@ describe("review actions", () => {
     }])
   })
 
-  it("mints ids when adding Frames", () => {
-    const randomUUID = vi.spyOn(crypto, "randomUUID")
-    randomUUID.mockReturnValueOnce("00000000-0000-4000-8000-000000000001")
-    const selection = itemSelection([])
+  it("keeps add-frame out of the review policy table", () => {
+    expect(reviewActionPolicies.map((entry) => entry.id)).not.toContain("add-frame")
+  })
 
-    expect(commandsFor("add-frame", context(selection, {
-      _tag: "url",
-      url: "https://example.org/review"
-    }))[0]).toMatchObject({
-      _tag: "add-frame",
-      frameId: "frame_00000000000040008000000000000001",
-      representation: {
-        _tag: "web-url",
-        url: "https://example.org/review"
-      }
+  it("binds review shortcuts from the table", () => {
+    expect(policyById("remove").shortcuts).toEqual(["Delete", "Backspace"])
+    expect(policyById("exit-fullscreen").shortcuts).toEqual(["Escape"])
+    expect(policyById("enter-fullscreen").shortcuts).toEqual(["F"])
+    expect(policyById("open-url").shortcuts).toEqual(["O"])
+    expect(policyById("copy-node-id").shortcuts).toEqual(["Mod+Shift+C"])
+    expect(policyById("bring-to-front").shortcuts).toEqual(["Mod+]"])
+    expect(policyById("send-to-back").shortcuts).toEqual(["Mod+["])
+    expect(policyById("set-frame-status-in-progress").shortcuts).toEqual(["1"])
+    expect(policyById("set-frame-status-ready-for-review").shortcuts).toEqual(["2"])
+    expect(policyById("set-frame-status-changes-requested").shortcuts).toEqual(["3"])
+    expect(policyById("set-frame-status-approved").shortcuts).toEqual(["4"])
+    expect(policyById("align-top").shortcuts).toEqual(["Alt+W"])
+    expect(policyById("align-bottom").shortcuts).toEqual(["Alt+S"])
+    expect(policyById("align-left").shortcuts).toEqual(["Alt+A"])
+    expect(policyById("align-right").shortcuts).toEqual(["Alt+D"])
+    expect(policyById("align-vertical-center").shortcuts).toEqual(["Alt+V"])
+    expect(policyById("align-horizontal-center").shortcuts).toEqual(["Alt+H"])
+    expect(policyById("distribute-horizontal").shortcuts).toEqual(["Control+Alt+H"])
+    expect(policyById("distribute-vertical").shortcuts).toEqual(["Control+Alt+V"])
+    expect(policyById("arrange-grid").shortcuts).toEqual(["Alt+G"])
+  })
+
+  it("resolves a policy that has no shortcuts", () => {
+    const frame = context(itemSelection([
+      { _tag: "frame", frameId: "frame_a" }
+    ]))
+    expect(policyById("rename-canvas").shortcuts).toEqual([])
+    expect(resolveReviewAction("copy-node-id", frame)).toEqual({
+      _tag: "effect",
+      effect: { _tag: "copy", text: "frame_a" }
     })
   })
 
@@ -186,14 +219,21 @@ describe("review actions", () => {
       _tag: "effect",
       effect: { _tag: "copy", text: "frame_a" }
     })
-    expect(resolveReviewAction("toggle-pause-offscreen", frame)).toEqual({
-      _tag: "effect",
-      effect: {
-        _tag: "set-preference",
-        key: "pause-offscreen",
-        value: true
-      }
-    })
+  })
+
+  it("sets status on every selected Frame that is not already that status", () => {
+    const frames = context(itemSelection([
+      { _tag: "frame", frameId: "frame_a" },
+      { _tag: "frame", frameId: "frame_b" }
+    ]))
+    expect(commandsFor("set-frame-status-approved", frames)).toEqual([{
+      _tag: "set-frame-status",
+      frameId: "frame_a",
+      expectedChangedByChangeId: "change_1",
+      status: "approved"
+    }])
+    expect(reviewActionPolicies.map((entry) => entry.id))
+      .not.toContain("toggle-pause-offscreen")
   })
 
 })

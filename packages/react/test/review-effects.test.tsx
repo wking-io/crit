@@ -39,7 +39,7 @@ describe("applyReviewEffect", () => {
 
     applyReviewEffect(
       { _tag: "open-url", url: "https://example.com" },
-      { frameElement: null, setPauseOffscreen: vi.fn() }
+      { frameElement: null }
     )
 
     expect(open).toHaveBeenCalledWith(
@@ -58,7 +58,7 @@ describe("applyReviewEffect", () => {
 
     applyReviewEffect(
       { _tag: "copy", text: "note_a" },
-      { frameElement: null, setPauseOffscreen: vi.fn() }
+      { frameElement: null }
     )
 
     expect(writeText).toHaveBeenCalledWith("note_a")
@@ -79,29 +79,15 @@ describe("applyReviewEffect", () => {
 
     applyReviewEffect(
       { _tag: "fullscreen", target: "frame" },
-      { frameElement, setPauseOffscreen: vi.fn() }
+      { frameElement }
     )
     applyReviewEffect(
       { _tag: "fullscreen", target: "exit" },
-      { frameElement, setPauseOffscreen: vi.fn() }
+      { frameElement }
     )
 
     expect(requestFullscreen).toHaveBeenCalledOnce()
     expect(exitFullscreen).toHaveBeenCalledOnce()
   })
 
-  it("updates the pause-offscreen preference", () => {
-    const setPauseOffscreen = vi.fn()
-
-    applyReviewEffect(
-      {
-        _tag: "set-preference",
-        key: "pause-offscreen",
-        value: true
-      },
-      { frameElement: null, setPauseOffscreen }
-    )
-
-    expect(setPauseOffscreen).toHaveBeenCalledWith(true)
-  })
 })

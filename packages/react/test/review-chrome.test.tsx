@@ -5,7 +5,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { CanvasSelection } from "../src/canvas-selection.js"
 import { ReviewChrome } from "../src/review-chrome.js"
-import type { ReviewSelection } from "../src/review-actions.js"
+import {
+  reviewActionPolicies,
+  type ReviewSelection
+} from "../src/review-actions.js"
 
 Object.defineProperty(globalThis, "IS_REACT_ACT_ENVIRONMENT", { value: true })
 
@@ -42,6 +45,13 @@ const selection = (
   items: CanvasSelection.make(items)
 })
 
+const selectedFrame = selection([
+  { _tag: "frame", frameId: "frame_checkout" }
+])
+
+const removePolicy = reviewActionPolicies.find((entry) => entry.id === "remove")
+if (removePolicy === undefined) throw new Error("Missing remove policy")
+
 let container: HTMLDivElement
 let root: Root
 
@@ -53,6 +63,31 @@ const button = (label: string) => {
     throw new Error(`Button missing: ${label}`)
   }
   return match
+}
+
+const helpPanel = () => {
+  const panel = container.querySelector('[aria-label="Control help"]')
+  if (!(panel instanceof HTMLElement)) {
+    throw new Error("Control help missing")
+  }
+  return panel
+}
+
+const press = (key: string) => {
+  document.dispatchEvent(new KeyboardEvent("keydown", {
+    key,
+    bubbles: true,
+    cancelable: true
+  }))
+}
+
+const setInputValue = (input: HTMLInputElement, value: string) => {
+  const setValue = Object.getOwnPropertyDescriptor(
+    HTMLInputElement.prototype,
+    "value"
+  )?.set
+  setValue?.call(input, value)
+  input.dispatchEvent(new Event("input", { bubbles: true }))
 }
 
 beforeEach(() => {
@@ -74,9 +109,7 @@ describe("ReviewChrome", () => {
       <ReviewChrome
         onSubmit={onSubmit}
         projection={projection}
-        selection={selection([
-          { _tag: "frame", frameId: "frame_checkout" }
-        ])}
+        selection={selectedFrame}
       />
     ))
 
@@ -108,43 +141,164 @@ describe("ReviewChrome", () => {
     expect(container.querySelector("[aria-label='Exit fullscreen']")).toBeNull()
   })
 
-  it("submits an add-frame batch from the form", async() => {
-    vi.spyOn(crypto, "randomUUID")
-      .mockReturnValue("00000000-0000-4000-8000-000000000001")
+  it("does not offer Add frame in the review UI", async() => {
+    await act(async() => render(
+      <ReviewChrome
+        onSubmit={vi.fn()}
+        projection={projection}
+        selection={selection([])}
+      />
+    ))
+
+    expect(container.querySelector("[aria-label='Add frame']")).toBeNull()
+    expect(container.querySelector("[aria-label='Frame URL']")).toBeNull()
+    expect(container.textContent).not.toContain("Add frame")
+    expect(container.querySelector("[aria-label='Pause offscreen frames']"))
+      .toBeNull()
+    expect(container.querySelector("[aria-label='Set status to approved']"))
+      .toBeNull()
+    expect(container.querySelector("[aria-label='Enter fullscreen']")).toBeNull()
+  })
+
+  it("lists Remove and its table shortcut in idle help", async() => {
+    await act(async() => render(
+      <ReviewChrome
+        onSubmit={vi.fn()}
+        projection={projection}
+        selection={selectedFrame}
+      />
+    ))
+
+    const idle = helpPanel().textContent ?? ""
+    expect(idle).toContain(removePolicy.label)
+    const shortcut = removePolicy.shortcuts[0]
+    if (shortcut === undefined) throw new Error("Remove shortcut missing")
+    expect(idle).toContain(shortcut)
+  })
+
+  it("shows the Remove policy description on pointer over", async() => {
+    await act(async() => render(
+      <ReviewChrome
+        onSubmit={vi.fn()}
+        projection={projection}
+        selection={selectedFrame}
+      />
+    ))
+
+    await act(async() => {
+      button("Remove").dispatchEvent(new Event("pointerover", { bubbles: true }))
+    })
+
+    expect(helpPanel().textContent).toContain(removePolicy.description)
+  })
+
+  it("submits remove from Delete and Backspace when a Frame is selected", async() => {
     const onSubmit = vi.fn()
     await act(async() => render(
       <ReviewChrome
         onSubmit={onSubmit}
         projection={projection}
-        selection={selection([])}
+        selection={selectedFrame}
       />
     ))
-    const input = container.querySelector("[aria-label='Frame URL']")
-    const form = container.querySelector("form[aria-label='Add frame']")
-    if (!(input instanceof HTMLInputElement) || !(form instanceof HTMLFormElement)) {
-      throw new Error("Add Frame form missing")
+
+    await act(async() => press("Delete"))
+    expect(onSubmit).toHaveBeenLastCalledWith([{
+      _tag: "remove-frame",
+      frameId: "frame_checkout",
+      expectedUpdatedByChangeId: "change_1"
+    }])
+
+    await act(async() => press("Backspace"))
+    expect(onSubmit).toHaveBeenCalledTimes(2)
+    expect(onSubmit).toHaveBeenLastCalledWith([{
+      _tag: "remove-frame",
+      frameId: "frame_checkout",
+      expectedUpdatedByChangeId: "change_1"
+    }])
+  })
+
+  it("does not remove when Delete is pressed in a text input", async() => {
+    const onSubmit = vi.fn()
+    await act(async() => render(
+      <ReviewChrome
+        onSubmit={onSubmit}
+        projection={projection}
+        selection={selectedFrame}
+      />
+    ))
+    const input = container.querySelector("[aria-label='Canvas title']")
+    if (!(input instanceof HTMLInputElement)) {
+      throw new Error("Canvas title input missing")
     }
 
     await act(async() => {
-      const setValue = Object.getOwnPropertyDescriptor(
-        HTMLInputElement.prototype,
-        "value"
-      )?.set
-      setValue?.call(input, "https://example.org/review")
-      input.dispatchEvent(new Event("input", { bubbles: true }))
+      input.focus()
+      press("Delete")
     })
+
+    expect(onSubmit).not.toHaveBeenCalled()
+  })
+
+  it("enters fullscreen from F when a single Frame is selected", async() => {
+    const onEffect = vi.fn()
+    await act(async() => render(
+      <ReviewChrome
+        onEffect={onEffect}
+        onSubmit={vi.fn()}
+        projection={projection}
+        selection={selectedFrame}
+      />
+    ))
+
+    await act(async() => press("F"))
+    expect(onEffect).toHaveBeenCalledWith({
+      _tag: "fullscreen",
+      target: "frame"
+    })
+  })
+
+  it("exits fullscreen from Escape when a Frame is selected", async() => {
+    const onEffect = vi.fn()
+    await act(async() => render(
+      <ReviewChrome
+        fullscreen
+        onEffect={onEffect}
+        onSubmit={vi.fn()}
+        projection={projection}
+        selection={selectedFrame}
+      />
+    ))
+
+    await act(async() => press("Escape"))
+    expect(onEffect).toHaveBeenCalledWith({
+      _tag: "fullscreen",
+      target: "exit"
+    })
+  })
+
+  it("submits rename canvas from the form", async() => {
+    const onSubmit = vi.fn()
+    await act(async() => render(
+      <ReviewChrome
+        onSubmit={onSubmit}
+        projection={projection}
+        selection={selectedFrame}
+      />
+    ))
+    const input = container.querySelector("[aria-label='Canvas title']")
+    const form = container.querySelector("form[aria-label='Rename canvas']")
+    if (!(input instanceof HTMLInputElement) || !(form instanceof HTMLFormElement)) {
+      throw new Error("Rename canvas form missing")
+    }
+
+    await act(async() => setInputValue(input, "Updated review"))
     await act(async() => form.requestSubmit())
 
     expect(onSubmit).toHaveBeenCalledWith([{
-      _tag: "add-frame",
-      frameId: "frame_00000000000040008000000000000001",
-      title: "https://example.org/review",
-      representation: {
-        _tag: "web-url",
-        url: "https://example.org/review"
-      },
-      status: "in-progress",
-      geometry: { x: 80, y: 80, width: 1280, height: 832 }
+      _tag: "rename-canvas",
+      expectedTitle: "Review",
+      title: "Updated review"
     }])
   })
 })
