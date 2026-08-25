@@ -14,7 +14,6 @@ import {
   type RetryRecord,
   type SubmitDecision
 } from "@crit/authority/adapter"
-import type { SqliteClient } from "@effect/sql-sqlite-node/SqliteClient"
 import {
   AcceptedAttribution,
   AuthSubject,
@@ -37,8 +36,12 @@ import {
 import { Data, Effect, Result, Schema } from "effect"
 import type { SqlError } from "effect/unstable/sql/SqlError"
 
-import { makeDatabase, retryTransaction } from "./database.js"
-import { decodeStored, encodeStored } from "./stored-json.js"
+import type { DurableSqlite } from "./database.js"
+import {
+  decodeStored,
+  encodeDurableSqlText,
+  encodeStored
+} from "./stored-json.js"
 
 type OneCanvasProposal = Omit<ProposedCanvasChange, "canvasId">
 type OneCanvasChangesAfter = Omit<ChangesAfter, "canvasId">
@@ -87,7 +90,8 @@ const CursorRow = Schema.Struct({ cursor: Schema.String })
 const FoundRow = Schema.Struct({ found: Schema.Number })
 const SequenceRow = Schema.Struct({ sequence: Schema.Number })
 
-const json = (value: Schema.Json): string => JSON.stringify(value)
+const encodeProtocol = (value: Schema.Json) =>
+  encodeDurableSqlText(JSON.stringify(value))
 const parseJson = (value: string): Schema.Json =>
   Schema.decodeUnknownSync(Schema.Json)(JSON.parse(value))
 
@@ -130,15 +134,14 @@ const readAccepted = (stored: typeof AcceptedRow.Type): AcceptedCanvasChange => 
 
 const bindDatabase = (args: {
   readonly canvasId: typeof CanvasId.Type
-  readonly sql: SqliteClient
+  readonly sqlite: DurableSqlite
   readonly clock: AuthorityClock["Service"]
 }) => {
-  const transaction = <A, R>(body: Effect.Effect<A, SqlError, R>): Effect.Effect<A, SqlError, R> =>
-    retryTransaction(args.sql, body)
+  const sql = args.sqlite.sql
 
   const readCanvas = (): Effect.Effect<CanvasRecord | undefined, SqlError> =>
     Effect.gen(function*() {
-      const rows = yield* args.sql<typeof CanvasRow.Encoded>`SELECT * FROM canvases`
+      const rows = yield* sql<typeof CanvasRow.Encoded>`SELECT * FROM canvases`
       if (rows.length === 0) return undefined
       if (rows.length !== 1) throw new Error("one-canvas database contains multiple canvases")
       const row = Schema.decodeUnknownSync(CanvasRow, { onExcessProperty: "error" })(rows[0])
@@ -153,7 +156,7 @@ const bindDatabase = (args: {
         throw new Error("stored Canvas checkpoint facts disagree")
       }
       if (row.current_sequence > 0) {
-        const heads = yield* args.sql<typeof CursorRow.Encoded>`SELECT cursor FROM accepted_changes
+        const heads = yield* sql<typeof CursorRow.Encoded>`SELECT cursor FROM accepted_changes
           WHERE canvas_id = ${row.canvas_id} AND sequence = ${row.current_sequence}`
         if (heads.length !== 1) throw new Error("stored Canvas checkpoint head is missing")
         const head = Schema.decodeUnknownSync(CursorRow)(heads[0])
@@ -177,7 +180,7 @@ const bindDatabase = (args: {
   const readRetry = (
     proposal: ProposedCanvasChange
   ): Effect.Effect<RetryRecord | undefined, SqlError> => Effect.gen(function*() {
-    const rows = yield* args.sql<typeof RetryRow.Encoded>`SELECT * FROM retry_reservations
+    const rows = yield* sql<typeof RetryRow.Encoded>`SELECT * FROM retry_reservations
       WHERE canvas_id = ${args.canvasId} AND change_id = ${proposal.changeId}`
     if (rows.length === 0) return undefined
     const row = Schema.decodeUnknownSync(RetryRow, { onExcessProperty: "error" })(rows[0])
@@ -190,7 +193,7 @@ const bindDatabase = (args: {
       authorizationSubject: Schema.decodeUnknownSync(AuthSubject)(row.authorization_subject)
     }
     if (row.accepted_sequence !== null) {
-      const acceptedRows = yield* args.sql<typeof AcceptedRow.Encoded>`SELECT * FROM accepted_changes
+      const acceptedRows = yield* sql<typeof AcceptedRow.Encoded>`SELECT * FROM accepted_changes
         WHERE canvas_id = ${args.canvasId} AND sequence = ${row.accepted_sequence}`
       if (acceptedRows.length !== 1) throw new Error("accepted retry target is missing")
       const stored = Schema.decodeUnknownSync(AcceptedRow, { onExcessProperty: "error" })(acceptedRows[0])
@@ -217,7 +220,7 @@ const bindDatabase = (args: {
     if (canvas === undefined) throw new Error("one-canvas database is missing its Canvas")
     let observedCursorKnown = proposal.observedCursor === null || proposal.observedCursor === canvas.genesisCursor
     if (!observedCursorKnown && proposal.observedCursor !== null) {
-      const knownRows = yield* args.sql<typeof FoundRow.Encoded>`
+      const knownRows = yield* sql<typeof FoundRow.Encoded>`
         SELECT 1 AS found FROM accepted_changes
         WHERE canvas_id = ${args.canvasId} AND cursor = ${proposal.observedCursor}`
       observedCursorKnown = knownRows.length > 0
@@ -254,7 +257,7 @@ const bindDatabase = (args: {
       const acceptedAt = preflight.evaluation._tag === "acceptance"
         ? yield* args.clock.now
         : undefined
-      const decision = yield* transaction(Effect.gen(function*() {
+      const decision = yield* args.sqlite.transact(Effect.gen(function*() {
         const durable = yield* evaluate(boundProposal, ownedInvocation)
         if (durable._tag === "decision") return durable.decision
         if (durable.evaluation._tag === "rejected") {
@@ -263,12 +266,16 @@ const bindDatabase = (args: {
             throw new Error("rejected retry contains an accepted change")
           }
           const failure = rejected.failure
-          yield* args.sql`INSERT INTO retry_reservations
+          const proposalJson = yield* encodeProtocol(
+            ChangeProtocol.proposed.encode(durable.evaluation.retry.identity.proposal)
+          )
+          const rejectedFailureJson = yield* encodeStored(ChangeRejected, failure)
+          yield* sql`INSERT INTO retry_reservations
             (canvas_id, change_id, proposal_json, authorization_subject, accepted_sequence, rejected_failure_json)
             VALUES (${args.canvasId}, ${boundProposal.changeId},
-              ${json(ChangeProtocol.proposed.encode(durable.evaluation.retry.identity.proposal))},
+              ${proposalJson},
               ${durable.evaluation.retry.identity.authorizationSubject},
-              NULL, ${encodeStored(ChangeRejected, failure)})`
+              NULL, ${rejectedFailureJson})`
           return Result.fail(failure)
         }
         if (acceptedAt === undefined) throw new Error("durable acceptance was not clocked")
@@ -278,17 +285,22 @@ const bindDatabase = (args: {
           position: durable.canvas.row.current_sequence + 1
         })
         const change = accepted.receipt.change
-        yield* args.sql`INSERT INTO accepted_changes
+        const changeJson = yield* encodeProtocol(ChangeProtocol.accepted.encode(change))
+        const proposalJson = yield* encodeProtocol(
+          ChangeProtocol.proposed.encode(accepted.retry.identity.proposal)
+        )
+        const projectionJson = yield* encodeStored(CanvasProjection, accepted.projection)
+        yield* sql`INSERT INTO accepted_changes
           (canvas_id, sequence, change_id, cursor, change_json)
           VALUES (${args.canvasId}, ${change.sequence}, ${boundProposal.changeId}, ${change.cursor},
-            ${json(ChangeProtocol.accepted.encode(change))})`
-        yield* args.sql`INSERT INTO retry_reservations
+            ${changeJson})`
+        yield* sql`INSERT INTO retry_reservations
           (canvas_id, change_id, proposal_json, authorization_subject, accepted_sequence, rejected_failure_json)
           VALUES (${args.canvasId}, ${boundProposal.changeId},
-            ${json(ChangeProtocol.proposed.encode(accepted.retry.identity.proposal))},
+            ${proposalJson},
             ${accepted.retry.identity.authorizationSubject}, ${change.sequence}, NULL)`
-        yield* args.sql`UPDATE canvases SET current_cursor = ${change.cursor}, current_sequence = ${change.sequence},
-          projection_json = ${encodeStored(CanvasProjection, accepted.projection)}
+        yield* sql`UPDATE canvases SET current_cursor = ${change.cursor}, current_sequence = ${change.sequence},
+          projection_json = ${projectionJson}
           WHERE canvas_id = ${args.canvasId}`
         return Result.succeed(accepted.receipt)
       })).pipe(Effect.orDie)
@@ -307,7 +319,7 @@ const bindDatabase = (args: {
       if (canvas === undefined) throw new Error("one-canvas database is missing its Canvas")
       let position = 0
       if (boundQuery.after !== null && boundQuery.after !== canvas.genesisCursor) {
-        const positions = yield* args.sql<typeof SequenceRow.Encoded>`SELECT sequence FROM accepted_changes
+        const positions = yield* sql<typeof SequenceRow.Encoded>`SELECT sequence FROM accepted_changes
           WHERE canvas_id = ${args.canvasId} AND cursor = ${boundQuery.after}`
         if (positions.length === 0) {
           return yield* Effect.fail(AuthorityFailure.cursorNotFound({
@@ -317,7 +329,7 @@ const bindDatabase = (args: {
         }
         position = Schema.decodeUnknownSync(SequenceRow)(positions[0]).sequence
       }
-      const rows = yield* args.sql<typeof AcceptedRow.Encoded>`SELECT * FROM accepted_changes
+      const rows = yield* sql<typeof AcceptedRow.Encoded>`SELECT * FROM accepted_changes
         WHERE canvas_id = ${args.canvasId} AND sequence > ${position}
         ORDER BY sequence LIMIT ${boundQuery.limit}`
       const changes = rows.map((row) => readAccepted(
@@ -341,11 +353,10 @@ const bindDatabase = (args: {
 
 export const makeOneCanvas = (args: {
   readonly canvasId: typeof CanvasId.Type
-  readonly path: string
+  readonly sqlite: DurableSqlite
   readonly clock: AuthorityClock["Service"]
 }) => Effect.gen(function*() {
-  const sql = yield* makeDatabase({ path: args.path })
-  const bound = bindDatabase({ canvasId: args.canvasId, sql, clock: args.clock })
+  const bound = bindDatabase(args)
   const canvas = yield* bound.readCanvas().pipe(Effect.orDie)
   if (canvas === undefined) {
     return yield* Effect.fail(AuthorityFailure.canvasNotFound({ canvasId: args.canvasId }))
@@ -355,22 +366,30 @@ export const makeOneCanvas = (args: {
 
 export const createOneCanvas = (args: {
   readonly view: AuthorityView
-  readonly path: string
+  readonly sqlite: DurableSqlite
   readonly clock: AuthorityClock["Service"]
 }) => Effect.gen(function*() {
-  const sql = yield* makeDatabase({ path: args.path })
-  const bound = bindDatabase({ canvasId: args.view.canvasId, sql, clock: args.clock })
-  yield* retryTransaction(sql, Effect.gen(function*() {
+  const bound = bindDatabase({
+    canvasId: args.view.canvasId,
+    sqlite: args.sqlite,
+    clock: args.clock
+  })
+  yield* args.sqlite.transact(Effect.gen(function*() {
     const existing = yield* bound.readCanvas()
     if (existing !== undefined) {
       return yield* Effect.fail(AuthorityFailure.canvasAlreadyExists({
         canvasId: args.view.canvasId
       }))
     }
-    yield* sql`INSERT INTO canvases
+    const createdByJson = yield* encodeStored(AcceptedAttribution, args.view.createdBy)
+    const projectionJson = yield* encodeStored(CanvasProjection, args.view.projection)
+    yield* args.sqlite.sql`INSERT INTO canvases
       (canvas_id, created_at, created_by_json, genesis_cursor, current_cursor, current_sequence, projection_json)
-      VALUES (${args.view.canvasId}, ${args.view.createdAt}, ${encodeStored(AcceptedAttribution, args.view.createdBy)},
-        ${args.view.cursor}, ${args.view.cursor}, 0, ${encodeStored(CanvasProjection, args.view.projection)})`
-  })).pipe(Effect.catchTag("SqlError", Effect.die))
+      VALUES (${args.view.canvasId}, ${args.view.createdAt}, ${createdByJson},
+        ${args.view.cursor}, ${args.view.cursor}, 0, ${projectionJson})`
+  })).pipe(
+    Effect.catchTag("SqlError", Effect.die),
+    Effect.catchTag("DurableSqlRowLimitExceeded", Effect.die)
+  )
   return bound.oneCanvas
 })

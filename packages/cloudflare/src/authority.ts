@@ -11,6 +11,7 @@ import { AuthorityPolicy } from "@crit/authority/adapter"
 import { DomainValue, type CanvasId } from "@crit/domain"
 import { Effect, Layer, Scope, SynchronizedRef } from "effect"
 
+import { makeDatabase } from "./database.js"
 import {
   createOneCanvas,
   makeOneCanvas,
@@ -38,7 +39,8 @@ const make = (options: CloudflareCanvasAuthorityOptions) => Effect.gen(function*
     if (!existsSync(path)) {
       return Effect.fail(AuthorityFailure.canvasNotFound({ canvasId }))
     }
-    return makeOneCanvas({ canvasId, path, clock }).pipe(
+    return makeDatabase({ path }).pipe(
+      Effect.flatMap((sqlite) => makeOneCanvas({ canvasId, sqlite, clock })),
       Effect.provideService(Scope.Scope, scope),
       Effect.catchTag("CloudflareDatabaseOpenFailure", Effect.die),
       Effect.map((isolate) => [isolate, new Map(canvases).set(canvasId, isolate)])
@@ -62,7 +64,8 @@ const make = (options: CloudflareCanvasAuthorityOptions) => Effect.gen(function*
             invocation: ownedInvocation,
             createdAt
           })
-          return createOneCanvas({ view, path, clock }).pipe(
+          return makeDatabase({ path }).pipe(
+            Effect.flatMap((sqlite) => createOneCanvas({ view, sqlite, clock })),
             Effect.provideService(Scope.Scope, scope),
             Effect.catchTag("CloudflareDatabaseOpenFailure", Effect.die),
             Effect.map((isolate): readonly [AuthorityView, Registry] => [

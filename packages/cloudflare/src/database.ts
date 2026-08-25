@@ -3,7 +3,7 @@ import * as SqliteMigrator from "@effect/sql-sqlite-node/SqliteMigrator"
 import { Cause, Data, Effect, Schedule } from "effect"
 import * as Reactivity from "effect/unstable/reactivity/Reactivity"
 import * as SqlClient from "effect/unstable/sql/SqlClient"
-import * as SqlError from "effect/unstable/sql/SqlError"
+import { isSqlError, type SqlError } from "effect/unstable/sql/SqlError"
 
 export class CloudflareDatabaseOpenFailure extends Data.TaggedError("CloudflareDatabaseOpenFailure")<{
   readonly path: string
@@ -12,6 +12,18 @@ export class CloudflareDatabaseOpenFailure extends Data.TaggedError("CloudflareD
 
 export interface CloudflareDatabaseOptions {
   readonly path: string
+}
+
+export interface DurableSqlite {
+  readonly transact: <A, E, R>(
+    body: Effect.Effect<A, E, R>
+  ) => Effect.Effect<A, E | SqlError, R>
+  readonly sql: {
+    <A>(
+      strings: TemplateStringsArray,
+      ...args: unknown[]
+    ): Effect.Effect<ReadonlyArray<A>, SqlError>
+  }
 }
 
 const createAuthority = Effect.gen(function*() {
@@ -55,12 +67,12 @@ const migrations = SqliteMigrator.fromRecord({
   "0001_authority": createAuthority
 })
 
-export const retryTransaction = <A, E, R>(
+const retryTransaction = <A, E, R>(
   sql: SqliteClient.SqliteClient,
   body: Effect.Effect<A, E, R>
-): Effect.Effect<A, E | SqlError.SqlError, R> => sql.withTransaction(body).pipe(Effect.retry({
+): Effect.Effect<A, E | SqlError, R> => sql.withTransaction(body).pipe(Effect.retry({
   schedule: Schedule.spaced("2 millis"),
-  while: (error) => SqlError.isSqlError(error) && error.reason._tag === "LockTimeoutError"
+  while: (error) => isSqlError(error) && error.reason._tag === "LockTimeoutError"
 }))
 
 export const makeDatabase = (options: CloudflareDatabaseOptions) => Effect.gen(function*() {
@@ -75,7 +87,10 @@ export const makeDatabase = (options: CloudflareDatabaseOptions) => Effect.gen(f
       while: (error) => error._tag === "SqlError" && error.reason._tag === "LockTimeoutError"
     })
   )
-  return sql
+  return {
+    sql,
+    transact: <A, E, R>(body: Effect.Effect<A, E, R>) => retryTransaction(sql, body)
+  }
 }).pipe(Effect.catchCause((cause) => Effect.fail(new CloudflareDatabaseOpenFailure({
   path: options.path,
   reason: Cause.pretty(cause)

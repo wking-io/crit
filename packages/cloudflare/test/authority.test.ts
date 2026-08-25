@@ -16,10 +16,14 @@ import {
   decodeCanvasCommandBatch,
   emptyCanvasProjection
 } from "@crit/domain"
-import { Context, Effect, Layer, Schema } from "effect"
+import { Cause, Context, Effect, Exit, Layer, Result, Schema } from "effect"
 import { describe, expect, it } from "vitest"
 
 import { CloudflareCanvasAuthority } from "../src/index.js"
+import {
+  DurableSqlRowLimitExceeded,
+  durableObjectSqlRowLimitBytes
+} from "../src/stored-json.js"
 
 const person = Schema.decodeUnknownSync(PersonInvocation)({
   _tag: "person",
@@ -177,6 +181,54 @@ describe("Cloudflare CanvasAuthority", () => {
           replay._tag === "replayed" && replay.projection
         ).toEqual(view.projection)
       }))
+    })))
+  })
+
+  it("rolls back a submit whose change exceeds the Durable Object SQL row limit", async () => {
+    await Effect.runPromise(Effect.scoped(Effect.gen(function*() {
+      const directory = yield* tempDirectory
+      const authority = yield* buildCloudflareAuthority({ directory })
+      const canvasId = Id.canvas("canvas_oversized_change")
+      yield* authority.create(create(canvasId), person)
+
+      const failed = yield* Effect.exit(authority.submit({
+        canvasId,
+        changeId: Id.change("change_oversized"),
+        observedCursor: null,
+        commands: decodeCanvasCommandBatch([
+          {
+            _tag: "rename-canvas",
+            expectedTitle: "Authority",
+            title: "Changed"
+          },
+          {
+            _tag: "add-frame",
+            frameId: "frame_oversized",
+            title: "Oversized",
+            representation: {
+              _tag: "application-route",
+              applicationId: "application_oversized",
+              route: "/",
+              state: { value: "x".repeat(durableObjectSqlRowLimitBytes) }
+            },
+            status: "in-progress",
+            geometry: { x: 0, y: 0, width: 10, height: 10 }
+          }
+        ])
+      }, person))
+
+      expect(Exit.isFailure(failed)).toBe(true)
+      if (Exit.isSuccess(failed)) throw new Error("oversized submit succeeded")
+      const defect = Result.getOrThrow(Cause.findDefect(failed.cause))
+      expect(defect).toBeInstanceOf(DurableSqlRowLimitExceeded)
+      expect(defect).toMatchObject({
+        _tag: "DurableSqlRowLimitExceeded",
+        limit: durableObjectSqlRowLimitBytes
+      })
+
+      const view = yield* authority.open(canvasId)
+      expect(view.projection.title).toBe("Authority")
+      expect(view.projection.frames).toHaveLength(0)
     })))
   })
 })
