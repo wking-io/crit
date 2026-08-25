@@ -81,8 +81,14 @@ const entryStateCopy = (state: PendingChange["state"]): string =>
       `Blocked by ${changeCount(blockedBy.length)} ahead of it.`
   }))
 
+const authorCopy = (author: PendingChange["author"]): string =>
+  Match.value(author).pipe(Match.tagsExhaustive({
+    person: ({ displayName }) => `Proposed by ${displayName}.`,
+    agent: ({ displayName }) => `Proposed by Agent ${displayName}.`
+  }))
+
 const entryCopy = (change: PendingChange): string =>
-  `${entryStateCopy(change.state)} Proposed by ${change.author.displayName}.`
+  `${entryStateCopy(change.state)} ${authorCopy(change.author)}`
 
 const connectedPersonCopy = (
   person: PresenceRoster["people"][number]

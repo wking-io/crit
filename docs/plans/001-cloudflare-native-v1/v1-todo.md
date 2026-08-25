@@ -8,7 +8,7 @@ This file is the current inventory. Phase docs own the prove. [Decision record](
 
 ## Next
 
-- [ ] Person vs Agent authorship in the UI. Pending changes show a local display name. Agent work must not look like the Person who ran the Agent did it.
+- [ ] Stamp and show Agent as author, plus the local Person who ran it, execution, and optional harness/model/session/task. Types exist. Pending rows already mark Agent copy.
 
 ## Remaining
 
@@ -41,8 +41,7 @@ Plan: [phase 6](phase-06-cloudflare-platform.md), [phase 7](phase-07-sync-and-sh
 ### Agents
 
 Local only. Plan: [decision record](decision-record.md), [ADR 0001](../../adr/0001-hosted-review-no-mcp.md).
-
-- [ ] Stamp and show Agent as author, plus the local Person who ran it, execution, and optional harness/model/session/task. Types exist.
+See the Agent attribution item under [Next](#next).
 
 ### Release
 
@@ -75,6 +74,7 @@ Local Frames authoring on one machine.
 - Frame Bridge input relay
 - Local SQLite authority, replica, restart-safe pending work
 - Person and Agent as domain Actors
+- Pending rows distinguish Person and Agent authorship.
 - Review UI no longer adds Frames
 - Contextual help and keyboard shortcuts from the review action table
 - Snapshot a live Frame into a new artifact Frame (`S`)
