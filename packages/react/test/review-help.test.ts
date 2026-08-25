@@ -13,10 +13,15 @@ const SELECT_HELP: ReviewHelpDetails = {
 
 describe("Review help", () => {
   it("hides focused help while the pointer is over a target without help", () => {
-    expect(activeReviewHelpDetails(null, SELECT_HELP)).toBeNull()
+    expect(activeReviewHelpDetails(
+      { _tag: "over", details: null },
+      SELECT_HELP
+    )).toBeNull()
   })
 
   it("keeps keyboard help active until pointer interaction enters the surface", () => {
-    expect(activeReviewHelpDetails(undefined, SELECT_HELP)).toEqual(SELECT_HELP)
+    expect(activeReviewHelpDetails({ _tag: "away" }, SELECT_HELP)).toEqual(
+      SELECT_HELP
+    )
   })
 })

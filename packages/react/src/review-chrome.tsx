@@ -46,7 +46,15 @@ const formActions = [
   readonly inputLabel: string
 }[]
 
-const formActionIds = new Set<string>(formActions.map(({ id }) => id))
+const formPolicies = formActions.map((entry) => {
+  const policy = reviewActionPolicies.find((candidate) => candidate.id === entry.id)
+  if (policy === undefined) {
+    throw new Error(`Missing form policy: ${entry.id}`)
+  }
+  return { ...entry, policy }
+})
+
+const formActionIds = new Set<string>(formPolicies.map(({ id }) => id))
 
 const dispatchReviewAction = (
   action: ReviewAction,
@@ -112,10 +120,15 @@ export function ReviewChrome({
     fullscreen,
     pauseOffscreen
   }
-  const available = availableReviewActions(context).filter((entry) =>
-    resolveReviewAction(entry.id, context) !== null || formActionIds.has(entry.id)
+  const available = availableReviewActions(context)
+  const runnable = available.filter((entry) =>
+    resolveReviewAction(entry.id, context) !== null
   )
-  const availableIds = new Set<string>(available.map(({ id }) => id))
+  const runnableIds = new Set<string>(runnable.map(({ id }) => id))
+  const toolbarActions = runnable.filter((entry) => !formActionIds.has(entry.id))
+  const visibleForms = formPolicies.filter(({ policy }) =>
+    policy.available(selection, projection)
+  )
   const run = (
     id: ReviewActionId,
     input: ReviewActionInputValue = ReviewActionInput.none
@@ -139,7 +152,7 @@ export function ReviewChrome({
         callback: () => {
           run(policy.id)
         },
-        options: { enabled: availableIds.has(policy.id) }
+        options: { enabled: runnableIds.has(policy.id) }
       }))
     )
   )
@@ -162,39 +175,26 @@ export function ReviewChrome({
     >
       <ReviewHelpSurface>
         <div aria-label="Review actions" role="toolbar">
-          {available.map((entry) =>
-            formActionIds.has(entry.id)
-              ? null
-              : (
-              <button
-                aria-label={entry.label}
-                key={entry.id}
-                type="button"
-                {...reviewActionHelpTarget(entry)}
-                onClick={() => run(entry.id)}
-              >
-                {entry.label}
-              </button>
-              )
-          )}
+          {toolbarActions.map((entry) => (
+            <button
+              aria-label={entry.label}
+              key={entry.id}
+              type="button"
+              {...reviewActionHelpTarget(entry)}
+              onClick={() => run(entry.id)}
+            >
+              {entry.label}
+            </button>
+          ))}
         </div>
-        {formActions
-          .filter(({ id }) => availableIds.has(id))
-          .map((entry) => {
-            const policy = reviewActionPolicies.find((candidate) =>
-              candidate.id === entry.id
-            )
-            return policy === undefined
-              ? null
-              : (
-                <ReviewActionForm
-                  inputLabel={entry.inputLabel}
-                  key={entry.id}
-                  onRun={run}
-                  policy={policy}
-                />
-              )
-          })}
+        {visibleForms.map((entry) => (
+          <ReviewActionForm
+            inputLabel={entry.inputLabel}
+            key={entry.id}
+            onRun={run}
+            policy={entry.policy}
+          />
+        ))}
         <ReviewHelpPanel />
       </ReviewHelpSurface>
     </aside>

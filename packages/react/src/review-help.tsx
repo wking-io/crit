@@ -101,12 +101,17 @@ const detailsFromTarget = (
 
 const ReviewHelpContext = createContext<ReviewHelpDetails | null>(null)
 
+export type ReviewHelpPointer =
+  | { readonly _tag: "away" }
+  | { readonly _tag: "over"; readonly details: ReviewHelpDetails | null }
+
+const pointerAway = { _tag: "away" } as const satisfies ReviewHelpPointer
+
 export const activeReviewHelpDetails = (
-  pointerDetails: ReviewHelpDetails | null | undefined,
+  pointer: ReviewHelpPointer,
   focusDetails: ReviewHelpDetails | null
-): ReviewHelpDetails | null => pointerDetails === undefined
-  ? focusDetails
-  : pointerDetails
+): ReviewHelpDetails | null =>
+  pointer._tag === "away" ? focusDetails : pointer.details
 
 export function ReviewHelpSurface({
   children,
@@ -116,14 +121,13 @@ export function ReviewHelpSurface({
   onPointerOver,
   ...props
 }: HTMLAttributes<HTMLDivElement> & { readonly children: ReactNode }): ReactElement {
-  const [pointerDetails, setPointerDetails] =
-    useState<ReviewHelpDetails | null | undefined>()
+  const [pointer, setPointer] = useState<ReviewHelpPointer>(pointerAway)
   const [focusDetails, setFocusDetails] =
     useState<ReviewHelpDetails | null>(null)
 
   return (
     <ReviewHelpContext.Provider
-      value={activeReviewHelpDetails(pointerDetails, focusDetails)}
+      value={activeReviewHelpDetails(pointer, focusDetails)}
     >
       <div
         {...props}
@@ -137,16 +141,19 @@ export function ReviewHelpSurface({
         }}
         onPointerOut={(event) => {
           onPointerOut?.(event)
-          setPointerDetails(
+          setPointer(
             event.relatedTarget instanceof Node &&
               event.currentTarget.contains(event.relatedTarget)
-              ? detailsFromTarget(event.relatedTarget)
-              : undefined
+              ? { _tag: "over", details: detailsFromTarget(event.relatedTarget) }
+              : pointerAway
           )
         }}
         onPointerOver={(event) => {
           onPointerOver?.(event)
-          setPointerDetails(detailsFromTarget(event.target))
+          setPointer({
+            _tag: "over",
+            details: detailsFromTarget(event.target)
+          })
         }}
       >
         {children}
