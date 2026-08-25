@@ -188,7 +188,11 @@ describe("CanvasBoard", () => {
     ))
 
     await act(async() => {
-      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Delete" }))
+      document.dispatchEvent(new KeyboardEvent("keydown", {
+        key: "Delete",
+        bubbles: true,
+        cancelable: true
+      }))
     })
     expect(onSubmit).toHaveBeenCalledWith([{
       _tag: "remove-frame",

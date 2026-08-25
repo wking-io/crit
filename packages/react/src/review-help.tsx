@@ -1,0 +1,219 @@
+import {
+  createContext,
+  useContext,
+  useState,
+  type HTMLAttributes,
+  type ReactElement,
+  type ReactNode
+} from "react"
+
+import {
+  reviewActionPolicies,
+  type ReviewActionPolicy
+} from "./review-actions.js"
+
+export type ReviewHelpDetails =
+  | {
+    readonly _tag: "action"
+    readonly name: string
+    readonly description: string
+    readonly shortcut: string | null
+    readonly availabilityMessage: string | null
+  }
+  | {
+    readonly _tag: "informational"
+    readonly name: string
+    readonly description: string
+  }
+
+type ReviewHelpAttributes = {
+  readonly "data-crit-help-kind": ReviewHelpDetails["_tag"]
+  readonly "data-crit-help-name": string
+  readonly "data-crit-help-description": string
+  readonly "data-crit-help-shortcut": string | undefined
+  readonly "data-crit-help-availability": string | undefined
+}
+
+const idleReviewHelp: ReviewHelpDetails = {
+  _tag: "informational",
+  name: "Review",
+  description: "Hover or focus a control to see what it does."
+}
+
+const helpTarget = (details: ReviewHelpDetails): ReviewHelpAttributes => ({
+  "data-crit-help-kind": details._tag,
+  "data-crit-help-name": details.name,
+  "data-crit-help-description": details.description,
+  "data-crit-help-shortcut": details._tag === "action"
+    ? details.shortcut ?? undefined
+    : undefined,
+  "data-crit-help-availability": details._tag === "action"
+    ? details.availabilityMessage ?? undefined
+    : undefined
+})
+
+export const reviewHelpForPolicy = (
+  policy: ReviewActionPolicy
+): Extract<ReviewHelpDetails, { readonly _tag: "action" }> => ({
+  _tag: "action",
+  name: policy.label,
+  description: policy.description,
+  shortcut: policy.shortcuts[0] ?? null,
+  availabilityMessage: null
+})
+
+export const reviewActionHelpTarget = (
+  policy: ReviewActionPolicy
+): ReviewHelpAttributes => helpTarget(reviewHelpForPolicy(policy))
+
+const detailsFromTarget = (
+  target: EventTarget | null
+): ReviewHelpDetails | null => {
+  if (!(target instanceof Element)) return null
+  const element = target.closest("[data-crit-help-name]")
+  if (!(element instanceof HTMLElement)) return null
+  const {
+    critHelpKind,
+    critHelpName,
+    critHelpDescription,
+    critHelpShortcut,
+    critHelpAvailability
+  } = element.dataset
+  if (
+    critHelpName === undefined ||
+    critHelpDescription === undefined ||
+    (critHelpKind !== "action" && critHelpKind !== "informational")
+  ) return null
+  return critHelpKind === "informational"
+    ? {
+      _tag: "informational",
+      name: critHelpName,
+      description: critHelpDescription
+    }
+    : {
+      _tag: "action",
+      name: critHelpName,
+      description: critHelpDescription,
+      shortcut: critHelpShortcut ?? null,
+      availabilityMessage: critHelpAvailability ?? null
+    }
+}
+
+const ReviewHelpContext = createContext<ReviewHelpDetails | null>(null)
+
+export const activeReviewHelpDetails = (
+  pointerDetails: ReviewHelpDetails | null | undefined,
+  focusDetails: ReviewHelpDetails | null
+): ReviewHelpDetails | null => pointerDetails === undefined
+  ? focusDetails
+  : pointerDetails
+
+export function ReviewHelpSurface({
+  children,
+  onBlur,
+  onFocus,
+  onPointerOut,
+  onPointerOver,
+  ...props
+}: HTMLAttributes<HTMLDivElement> & { readonly children: ReactNode }): ReactElement {
+  const [pointerDetails, setPointerDetails] =
+    useState<ReviewHelpDetails | null | undefined>()
+  const [focusDetails, setFocusDetails] =
+    useState<ReviewHelpDetails | null>(null)
+
+  return (
+    <ReviewHelpContext.Provider
+      value={activeReviewHelpDetails(pointerDetails, focusDetails)}
+    >
+      <div
+        {...props}
+        onBlur={(event) => {
+          onBlur?.(event)
+          setFocusDetails(detailsFromTarget(event.relatedTarget))
+        }}
+        onFocus={(event) => {
+          onFocus?.(event)
+          setFocusDetails(detailsFromTarget(event.target))
+        }}
+        onPointerOut={(event) => {
+          onPointerOut?.(event)
+          setPointerDetails(
+            event.relatedTarget instanceof Node &&
+              event.currentTarget.contains(event.relatedTarget)
+              ? detailsFromTarget(event.relatedTarget)
+              : undefined
+          )
+        }}
+        onPointerOver={(event) => {
+          onPointerOver?.(event)
+          setPointerDetails(detailsFromTarget(event.target))
+        }}
+      >
+        {children}
+      </div>
+    </ReviewHelpContext.Provider>
+  )
+}
+
+const shortcutedPolicies = reviewActionPolicies.filter(
+  (policy) => policy.shortcuts.length > 0
+)
+
+const ReviewHelpAction = ({
+  details
+}: {
+  readonly details: Extract<ReviewHelpDetails, { readonly _tag: "action" }>
+}): ReactElement => (
+  <>
+    <div>
+      <div>{details.name}</div>
+      {details.shortcut === null ? null : <div>{details.shortcut}</div>}
+    </div>
+    <p>{details.description}</p>
+    {details.availabilityMessage === null
+      ? null
+      : <p>{details.availabilityMessage}</p>}
+  </>
+)
+
+const IdleReviewHelp = (): ReactElement => (
+  <>
+    <div>{idleReviewHelp.name}</div>
+    <p>{idleReviewHelp.description}</p>
+    <ul>
+      {shortcutedPolicies.map((policy) => {
+        const shortcut = policy.shortcuts[0]
+        return (
+          <li key={policy.id}>
+            {policy.label}
+            {shortcut === undefined ? null : ` ${shortcut}`}
+          </li>
+        )
+      })}
+    </ul>
+  </>
+)
+
+const reviewHelpBody = (
+  details: ReviewHelpDetails | null
+): ReactElement => {
+  if (details === null) return <IdleReviewHelp />
+  if (details._tag === "informational") {
+    return (
+      <>
+        <div>{details.name}</div>
+        <p>{details.description}</p>
+      </>
+    )
+  }
+  return <ReviewHelpAction details={details} />
+}
+
+export function ReviewHelpPanel(): ReactElement {
+  const details = useContext(ReviewHelpContext)
+  return (
+    <aside aria-label="Control help" aria-live="polite">
+      {reviewHelpBody(details)}
+    </aside>
+  )
+}

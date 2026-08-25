@@ -4,10 +4,7 @@ import {
   type CanvasCommandBatch,
   type CanvasProjection,
   type Frame,
-  Id,
   type ReviewStatus,
-  WebUrlRepresentation,
-  proposeAddFrame,
   proposeBringToFront,
   proposeRemoveFrame,
   proposeRenameCanvas,
@@ -48,7 +45,6 @@ export type ReviewSelection = {
 export type ReviewActionInput =
   | { readonly _tag: "none" }
   | { readonly _tag: "text"; readonly text: string }
-  | { readonly _tag: "url"; readonly url: string }
 
 export interface ReviewActionContext {
   readonly projection: CanvasProjection
@@ -61,6 +57,8 @@ export interface ReviewActionContext {
 export interface ReviewActionPolicy<Id extends string = string> {
   readonly id: Id
   readonly label: string
+  readonly description: string
+  readonly shortcuts: readonly string[]
   readonly available: (
     selection: ReviewSelection,
     projection: CanvasProjection
@@ -106,42 +104,24 @@ const textInput = (input: ReviewActionInput) => {
   )
 }
 
-const urlInput = (input: ReviewActionInput) => {
-  if (input._tag !== "url") return undefined
-  return Option.getOrUndefined(
-    Schema.decodeUnknownOption(WebUrlRepresentation)({
-      _tag: "web-url",
-      url: input.url.trim()
-    })
-  )
-}
-
-const randomToken = () => crypto.randomUUID().replaceAll("-", "")
-const mintFrameId = () => Id.frame(`frame_${randomToken()}`)
-
 const noInput: ReviewActionInput = { _tag: "none" }
 
-const addFramePolicy = policy({
-  id: "add-frame",
-  label: "Add frame",
-  available: () => true,
-  run: ({ input, projection }) => {
-    const representation = urlInput(input)
-    if (representation === undefined) return null
-    const offset = 40 + projection.frames.length * 40
-    return reviewBatch([proposeAddFrame({
-      frameId: mintFrameId(),
-      title: representation.url,
-      representation,
-      status: "in-progress",
-      geometry: { x: offset, y: offset, width: 1280, height: 832 }
-    })])
-  }
-})
+const alignmentDescription: Record<CanvasAlignment, string> = {
+  left: "Align the selected Frames to the left of their shared bounds.",
+  "horizontal-center":
+    "Align the selected Frames to the horizontal center of their shared bounds.",
+  right: "Align the selected Frames to the right of their shared bounds.",
+  top: "Align the selected Frames to the top of their shared bounds.",
+  "vertical-center":
+    "Align the selected Frames to the vertical center of their shared bounds.",
+  bottom: "Align the selected Frames to the bottom of their shared bounds."
+}
 
 const renameCanvasPolicy = policy({
   id: "rename-canvas",
   label: "Rename canvas",
+  description: "Rename this canvas.",
+  shortcuts: [],
   available: () => true,
   run: ({ input, projection }) => {
     const title = textInput(input)
@@ -154,6 +134,8 @@ const renameCanvasPolicy = policy({
 const removePolicy = policy({
   id: "remove",
   label: "Remove",
+  description: "Remove the selected Frames from the canvas.",
+  shortcuts: ["Delete", "Backspace"],
   available: (selection, projection) =>
     selectedFrames(selection, projection).length > 0,
   run: ({ projection, selection }) =>
@@ -163,6 +145,8 @@ const removePolicy = policy({
 const bringToFrontPolicy = policy({
   id: "bring-to-front",
   label: "Bring to front",
+  description: "Place this Frame above every other canvas item.",
+  shortcuts: [],
   available: (selection, projection) =>
     selectedFrame(selection, projection) !== undefined,
   run: ({ projection, selection }) => {
@@ -176,6 +160,8 @@ const bringToFrontPolicy = policy({
 const sendToBackPolicy = policy({
   id: "send-to-back",
   label: "Send to back",
+  description: "Place this Frame behind every other canvas item.",
+  shortcuts: [],
   available: (selection, projection) =>
     selectedFrame(selection, projection) !== undefined,
   run: ({ projection, selection }) => {
@@ -189,6 +175,8 @@ const sendToBackPolicy = policy({
 const setFrameTitlePolicy = policy({
   id: "set-frame-title",
   label: "Set frame title",
+  description: "Rename this Frame.",
+  shortcuts: [],
   available: (selection, projection) =>
     selectedFrame(selection, projection) !== undefined,
   run: ({ input, projection, selection }) => {
@@ -208,6 +196,8 @@ const frameStatusPolicies = ([
 ] as const satisfies readonly ReviewStatus[]).map((status) => policy({
   id: `set-frame-status-${status}` as const,
   label: `Set status to ${status}`,
+  description: `Set this Frame's review status to ${status}.`,
+  shortcuts: [],
   available: (selection, projection) => {
     const frame = selectedFrame(selection, projection)
     return frame !== undefined && frame.status !== status
@@ -250,6 +240,8 @@ const arrangementAction = (
 const alignmentPolicy = (alignment: CanvasAlignment) => policy({
   id: `align-${alignment}` as const,
   label: `Align ${alignment}`,
+  description: alignmentDescription[alignment],
+  shortcuts: [],
   available: (selection, projection) =>
     selectedFrames(selection, projection).length >= 2,
   run: (context) => arrangementAction(context, { _tag: "Align", alignment })
@@ -258,6 +250,8 @@ const alignmentPolicy = (alignment: CanvasAlignment) => policy({
 const distributionPolicy = (axis: "horizontal" | "vertical") => policy({
   id: `distribute-${axis}` as const,
   label: `Distribute ${axis}`,
+  description: `Equalize the ${axis} gaps between the selected Frames.`,
+  shortcuts: [],
   available: (selection, projection) =>
     selectedFrames(selection, projection).length >= 3,
   run: (context) => arrangementAction(context, { _tag: "Distribute", axis })
@@ -266,6 +260,8 @@ const distributionPolicy = (axis: "horizontal" | "vertical") => policy({
 const arrangeGridPolicy = policy({
   id: "arrange-grid",
   label: "Arrange grid",
+  description: "Arrange the selected Frames into a grid.",
+  shortcuts: [],
   available: (selection, projection) =>
     selectedFrames(selection, projection).length >= 2,
   run: (context) => arrangementAction(context, { _tag: "ArrangeGrid" })
@@ -274,6 +270,8 @@ const arrangeGridPolicy = policy({
 const framePresetPolicies = FRAME_SIZE_PRESETS.map((preset) => policy({
   id: `resize-frame-${preset.id}` as const,
   label: `Resize to ${preset.label}`,
+  description: `Resize this Frame to the ${preset.label.toLowerCase()} preset.`,
+  shortcuts: [],
   available: (selection, projection) => {
     const frame = selectedFrame(selection, projection)
     return frame !== undefined &&
@@ -295,6 +293,8 @@ const framePresetPolicies = FRAME_SIZE_PRESETS.map((preset) => policy({
 const openUrlPolicy = policy({
   id: "open-url",
   label: "Open in new tab",
+  description: "Open this Frame's page in a new browser tab.",
+  shortcuts: [],
   available: (selection, projection) =>
     selectedFrame(selection, projection)?.representation._tag === "web-url",
   run: ({ projection, selection }) => {
@@ -311,6 +311,8 @@ const openUrlPolicy = policy({
 const enterFullscreenPolicy = policy({
   id: "enter-fullscreen",
   label: "Enter fullscreen",
+  description: "Expand this Frame to fill the screen.",
+  shortcuts: [],
   available: (selection, projection) =>
     selectedFrame(selection, projection) !== undefined,
   run: ({ fullscreen }) => fullscreen
@@ -321,6 +323,8 @@ const enterFullscreenPolicy = policy({
 const exitFullscreenPolicy = policy({
   id: "exit-fullscreen",
   label: "Exit fullscreen",
+  description: "Return this Frame to the canvas.",
+  shortcuts: ["Escape"],
   available: (selection, projection) =>
     selectedFrame(selection, projection) !== undefined,
   run: ({ fullscreen }) => fullscreen
@@ -331,6 +335,8 @@ const exitFullscreenPolicy = policy({
 const copyNodeIdPolicy = policy({
   id: "copy-node-id",
   label: "Copy node ID",
+  description: "Copy this Frame's stable ID.",
+  shortcuts: [],
   available: (selection, projection) =>
     selectedFrame(selection, projection) !== undefined,
   run: ({ projection, selection }) => {
@@ -346,6 +352,8 @@ const copyNodeIdPolicy = policy({
 const pauseOffscreenPolicy = policy({
   id: "toggle-pause-offscreen",
   label: "Pause offscreen frames",
+  description: "Pause Frames that are out of view.",
+  shortcuts: [],
   available: () => true,
   run: ({ pauseOffscreen }) => ({
     _tag: "effect",
@@ -358,7 +366,6 @@ const pauseOffscreenPolicy = policy({
 })
 
 export const reviewActionPolicies = [
-  addFramePolicy,
   renameCanvasPolicy,
   removePolicy,
   bringToFrontPolicy,

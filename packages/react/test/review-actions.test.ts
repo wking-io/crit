@@ -1,15 +1,22 @@
 import { decodeCanvasProjection } from "@crit/domain"
-import { describe, expect, it, vi } from "vitest"
+import { describe, expect, it } from "vitest"
 
 import { CanvasSelection } from "../src/canvas-selection.js"
 import {
   ReviewActionInput,
   availableReviewActions,
   resolveReviewAction,
+  reviewActionPolicies,
   type ReviewActionContext,
   type ReviewActionId,
   type ReviewSelection
 } from "../src/review-actions.js"
+
+const policyById = (id: ReviewActionId) => {
+  const policy = reviewActionPolicies.find((entry) => entry.id === id)
+  if (policy === undefined) throw new Error(`Missing policy: ${id}`)
+  return policy
+}
 
 const projection = decodeCanvasProjection({
   schemaVersion: 3,
@@ -125,21 +132,23 @@ describe("review actions", () => {
     }])
   })
 
-  it("mints ids when adding Frames", () => {
-    const randomUUID = vi.spyOn(crypto, "randomUUID")
-    randomUUID.mockReturnValueOnce("00000000-0000-4000-8000-000000000001")
-    const selection = itemSelection([])
+  it("keeps add-frame out of the review policy table", () => {
+    expect(reviewActionPolicies.map((entry) => entry.id)).not.toContain("add-frame")
+  })
 
-    expect(commandsFor("add-frame", context(selection, {
-      _tag: "url",
-      url: "https://example.org/review"
-    }))[0]).toMatchObject({
-      _tag: "add-frame",
-      frameId: "frame_00000000000040008000000000000001",
-      representation: {
-        _tag: "web-url",
-        url: "https://example.org/review"
-      }
+  it("binds remove and exit-fullscreen from the table", () => {
+    expect(policyById("remove").shortcuts).toEqual(["Delete", "Backspace"])
+    expect(policyById("exit-fullscreen").shortcuts).toEqual(["Escape"])
+  })
+
+  it("resolves a policy that has no shortcuts", () => {
+    const frame = context(itemSelection([
+      { _tag: "frame", frameId: "frame_a" }
+    ]))
+    expect(policyById("copy-node-id").shortcuts).toEqual([])
+    expect(resolveReviewAction("copy-node-id", frame)).toEqual({
+      _tag: "effect",
+      effect: { _tag: "copy", text: "frame_a" }
     })
   })
 
