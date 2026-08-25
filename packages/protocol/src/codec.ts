@@ -60,7 +60,7 @@ const trustedFields = new Set([
   "author", "person", "agent", "editedAt", "at", "time", "digest", "hash",
   "personId", "agentId", "executionId",
   "delegatedBy", "reportedRuntime", "harness", "model", "source", "sessionId",
-  "taskId", "displayName"
+  "taskId", "displayName", "email", "address"
 ])
 
 const containsTrustedField = (input: Schema.Json): boolean => {

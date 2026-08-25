@@ -15,10 +15,12 @@ import {
   decodeReportedRuntime
 } from "../src/index.js"
 
+const unspecifiedEmail = { _tag: "unspecified" as const }
 const person = {
   _tag: "person",
   personId: Id.person("person_will"),
-  displayName: "Will King"
+  displayName: "Will King",
+  email: unspecifiedEmail
 }
 
 const agent = {
@@ -45,6 +47,53 @@ describe("ActorSnapshot", () => {
     expect(() => decodeActorSnapshot({ ...person, agentId: "agent_codex" })).toThrow()
     expect(() => decodeActorSnapshot({ _tag: "robot", displayName: "Codex" })).toThrow()
     expect(() => decodeActorSnapshot({ ...person, displayName: "  " })).toThrow()
+  })
+
+  it("requires an email state and rejects a raw or malformed address", () => {
+    const access = {
+      ...person,
+      email: { _tag: "access" as const, address: "will@example.com" }
+    }
+    expect(decodeActorSnapshot(access)).toEqual(access)
+    expect(decodeActorSnapshot(person)).toEqual(person)
+    expect(() => decodeActorSnapshot({
+      _tag: "person",
+      personId: person.personId,
+      displayName: person.displayName
+    })).toThrow()
+    expect(() => decodeActorSnapshot({ ...person, email: "will@example.com" })).toThrow()
+    expect(() => decodeActorSnapshot({
+      ...person,
+      email: { _tag: "access", address: "" }
+    })).toThrow()
+    expect(() => decodeActorSnapshot({
+      ...person,
+      email: { _tag: "access", address: "not-an-email" }
+    })).toThrow()
+    expect(() => decodeActorSnapshot({
+      ...person,
+      email: { _tag: "access", address: "a@b" }
+    })).toThrow()
+  })
+
+  it("rejects email on an agent as an excess property", () => {
+    expect(() => decodeActorSnapshot({ ...agent, email: "will@example.com" })).toThrow()
+  })
+
+  it("completes a stored Person inside a principal when email is missing", () => {
+    expect(decodePrincipal({
+      _tag: "person",
+      subject: "oidc|will",
+      person: {
+        _tag: "person",
+        personId: person.personId,
+        displayName: person.displayName
+      }
+    })).toEqual({
+      _tag: "person",
+      subject: "oidc|will",
+      person
+    })
   })
 })
 

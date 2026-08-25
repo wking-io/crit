@@ -33,7 +33,8 @@ const person = Schema.decodeUnknownSync(PersonInvocation)({
     person: {
       _tag: "person",
       personId: "person_cloudflare",
-      displayName: "Cloudflare"
+      displayName: "Cloudflare",
+      email: { _tag: "unspecified" }
     }
   }
 })

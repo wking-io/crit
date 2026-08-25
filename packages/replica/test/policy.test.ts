@@ -16,7 +16,12 @@ const person = Schema.decodeUnknownSync(PersonInvocation)({
   principal: {
     _tag: "person",
     subject: "oidc|replica-policy",
-    person: { _tag: "person", personId: "person_replica_policy", displayName: "Replica" }
+    person: {
+      _tag: "person",
+      personId: "person_replica_policy",
+      displayName: "Replica",
+      email: { _tag: "unspecified" }
+    }
   }
 })
 const agent = Schema.decodeUnknownSync(AgentInvocation)({

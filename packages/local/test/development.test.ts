@@ -23,7 +23,7 @@ import { FetchHttpClient } from "effect/unstable/http"
 import { describe, expect, it } from "vitest"
 
 import { inspectLocalDaemon, LocalDevelopment } from "../src/index.js"
-import { LocalInstallation } from "../src/development.js"
+import { LocalInstallation, type LocalDevelopmentOptions } from "../src/development.js"
 import { decodeStored } from "../src/stored-json.js"
 
 const temporaryRoot = Effect.acquireRelease(
@@ -31,10 +31,19 @@ const temporaryRoot = Effect.acquireRelease(
   (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true }))
 )
 
-const build = (dataRoot: string, scope: Scope.Scope) => Layer.buildWithScope(
-  LocalDevelopment.layer({ dataRoot }).pipe(Layer.provide(NodeServices.layer)),
+const buildWith = (
+  dataRoot: string,
+  scope: Scope.Scope,
+  extras: Omit<LocalDevelopmentOptions, "dataRoot"> = {}
+) => Layer.buildWithScope(
+  LocalDevelopment.layer({ dataRoot, ...extras }).pipe(Layer.provide(NodeServices.layer)),
   scope
 )
+
+const build = (dataRoot: string, scope: Scope.Scope) => buildWith(dataRoot, scope)
+
+const personFrom = (dataRoot: string) =>
+  decodeStored(LocalInstallation, readFileSync(join(dataRoot, "installation.json"), "utf8")).principal.person
 
 const clientFor = (
   development: Context.Tag.Service<LocalDevelopment>,
@@ -314,5 +323,49 @@ describe("LocalDevelopment", () => {
       const result = yield* Effect.result(build(dataRoot, yield* Effect.scope))
       expect(Result.isFailure(result)).toBe(true)
       expect(readdirSync(dataRoot).filter((name) => name.startsWith(".daemon-"))).toEqual([])
+    }))))
+
+  it("writes unspecified email on first boot", () =>
+    Effect.runPromise(Effect.scoped(Effect.gen(function*() {
+      const directory = yield* temporaryRoot
+      const dataRoot = join(directory, ".crit", "v1")
+      yield* build(dataRoot, yield* Effect.scope)
+      expect(personFrom(dataRoot).email).toEqual({ _tag: "unspecified" })
+      expect(personFrom(dataRoot).displayName).toBe("Local Crit User")
+    }))))
+
+  it("rewrites a stored Person that predates the email field", () =>
+    Effect.runPromise(Effect.scoped(Effect.gen(function*() {
+      const directory = yield* temporaryRoot
+      const dataRoot = join(directory, ".crit", "v1")
+      yield* Effect.scoped(Effect.gen(function*() {
+        yield* build(dataRoot, yield* Effect.scope)
+      }))
+      const installationPath = join(dataRoot, "installation.json")
+      const stored = JSON.parse(readFileSync(installationPath, "utf8"))
+      delete stored.principal.person.email
+      writeFileSync(installationPath, JSON.stringify(stored))
+      yield* build(dataRoot, yield* Effect.scope)
+      expect(personFrom(dataRoot).email).toEqual({ _tag: "unspecified" })
+      expect(JSON.parse(readFileSync(installationPath, "utf8")).principal.person.email)
+        .toEqual({ _tag: "unspecified" })
+    }))))
+
+  it("does not rewrite installation.json on a later boot once email is stored", () =>
+    Effect.runPromise(Effect.scoped(Effect.gen(function*() {
+      const directory = yield* temporaryRoot
+      const dataRoot = join(directory, ".crit", "v1")
+      yield* Effect.scoped(Effect.gen(function*() {
+        yield* build(dataRoot, yield* Effect.scope)
+      }))
+      const installationPath = join(dataRoot, "installation.json")
+      writeFileSync(installationPath, JSON.stringify(
+        JSON.parse(readFileSync(installationPath, "utf8")),
+        null,
+        2
+      ))
+      const marked = readFileSync(installationPath, "utf8")
+      yield* build(dataRoot, yield* Effect.scope)
+      expect(readFileSync(installationPath, "utf8")).toBe(marked)
     }))))
 })

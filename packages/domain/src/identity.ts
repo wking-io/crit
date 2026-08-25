@@ -1,4 +1,4 @@
-import { Schema } from "effect"
+import { Effect, Schema } from "effect"
 
 import {
   AgentId,
@@ -13,11 +13,39 @@ const RuntimeName = NonBlankString
 const RuntimeVersion = NonBlankString
 const ExternalReference = NonBlankString
 
+export const EmailAddress = Schema.Trimmed.check(
+  Schema.isPattern(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)
+).pipe(Schema.brand("EmailAddress"))
+export type EmailAddress = typeof EmailAddress.Type
+
+export const UnspecifiedPersonEmail = Schema.TaggedStruct("unspecified", {})
+export type UnspecifiedPersonEmail = typeof UnspecifiedPersonEmail.Type
+
+export const AccessPersonEmail = Schema.TaggedStruct("access", {
+  address: EmailAddress
+})
+export type AccessPersonEmail = typeof AccessPersonEmail.Type
+
+export const PersonEmail = Schema.Union([
+  UnspecifiedPersonEmail,
+  AccessPersonEmail
+])
+export type PersonEmail = typeof PersonEmail.Type
+
 export const PersonSnapshot = Schema.TaggedStruct("person", {
   personId: PersonId,
-  displayName: DisplayName
+  displayName: DisplayName,
+  email: PersonEmail
 })
 export type PersonSnapshot = typeof PersonSnapshot.Type
+
+const PersonSnapshotFromStored = Schema.TaggedStruct("person", {
+  personId: PersonId,
+  displayName: DisplayName,
+  email: PersonEmail.pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed(UnspecifiedPersonEmail.make({})))
+  )
+})
 
 export const AgentSnapshot = Schema.TaggedStruct("agent", {
   agentId: AgentId,
@@ -55,14 +83,14 @@ export type ReportedRuntime = typeof ReportedRuntime.Type
 
 export const PersonPrincipal = Schema.TaggedStruct("person", {
   subject: AuthSubject,
-  person: PersonSnapshot
+  person: PersonSnapshotFromStored
 })
 export type PersonPrincipal = typeof PersonPrincipal.Type
 
 export const AgentPrincipal = Schema.TaggedStruct("agent", {
   subject: AuthSubject,
   agent: AgentSnapshot,
-  delegatedBy: PersonSnapshot
+  delegatedBy: PersonSnapshotFromStored
 })
 export type AgentPrincipal = typeof AgentPrincipal.Type
 
@@ -73,13 +101,13 @@ export const Principal = Schema.Union([
 export type Principal = typeof Principal.Type
 
 export const PersonAttribution = Schema.TaggedStruct("person", {
-  person: PersonSnapshot
+  person: PersonSnapshotFromStored
 })
 export type PersonAttribution = typeof PersonAttribution.Type
 
 export const AgentAttribution = Schema.TaggedStruct("agent", {
   agent: AgentSnapshot,
-  delegatedBy: PersonSnapshot,
+  delegatedBy: PersonSnapshotFromStored,
   executionId: ExecutionId,
   reportedRuntime: Schema.optionalKey(ReportedRuntime)
 })

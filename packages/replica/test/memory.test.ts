@@ -35,7 +35,12 @@ const person = Schema.decodeUnknownSync(PersonInvocation)({
   principal: {
     _tag: "person",
     subject: "oidc|replica-test",
-    person: { _tag: "person", personId: "person_replica_test", displayName: "Replica" }
+    person: {
+      _tag: "person",
+      personId: "person_replica_test",
+      displayName: "Replica",
+      email: { _tag: "unspecified" }
+    }
   }
 })
 

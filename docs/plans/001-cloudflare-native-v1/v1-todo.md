@@ -28,7 +28,8 @@ Plan: [phase 5](phase-05-review-ui.md), [phase 3](phase-03-local-daemon-and-cli.
 
 Plan: [phase 6](phase-06-cloudflare-platform.md), [phase 7](phase-07-sync-and-sharing.md), [phase 8](phase-08-hosted-review.md).
 
-- [ ] `crit login` and `crit share`.
+- [ ] `crit login`. Reconcile the local Person with the Access-authenticated Person. Write Access email onto that Person. Share uses the bound Person. Do not add a second join at share time.
+- [ ] `crit share`.
 - [ ] Push/pull by change ID and cursor against a remote authority.
 - [ ] First share with share/import IDs and a projection digest.
 - [ ] Two author replicas edit offline and converge.
