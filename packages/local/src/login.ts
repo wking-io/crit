@@ -15,7 +15,11 @@ import {
   HttpClientRequest
 } from "effect/unstable/http"
 
-import { LocalInstallation } from "./development.js"
+import {
+  InstallationOrigin,
+  LocalInstallation,
+  type InstallationOrigin as InstallationOriginType
+} from "./development.js"
 import {
   LocalDaemonStateMalformed,
   LocalDaemonStateMissing,
@@ -75,6 +79,55 @@ const bound = (
 ): AccessPersonBinding => AccessPersonBinding.make({
   personId,
   email
+})
+
+const rememberInstallationOrigin = (
+  dataRoot: string,
+  installationOrigin: InstallationOriginType
+) => Effect.gen(function*() {
+  const fs = yield* FileSystem.FileSystem
+  const path = yield* Path.Path
+  const installationPath = path.join(dataRoot, "installation.json")
+  const stateUnreadable = (reason: string) => new LocalDaemonStateUnreadable({
+    state: "installation",
+    path: installationPath,
+    reason
+  })
+  const contents = yield* fs.readFileString(installationPath).pipe(
+    Effect.mapError(() => stateUnreadable("Unable to read installation state"))
+  )
+  const installation = yield* Effect.try({
+    try: () => decodeStored(LocalInstallation, contents),
+    catch: () => new LocalDaemonStateMalformed({
+      state: "installation",
+      path: installationPath,
+      reason: "Stored JSON does not match the required schema"
+    })
+  })
+  if (installation.installationOrigin === installationOrigin) return
+
+  const rewritten = LocalInstallation.make({
+    ...installation,
+    installationOrigin
+  })
+  const temporaryPath = path.join(
+    dataRoot,
+    `.installation-origin-${installation.installationId}.tmp`
+  )
+  yield* Effect.scoped(Effect.gen(function*() {
+    const file = yield* fs.open(temporaryPath, { flag: "wx", mode: 0o600 })
+    yield* file.writeAll(new TextEncoder().encode(
+      encodeStored(LocalInstallation, rewritten)
+    ))
+    yield* file.sync
+    yield* fs.rename(temporaryPath, installationPath)
+  })).pipe(
+    Effect.ensuring(fs.remove(temporaryPath, { force: true }).pipe(Effect.ignore)),
+    Effect.mapError(() => stateUnreadable("Unable to update installation state"))
+  )
+  yield* fs.chmod(installationPath, 0o600).pipe(
+    Effect.mapError(() => stateUnreadable("Unable to secure installation state"))
+  )
 })
 
 export const bindAccessPerson = (options: BindAccessPersonOptions) => Effect.gen(function*() {
@@ -151,15 +204,22 @@ export const bindAccessPerson = (options: BindAccessPersonOptions) => Effect.gen
   return bound(rewritten.principal.person.personId, options.email)
 })
 
-const identityUrl = (
+const installationEndpoint = (
   installationUrl: string
-): Effect.Effect<string, InstallationUrlInvalid> => Effect.try({
+): Effect.Effect<{
+  readonly identityUrl: string
+  readonly installationOrigin: InstallationOriginType
+}, InstallationUrlInvalid> => Effect.try({
   try: () => {
     const url = new URL(installationUrl)
     if (url.protocol !== "http:" && url.protocol !== "https:") {
       throw new Error("Unsupported installation URL protocol")
     }
-    return `${url.origin}/identity`
+    const installationOrigin = Schema.decodeUnknownSync(InstallationOrigin)(url.origin)
+    return {
+      identityUrl: `${installationOrigin}/identity`,
+      installationOrigin
+    }
   },
   catch: () => new InstallationUrlInvalid({ installationUrl })
 })
@@ -167,9 +227,9 @@ const identityUrl = (
 export const loginToInstallation = (
   options: LoginToInstallationOptions
 ) => Effect.gen(function*() {
-  const url = yield* identityUrl(options.installationUrl)
+  const endpoint = yield* installationEndpoint(options.installationUrl)
   const http = yield* HttpClient.HttpClient
-  const response = yield* http.execute(HttpClientRequest.get(url)).pipe(
+  const response = yield* http.execute(HttpClientRequest.get(endpoint.identityUrl)).pipe(
     Effect.mapError(() => new AccessPersonRequestFailed({}))
   )
   if (response.status === 401) {
@@ -185,10 +245,12 @@ export const loginToInstallation = (
     try: () => decodeAccessAuthenticatedPersonWire(JSON.parse(contents)),
     catch: () => new AccessPersonResponseInvalid({})
   })
-  return yield* bindAccessPerson({
+  const binding = yield* bindAccessPerson({
     dataRoot: options.dataRoot,
     email: AccessPersonEmail.make({
       address: wire.address
     })
   })
+  yield* rememberInstallationOrigin(options.dataRoot, endpoint.installationOrigin)
+  return binding
 }).pipe(Effect.provide(FetchHttpClient.layer))

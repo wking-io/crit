@@ -50,12 +50,40 @@ const LocalPort = Schema.Int.check(
   Schema.isLessThanOrEqualTo(65_535)
 ).pipe(Schema.brand("LocalPort"))
 
+const installationOriginFailure = (value: string) => {
+  try {
+    const url = new URL(value)
+    if (url.protocol !== "http:" && url.protocol !== "https:") {
+      return "Expected an HTTP or HTTPS origin"
+    }
+    if (
+      url.username.length > 0 ||
+      url.password.length > 0 ||
+      url.pathname !== "/" ||
+      url.search.length > 0 ||
+      url.hash.length > 0 ||
+      url.origin !== value
+    ) {
+      return "Expected an origin without credentials, path, query, or fragment"
+    }
+    return undefined
+  } catch {
+    return "Expected an HTTP or HTTPS origin"
+  }
+}
+
+export const InstallationOrigin = Schema.String.check(
+  Schema.makeFilter<string>(installationOriginFailure)
+).pipe(Schema.brand("InstallationOrigin"))
+export type InstallationOrigin = typeof InstallationOrigin.Type
+
 export const LocalInstallation = Schema.Struct({
   version: Schema.Literal(1),
   installationId: InstallationId,
   principal: PersonPrincipal,
   bearerSecret: InstallationSecret,
-  port: LocalPort
+  port: LocalPort,
+  installationOrigin: Schema.optionalKey(InstallationOrigin)
 })
 export type LocalInstallation = typeof LocalInstallation.Type
 
