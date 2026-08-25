@@ -22,7 +22,7 @@ import type {
 } from "@crit/protocol"
 import { Effect, Result, SynchronizedRef } from "effect"
 
-export interface OneCanvasLedger {
+interface OneCanvasLedger {
   readonly view: AuthorityView
   readonly genesisCursor: Cursor
   readonly changes: readonly AcceptedCanvasChange[]
