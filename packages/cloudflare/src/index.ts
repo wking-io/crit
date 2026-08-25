@@ -1,1 +1,4 @@
-export { CloudflareCanvasAuthority } from "./authority.js"
+export {
+  CloudflareCanvasAuthority,
+  type CloudflareCanvasAuthorityOptions
+} from "./authority.js"
