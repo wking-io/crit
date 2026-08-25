@@ -153,6 +153,11 @@ describe("ReviewChrome", () => {
     expect(container.querySelector("[aria-label='Add frame']")).toBeNull()
     expect(container.querySelector("[aria-label='Frame URL']")).toBeNull()
     expect(container.textContent).not.toContain("Add frame")
+    expect(container.querySelector("[aria-label='Pause offscreen frames']"))
+      .toBeNull()
+    expect(container.querySelector("[aria-label='Set status to approved']"))
+      .toBeNull()
+    expect(container.querySelector("[aria-label='Enter fullscreen']")).toBeNull()
   })
 
   it("lists Remove and its table shortcut in idle help", async() => {
@@ -233,6 +238,24 @@ describe("ReviewChrome", () => {
     })
 
     expect(onSubmit).not.toHaveBeenCalled()
+  })
+
+  it("enters fullscreen from F when a single Frame is selected", async() => {
+    const onEffect = vi.fn()
+    await act(async() => render(
+      <ReviewChrome
+        onEffect={onEffect}
+        onSubmit={vi.fn()}
+        projection={projection}
+        selection={selectedFrame}
+      />
+    ))
+
+    await act(async() => press("F"))
+    expect(onEffect).toHaveBeenCalledWith({
+      _tag: "fullscreen",
+      target: "frame"
+    })
   })
 
   it("exits fullscreen from Escape when a Frame is selected", async() => {

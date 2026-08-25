@@ -68,7 +68,7 @@ Local Frames authoring on one machine.
 - Atomic command batches with recoverable local conflicts
 - Camera, pan, zoom, saved camera and selection
 - Align, distribute, arrange grid, breakpoint presets
-- Pause offscreen, fullscreen, open `web-url` in a new tab, copy Frame ID
+- Offscreen Frames pause themselves, fullscreen, open `web-url` in a new tab, copy Frame ID
 - `application-route`, `web-url`, and digest-bound `artifact` in domain, CLI, and local resolve
 - Local Application binding from the manifest and `--application-origin`
 - Unavailable render for unbound app or missing/corrupt artifact

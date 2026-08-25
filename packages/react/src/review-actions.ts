@@ -31,11 +31,6 @@ export type ReviewClientEffect =
   | { readonly _tag: "open-url"; readonly url: string }
   | { readonly _tag: "fullscreen"; readonly target: "frame" | "exit" }
   | { readonly _tag: "copy"; readonly text: string }
-  | {
-    readonly _tag: "set-preference"
-    readonly key: "pause-offscreen"
-    readonly value: boolean
-  }
 
 export type ReviewSelection = {
   readonly _tag: "items"
@@ -51,10 +46,35 @@ export interface ReviewActionContext {
   readonly selection: ReviewSelection
   readonly input: ReviewActionInput
   readonly fullscreen: boolean
-  readonly pauseOffscreen: boolean
 }
 
-export type ReviewShortcut = "Delete" | "Backspace" | "Escape"
+export type ReviewShortcut =
+  | "Delete"
+  | "Backspace"
+  | "Escape"
+  | "F"
+  | "O"
+  | "1"
+  | "2"
+  | "3"
+  | "4"
+  | "Shift+1"
+  | "Shift+2"
+  | "Shift+3"
+  | "Shift+4"
+  | "Shift+5"
+  | "Alt+W"
+  | "Alt+S"
+  | "Alt+A"
+  | "Alt+D"
+  | "Alt+V"
+  | "Alt+H"
+  | "Alt+G"
+  | "Control+Alt+H"
+  | "Control+Alt+V"
+  | "Mod+]"
+  | "Mod+["
+  | "Mod+Shift+C"
 
 export interface ReviewActionPolicy<Id extends string = string> {
   readonly id: Id
@@ -119,6 +139,25 @@ const alignmentDescription = {
   bottom: "Align the selected Frames to the bottom of their shared bounds."
 } as const satisfies Record<CanvasAlignment, string>
 
+const alignmentShortcuts = {
+  top: ["Alt+W"],
+  bottom: ["Alt+S"],
+  left: ["Alt+A"],
+  right: ["Alt+D"],
+  "vertical-center": ["Alt+V"],
+  "horizontal-center": ["Alt+H"]
+} as const satisfies Record<CanvasAlignment, readonly ReviewShortcut[]>
+
+const statusShortcuts = {
+  "in-progress": ["1"],
+  "ready-for-review": ["2"],
+  "changes-requested": ["3"],
+  approved: ["4"]
+} as const satisfies Record<
+  Exclude<ReviewStatus, "archived">,
+  readonly ReviewShortcut[]
+>
+
 const renameCanvasPolicy = policy({
   id: "rename-canvas",
   label: "Rename canvas",
@@ -148,7 +187,7 @@ const bringToFrontPolicy = policy({
   id: "bring-to-front",
   label: "Bring to front",
   description: "Place this Frame above every other canvas item.",
-  shortcuts: [],
+  shortcuts: ["Mod+]"],
   available: (selection, projection) =>
     selectedFrame(selection, projection) !== undefined,
   run: ({ projection, selection }) => {
@@ -163,7 +202,7 @@ const sendToBackPolicy = policy({
   id: "send-to-back",
   label: "Send to back",
   description: "Place this Frame behind every other canvas item.",
-  shortcuts: [],
+  shortcuts: ["Mod+["],
   available: (selection, projection) =>
     selectedFrame(selection, projection) !== undefined,
   run: ({ projection, selection }) => {
@@ -193,23 +232,21 @@ const setFrameTitlePolicy = policy({
 const frameStatusPolicies = ([
   "in-progress",
   "ready-for-review",
-  "approved",
-  "changes-requested"
-] as const satisfies readonly ReviewStatus[]).map((status) => policy({
+  "changes-requested",
+  "approved"
+] as const satisfies readonly Exclude<ReviewStatus, "archived">[]).map((status) => policy({
   id: `set-frame-status-${status}` as const,
   label: `Set status to ${status}`,
   description: `Set this Frame's review status to ${status}.`,
-  shortcuts: [],
-  available: (selection, projection) => {
-    const frame = selectedFrame(selection, projection)
-    return frame !== undefined && frame.status !== status
-  },
-  run: ({ projection, selection }) => {
-    const frame = selectedFrame(selection, projection)
-    return frame === undefined
-      ? null
-      : reviewBatch([proposeSetFrameStatus(frame, status)])
-  }
+  shortcuts: statusShortcuts[status],
+  available: (selection, projection) =>
+    selectedFrames(selection, projection).some((frame) => frame.status !== status),
+  run: ({ projection, selection }) =>
+    reviewBatch(
+      selectedFrames(selection, projection)
+        .filter((frame) => frame.status !== status)
+        .map((frame) => proposeSetFrameStatus(frame, status))
+    )
 }))
 
 const arrangementAction = (
@@ -243,7 +280,7 @@ const alignmentPolicy = (alignment: CanvasAlignment) => policy({
   id: `align-${alignment}` as const,
   label: `Align ${alignment}`,
   description: alignmentDescription[alignment],
-  shortcuts: [],
+  shortcuts: alignmentShortcuts[alignment],
   available: (selection, projection) =>
     selectedFrames(selection, projection).length >= 2,
   run: (context) => arrangementAction(context, { _tag: "Align", alignment })
@@ -253,7 +290,7 @@ const distributionPolicy = (axis: "horizontal" | "vertical") => policy({
   id: `distribute-${axis}` as const,
   label: `Distribute ${axis}`,
   description: `Equalize the ${axis} gaps between the selected Frames.`,
-  shortcuts: [],
+  shortcuts: axis === "horizontal" ? ["Control+Alt+H"] : ["Control+Alt+V"],
   available: (selection, projection) =>
     selectedFrames(selection, projection).length >= 3,
   run: (context) => arrangementAction(context, { _tag: "Distribute", axis })
@@ -263,17 +300,28 @@ const arrangeGridPolicy = policy({
   id: "arrange-grid",
   label: "Arrange grid",
   description: "Arrange the selected Frames into a grid.",
-  shortcuts: [],
+  shortcuts: ["Alt+G"],
   available: (selection, projection) =>
     selectedFrames(selection, projection).length >= 2,
   run: (context) => arrangementAction(context, { _tag: "ArrangeGrid" })
 })
 
+const presetShortcuts = {
+  mobile: ["Shift+1"],
+  tablet: ["Shift+2"],
+  laptop: ["Shift+3"],
+  desktop: ["Shift+4"],
+  widescreen: ["Shift+5"]
+} as const satisfies Record<
+  (typeof FRAME_SIZE_PRESETS)[number]["id"],
+  readonly ReviewShortcut[]
+>
+
 const framePresetPolicies = FRAME_SIZE_PRESETS.map((preset) => policy({
   id: `resize-frame-${preset.id}` as const,
   label: `Resize to ${preset.label}`,
   description: `Resize this Frame to the ${preset.label.toLowerCase()} preset.`,
-  shortcuts: [],
+  shortcuts: presetShortcuts[preset.id],
   available: (selection, projection) => {
     const frame = selectedFrame(selection, projection)
     return frame !== undefined &&
@@ -296,7 +344,7 @@ const openUrlPolicy = policy({
   id: "open-url",
   label: "Open in new tab",
   description: "Open this Frame's page in a new browser tab.",
-  shortcuts: [],
+  shortcuts: ["O"],
   available: (selection, projection) =>
     selectedFrame(selection, projection)?.representation._tag === "web-url",
   run: ({ projection, selection }) => {
@@ -314,7 +362,7 @@ const enterFullscreenPolicy = policy({
   id: "enter-fullscreen",
   label: "Enter fullscreen",
   description: "Expand this Frame to fill the screen.",
-  shortcuts: [],
+  shortcuts: ["F"],
   available: (selection, projection) =>
     selectedFrame(selection, projection) !== undefined,
   run: ({ fullscreen }) => fullscreen
@@ -338,7 +386,7 @@ const copyNodeIdPolicy = policy({
   id: "copy-node-id",
   label: "Copy node ID",
   description: "Copy this Frame's stable ID.",
-  shortcuts: [],
+  shortcuts: ["Mod+Shift+C"],
   available: (selection, projection) =>
     selectedFrame(selection, projection) !== undefined,
   run: ({ projection, selection }) => {
@@ -349,22 +397,6 @@ const copyNodeIdPolicy = policy({
       effect: { _tag: "copy", text: frame.frameId }
     }
   }
-})
-
-const pauseOffscreenPolicy = policy({
-  id: "toggle-pause-offscreen",
-  label: "Pause offscreen frames",
-  description: "Pause Frames that are out of view.",
-  shortcuts: [],
-  available: () => true,
-  run: ({ pauseOffscreen }) => ({
-    _tag: "effect",
-    effect: {
-      _tag: "set-preference",
-      key: "pause-offscreen",
-      value: !pauseOffscreen
-    }
-  })
 })
 
 export const reviewActionPolicies = [
@@ -387,8 +419,7 @@ export const reviewActionPolicies = [
   openUrlPolicy,
   enterFullscreenPolicy,
   exitFullscreenPolicy,
-  copyNodeIdPolicy,
-  pauseOffscreenPolicy
+  copyNodeIdPolicy
 ] as const satisfies readonly ReviewActionPolicy[]
 
 export type ReviewActionId = (typeof reviewActionPolicies)[number]["id"]

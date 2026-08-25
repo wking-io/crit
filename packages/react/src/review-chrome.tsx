@@ -29,7 +29,6 @@ export interface ReviewChromeProps {
   readonly onSubmit: (commands: CanvasCommandBatch) => void
   readonly onEffect?: (effect: ReviewClientEffect) => void
   readonly fullscreen?: boolean
-  readonly pauseOffscreen?: boolean
 }
 
 const formActions = [
@@ -109,7 +108,6 @@ export function ReviewChrome({
   fullscreen = false,
   onEffect,
   onSubmit,
-  pauseOffscreen = false,
   projection,
   selection
 }: ReviewChromeProps): ReactElement {
@@ -117,8 +115,7 @@ export function ReviewChrome({
     projection,
     selection,
     input: ReviewActionInput.none,
-    fullscreen,
-    pauseOffscreen
+    fullscreen
   }
   const available = availableReviewActions(context)
   const runnable = available.filter((entry) =>
@@ -137,8 +134,7 @@ export function ReviewChrome({
       projection,
       selection,
       input,
-      fullscreen,
-      pauseOffscreen
+      fullscreen
     })
     if (action === null) return false
     dispatchReviewAction(action, onSubmit, onEffect)
@@ -152,7 +148,10 @@ export function ReviewChrome({
         callback: () => {
           run(policy.id)
         },
-        options: { enabled: runnableIds.has(policy.id) }
+        options: {
+          enabled: runnableIds.has(policy.id),
+          ignoreInputs: hotkey !== "Escape"
+        }
       }))
     )
   )
