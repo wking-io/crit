@@ -211,12 +211,6 @@ export const shareCanvas = (
     try: () => decodeCanvasSharedWire(JSON.parse(contents)),
     catch: () => new ShareResponseInvalid({})
   })
-  if (
-    receipt.canvasId !== options.canvasId ||
-    receipt.title !== options.title
-  ) {
-    return yield* new ShareResponseInvalid({})
-  }
 
   const shared = SharedCanvas.make({
     canvasId: receipt.canvasId,
