@@ -354,9 +354,33 @@ describe("ReplicaBoard", () => {
       "Review has pending changes."
     )
     expect(region?.querySelector("li")?.textContent).toBe(
-      "Waiting to sync. Proposed by Codex."
+      "Waiting to sync. Proposed by Agent Codex."
     )
     expect(region?.textContent).not.toContain("Ada")
+  })
+
+  it("distinguishes a Person named Codex from an Agent named Codex", async() => {
+    const personCodex = decodeAuthor({ _tag: "person", displayName: "Codex" })
+    const sameNameAuthors = decodeView({
+      _tag: "replica-view",
+      canvasId: projection.canvasId,
+      acknowledgedCursor: "cursor_ack",
+      projection,
+      pending: [
+        pendingChange("change_person_codex", Ready.make({}), rename, personCodex),
+        pendingChange("change_agent_codex", Ready.make({}), rename, agentAuthor)
+      ]
+    })
+    await act(async() => render(
+      <ReplicaBoard {...requiredBoard} resolver={checkoutResolver} view={sameNameAuthors} />
+    ))
+
+    const rows = [...syncRegion()?.querySelectorAll("li") ?? []]
+      .map((node) => node.textContent)
+    expect(rows).toEqual([
+      "Waiting to sync. Proposed by Codex.",
+      "Waiting to sync. Proposed by Agent Codex."
+    ])
   })
 
   it("drops the queue when a later view is synchronized", async() => {
