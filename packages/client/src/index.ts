@@ -4,13 +4,19 @@ import {
   type CanvasNotFound,
   type ChangeRejected
 } from "@crit/authority"
-import type { CanvasId } from "@crit/domain"
+import type {
+  CanvasId,
+  PresenceRoster
+} from "@crit/domain"
 import {
   ArtifactRepresentation,
   type LiveRepresentation,
   type RepresentationRef
 } from "@crit/domain"
-import type { ReplicaChanged } from "@crit/protocol"
+import type {
+  PresenceChanged,
+  ReplicaChanged
+} from "@crit/protocol"
 import type {
   ReplicaChange,
   ReplicaChangeReceipt,
@@ -31,6 +37,8 @@ import {
 } from "@crit/representations"
 import {
   LocalApiAuthorization,
+  AnnouncePresence,
+  DepartPresence,
   type LocalDaemonStatus,
   LocalApiOriginRejected,
   type LocalApiToken,
@@ -39,11 +47,14 @@ import {
   LocalCanvasApi,
   LocalReplicaSocketHello,
   LocalReplicaSocketServerFrame,
+  type PresenceClaimMismatch,
+  type PresenceLeaseNotFound,
+  type PresenceClaim,
   localApiVersion,
   localApiVersionHeader,
   localReplicaSocketCloseCode
 } from "@crit/replica/http"
-import { Context, Deferred, Effect, Exit, flow, Layer, Queue, Redacted, Ref, Schema, Scope, Stream, type Take } from "effect"
+import { Clock, Context, Deferred, Duration, Effect, Exit, flow, Layer, Match, Queue, Redacted, Ref, Result, Schema, Scope, Stream, type Take } from "effect"
 import { FetchHttpClient, HttpClient, HttpClientError, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { HttpApiClient, HttpApiMiddleware } from "effect/unstable/httpapi"
 import * as Socket from "effect/unstable/socket/Socket"
@@ -91,6 +102,12 @@ export type SubscriptionFailure =
   | ReplicaNotOpen
   | LocalSubscriptionProtocolError
 
+export type PresenceAttendFailure =
+  | TransportFailure
+  | SubscriptionFailure
+  | PresenceClaimMismatch
+  | PresenceLeaseNotFound
+
 export type CreateCanvasInput = Omit<CreateCanvas, "_tag">
 
 export interface LocalCanvasClientService {
@@ -102,6 +119,14 @@ export interface LocalCanvasClientService {
   readonly subscribe: (canvasId: CanvasId) => Effect.Effect<
     Stream.Stream<ReplicaChanged, SubscriptionFailure>,
     SubscriptionFailure,
+    Socket.WebSocketConstructor | Scope.Scope
+  >
+  readonly attendPresence: (
+    canvasId: CanvasId,
+    claim: PresenceClaim
+  ) => Effect.Effect<
+    Stream.Stream<PresenceRoster, SubscriptionFailure>,
+    PresenceAttendFailure,
     Socket.WebSocketConstructor | Scope.Scope
   >
 }
@@ -276,11 +301,14 @@ const mapSocketFailure = (canvasId: CanvasId, failure: Socket.SocketError) => {
   return failure
 }
 
-const subscribe = (
+type LocalNotification = ReplicaChanged | PresenceChanged
+
+const subscribeNotifications = <A>(
   options: LocalClientOptions,
-  canvasId: CanvasId
+  canvasId: CanvasId,
+  select: (notification: LocalNotification) => Result.Result<A, void>
 ): Effect.Effect<
-  Stream.Stream<ReplicaChanged, SubscriptionFailure>,
+  Stream.Stream<A, SubscriptionFailure>,
   SubscriptionFailure,
   Socket.WebSocketConstructor | Scope.Scope
 > => Effect.gen(function*() {
@@ -288,7 +316,7 @@ const subscribe = (
     closeCodeIsError: (code) => code !== 1000
   })
   const opened = yield* Deferred.make<void, SubscriptionFailure>()
-  const messages = yield* Queue.sliding<Take.Take<ReplicaChanged, SubscriptionFailure>>(1)
+  const messages = yield* Queue.sliding<Take.Take<A, SubscriptionFailure>>(1)
   const ready = yield* Ref.make(false)
   const decode = Schema.decodeUnknownEffect(Schema.fromJsonString(LocalReplicaSocketServerFrame))
   if (options._tag === "bearer") {
@@ -300,21 +328,33 @@ const subscribe = (
     }))
     yield* write(hello).pipe(Effect.forkScoped)
   }
+  const receive = (notification: LocalNotification) => Effect.gen(function*() {
+    if (!(yield* Ref.get(ready))) {
+      return yield* new LocalSubscriptionProtocolError({
+        message: "Notification arrived before subscription readiness"
+      })
+    }
+    const selected = select(notification)
+    if (selected._tag === "Success") {
+      yield* Queue.offer(messages, [selected.success])
+    }
+  })
   yield* socket.runString<unknown, SubscriptionFailure>(
-    (message) => decode(message).pipe(Effect.flatMap((frame) => Effect.gen(function*() {
-      if (frame.kind === "subscription-ready") {
-        if (frame.canvasId !== canvasId) {
-          return yield* new LocalSubscriptionProtocolError({ message: "Subscription ready frame named another Canvas" })
-        }
-        yield* Ref.set(ready, true)
-        yield* Deferred.succeed(opened, undefined)
-        return
-      }
-      if (!(yield* Ref.get(ready))) {
-        return yield* new LocalSubscriptionProtocolError({ message: "Replica change arrived before subscription readiness" })
-      }
-      yield* Queue.offer(messages, [frame])
-    })))
+    (message) => decode(message).pipe(Effect.flatMap((frame) =>
+      Match.value(frame).pipe(Match.discriminatorsExhaustive("kind")({
+        "subscription-ready": (subscriptionReady) => Effect.gen(function*() {
+          if (subscriptionReady.canvasId !== canvasId) {
+            return yield* new LocalSubscriptionProtocolError({
+              message: "Subscription ready frame named another Canvas"
+            })
+          }
+          yield* Ref.set(ready, true)
+          yield* Deferred.succeed(opened, undefined)
+        }),
+        "replica-changed": receive,
+        "presence-changed": receive
+      }))
+    ))
   ).pipe(
     Effect.mapError((failure) => Socket.isSocketError(failure) ? mapSocketFailure(canvasId, failure) : failure),
     Effect.matchEffect({
@@ -333,6 +373,34 @@ const subscribe = (
   return Stream.fromQueue(messages).pipe(Stream.flattenTake)
 })
 
+const subscribe = (
+  options: LocalClientOptions,
+  canvasId: CanvasId
+): Effect.Effect<
+  Stream.Stream<ReplicaChanged, SubscriptionFailure>,
+  SubscriptionFailure,
+  Socket.WebSocketConstructor | Scope.Scope
+> => subscribeNotifications(options, canvasId, (notification) =>
+  Match.value(notification).pipe(Match.discriminatorsExhaustive("kind")({
+    "replica-changed": (replicaChanged) => Result.succeed(replicaChanged),
+    "presence-changed": () => Result.fail(undefined)
+  }))
+)
+
+const subscribePresence = (
+  options: LocalClientOptions,
+  canvasId: CanvasId
+): Effect.Effect<
+  Stream.Stream<PresenceRoster, SubscriptionFailure>,
+  SubscriptionFailure,
+  Socket.WebSocketConstructor | Scope.Scope
+> => subscribeNotifications(options, canvasId, (notification) =>
+  Match.value(notification).pipe(Match.discriminatorsExhaustive("kind")({
+    "replica-changed": () => Result.fail(undefined),
+    "presence-changed": ({ roster }) => Result.succeed(roster)
+  }))
+)
+
 export class LocalCanvasClient extends Context.Service<
   LocalCanvasClient,
   LocalCanvasClientService
@@ -349,13 +417,56 @@ export class LocalCanvasClient extends Context.Service<
             : (request) => request
         ))
       })
+      const announce = (
+        canvasId: CanvasId,
+        claim: PresenceClaim,
+        leaseId?: Parameters<typeof DepartPresence.make>[0]["leaseId"]
+      ) => {
+        const payload = leaseId === undefined
+          ? AnnouncePresence.make({ canvasId, claim })
+          : AnnouncePresence.make({ canvasId, claim, leaseId })
+        return withBrowserCredentials(options, http.announce({ payload }))
+      }
+      const attendPresence: LocalCanvasClientService["attendPresence"] = (
+        canvasId,
+        claim
+      ) => Effect.gen(function*() {
+        const first = yield* announce(canvasId, claim)
+        yield* Effect.addFinalizer(() => withBrowserCredentials(
+          options,
+          http.depart({
+            payload: DepartPresence.make({
+              canvasId,
+              leaseId: first.leaseId
+            })
+          })
+        ).pipe(Effect.ignore))
+        const receipt = yield* Ref.make(first)
+        yield* Effect.forever(Effect.gen(function*() {
+          const current = yield* Ref.get(receipt)
+          const now = yield* Clock.currentTimeMillis
+          const halfRemaining = Math.max(
+            1,
+            (Date.parse(current.expiresAt) - now) / 2
+          )
+          yield* Effect.sleep(Duration.millis(halfRemaining))
+          const refreshed = yield* announce(
+            canvasId,
+            claim,
+            current.leaseId
+          )
+          yield* Ref.set(receipt, refreshed)
+        })).pipe(Effect.forkScoped)
+        return yield* subscribePresence(options, canvasId)
+      })
       return LocalCanvasClient.of({
         status: () => withBrowserCredentials(options, http.status()),
         create: (input) => withBrowserCredentials(options, http.create({ payload: CreateCanvas.make(input) })),
         open: (canvasId) => withBrowserCredentials(options, http.open({ params: { canvasId } })),
         change: (input) => withBrowserCredentials(options, http.change({ payload: input })),
         sync: (canvasId) => withBrowserCredentials(options, http.sync({ params: { canvasId } })),
-        subscribe: (canvasId) => subscribe(options, canvasId)
+        subscribe: (canvasId) => subscribe(options, canvasId),
+        attendPresence
       })
     })).pipe(
       Layer.provide(HttpApiMiddleware.layerClient(

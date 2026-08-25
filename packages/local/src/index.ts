@@ -4,6 +4,12 @@ export { SqliteCanvasReplica } from "./sqlite-replica.js"
 export type { SqliteCanvasReplicaOptions } from "./sqlite-replica.js"
 export { LocalDaemon } from "./daemon.js"
 export type { LocalDaemonOptions } from "./daemon.js"
+export {
+  PresenceRegistry,
+  delegatingPerson,
+  presenceLeaseTtl,
+  presenceParticipantFromClaim
+} from "./presence-registry.js"
 export { FileSystemArtifactStoreOpenFailure, LocalArtifactStore } from "./artifact-store.js"
 export { LocalProjectApplicationBindings } from "./application-bindings.js"
 export type { LocalProjectApplicationBindingsOptions } from "./application-bindings.js"

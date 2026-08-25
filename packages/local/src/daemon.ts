@@ -6,6 +6,7 @@ import {
 } from "@crit/authority"
 import { LocalBrowserConnection } from "@crit/client"
 import { CanvasId, Id, type InstallationId } from "@crit/domain"
+import { PresenceChangedSchema } from "@crit/protocol"
 import {
   CanvasReplica,
   ChangeIdGenerationFailure,
@@ -56,6 +57,10 @@ import {
 } from "./browser-session.js"
 import { SqliteCanvasReplica } from "./sqlite-replica.js"
 import { SqliteCanvasAuthority } from "./sqlite.js"
+import {
+  PresenceRegistry,
+  presenceParticipantFromClaim
+} from "./presence-registry.js"
 
 export interface LocalDaemonOptions {
   readonly databasePath: string
@@ -124,6 +129,39 @@ const handlers = (options: LocalDaemonOptions) => HttpApiBuilder.group(
           ReplicaInvariantFailure: Effect.die
         })
       )
+    })
+  })
+)
+
+const presenceHandlers = HttpApiBuilder.group(
+  LocalCanvasApi,
+  "presence",
+  Effect.fn(function*(group) {
+    const registry = yield* PresenceRegistry
+    return group.handleAll({
+      announce: Effect.fn(function*({ payload }) {
+        const invocation = yield* AuthenticatedInvocation
+        const participant = yield* presenceParticipantFromClaim(
+          payload.claim,
+          invocation
+        )
+        return yield* (
+          payload.leaseId === undefined
+            ? registry.announce({
+                canvasId: payload.canvasId,
+                participant
+              })
+            : registry.announce({
+                canvasId: payload.canvasId,
+                participant,
+                leaseId: payload.leaseId
+              })
+        )
+      }),
+      depart: ({ payload }) => registry.depart({
+        canvasId: payload.canvasId,
+        leaseId: payload.leaseId
+      })
     })
   })
 )
@@ -252,6 +290,7 @@ const isWebSocketUpgrade = (request: HttpServerRequest.HttpServerRequest) =>
 
 const notificationSocket = (
   replica: CanvasReplica["Service"],
+  presence: PresenceRegistry["Service"],
   canvasId: CanvasId,
   bearerOptions: LocalDaemonOptions | undefined
 ) => Effect.gen(function*() {
@@ -284,7 +323,17 @@ const notificationSocket = (
     yield* write(new Socket.CloseEvent(localReplicaSocketCloseCode.replicaNotOpen, "canvas is not open"))
     return HttpServerResponse.empty()
   }
-  const pull = yield* Stream.toPull(subscribed.success)
+  const notifications = Stream.merge(
+    subscribed.success,
+    presence.watch(canvasId).pipe(
+      Stream.map((roster) => PresenceChangedSchema.make({
+        kind: "presence-changed",
+        schemaVersion: 1,
+        roster
+      }))
+    )
+  )
+  const pull = yield* Stream.toPull(notifications)
   yield* write(JSON.stringify(LocalReplicaSocketReady.make({
     kind: "subscription-ready",
     schemaVersion: 1,
@@ -304,6 +353,7 @@ const notificationSocket = (
 
 const bearerNotificationRoutes = (options: LocalDaemonOptions) => HttpRouter.use(Effect.fn(function*(router) {
   const replica = yield* CanvasReplica
+  const presence = yield* PresenceRegistry
   yield* router.add("GET", localReplicaNotificationsPath, (request) => Effect.gen(function*() {
     if (!isWebSocketUpgrade(request)) return HttpServerResponse.empty({ status: 400 })
     const origin = request.headers.origin
@@ -313,7 +363,7 @@ const bearerNotificationRoutes = (options: LocalDaemonOptions) => HttpRouter.use
     const route = yield* HttpRouter.RouteContext
     const decoded = Schema.decodeUnknownOption(CanvasId)(route.params.canvasId)
     if (decoded._tag === "None") return HttpServerResponse.empty({ status: 400 })
-    return yield* notificationSocket(replica, decoded.value, options).pipe(
+    return yield* notificationSocket(replica, presence, decoded.value, options).pipe(
       Effect.catch(() => Effect.succeed(HttpServerResponse.empty()))
     )
   }))
@@ -322,6 +372,7 @@ const bearerNotificationRoutes = (options: LocalDaemonOptions) => HttpRouter.use
 const browserNotificationRoutes = HttpRouter.use(Effect.fn(function*(router) {
   const browser = yield* BrowserSession
   const replica = yield* CanvasReplica
+  const presence = yield* PresenceRegistry
   const path: `/${string}` = `${browser.path}${localReplicaNotificationsPath.slice(1)}`
   yield* router.add("GET", path, (request) => Effect.gen(function*() {
     if (!isWebSocketUpgrade(request)) return HttpServerResponse.empty({ status: 400 })
@@ -335,7 +386,7 @@ const browserNotificationRoutes = HttpRouter.use(Effect.fn(function*(router) {
     const route = yield* HttpRouter.RouteContext
     const decoded = Schema.decodeUnknownOption(CanvasId)(route.params.canvasId)
     if (decoded._tag === "None") return HttpServerResponse.empty({ status: 400 })
-    return yield* notificationSocket(replica, decoded.value, undefined).pipe(
+    return yield* notificationSocket(replica, presence, decoded.value, undefined).pipe(
       Effect.catch(() => Effect.succeed(HttpServerResponse.empty()))
     )
   }))
@@ -366,8 +417,8 @@ const representationFailureResponse = (reason: "application-binding" | "artifact
     reason
   }), { status: 500 })
 
-const invalidRepresentationRequest = "invalid"
-const oversizedRepresentationRequest = "too-large"
+const invalidRepresentationRequest = Schema.Literal("invalid").make("invalid")
+const oversizedRepresentationRequest = Schema.Literal("too-large").make("too-large")
 
 const representationRequestBody = <A, I>(
   request: HttpServerRequest.HttpServerRequest,
@@ -602,12 +653,14 @@ const daemonLayer = (
     const authority = SqliteCanvasAuthority.layer({ path: options.databasePath }).pipe(
       Layer.provide(AuthorityClockLive)
     )
-    const services = SqliteCanvasReplica.layer({ path: options.databasePath }).pipe(
+    const replica = SqliteCanvasReplica.layer({ path: options.databasePath }).pipe(
       Layer.provide(changeIds),
       Layer.provideMerge(authority)
     )
+    const services = Layer.merge(replica, PresenceRegistry.layer)
     const bearerRoutes = HttpApiBuilder.layer(LocalCanvasApi).pipe(
       Layer.provide(handlers(options)),
+      Layer.provide(presenceHandlers),
       Layer.provide(bearerAuthorizationLayer(options))
     )
     const browserCanvasRoutes = HttpRouter.use(Effect.fn(function*(router) {
@@ -615,6 +668,7 @@ const daemonLayer = (
       yield* Layer.build(
         HttpApiBuilder.layer(LocalCanvasApi).pipe(
           Layer.provide(handlers(options)),
+          Layer.provide(presenceHandlers),
           Layer.provide(browserAuthorizationLayer),
           Layer.provide(Layer.succeed(HttpRouter.HttpRouter, router.prefixed(session.path)))
         )
