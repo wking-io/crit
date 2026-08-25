@@ -18,6 +18,6 @@ Deploy the shared human collaboration surface entirely in a customer Cloudflare 
 
 - Authority conformance passes unchanged against the Durable Object.
 - Eviction, restart, retry, and concurrent submission preserve ordering and projection.
-- The first Workspace becomes default atomically and selection follows the documented order.
-- Cross-Workspace access fails at every API boundary.
+- The Installation uses one implicit default Workspace. v1 does not expose workspace switching.
+- Unauthorized access fails at every API boundary.
 - D1 contains no canonical Canvas content and no Queue participates in commits.

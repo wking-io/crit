@@ -48,7 +48,7 @@ Open the shared Canvas in a browser with no Crit install. Complete Access sign-i
 
 ### Installation workflow
 
-Deploy into an empty Cloudflare account from the published package. Create the first Workspace and confirm that it becomes the default. Add a second Workspace and confirm that login still chooses the first unless the user switches. Exercise a target-schema upgrade and confirm that Canvases and artifacts remain readable.
+Deploy into an empty Cloudflare account from the published package. Confirm that the Installation uses its implicit default Workspace without exposing workspace product. Exercise a target-schema upgrade and confirm that Canvases and artifacts remain readable.
 
 ## Project checks
 

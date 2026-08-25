@@ -11,7 +11,10 @@ This file records the product decisions supplied in the active architecture conv
 - After share, review is human-led. Teammates open the hosted UI through Cloudflare Access. They do not install Crit.
 - Crit has no remote agent interface, MCP server, Code Mode runtime, or OAuth agent grants.
 - One customer-hosted installation is one tenant. The v1 model has no Organization.
-- The first Workspace becomes the installation default. Login connects automatically. Workspace commands exist to switch.
+- Workspace stays in the data model as the authorization boundary. v1 does not expose Workspaces, ship workspace commands, or write workspace-switching product.
+- Authors add Frames through the CLI or local agents. The review UI does not add Frames.
+- A Frame's Representation is set when the Frame is created. There is no generic representation-change action. The only later content action is snapshot, which creates a new artifact Frame from a live Frame.
+- Contextual help and keyboard shortcuts use TanStack Hotkeys.
 - Frames refer to logical live-page Representations. Local and shared environments may resolve the same Frame differently.
 - The Frame Bridge has an installation skill and stays off by default in production environments.
 - The shared runtime is Cloudflare-native.

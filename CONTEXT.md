@@ -11,7 +11,7 @@ _Avoid_: Organization, tenant record
 
 **Default Workspace**: The first Workspace created in an Installation, unless an administrator later changes the default. Crit selects it automatically when a Person has not chosen another accessible Workspace.
 
-**Active Workspace**: The Workspace used for new links and Workspace-scoped browsing. Changing it does not move an existing linked Canvas.
+**Active Workspace**: The Workspace used for new links and Workspace-scoped browsing. Changing it does not move an existing linked Canvas. v1 uses the Installation's implicit default Workspace and does not expose switching.
 
 **Canvas**: A named review space containing Frames.
 
@@ -60,7 +60,7 @@ _Avoid_: Canvas Document, authoritative document
 
 **Artifact**: Immutable content stored outside the Canvas Ledger and addressed by a digest.
 
-**Capture**: The operation that creates an Artifact from a live Representation and adds a separate Artifact Frame.
+**Capture**: The operation that creates an Artifact from a live Representation and adds a separate Artifact Frame. A Frame's Representation is set at create. Capture is not a generic representation-change action.
 
 **Principal**: The authenticated identity making a request.
 

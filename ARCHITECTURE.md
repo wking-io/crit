@@ -30,7 +30,7 @@ packages/
 ├── frame-bridge/     versioned browser bridge
 ├── local/            crit dev, SQLite, and filesystem artifacts
 ├── cloudflare/       Worker, Durable Object, D1, R2, Access, and hosted UI
-└── cli/              local, sync, Workspace, and deployment commands
+└── cli/              local, sync, and deployment commands
 ```
 
 These boundaries are part of the rewrite contract. The old source tree is not migrated package by package.
@@ -108,14 +108,7 @@ Canvas creation records `createdBy` as provenance. Creation grants no permanent 
 
 ## Workspaces
 
-The first Workspace created becomes the installation default. Login selects an active Workspace in this order:
-
-1. The remembered Workspace, if the Person can still access it.
-2. The installation default, if accessible.
-3. The only accessible Workspace.
-4. The earliest-created accessible Workspace.
-
-Workspace commands exist to switch. A linked Canvas retains its explicit Workspace when the active Workspace changes.
+Workspace remains in the data model as the authorization boundary inside an Installation. v1 uses one implicit default Workspace. It does not expose Workspaces, ship workspace commands, or write workspace-switching product.
 
 ## Representations
 
