@@ -237,7 +237,7 @@ describe("review actions", () => {
     ]))
     expect(resolveReviewAction("open-url", frame)).toEqual({
       _tag: "effect",
-      effect: { _tag: "open-url", url: "https://example.com/a" }
+      effect: { _tag: "openUrl", url: "https://example.com/a" }
     })
     expect(resolveReviewAction("copy-node-id", frame)).toEqual({
       _tag: "effect",

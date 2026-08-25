@@ -38,7 +38,7 @@ describe("applyReviewEffect", () => {
     const open = vi.spyOn(window, "open").mockImplementation(() => null)
 
     applyReviewEffect(
-      { _tag: "open-url", url: "https://example.com" },
+      { _tag: "openUrl", url: "https://example.com" },
       { frameElement: null }
     )
 

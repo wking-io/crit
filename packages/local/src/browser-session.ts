@@ -27,7 +27,7 @@ const BrowserDigest = Schema.String.check(
 type BrowserDigest = typeof BrowserDigest.Type
 
 type BrowserAuthState = Data.TaggedEnum<{
-  readonly "awaiting-bootstrap": { readonly bootstrapDigest: BrowserDigest }
+  readonly awaitingBootstrap: { readonly bootstrapDigest: BrowserDigest }
   readonly bootstrapped: { readonly sessionDigest: BrowserDigest }
 }>
 const BrowserAuthState = Data.taggedEnum<BrowserAuthState>()
@@ -76,7 +76,7 @@ export class BrowserSession extends Context.Service<BrowserSession, BrowserSessi
         Encoding.encodeBase64Url(yield* crypto.randomBytes(64))
       )
       const state = yield* Ref.make<BrowserAuthState>(
-        BrowserAuthState["awaiting-bootstrap"]({
+        BrowserAuthState.awaitingBootstrap({
           bootstrapDigest: yield* digest(capability)
         })
       )
@@ -108,7 +108,7 @@ export class BrowserSession extends Context.Service<BrowserSession, BrowserSessi
             BrowserAuthState
           ] => {
             if (
-              current._tag === "awaiting-bootstrap" &&
+              current._tag === "awaitingBootstrap" &&
               current.bootstrapDigest === candidateDigest
             ) {
               return [
