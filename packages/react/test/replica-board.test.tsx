@@ -30,7 +30,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import {
   ReplicaBoard,
-  type FrameRepresentationResolver
+  ReplicaConnection,
+  ReplicaSubmitNotice,
+  type FrameRepresentationResolver,
+  type FrameSnapshotter
 } from "../src/index.js"
 import { requiredBoard } from "./required-board.js"
 
@@ -219,6 +222,10 @@ const unusedResolver: FrameRepresentationResolver = {
   resolve: () => Effect.die("empty canvas must not resolve a Frame")
 }
 
+const unusedSnapshotter: FrameSnapshotter = {
+  capture: () => Effect.die("snapshot must not run")
+}
+
 const syncRegion = () => {
   const region = container.querySelector("[aria-label$='sync status']")
   expect(region).toBeInstanceOf(HTMLElement)
@@ -305,6 +312,56 @@ describe("ReplicaBoard", () => {
     expect(boardStatus).toContain("Empty is synchronized.")
     expect(boardStatus).toContain("Empty has no Frames.")
     expect(container.querySelector("iframe")).toBeNull()
+  })
+
+  it("shows connection and submit alerts and locks mutation while disconnected", async() => {
+    const onSubmit = vi.fn()
+    const failure = decodeFailure({
+      _tag: "entity-not-found",
+      commandIndex: 0,
+      entity: "frame",
+      id: "frame_missing"
+    })
+
+    await act(async() => render(
+      <ReplicaBoard
+        {...requiredBoard}
+        connection={ReplicaConnection.lost({ reason: "socket closed." })}
+        notice={ReplicaSubmitNotice.rejected({ failure })}
+        onSubmit={onSubmit}
+        resolver={checkoutResolver}
+        snapshotter={unusedSnapshotter}
+        view={synchronized}
+      />
+    ))
+
+    expect([...container.querySelectorAll("[role='alert']")].map((node) => node.textContent))
+      .toEqual([
+        "Connection lost. socket closed. Showing the last known state.",
+        "Your last edit was not applied. Rejected because its frame no longer exists."
+      ])
+    expect(container.querySelector("[aria-label='Review controls']")).toBeNull()
+    expect(onSubmit).not.toHaveBeenCalled()
+  })
+
+  it("keeps mutation available without a lost connection", async() => {
+    await act(async() => render(
+      <ReplicaBoard
+        {...requiredBoard}
+        notice={ReplicaSubmitNotice.unavailable({ reason: "daemon unavailable." })}
+        onSubmit={() => undefined}
+        resolver={checkoutResolver}
+        snapshotter={unusedSnapshotter}
+        view={synchronized}
+      />
+    ))
+
+    expect(container.querySelector("[role='alert']")?.textContent).toBe(
+      "Your last edit was not applied. daemon unavailable."
+    )
+    expect(container.textContent).not.toContain("Connection lost.")
+    expect(container.querySelector("[aria-label='Review controls']"))
+      .toBeInstanceOf(HTMLElement)
   })
 
   it("lists mixed pending states in replica order", async() => {

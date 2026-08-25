@@ -320,9 +320,10 @@ export const useReplicaSession = (args: {
       })))
     }
     return run(Effect.result(ports.change({ canvasId, commands }))).then((changed) => {
+      const action = ReplicaSessionAction.submitted({ result: changed })
       setSession((previous) => reduceSession(
         previous,
-        ReplicaSessionAction.submitted({ result: changed })
+        action
       ))
       return changed
     })
