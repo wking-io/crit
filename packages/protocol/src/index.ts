@@ -8,8 +8,14 @@ export {
 } from "./change.js"
 export { CursorSchema, ProtocolValue, SequenceSchema } from "./value.js"
 export type { Cursor, Sequence } from "./value.js"
-export { ReplicaChangedSchema } from "./notification.js"
-export type { ReplicaChanged } from "./notification.js"
+export {
+  PresenceChangedSchema,
+  ReplicaChangedSchema
+} from "./notification.js"
+export type {
+  PresenceChanged,
+  ReplicaChanged
+} from "./notification.js"
 export {
   CritProjectManifestV2,
   decodeCritProjectManifestV2,

@@ -1,4 +1,9 @@
-import type { CanvasChangeFailure, CanvasCommandBatch } from "@crit/domain"
+import {
+  presenceKey,
+  type CanvasChangeFailure,
+  type CanvasCommandBatch,
+  type PresenceRoster
+} from "@crit/domain"
 import type { ReplicaView } from "@crit/replica"
 import { Match } from "effect"
 import type { ReactElement } from "react"
@@ -17,6 +22,7 @@ interface ReplicaBoardBaseProps {
   readonly onCameraChange: (camera: CanvasCamera) => void
   readonly selection: CanvasSelection
   readonly onSelectionChange: (selection: CanvasSelection) => void
+  readonly presence?: PresenceRoster | undefined
   readonly onEffect?: (effect: ReviewClientEffect) => void
   readonly className?: string
 }
@@ -78,6 +84,10 @@ const entryStateCopy = (state: PendingChange["state"]): string =>
 const entryCopy = (change: PendingChange): string =>
   `${entryStateCopy(change.state)} Proposed by ${change.author.displayName}.`
 
+const connectedPersonCopy = (
+  person: PresenceRoster["people"][number]
+): string => person.person.displayName
+
 const outstandingHeadline = (
   title: ReplicaView["projection"]["title"],
   changes: readonly [PendingChange, ...PendingChange[]]
@@ -113,14 +123,30 @@ export function ReplicaBoard({
   onEffect,
   onSelectionChange,
   onSubmit,
+  presence,
   resolver,
   selection,
   snapshotter,
   view
 }: ReplicaBoardProps): ReactElement {
   const status = statusFromPending(view.pending)
+  const showPresence = presence !== undefined && presence.people.length > 0
   return (
     <div className={className}>
+      {showPresence
+        ? (
+          <section
+            aria-label={`${view.projection.title} presence`}
+            role="status"
+          >
+            <ul>
+              {presence.people.map((person) => (
+                <li key={presenceKey(person)}>{connectedPersonCopy(person)}</li>
+              ))}
+            </ul>
+          </section>
+        )
+        : null}
       <section aria-label={`${view.projection.title} sync status`}>
         <p role={statusTone(status)}>{statusCopy(view.projection.title, status)}</p>
         {status._tag === "outstanding"
@@ -139,7 +165,7 @@ export function ReplicaBoard({
           : { onSubmit, snapshotter })}
         camera={camera}
         onCameraChange={onCameraChange}
-        onEffect={onEffect}
+        {...(onEffect === undefined ? {} : { onEffect })}
         onSelectionChange={onSelectionChange}
         projection={view.projection}
         resolver={resolver}

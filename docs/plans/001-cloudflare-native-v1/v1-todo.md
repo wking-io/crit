@@ -8,14 +8,13 @@ This file is the current inventory. Phase docs own the prove. [Decision record](
 
 ## Next
 
-- [ ] Presence of people and local Agent runs.
+- [ ] Person vs Agent authorship in the UI. Pending changes show a local display name. Agent work must not look like the Person who ran the Agent did it.
 
 ## Remaining
 
 ### Local review
 
 Plan: [phase 5](phase-05-review-ui.md), [phase 3](phase-03-local-daemon-and-cli.md), [phase 4](phase-04-representations-and-bridge.md).
-- [ ] Person vs Agent authorship in the UI. Pending changes show a local display name. Agent work must not look like the Person who ran the Agent did it.
 - [ ] Shared pending, conflict, unavailable, and offline states. Local pending/conflict/sync exists.
 - [ ] Inspect a Representation. `RepresentationRuntime` in the overview still names it. Nothing implements it.
 - [ ] Frame Bridge capability negotiation, route/revision reporting, highlighting, authorized inspection.
@@ -37,6 +36,7 @@ Plan: [phase 6](phase-06-cloudflare-platform.md), [phase 7](phase-07-sync-and-sh
 - [ ] Worker, static assets, Access, D1, R2 artifacts. `packages/cloudflare` has the one-Canvas SQLite authority and a workerd Durable Object. The hosted Worker is still missing.
 - [ ] Hosted review UI served from the Worker.
 - [ ] Teammate signs in with Access, views Frames and shared previews, and sets review status. No Crit install.
+- [ ] Presence of Access-authenticated people viewing a shared Canvas. Local review does not attend.
 - [ ] Author's local replica receives the reviewer's accepted changes.
 
 ### Agents

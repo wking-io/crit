@@ -2,6 +2,7 @@ import {
   CanvasChangeFailureSchema,
   decodeCanvasCommandBatch,
   decodeCanvasProjection,
+  decodePresenceRoster,
   Id
 } from "@crit/domain"
 import {
@@ -131,6 +132,26 @@ const emptySynchronized = decodeView({
   pending: []
 })
 
+const presence = decodePresenceRoster({
+  _tag: "presence-roster",
+  canvasId: projection.canvasId,
+  people: [{
+    _tag: "connected-person",
+    person: {
+      _tag: "person",
+      personId: "person_presence",
+      displayName: "Ada",
+      email: { _tag: "unspecified" }
+    }
+  }]
+})
+
+const emptyPresence = decodePresenceRoster({
+  _tag: "presence-roster",
+  canvasId: projection.canvasId,
+  people: []
+})
+
 const mixed = decodeView({
   _tag: "replica-view",
   canvasId: projection.canvasId,
@@ -216,6 +237,44 @@ afterEach(async() => {
 })
 
 describe("ReplicaBoard", () => {
+  it("lists connected people", async() => {
+    await act(async() => render(
+      <ReplicaBoard
+        {...requiredBoard}
+        presence={presence}
+        resolver={checkoutResolver}
+        view={synchronized}
+      />
+    ))
+    const region = container.querySelector("[aria-label='Review presence']")
+    expect(region?.getAttribute("role")).toBe("status")
+    expect([...region?.querySelectorAll("li") ?? []].map((row) => row.textContent))
+      .toEqual(["Ada"])
+    expect(region?.textContent).not.toContain("run by")
+    expect(region?.textContent).not.toContain("Proposed by")
+  })
+
+  it("hides presence when the roster is absent or empty", async() => {
+    await act(async() => render(
+      <ReplicaBoard
+        {...requiredBoard}
+        resolver={checkoutResolver}
+        view={synchronized}
+      />
+    ))
+    expect(container.querySelector("[aria-label='Review presence']")).toBeNull()
+
+    await act(async() => render(
+      <ReplicaBoard
+        {...requiredBoard}
+        presence={emptyPresence}
+        resolver={checkoutResolver}
+        view={synchronized}
+      />
+    ))
+    expect(container.querySelector("[aria-label='Review presence']")).toBeNull()
+  })
+
   it("shows synchronized copy and the existing board", async() => {
     await act(async() => render(
       <ReplicaBoard {...requiredBoard}  className="workspace" resolver={checkoutResolver} view={synchronized} />

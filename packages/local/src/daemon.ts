@@ -366,8 +366,8 @@ const representationFailureResponse = (reason: "application-binding" | "artifact
     reason
   }), { status: 500 })
 
-const invalidRepresentationRequest = "invalid"
-const oversizedRepresentationRequest = "too-large"
+const invalidRepresentationRequest = Schema.Literal("invalid").make("invalid")
+const oversizedRepresentationRequest = Schema.Literal("too-large").make("too-large")
 
 const representationRequestBody = <A, I>(
   request: HttpServerRequest.HttpServerRequest,
