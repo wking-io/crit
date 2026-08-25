@@ -36,7 +36,7 @@ import {
 import { Data, Effect, Result, Schema } from "effect"
 import type { SqlError } from "effect/unstable/sql/SqlError"
 
-import type { DurableSqlite } from "./database.js"
+import type { DurableSqlite } from "./durable-sqlite.js"
 import {
   decodeStored,
   encodeDurableSqlText,

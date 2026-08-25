@@ -33,7 +33,7 @@ Plan: [phase 6](phase-06-cloudflare-platform.md), [phase 7](phase-07-sync-and-sh
 - [ ] First share with share/import IDs and a projection digest.
 - [ ] Two author replicas edit offline and converge.
 - [ ] Recoverable remote conflicts that keep dependent pending work. Local replica policy exists.
-- [ ] Worker, static assets, Access, D1, one SQLite Durable Object per Canvas, R2 artifacts. `packages/cloudflare` contains the one-Canvas SQLite authority.
+- [ ] Worker, static assets, Access, D1, R2 artifacts. `packages/cloudflare` has the one-Canvas SQLite authority and a workerd Durable Object. The hosted Worker is still missing.
 - [ ] Hosted review UI served from the Worker.
 - [ ] Teammate signs in with Access, views Frames and shared previews, and sets review status. No Crit install.
 - [ ] Author's local replica receives the reviewer's accepted changes.

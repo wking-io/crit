@@ -14,5 +14,8 @@ export default defineConfig({
       "@crit/protocol": fileURLToPath(new URL("../protocol/src/index.ts", import.meta.url))
     }
   },
-  test: { include: [`${packageRoot}test/**/*.test.ts`] }
+  test: {
+    include: [`${packageRoot}test/**/*.test.ts`],
+    exclude: [`${packageRoot}test/**/*.workers.test.ts`]
+  }
 })

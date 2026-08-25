@@ -1,0 +1,19 @@
+{
+  "name": "crit-cloudflare",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-08-25",
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "CANVASES",
+        "class_name": "CanvasDurableObject"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["CanvasDurableObject"]
+    }
+  ]
+}

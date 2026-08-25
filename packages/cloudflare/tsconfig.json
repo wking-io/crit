@@ -5,7 +5,7 @@
     "outDir": "dist",
     "tsBuildInfoFile": "dist/tsconfig.tsbuildinfo",
     "baseUrl": ".",
-    "types": ["node"],
+    "types": ["node", "@cloudflare/workers-types"],
     "paths": {
       "@crit/authority": ["../authority/src/index.ts"],
       "@crit/authority/adapter": ["../authority/src/adapter.ts"],
