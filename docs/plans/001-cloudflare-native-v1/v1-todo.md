@@ -8,14 +8,13 @@ This file is the current inventory. Phase docs own the prove. [Decision record](
 
 ## Next
 
-- [ ] Shared pending, conflict, unavailable, and offline states. Local pending/conflict/sync exists.
+- [ ] Inspect a Representation. `RepresentationRuntime` in the overview still names it. Nothing implements it.
 
 ## Remaining
 
 ### Local review
 
 Plan: [phase 5](phase-05-review-ui.md), [phase 3](phase-03-local-daemon-and-cli.md), [phase 4](phase-04-representations-and-bridge.md).
-- [ ] Shared pending, conflict, unavailable, and offline states. Local pending/conflict/sync exists.
 - [ ] Inspect a Representation. `RepresentationRuntime` in the overview still names it. Nothing implements it.
 - [ ] Frame Bridge capability negotiation, route/revision reporting, highlighting, authorized inspection.
 - [ ] Bridge off in ordinary production. Opt-in only on shared review previews.
@@ -79,6 +78,9 @@ Local Frames authoring on one machine.
 - Review UI no longer adds Frames
 - Contextual help and keyboard shortcuts from the review action table
 - Snapshot a live Frame into a new artifact Frame (`S`)
+- Local review pending resolves. The daemon reconciles after open and change.
+- Mid-session daemon loss keeps the last projection and shows a connection alert.
+- Enqueue rejection is a submit notice. Conflict repair stays later.
 
 ## Out of v1
 
