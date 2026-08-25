@@ -30,7 +30,11 @@ import {
   type RenderPlan
 } from "@crit/representations"
 import {
+  AgentSessionRejected,
+  LocalAgentApi,
   LocalApiAuthorization,
+  type AgentSessionDeclaration,
+  type AgentSessionGrant,
   type LocalDaemonStatus,
   LocalApiOriginRejected,
   type LocalApiToken,
@@ -79,6 +83,7 @@ export type StatusFailure = TransportFailure
 export type OpenFailure = TransportFailure | CanvasNotFound
 export type ChangeFailure = TransportFailure | CanvasNotFound | ChangeRejected
 export type SyncFailure = TransportFailure | CanvasNotFound
+export type AgentBeginFailure = TransportFailure | AgentSessionRejected
 export class LocalSubscriptionProtocolError extends Schema.TaggedError<LocalSubscriptionProtocolError>()(
   "LocalSubscriptionProtocolError",
   { message: Schema.String }
@@ -99,6 +104,9 @@ export interface LocalCanvasClientService {
   readonly open: (canvasId: CanvasId) => Effect.Effect<ReplicaView, OpenFailure>
   readonly change: (input: ReplicaChange) => Effect.Effect<ReplicaChangeReceipt, ChangeFailure>
   readonly sync: (canvasId: CanvasId) => Effect.Effect<SyncResult, SyncFailure>
+  readonly agentBegin: (
+    declaration: AgentSessionDeclaration
+  ) => Effect.Effect<AgentSessionGrant, AgentBeginFailure>
   readonly subscribe: (canvasId: CanvasId) => Effect.Effect<
     Stream.Stream<ReplicaChanged, SubscriptionFailure>,
     SubscriptionFailure,
@@ -340,21 +348,22 @@ export class LocalCanvasClient extends Context.Service<
   static readonly layer = (options: LocalClientOptions) => {
     const origin = options._tag === "bearer" ? options.origin : undefined
     return Layer.effect(LocalCanvasClient, Effect.gen(function*() {
-      const http = yield* HttpApiClient.make(LocalCanvasApi, {
-        transformClient: HttpClient.mapRequest(flow(
-          HttpClientRequest.prependUrl(localUrl(options, "/").replace(/\/$/, "")),
-          (request) => HttpClientRequest.setHeader(request, localApiVersionHeader, localApiVersion),
-          origin !== undefined
-            ? (request) => HttpClientRequest.setHeader(request, "origin", origin)
-            : (request) => request
-        ))
-      })
+      const transformClient = HttpClient.mapRequest(flow(
+        HttpClientRequest.prependUrl(localUrl(options, "/").replace(/\/$/, "")),
+        (request) => HttpClientRequest.setHeader(request, localApiVersionHeader, localApiVersion),
+        origin !== undefined
+          ? (request) => HttpClientRequest.setHeader(request, "origin", origin)
+          : (request) => request
+      ))
+      const http = yield* HttpApiClient.make(LocalCanvasApi, { transformClient })
+      const agent = yield* HttpApiClient.make(LocalAgentApi, { transformClient })
       return LocalCanvasClient.of({
         status: () => withBrowserCredentials(options, http.status()),
         create: (input) => withBrowserCredentials(options, http.create({ payload: CreateCanvas.make(input) })),
         open: (canvasId) => withBrowserCredentials(options, http.open({ params: { canvasId } })),
         change: (input) => withBrowserCredentials(options, http.change({ payload: input })),
         sync: (canvasId) => withBrowserCredentials(options, http.sync({ params: { canvasId } })),
+        agentBegin: (declaration) => withBrowserCredentials(options, agent.begin({ payload: declaration })),
         subscribe: (canvasId) => subscribe(options, canvasId)
       })
     })).pipe(

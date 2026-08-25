@@ -2,7 +2,9 @@ import {
   presenceKey,
   type CanvasChangeFailure,
   type CanvasCommandBatch,
-  type PresenceRoster
+  type ExecutionId,
+  type PresenceRoster,
+  type ReportedRuntime
 } from "@crit/domain"
 import type { ReplicaView } from "@crit/replica"
 import { Data, Match } from "effect"
@@ -85,11 +87,40 @@ const entryStateCopy = (state: PendingChange["state"]): string =>
 const authorCopy = (author: PendingChange["author"]): string =>
   Match.value(author).pipe(Match.tagsExhaustive({
     person: ({ displayName }) => `Proposed by ${displayName}.`,
-    agent: ({ displayName }) => `Proposed by Agent ${displayName}.`
+    agent: ({ displayName, runBy }) => `Proposed by Agent ${displayName}. Run by ${runBy}.`
   }))
 
-const entryCopy = (change: PendingChange): string =>
-  `${entryStateCopy(change.state)} ${authorCopy(change.author)}`
+const runtimeCopy = (runtime: ReportedRuntime | undefined): string => {
+  if (runtime === undefined) return ""
+  const harness = runtime.harness.version === undefined
+    ? runtime.harness.name
+    : `${runtime.harness.name} ${runtime.harness.version}`
+  const model = runtime.model === undefined
+    ? undefined
+    : runtime.model.version === undefined
+      ? runtime.model.name
+      : `${runtime.model.name} ${runtime.model.version}`
+  const via = model === undefined ? `Via reported ${harness}.` : `Via reported ${harness} (${model}).`
+  const session = runtime.sessionId === undefined ? undefined : `Reported session ${runtime.sessionId}.`
+  const task = runtime.taskId === undefined ? undefined : `Reported task ${runtime.taskId}.`
+  return [via, session, task].filter((part) => part !== undefined).join(" ")
+}
+
+const executionCopy = (executionId: ExecutionId): string => {
+  const visible = executionId.length > 14 ? `${executionId.slice(0, 14)}…` : executionId
+  return `Run ${visible}`
+}
+
+const entryCopy = (change: PendingChange): string => {
+  if (change.author._tag === "person") {
+    return `${entryStateCopy(change.state)} ${authorCopy(change.author)}`
+  }
+  const runtime = runtimeCopy(change.author.reportedRuntime)
+  const execution = executionCopy(change.author.executionId)
+  return runtime === ""
+    ? `${entryStateCopy(change.state)} ${authorCopy(change.author)} ${execution}`
+    : `${entryStateCopy(change.state)} ${authorCopy(change.author)} ${runtime} ${execution}`
+}
 
 const connectedPersonCopy = (
   person: PresenceRoster["people"][number]

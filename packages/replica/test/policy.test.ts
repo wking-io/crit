@@ -71,7 +71,7 @@ describe("ReplicaPolicy reconciliation", () => {
     })
   })
 
-  it("names an agent author on the pending view without the delegating person", () => {
+  it("names an agent author on the pending view with runBy display name, not a PersonSnapshot", () => {
     const enqueuedAgent = Result.getOrThrow(ReplicaPolicy.enqueue(
       initial(),
       ReplicaModel.change({ canvasId, commands }),
@@ -81,7 +81,37 @@ describe("ReplicaPolicy reconciliation", () => {
     const viewed = Result.getOrThrow(ReplicaPolicy.view(enqueuedAgent))
     expect(viewed.pending[0]?.author).toEqual({
       _tag: "agent",
-      displayName: agent.principal.agent.displayName
+      displayName: agent.principal.agent.displayName,
+      runBy: person.principal.person.displayName,
+      executionId: agent.executionId
+    })
+    expect(viewed.pending[0]?.author).not.toHaveProperty("delegatedBy")
+  })
+
+  it("copies optional reported runtime onto the agent pending author", () => {
+    const runtime = {
+      _tag: "reported-runtime" as const,
+      source: "client-reported" as const,
+      harness: { name: "claude-code" },
+      model: { name: "claude-fable-5" }
+    }
+    const withRuntime = Schema.decodeUnknownSync(AgentInvocation)({
+      ...agent,
+      reportedRuntime: runtime
+    })
+    const enqueuedAgent = Result.getOrThrow(ReplicaPolicy.enqueue(
+      initial(),
+      ReplicaModel.change({ canvasId, commands }),
+      withRuntime,
+      changeId
+    ))
+    const viewed = Result.getOrThrow(ReplicaPolicy.view(enqueuedAgent))
+    expect(viewed.pending[0]?.author).toEqual({
+      _tag: "agent",
+      displayName: "Codex",
+      runBy: "Replica",
+      executionId: "execution_replica_policy",
+      reportedRuntime: runtime
     })
     expect(viewed.pending[0]?.author).not.toHaveProperty("delegatedBy")
   })

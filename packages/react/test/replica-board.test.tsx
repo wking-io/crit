@@ -81,7 +81,12 @@ const decodeFailure = Schema.decodeUnknownSync(CanvasChangeFailureSchema)
 
 const decodeAuthor = Schema.decodeUnknownSync(PendingAuthor)
 const personAuthor = decodeAuthor({ _tag: "person", displayName: "Ada" })
-const agentAuthor = decodeAuthor({ _tag: "agent", displayName: "Codex" })
+const agentAuthor = decodeAuthor({
+  _tag: "agent",
+  displayName: "Codex",
+  runBy: "Ada",
+  executionId: "execution_9f3abcde"
+})
 
 const pendingChange = (
   changeId: string,
@@ -338,7 +343,7 @@ describe("ReplicaBoard", () => {
     expect(container.querySelector("[aria-label='Checkout']")).toBeInstanceOf(HTMLElement)
   })
 
-  it("names an agent proposal by the agent, not a delegating person", async() => {
+  it("names an agent proposal with the runner and execution detail", async() => {
     const agentProposed = decodeView({
       _tag: "replica-view",
       canvasId: projection.canvasId,
@@ -354,9 +359,39 @@ describe("ReplicaBoard", () => {
       "Review has pending changes."
     )
     expect(region?.querySelector("li")?.textContent).toBe(
-      "Waiting to sync. Proposed by Agent Codex."
+      "Waiting to sync. Proposed by Agent Codex. Run by Ada. Run execution_9f3a…"
     )
-    expect(region?.textContent).not.toContain("Ada")
+    expect(region?.textContent).toContain("Run by")
+  })
+
+  it("appends reported runtime only for present fields", async() => {
+    const agentWithRuntime = decodeAuthor({
+      _tag: "agent",
+      displayName: "Codex",
+      runBy: "Ada",
+      executionId: "execution_9f3abcde",
+      reportedRuntime: {
+        _tag: "reported-runtime",
+        source: "client-reported",
+        harness: { name: "claude-code" },
+        model: { name: "claude-fable-5" },
+        sessionId: "sess_1"
+      }
+    })
+    const agentProposed = decodeView({
+      _tag: "replica-view",
+      canvasId: projection.canvasId,
+      acknowledgedCursor: "cursor_ack",
+      projection,
+      pending: [pendingChange("change_agent_runtime", Ready.make({}), rename, agentWithRuntime)]
+    })
+    await act(async() => render(
+      <ReplicaBoard {...requiredBoard} resolver={checkoutResolver} view={agentProposed} />
+    ))
+    expect(syncRegion()?.querySelector("li")?.textContent).toBe(
+      "Waiting to sync. Proposed by Agent Codex. Run by Ada. Via reported claude-code (claude-fable-5). Reported session sess_1. Run execution_9f3a…"
+    )
+    expect(syncRegion()?.textContent).not.toContain("Reported task")
   })
 
   it("distinguishes a Person named Codex from an Agent named Codex", async() => {
@@ -379,8 +414,10 @@ describe("ReplicaBoard", () => {
       .map((node) => node.textContent)
     expect(rows).toEqual([
       "Waiting to sync. Proposed by Codex.",
-      "Waiting to sync. Proposed by Agent Codex."
+      "Waiting to sync. Proposed by Agent Codex. Run by Ada. Run execution_9f3a…"
     ])
+    expect(rows[1]).toContain("Run by")
+    expect(rows[0]).not.toContain("Run by")
   })
 
   it("drops the queue when a later view is synchronized", async() => {

@@ -31,6 +31,7 @@ export type {
   ProjectManifestFailure
 } from "./project-manifest.js"
 export {
+  AGENT_SESSION_ENV,
   inspectLocalDaemon,
   LocalDaemonIdentityMismatch,
   LocalDaemonProtocolFailure,

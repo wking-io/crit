@@ -1,4 +1,5 @@
 import {
+  AgentSnapshot,
   ApplicationRouteRepresentation,
   ArtifactId,
   ArtifactRepresentation,
@@ -6,6 +7,7 @@ import {
   CanvasId,
   CanvasTitle,
   Id,
+  ReportedRuntime,
   RootedRoute,
   Sha256Digest,
   WebUrlRepresentation
@@ -18,6 +20,7 @@ import {
   AccessPersonResponseRejected,
   AccessPersonUnauthenticated,
   InstallationUrlInvalid,
+  AGENT_SESSION_ENV,
   inspectLocalDaemon,
   LocalDaemonIdentityMismatch,
   LocalDaemonDescriptor,
@@ -503,6 +506,156 @@ const layout = Command.make("layout", {
   yield* Console.log(formatCanvasLayout(current))
 })).pipe(Command.withDescription("Print Canvas Frame geometry"))
 
+const runtimeFromFlags = (flags: {
+  readonly harness: Option.Option<string>
+  readonly harnessVersion: Option.Option<string>
+  readonly model: Option.Option<string>
+  readonly modelProvider: Option.Option<string>
+  readonly modelVersion: Option.Option<string>
+  readonly session: Option.Option<string>
+  readonly task: Option.Option<string>
+}) => Effect.gen(function*() {
+  const hasDetail = Option.isSome(flags.harnessVersion)
+    || Option.isSome(flags.model)
+    || Option.isSome(flags.modelProvider)
+    || Option.isSome(flags.modelVersion)
+    || Option.isSome(flags.session)
+    || Option.isSome(flags.task)
+  return yield* Option.match(flags.harness, {
+    onNone: () => hasDetail
+      ? Effect.fail(new CliOperationalFailure({
+        message: "--harness is required when reporting runtime details"
+      }))
+      : Effect.succeed(undefined),
+    onSome: (harnessName) => Effect.try({
+      try: () => {
+        const harness = Option.isSome(flags.harnessVersion)
+          ? { name: harnessName, version: flags.harnessVersion.value }
+          : { name: harnessName }
+        const model = Option.isSome(flags.model)
+          ? Option.isSome(flags.modelProvider) && Option.isSome(flags.modelVersion)
+            ? {
+              name: flags.model.value,
+              provider: flags.modelProvider.value,
+              version: flags.modelVersion.value
+            }
+            : Option.isSome(flags.modelProvider)
+              ? { name: flags.model.value, provider: flags.modelProvider.value }
+              : Option.isSome(flags.modelVersion)
+                ? { name: flags.model.value, version: flags.modelVersion.value }
+                : { name: flags.model.value }
+          : undefined
+        const sessionId = Option.getOrUndefined(flags.session)
+        const taskId = Option.getOrUndefined(flags.task)
+        if (model !== undefined && sessionId !== undefined && taskId !== undefined) {
+          return ReportedRuntime.make({
+            source: "client-reported", harness, model, sessionId, taskId
+          })
+        }
+        if (model !== undefined && sessionId !== undefined) {
+          return ReportedRuntime.make({ source: "client-reported", harness, model, sessionId })
+        }
+        if (model !== undefined && taskId !== undefined) {
+          return ReportedRuntime.make({ source: "client-reported", harness, model, taskId })
+        }
+        if (sessionId !== undefined && taskId !== undefined) {
+          return ReportedRuntime.make({ source: "client-reported", harness, sessionId, taskId })
+        }
+        if (model !== undefined) {
+          return ReportedRuntime.make({ source: "client-reported", harness, model })
+        }
+        if (sessionId !== undefined) {
+          return ReportedRuntime.make({ source: "client-reported", harness, sessionId })
+        }
+        if (taskId !== undefined) {
+          return ReportedRuntime.make({ source: "client-reported", harness, taskId })
+        }
+        return ReportedRuntime.make({ source: "client-reported", harness })
+      },
+      catch: () => new CliOperationalFailure({ message: "Invalid reported runtime" })
+    })
+  })
+})
+
+const agentBegin = Command.make("begin", {
+  dataRoot,
+  json,
+  name: Flag.string("name").pipe(Flag.withDescription("Agent display name")),
+  harness: Flag.string("harness").pipe(
+    Flag.withDescription("Reported harness name"),
+    Flag.optional
+  ),
+  harnessVersion: Flag.string("harness-version").pipe(
+    Flag.withDescription("Reported harness version"),
+    Flag.optional
+  ),
+  model: Flag.string("model").pipe(
+    Flag.withDescription("Reported model name"),
+    Flag.optional
+  ),
+  modelProvider: Flag.string("model-provider").pipe(
+    Flag.withDescription("Reported model provider"),
+    Flag.optional
+  ),
+  modelVersion: Flag.string("model-version").pipe(
+    Flag.withDescription("Reported model version"),
+    Flag.optional
+  ),
+  session: Flag.string("session").pipe(
+    Flag.withDescription("External session reference"),
+    Flag.optional
+  ),
+  task: Flag.string("task").pipe(
+    Flag.withDescription("External task reference"),
+    Flag.optional
+  )
+}, ({
+  dataRoot: root,
+  harness,
+  harnessVersion,
+  json: asJson,
+  model,
+  modelProvider,
+  modelVersion,
+  name,
+  session,
+  task
+}) => Effect.gen(function*() {
+  const displayName = yield* decode(AgentSnapshot.fields.displayName, name, "name")
+  const reportedRuntime = yield* runtimeFromFlags({
+    harness,
+    harnessVersion,
+    model,
+    modelProvider,
+    modelVersion,
+    session,
+    task
+  })
+  const declaration = reportedRuntime === undefined
+    ? { displayName }
+    : { displayName, reportedRuntime }
+  const grant = yield* connected(root, ({ client }) => client.agentBegin(declaration).pipe(Effect.mapError((failure) => Match.value(failure).pipe(
+    Match.when({ _tag: "AgentSessionRejected", reason: "session-limit" }, () =>
+      new CliOperationalFailure({ message: "Crit agent session limit reached" })),
+    Match.when({ _tag: "AgentSessionRejected" }, () =>
+      new CliOperationalFailure({ message: "Crit agent session must be started by the local person" })),
+    Match.orElse(() => new CliOperationalFailure({ message: "Unable to begin an agent session" }))
+  ))))
+  if (asJson) {
+    return yield* Console.log(JSON.stringify({
+      token: Redacted.value(grant.token),
+      agent: Schema.encodeSync(AgentSnapshot)(grant.agent),
+      executionId: grant.executionId
+    }))
+  }
+  yield* Console.log(`export ${AGENT_SESSION_ENV}=${Redacted.value(grant.token)}`)
+})).pipe(Command.withDescription("Begin a daemon-minted agent session"))
+
+const agent = Command.make("agent").pipe(
+  Command.withDescription("Agent session tools"),
+  Command.withSubcommands([agentBegin])
+)
+
 export const command = crit.pipe(Command.withSubcommands([
   init,
   dev,
@@ -511,7 +664,8 @@ export const command = crit.pipe(Command.withSubcommands([
   create,
   open,
   addFrame,
-  layout
+  layout,
+  agent
 ]))
 
 export const main = Command.run(command, { version: "0.0.0" })
