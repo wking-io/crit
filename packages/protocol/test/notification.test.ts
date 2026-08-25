@@ -33,7 +33,8 @@ describe("PresenceChanged", () => {
         person: {
           _tag: "person",
           personId: "person_notification",
-          displayName: "Presence Person"
+          displayName: "Presence Person",
+          email: { _tag: "unspecified" }
         }
       }]
     }

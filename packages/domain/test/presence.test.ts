@@ -10,7 +10,8 @@ import {
 const person = {
   _tag: "person",
   personId: "person_will",
-  displayName: "Will King"
+  displayName: "Will King",
+  email: { _tag: "unspecified" }
 }
 
 const connectedPerson = {

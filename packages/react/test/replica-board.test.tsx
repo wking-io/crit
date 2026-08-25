@@ -140,7 +140,8 @@ const presence = decodePresenceRoster({
     person: {
       _tag: "person",
       personId: "person_presence",
-      displayName: "Ada"
+      displayName: "Ada",
+      email: { _tag: "unspecified" }
     }
   }]
 })
