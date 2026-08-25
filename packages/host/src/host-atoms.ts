@@ -6,7 +6,7 @@ import {
 } from "@crit/client"
 import { CanvasTitle, Id } from "@crit/domain"
 import { layerMemory, layerStorage, type ReplicaSessionRun } from "@crit/react"
-import { Effect, Layer, Result, Schema } from "effect"
+import { Data, Effect, Layer, Result, Schema } from "effect"
 import { FetchHttpClient } from "effect/unstable/http"
 import { KeyValueStore } from "effect/unstable/persistence"
 import { Atom, AsyncResult } from "effect/unstable/reactivity"
@@ -19,10 +19,12 @@ import { localReplicaSessionPorts } from "./local-replica-session-ports.js"
 export const localCanvasId = Id.canvas("canvas_local")
 const localCanvasTitle = Schema.decodeUnknownSync(CanvasTitle)("Untitled")
 
-export type HostScreen =
-  | { readonly _tag: "invalid" }
-  | { readonly _tag: "connecting" }
-  | { readonly _tag: "ready"; readonly props: CritHostProps }
+export type HostScreen = Data.TaggedEnum<{
+  readonly invalid: {}
+  readonly connecting: {}
+  readonly ready: { readonly props: CritHostProps }
+}>
+export const HostScreen = Data.taggedEnum<HostScreen>()
 
 const sessionStore = () => {
   try {
@@ -42,14 +44,14 @@ const hostLayer = (descriptor: LocalBrowserConnectionDescriptor) => {
   return Layer.merge(clients, sessionStore())
 }
 
-const invalidScreen: HostScreen = { _tag: "invalid" }
-const connectingScreen: HostScreen = { _tag: "connecting" }
+const invalidScreen = HostScreen.invalid()
+const connectingScreen = HostScreen.connecting()
 
 const screenFromBoot = (boot: AsyncResult.AsyncResult<CritHostProps>): HostScreen =>
   AsyncResult.match(boot, {
     onFailure: () => invalidScreen,
     onInitial: () => connectingScreen,
-    onSuccess: ({ value }) => ({ _tag: "ready", props: value })
+    onSuccess: ({ value }) => HostScreen.ready({ props: value })
   })
 
 export const hostScreenAtom = Atom.family((fragment: string): Atom.Atom<HostScreen> => {

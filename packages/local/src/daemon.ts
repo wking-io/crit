@@ -567,7 +567,7 @@ const browserBootstrapRoutes = HttpRouter.use(Effect.fn(function*(router) {
     )
     if (body._tag === "None") return HttpServerResponse.empty({ status: 400 })
     const exchange = yield* browser.exchange(body.value.capability)
-    if (exchange.kind === "rejected") return HttpServerResponse.empty({ status: 401 })
+    if (exchange._tag === "rejected") return HttpServerResponse.empty({ status: 401 })
     return yield* HttpServerResponse.setCookie(
       HttpServerResponse.jsonUnsafe({
         redirectTo: `${browser.browserOrigin}${LocalBrowserConnection.encode(browser.connection)}`

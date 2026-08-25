@@ -4,7 +4,7 @@ import {
   type LocalBrowserConnectionDescriptor
 } from "@crit/client"
 import type { LocalDaemonInstanceNonce } from "@crit/replica/http"
-import { Context, Crypto, Effect, Encoding, Layer, Redacted, Ref, Schema } from "effect"
+import { Context, Crypto, Data, Effect, Encoding, Layer, Redacted, Ref, Schema } from "effect"
 
 export const BrowserCapability = Schema.String.check(
   Schema.isPattern(/^[A-Za-z0-9_-]{86}$/)
@@ -26,9 +26,17 @@ const BrowserDigest = Schema.String.check(
 ).pipe(Schema.brand("BrowserDigest"))
 type BrowserDigest = typeof BrowserDigest.Type
 
-type BrowserAuthState =
-  | { readonly kind: "awaiting-bootstrap"; readonly bootstrapDigest: BrowserDigest }
-  | { readonly kind: "bootstrapped"; readonly sessionDigest: BrowserDigest }
+type BrowserAuthState = Data.TaggedEnum<{
+  readonly "awaiting-bootstrap": { readonly bootstrapDigest: BrowserDigest }
+  readonly bootstrapped: { readonly sessionDigest: BrowserDigest }
+}>
+const BrowserAuthState = Data.taggedEnum<BrowserAuthState>()
+
+type BrowserExchange = Data.TaggedEnum<{
+  readonly accepted: { readonly session: BrowserSessionSecret }
+  readonly rejected: {}
+}>
+const BrowserExchange = Data.taggedEnum<BrowserExchange>()
 
 export interface BrowserSessionOptions {
   readonly baseUrl: string
@@ -46,10 +54,7 @@ export interface BrowserSessionService {
   readonly path: `/${string}`
   readonly cookieName: string
   readonly invocation: VerifiedInvocation
-  readonly exchange: (capability: string) => Effect.Effect<
-    | { readonly kind: "accepted"; readonly session: BrowserSessionSecret }
-    | { readonly kind: "rejected" }
-  >
+  readonly exchange: (capability: string) => Effect.Effect<BrowserExchange>
   readonly authorize: (session: string) => Effect.Effect<boolean>
 }
 
@@ -70,10 +75,11 @@ export class BrowserSession extends Context.Service<BrowserSession, BrowserSessi
       const capability = Schema.decodeUnknownSync(BrowserCapability)(
         Encoding.encodeBase64Url(yield* crypto.randomBytes(64))
       )
-      const state = yield* Ref.make<BrowserAuthState>({
-        kind: "awaiting-bootstrap",
-        bootstrapDigest: yield* digest(capability)
-      })
+      const state = yield* Ref.make<BrowserAuthState>(
+        BrowserAuthState["awaiting-bootstrap"]({
+          bootstrapDigest: yield* digest(capability)
+        })
+      )
       const connection = LocalBrowserConnection.make({
         baseUrl: options.baseUrl,
         instance: options.instance
@@ -98,23 +104,25 @@ export class BrowserSession extends Context.Service<BrowserSession, BrowserSessi
           )
           const sessionDigest = yield* digest(session)
           return yield* Ref.modify(state, (current): readonly [
-            | { readonly kind: "accepted"; readonly session: BrowserSessionSecret }
-            | { readonly kind: "rejected" },
+            BrowserExchange,
             BrowserAuthState
           ] => {
             if (
-              current.kind === "awaiting-bootstrap" &&
+              current._tag === "awaiting-bootstrap" &&
               current.bootstrapDigest === candidateDigest
             ) {
-              return [{ kind: "accepted", session }, { kind: "bootstrapped", sessionDigest }]
+              return [
+                BrowserExchange.accepted({ session }),
+                BrowserAuthState.bootstrapped({ sessionDigest })
+              ]
             }
-            return [{ kind: "rejected" }, current]
+            return [BrowserExchange.rejected(), current]
           })
         }),
         authorize: (session) => Effect.gen(function*() {
           const sessionDigest = yield* digest(session)
           return yield* Ref.get(state).pipe(Effect.map((current) =>
-            current.kind === "bootstrapped" && current.sessionDigest === sessionDigest
+            current._tag === "bootstrapped" && current.sessionDigest === sessionDigest
           ))
         })
       })

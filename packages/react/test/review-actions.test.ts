@@ -70,7 +70,7 @@ const itemSelection = (
 
 const context = (
   selection: ReviewSelection,
-  input: ReviewActionContext["input"] = ReviewActionInput.none
+  input: ReviewActionContext["input"] = ReviewActionInput.none()
 ): ReviewActionContext => ({
   projection,
   selection,

@@ -3,7 +3,7 @@ import {
   type CanvasItemRef,
   type FrameId
 } from "@crit/domain"
-import { Schema } from "effect"
+import { Data, Schema } from "effect"
 
 const itemKey = (item: CanvasItemRef): string => `frame:${item.frameId}`
 
@@ -17,19 +17,22 @@ const CanvasSelectionValue = Schema.Array(CanvasItemRefSchema).check(
 
 export type CanvasSelection = typeof CanvasSelectionValue.Type
 
-export type CanvasSelectionCommand =
-  | { readonly _tag: "clear" }
-  | {
-    readonly _tag: "item"
+export type CanvasSelectionCommand = Data.TaggedEnum<{
+  readonly clear: {}
+  readonly item: {
     readonly item: CanvasItemRef
     readonly additive: boolean
   }
+}>
+export const CanvasSelectionCommand = Data.taggedEnum<CanvasSelectionCommand>()
 
-export type CanvasInputTarget =
-  | { readonly _tag: "camera" }
-  | { readonly _tag: "frame"; readonly frameId: FrameId }
+export type CanvasInputTarget = Data.TaggedEnum<{
+  readonly camera: {}
+  readonly frame: { readonly frameId: FrameId }
+}>
+export const CanvasInputTarget = Data.taggedEnum<CanvasInputTarget>()
 
-const cameraTarget: CanvasInputTarget = { _tag: "camera" }
+const cameraTarget = CanvasInputTarget.camera()
 
 const makeCanvasSelection = Schema.decodeUnknownSync(CanvasSelectionValue)
 
@@ -72,6 +75,6 @@ export const CanvasSelection = {
     const item = selection[0]
     return item === undefined
       ? cameraTarget
-      : { _tag: "frame", frameId: item.frameId }
+      : CanvasInputTarget.frame({ frameId: item.frameId })
   }
 }

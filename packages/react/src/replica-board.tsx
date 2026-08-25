@@ -1,6 +1,6 @@
 import type { CanvasChangeFailure, CanvasCommandBatch } from "@crit/domain"
 import type { ReplicaView } from "@crit/replica"
-import { Match } from "effect"
+import { Data, Match } from "effect"
 import type { ReactElement } from "react"
 
 import type { CanvasCamera } from "./canvas-camera.js"
@@ -35,17 +35,18 @@ export type ReplicaBoardProps = ReplicaBoardBaseProps & ReplicaBoardReviewProps
 
 type PendingChange = ReplicaView["pending"][number]
 
-type ReplicaBoardStatus =
-  | { readonly _tag: "synchronized" }
-  | {
-    readonly _tag: "outstanding"
+type ReplicaBoardStatus = Data.TaggedEnum<{
+  readonly synchronized: {}
+  readonly outstanding: {
     readonly changes: readonly [PendingChange, ...PendingChange[]]
   }
+}>
+const ReplicaBoardStatus = Data.taggedEnum<ReplicaBoardStatus>()
 
 const statusFromPending = (pending: ReplicaView["pending"]): ReplicaBoardStatus => {
   const [first, ...rest] = pending
-  if (first === undefined) return { _tag: "synchronized" }
-  return { _tag: "outstanding", changes: [first, ...rest] }
+  if (first === undefined) return ReplicaBoardStatus.synchronized()
+  return ReplicaBoardStatus.outstanding({ changes: [first, ...rest] })
 }
 
 const changeCount = (count: number): string =>

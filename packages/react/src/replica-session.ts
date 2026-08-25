@@ -34,15 +34,16 @@ export interface ReplicaSessionPorts {
   }) => Effect.Effect<ReplicaView, ReplicaSessionUnavailable | ReplicaChangeRejected>
 }
 
-export type ReplicaSession =
-  | { readonly _tag: "loading" }
-  | { readonly _tag: "unavailable"; readonly reason: string }
-  | {
-    readonly _tag: "ready"
+export type ReplicaSession = Data.TaggedEnum<{
+  readonly loading: {}
+  readonly unavailable: { readonly reason: string }
+  readonly ready: {
     readonly view: ReplicaView
     readonly camera: CanvasCamera
     readonly selection: CanvasSelection
   }
+}>
+export const ReplicaSession = Data.taggedEnum<ReplicaSession>()
 
 export type ReplicaSessionRun = <A, E>(
   effect: Effect.Effect<A, E, KeyValueStore.KeyValueStore>
@@ -57,20 +58,16 @@ export interface ReplicaSessionHandle {
   ) => Promise<Result.Result<ReplicaView, ReplicaSessionUnavailable | ReplicaChangeRejected>>
 }
 
-const loading: ReplicaSession = { _tag: "loading" }
+const loading = ReplicaSession.loading()
 
-const unavailable = (reason: string): ReplicaSession => ({ _tag: "unavailable", reason })
+const unavailable = (reason: string): ReplicaSession =>
+  ReplicaSession.unavailable({ reason })
 
 const ready = (
   view: ReplicaView,
   camera: CanvasCamera,
   selection: CanvasSelection
-): ReplicaSession => ({
-  _tag: "ready",
-  view,
-  camera,
-  selection
-})
+): ReplicaSession => ReplicaSession.ready({ view, camera, selection })
 
 const defaultCamera = CanvasCamera.make({ x: 0, y: 0, zoom: 1 })
 const defaultSelection = CanvasSelection.make([])

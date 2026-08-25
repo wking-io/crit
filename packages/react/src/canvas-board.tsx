@@ -27,7 +27,8 @@ import {
 import { useCanvasItemDrag } from "./canvas-item-drag.js"
 import {
   CanvasSelection,
-  type CanvasSelectionCommand
+  CanvasSelectionCommand,
+  type CanvasSelectionCommand as CanvasSelectionCommandValue
 } from "./canvas-selection.js"
 import {
   FrameRenderer,
@@ -135,7 +136,7 @@ export function CanvasBoard({
   }, [inputTarget])
 
   const applySelectionCommand = useCallback(
-    (command: CanvasSelectionCommand) => {
+    (command: CanvasSelectionCommandValue) => {
       const latest = selectionRef.current
       latest.onSelectionChange(CanvasSelection.apply(latest.selection, command))
     },
@@ -179,11 +180,10 @@ export function CanvasBoard({
   const selectFrame = (
     item: CanvasItemRef,
     event: ReactPointerEvent<HTMLDivElement>
-  ) => applySelectionCommand({
-    _tag: "item",
+  ) => applySelectionCommand(CanvasSelectionCommand.item({
     item,
     additive: isAdditiveSelection(event)
-  })
+  }))
 
   const frameEntries = projection.stack.flatMap((item, zIndex) => {
     const frame = frames.get(item.frameId)
@@ -201,11 +201,10 @@ export function CanvasBoard({
         inputTarget.frameId !== frameId
       const onFrameInputIntent = (intent: FrameInputIntent) => {
         if (intent.type === "select") {
-          applySelectionCommand({
-            _tag: "item",
+          applySelectionCommand(CanvasSelectionCommand.item({
             item,
             additive: intent.additive
-          })
+          }))
           return
         }
         applyCameraIntent(intent)
@@ -275,7 +274,7 @@ export function CanvasBoard({
           target instanceof Element &&
           target.closest('[role="option"]') !== null
         ) return
-        applySelectionCommand({ _tag: "clear" })
+        applySelectionCommand(CanvasSelectionCommand.clear())
       }}
       onPointerMove={itemDrag.update}
       onPointerUp={itemDrag.finish}

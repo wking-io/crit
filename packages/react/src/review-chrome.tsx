@@ -92,7 +92,7 @@ function ReviewActionForm({
   const [value, setValue] = useState("")
   const submit = (event: FormEvent) => {
     event.preventDefault()
-    if (onRun(policy.id, { _tag: "text", text: value })) setValue("")
+    if (onRun(policy.id, ReviewActionInput.text({ text: value }))) setValue("")
   }
   return (
     <form
@@ -130,7 +130,7 @@ export function ReviewChrome({
   const context = {
     projection,
     selection,
-    input: ReviewActionInput.none,
+    input: ReviewActionInput.none(),
     fullscreen
   }
   const available = availableReviewActions(context)
@@ -147,7 +147,7 @@ export function ReviewChrome({
   )
   const run = (
     id: ReviewActionId,
-    input: ReviewActionInputValue = ReviewActionInput.none
+    input: ReviewActionInputValue = ReviewActionInput.none()
   ): boolean => {
     if (
       id === "snapshot" &&

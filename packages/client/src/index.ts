@@ -43,7 +43,7 @@ import {
   localApiVersionHeader,
   localReplicaSocketCloseCode
 } from "@crit/replica/http"
-import { Context, Deferred, Effect, Exit, flow, Layer, Queue, Redacted, Ref, Schema, Scope, Stream, type Take } from "effect"
+import { Context, Data, Deferred, Effect, Exit, flow, Layer, Queue, Redacted, Ref, Schema, Scope, Stream, type Take } from "effect"
 import { FetchHttpClient, HttpClient, HttpClientError, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { HttpApiClient, HttpApiMiddleware } from "effect/unstable/httpapi"
 import * as Socket from "effect/unstable/socket/Socket"
@@ -54,18 +54,18 @@ export {
   LocalBrowserConnectionInvalid
 } from "./browser-connection.js"
 
-export type LocalClientOptions =
-  | {
-    readonly _tag: "bearer"
+export type LocalClientOptions = Data.TaggedEnum<{
+  readonly bearer: {
     readonly baseUrl: string
     readonly token: LocalApiToken
     readonly origin?: string
   }
-  | {
-    readonly _tag: "browser-session"
+  readonly "browser-session": {
     readonly baseUrl: string
     readonly browserPath: `/${string}/`
   }
+}>
+export const LocalClientOptions = Data.taggedEnum<LocalClientOptions>()
 
 type TransportFailure =
   | LocalApiUnauthorized
