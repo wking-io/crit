@@ -8,11 +8,12 @@ import {
   WebUrlRepresentation,
   type ApplicationId
 } from "@crit/domain"
-import { Data, Effect, Layer, Option, Schema } from "effect"
+import { Crypto, Data, Effect, Layer, Option, Schema } from "effect"
 
 import {
   ApplicationBaseUrl,
   ApplicationBindings,
+  LiveContent,
   RepresentationRuntime,
   RepresentationRuntimeLive
 } from "./runtime.js"
@@ -84,6 +85,13 @@ export const runArtifactStoreConformance = <E, R>(
 )
 
 const unboundApplicationId = Id.application("application_conformance_unbound")
+const inertLiveContent = Layer.succeed(LiveContent, LiveContent.of({
+  get: () => Effect.die("Representation resolve must not read live content")
+}))
+const inertCrypto = Layer.succeed(Crypto.Crypto, Crypto.make({
+  randomBytes: (size) => new Uint8Array(size),
+  digest: (_algorithm, data) => Effect.succeed(data)
+}))
 
 export interface RepresentationRuntimeConformanceExpectation {
   readonly applicationId: ApplicationId
@@ -243,9 +251,11 @@ export const runRepresentationRuntimeConformance = <ArtifactE, ArtifactR, Bindin
     readonly expected: RepresentationRuntimeConformanceExpectation
   }
 ): Effect.Effect<void, unknown | ArtifactE | BindingE, ArtifactR | BindingR> => {
-  const dependencies = Layer.merge(
+  const dependencies = Layer.mergeAll(
     options.artifactStoreLayer,
-    options.applicationBindingsLayer
+    options.applicationBindingsLayer,
+    inertLiveContent,
+    inertCrypto
   )
   const runtime = RepresentationRuntimeLive.pipe(Layer.provide(dependencies))
   const environment = Layer.merge(dependencies, runtime)

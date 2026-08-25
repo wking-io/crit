@@ -3,6 +3,7 @@ import { Schema } from "effect"
 import { describe, expect, it } from "vitest"
 
 import {
+  LocalRepresentationCaptureRequest,
   LocalRepresentationJsonResponse,
   LocalRepresentationResolveRequest
 } from "../src/index.js"
@@ -28,6 +29,15 @@ describe("local representation HTTP schemas", () => {
       representation
     })
     expect(roundTrip(LocalRepresentationResolveRequest, request)).toEqual(request)
+  })
+
+  it("round-trips a live capture request", () => {
+    const request = LocalRepresentationCaptureRequest.make({
+      _tag: "capture-representation",
+      schemaVersion: 1,
+      representation
+    })
+    expect(roundTrip(LocalRepresentationCaptureRequest, request)).toEqual(request)
   })
 
   it("round-trips every JSON response variant", () => {

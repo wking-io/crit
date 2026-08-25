@@ -41,6 +41,7 @@ export {
 export {
   ApplicationRouteRepresentation,
   ArtifactRepresentation,
+  LiveRepresentation,
   RepresentationRef,
   RootedRoute,
   WebUrlRepresentation,

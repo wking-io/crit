@@ -16,17 +16,24 @@ export {
   ApplicationUnavailableRenderPlan,
   ArtifactBytesRenderPlan,
   ArtifactUnavailableRenderPlan,
+  CaptureSourceUnavailable,
   IframeRenderPlan,
+  LiveContent,
+  LiveContentUnreachable,
   RenderPlan,
   RepresentationRuntime,
   RepresentationRuntimeLive
 } from "./runtime.js"
 export type {
+  CaptureFailure,
   RepresentationRuntimeFailure,
   RepresentationRuntimeService
 } from "./runtime.js"
 export {
+  localRepresentationCapturePath,
   localRepresentationResolvePath,
+  LocalRepresentationCaptureFailure,
+  LocalRepresentationCaptureRequest,
   LocalRepresentationJsonResponse,
   LocalRepresentationResolveFailure,
   LocalRepresentationResolveRequest
