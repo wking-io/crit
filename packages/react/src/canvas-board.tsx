@@ -33,22 +33,34 @@ import {
   FrameRenderer,
   type FrameRepresentationResolver
 } from "./frame-renderer.js"
+import type { FrameSnapshotter } from "./frame-snapshot.js"
 import { framesById } from "./projection-index.js"
 import { ReviewChrome } from "./review-chrome.js"
 import type { ReviewClientEffect } from "./review-actions.js"
 import { useReviewEffects } from "./review-effects.js"
 
-export interface CanvasBoardProps {
+interface CanvasBoardBaseProps {
   readonly projection: CanvasProjection
   readonly resolver: FrameRepresentationResolver
   readonly camera: CanvasCamera
   readonly onCameraChange: (camera: CanvasCamera) => void
   readonly selection: CanvasSelection
   readonly onSelectionChange: (selection: CanvasSelection) => void
-  readonly onSubmit?: (commands: CanvasCommandBatch) => void
   readonly onEffect?: (effect: ReviewClientEffect) => void
   readonly className?: string
 }
+
+type CanvasBoardReviewProps =
+  | {
+    readonly onSubmit: (commands: CanvasCommandBatch) => void
+    readonly snapshotter: FrameSnapshotter
+  }
+  | {
+    readonly onSubmit?: undefined
+    readonly snapshotter?: undefined
+  }
+
+export type CanvasBoardProps = CanvasBoardBaseProps & CanvasBoardReviewProps
 
 const ariaSelected = (
   selection: CanvasSelection,
@@ -88,7 +100,8 @@ export function CanvasBoard({
   onSubmit,
   projection,
   resolver,
-  selection
+  selection,
+  snapshotter
 }: CanvasBoardProps): ReactElement {
   const rootRef = useRef<HTMLElement>(null)
   const selectedFrameRef = useRef<HTMLDivElement>(null)
@@ -276,6 +289,7 @@ export function CanvasBoard({
             onSubmit={onSubmit}
             projection={projection}
             selection={{ _tag: "items", items: selection }}
+            snapshotter={snapshotter}
           />
         )}
       {hasItems

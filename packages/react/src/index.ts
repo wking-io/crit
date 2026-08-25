@@ -39,6 +39,11 @@ export type {
   FrameRendererProps,
   FrameRepresentationResolver
 } from "./frame-renderer.js"
+export { useSnapshotRunner } from "./frame-snapshot.js"
+export type {
+  FrameSnapshotter,
+  SnapshotRunState
+} from "./frame-snapshot.js"
 export { FRAME_SIZE_PRESETS } from "./frame-breakpoints.js"
 export type { FrameSizePreset } from "./frame-breakpoints.js"
 export { ReplicaBoard } from "./replica-board.js"
@@ -68,7 +73,9 @@ export type {
   ReviewActionId,
   ReviewActionPolicy,
   ReviewClientEffect,
-  ReviewSelection
+  ReviewSelection,
+  SnapshotRequest,
+  SnapshotSource
 } from "./review-actions.js"
 export { applyReviewEffect } from "./review-effects.js"
 export type { ReviewEffectContext } from "./review-effects.js"

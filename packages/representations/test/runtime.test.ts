@@ -9,7 +9,7 @@ import {
   Sha256Digest,
   WebUrlRepresentation
 } from "@crit/domain"
-import { Effect, Layer, Option, Result, Schema } from "effect"
+import { Crypto, Effect, Layer, Option, Result, Schema } from "effect"
 import { describe, expect, it } from "vitest"
 
 import {
@@ -21,6 +21,9 @@ import {
   ArtifactNotFound,
   ArtifactStore,
   ArtifactStoreIoFailure,
+  CaptureSourceUnavailable,
+  LiveContent,
+  LiveContentUnreachable,
   RepresentationRuntime,
   RepresentationRuntimeLive
 } from "../src/index.js"
@@ -79,6 +82,43 @@ const unboundBindings = Layer.succeed(ApplicationBindings, ApplicationBindings.o
   get: () => Effect.succeed(Option.none())
 }))
 
+const liveContentLayer = (
+  get: LiveContent["Service"]["get"]
+) => Layer.succeed(LiveContent, LiveContent.of({ get }))
+
+const unreachableLiveContent = liveContentLayer((url) =>
+  Effect.fail(new LiveContentUnreachable({
+    url,
+    reason: "Live content must not be read"
+  }))
+)
+
+const cryptoLayer = () => {
+  let sequence = 0
+  return Layer.succeed(Crypto.Crypto, Crypto.make({
+    randomBytes: (size) => {
+      sequence += 1
+      const bytes = new Uint8Array(size)
+      bytes[bytes.length - 1] = sequence
+      return bytes
+    },
+    digest: (_algorithm, data) => Effect.succeed(data)
+  }))
+}
+
+const runtimeLayer = (
+  artifacts: Layer.Layer<ArtifactStore>,
+  bindings: Layer.Layer<ApplicationBindings>,
+  liveContent: Layer.Layer<LiveContent> = unreachableLiveContent
+) => RepresentationRuntimeLive.pipe(
+  Layer.provide(Layer.mergeAll(
+    artifacts,
+    bindings,
+    liveContent,
+    cryptoLayer()
+  ))
+)
+
 describe("ApplicationBaseUrl", () => {
   const decode = Schema.decodeUnknownResult(ApplicationBaseUrl)
 
@@ -135,8 +175,9 @@ describe("RepresentationRuntime", () => {
     const resolveWith = (baseUrl: ReturnType<typeof decodeBaseUrl>) => Effect.gen(function*() {
       const runtime = yield* RepresentationRuntime
       return yield* runtime.resolve(representation)
-    }).pipe(Effect.provide(RepresentationRuntimeLive.pipe(
-      Layer.provide(Layer.merge(artifacts, bindingsLayer(applicationId, baseUrl)))
+    }).pipe(Effect.provide(runtimeLayer(
+      artifacts,
+      bindingsLayer(applicationId, baseUrl)
     )))
 
     const local = await Effect.runPromise(resolveWith(decodeBaseUrl("http://localhost:5173/")))
@@ -192,9 +233,7 @@ describe("RepresentationRuntime", () => {
     const plan = await Effect.runPromise(Effect.gen(function*() {
       const runtime = yield* RepresentationRuntime
       return yield* runtime.resolve(representation)
-    }).pipe(Effect.provide(RepresentationRuntimeLive.pipe(
-      Layer.provide(Layer.merge(bindings, artifacts))
-    ))))
+    }).pipe(Effect.provide(runtimeLayer(artifacts, bindings))))
     expect(plan).toEqual({
       _tag: "iframe",
       representation,
@@ -221,9 +260,7 @@ describe("RepresentationRuntime", () => {
     const bindings = Layer.succeed(ApplicationBindings, ApplicationBindings.of({
       get: () => Effect.succeed(Option.none())
     }))
-    const runtime = RepresentationRuntimeLive.pipe(
-      Layer.provide(Layer.merge(artifacts, bindings))
-    )
+    const runtime = runtimeLayer(artifacts, bindings)
     const plan = await Effect.runPromise(Effect.gen(function*() {
       const service = yield* RepresentationRuntime
       return yield* service.resolve(artifact)
@@ -234,57 +271,82 @@ describe("RepresentationRuntime", () => {
     expect(plan.bytes).toBe(transferred)
   })
 
-  it("resolves captured artifact bytes with the same contents", async() => {
-    const artifactId = Id.artifact("artifact_runtime_capture")
-    const bytes = Uint8Array.from([2, 7, 1])
-    const runtime = RepresentationRuntimeLive.pipe(
-      Layer.provide(Layer.merge(memoryArtifactStore(), unboundBindings))
-    )
-    const plan = await Effect.runPromise(Effect.gen(function*() {
-      const service = yield* RepresentationRuntime
-      const captured = yield* service.capture({ artifactId, bytes })
-      return yield* service.resolve(captured)
-    }).pipe(Effect.provide(runtime)))
-    expect(plan._tag).toBe("artifact-bytes")
-    if (plan._tag !== "artifact-bytes") return
-    expect([...plan.bytes]).toEqual([2, 7, 1])
-  })
-
-  it("returns the same digest for a second identical capture", async() => {
-    const artifactId = Id.artifact("artifact_runtime_capture_idempotent")
-    const bytes = Uint8Array.from([4, 5, 6])
-    const runtime = RepresentationRuntimeLive.pipe(
-      Layer.provide(Layer.merge(memoryArtifactStore(), unboundBindings))
-    )
-    const digests = await Effect.runPromise(Effect.gen(function*() {
-      const service = yield* RepresentationRuntime
-      const first = yield* service.capture({ artifactId, bytes })
-      const second = yield* service.capture({ artifactId, bytes: Uint8Array.from([4, 5, 6]) })
-      return { first: first.digest, second: second.digest }
-    }).pipe(Effect.provide(runtime)))
-    expect(digests.second).toBe(digests.first)
-  })
-
-  it("fails a conflicting capture with ArtifactConflict", async() => {
-    const artifactId = Id.artifact("artifact_runtime_capture_conflict")
-    const runtime = RepresentationRuntimeLive.pipe(
-      Layer.provide(Layer.merge(memoryArtifactStore(), unboundBindings))
+  it("fails capture when an application has no binding", async() => {
+    const representation = ApplicationRouteRepresentation.make({
+      applicationId: Id.application("application_runtime_capture_unbound"),
+      route: "/preview"
+    })
+    let contentReads = 0
+    const runtime = runtimeLayer(
+      memoryArtifactStore(),
+      unboundBindings,
+      liveContentLayer((url) => {
+        contentReads += 1
+        return Effect.fail(new LiveContentUnreachable({
+          url,
+          reason: "must not run"
+        }))
+      })
     )
     const result = await Effect.runPromise(Effect.gen(function*() {
       const service = yield* RepresentationRuntime
-      const first = yield* service.capture({ artifactId, bytes: Uint8Array.from([4, 5, 6]) })
-      const conflict = yield* service.capture({
-        artifactId,
-        bytes: Uint8Array.from([6, 5, 4])
-      }).pipe(Effect.result)
-      return { first, conflict }
+      return yield* service.capture(representation).pipe(Effect.result)
     }).pipe(Effect.provide(runtime)))
-    expect(result.conflict._tag).toBe("Failure")
-    if (result.conflict._tag !== "Failure") return
-    expect(result.conflict.failure._tag).toBe("ArtifactConflict")
-    expect(result.conflict.failure.artifactId).toBe(artifactId)
-    expect(result.conflict.failure.storedDigest).toBe(result.first.digest)
-    expect(result.conflict.failure.suppliedDigest).not.toBe(result.first.digest)
+    expect(result).toEqual(Result.fail(new CaptureSourceUnavailable({
+      representation
+    })))
+    expect(contentReads).toBe(0)
+  })
+
+  it("captures live bytes into a digest-bound artifact", async() => {
+    const bytes = Uint8Array.from([2, 7, 1])
+    const applicationId = Id.application("application_runtime_capture_bound")
+    const representation = ApplicationRouteRepresentation.make({
+      applicationId,
+      route: "/review?mode=snapshot"
+    })
+    const runtime = runtimeLayer(
+      memoryArtifactStore(),
+      bindingsLayer(
+        applicationId,
+        decodeBaseUrl("https://capture.example/")
+      ),
+      liveContentLayer((url) => {
+        expect(url).toBe("https://capture.example/review?mode=snapshot")
+        return Effect.succeed(bytes)
+      })
+    )
+    const result = await Effect.runPromise(Effect.gen(function*() {
+      const service = yield* RepresentationRuntime
+      const artifact = yield* service.capture(representation)
+      const plan = yield* service.resolve(artifact)
+      return { artifact, plan }
+    }).pipe(Effect.provide(runtime)))
+    expect(result.artifact.artifactId).toMatch(/^artifact_[0-9a-f]{32}$/)
+    expect(result.artifact.digest).toBe(digestOf(bytes))
+    expect(result.plan._tag).toBe("artifact-bytes")
+    if (result.plan._tag !== "artifact-bytes") return
+    expect([...result.plan.bytes]).toEqual([2, 7, 1])
+  })
+
+  it("mints a new artifact for a second identical fetch", async() => {
+    const bytes = Uint8Array.from([4, 5, 6])
+    const representation = WebUrlRepresentation.make({
+      url: "https://capture.example/repeated"
+    })
+    const runtime = runtimeLayer(
+      memoryArtifactStore(),
+      unboundBindings,
+      liveContentLayer(() => Effect.succeed(bytes))
+    )
+    const artifacts = await Effect.runPromise(Effect.gen(function*() {
+      const service = yield* RepresentationRuntime
+      const first = yield* service.capture(representation)
+      const second = yield* service.capture(representation)
+      return { first, second }
+    }).pipe(Effect.provide(runtime)))
+    expect(artifacts.second.artifactId).not.toBe(artifacts.first.artifactId)
+    expect(artifacts.second.digest).toBe(artifacts.first.digest)
   })
 
   it("keeps binding lookup and artifact I/O failures typed", async() => {
@@ -313,9 +375,7 @@ describe("RepresentationRuntime", () => {
       put: () => Effect.fail(ioFailure),
       read: () => Effect.fail(ioFailure)
     }))
-    const runtime = RepresentationRuntimeLive.pipe(
-      Layer.provide(Layer.merge(bindings, artifacts))
-    )
+    const runtime = runtimeLayer(artifacts, bindings)
     const resolve = (representation: typeof application | typeof artifact) => Effect.gen(function*() {
       const service = yield* RepresentationRuntime
       return yield* service.resolve(representation).pipe(Effect.result)

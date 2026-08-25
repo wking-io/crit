@@ -1,5 +1,6 @@
 import type { CanvasCommandBatch, CanvasProjection } from "@crit/domain"
 import { useHotkeys } from "@tanstack/react-hotkeys"
+import { Effect, Match } from "effect"
 import {
   useState,
   type FormEvent,
@@ -18,6 +19,10 @@ import {
   type ReviewSelection
 } from "./review-actions.js"
 import {
+  useSnapshotRunner,
+  type FrameSnapshotter
+} from "./frame-snapshot.js"
+import {
   ReviewHelpPanel,
   ReviewHelpSurface,
   reviewActionHelpTarget
@@ -28,6 +33,7 @@ export interface ReviewChromeProps {
   readonly selection: ReviewSelection
   readonly onSubmit: (commands: CanvasCommandBatch) => void
   readonly onEffect?: (effect: ReviewClientEffect) => void
+  readonly snapshotter?: FrameSnapshotter
   readonly fullscreen?: boolean
 }
 
@@ -54,18 +60,22 @@ const formPolicies = formActions.map((entry) => {
 })
 
 const formActionIds = new Set<string>(formPolicies.map(({ id }) => id))
+const unavailableSnapshotter = {
+  capture: () => Effect.die("Snapshotter unavailable")
+} satisfies FrameSnapshotter
 
 const dispatchReviewAction = (
   action: ReviewAction,
   onSubmit: ReviewChromeProps["onSubmit"],
-  onEffect: ReviewChromeProps["onEffect"]
-): void => {
-  if (action._tag === "batch") {
-    onSubmit(action.commands)
-    return
-  }
-  onEffect?.(action.effect)
-}
+  onEffect: ReviewChromeProps["onEffect"],
+  beginSnapshot: ReturnType<typeof useSnapshotRunner>["begin"]
+): void => Match.value(action).pipe(Match.tagsExhaustive({
+  batch: ({ commands }) => onSubmit(commands),
+  effect: ({ effect }) => {
+    onEffect?.(effect)
+  },
+  snapshot: ({ request }) => beginSnapshot(request)
+}))
 
 function ReviewActionForm({
   inputLabel,
@@ -109,8 +119,14 @@ export function ReviewChrome({
   onEffect,
   onSubmit,
   projection,
-  selection
+  selection,
+  snapshotter
 }: ReviewChromeProps): ReactElement {
+  const snapshot = useSnapshotRunner({
+    onSubmit,
+    snapshotter: snapshotter ?? unavailableSnapshotter
+  })
+  const snapshotCapturing = snapshot.state._tag === "capturing"
   const context = {
     projection,
     selection,
@@ -119,9 +135,12 @@ export function ReviewChrome({
   }
   const available = availableReviewActions(context)
   const runnable = available.filter((entry) =>
-    resolveReviewAction(entry.id, context) !== null
+    (entry.id !== "snapshot" || snapshotter !== undefined) &&
+      resolveReviewAction(entry.id, context) !== null
   )
-  const runnableIds = new Set<string>(runnable.map(({ id }) => id))
+  const runnableIds = new Set<string>(runnable.flatMap(({ id }) =>
+    id === "snapshot" && snapshotCapturing ? [] : [id]
+  ))
   const toolbarActions = runnable.filter((entry) => !formActionIds.has(entry.id))
   const visibleForms = formPolicies.filter(({ policy }) =>
     policy.available(selection, projection)
@@ -130,6 +149,10 @@ export function ReviewChrome({
     id: ReviewActionId,
     input: ReviewActionInputValue = ReviewActionInput.none
   ): boolean => {
+    if (
+      id === "snapshot" &&
+      (snapshotter === undefined || snapshotCapturing)
+    ) return false
     const action = resolveReviewAction(id, {
       projection,
       selection,
@@ -137,7 +160,7 @@ export function ReviewChrome({
       fullscreen
     })
     if (action === null) return false
-    dispatchReviewAction(action, onSubmit, onEffect)
+    dispatchReviewAction(action, onSubmit, onEffect, snapshot.begin)
     return true
   }
 
@@ -177,6 +200,7 @@ export function ReviewChrome({
           {toolbarActions.map((entry) => (
             <button
               aria-label={entry.label}
+              disabled={entry.id === "snapshot" && snapshotCapturing}
               key={entry.id}
               type="button"
               {...reviewActionHelpTarget(entry)}
@@ -194,6 +218,12 @@ export function ReviewChrome({
             policy={entry.policy}
           />
         ))}
+        {snapshot.state._tag === "capturing"
+          ? <p role="status">Capturing snapshot.</p>
+          : null}
+        {snapshot.state._tag === "failed"
+          ? <p role="alert">Snapshot failed.</p>
+          : null}
         <ReviewHelpPanel />
       </ReviewHelpSurface>
     </aside>

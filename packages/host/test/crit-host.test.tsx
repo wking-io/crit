@@ -3,6 +3,7 @@ import {
   ReplicaSessionUnavailable,
   layerMemory,
   type FrameRepresentationResolver,
+  type FrameSnapshotter,
   type ReplicaSessionPorts,
   type ReplicaSessionRun
 } from "@crit/react"
@@ -51,7 +52,8 @@ const view = Schema.decodeUnknownSync(ReplicaView)({
   pending: []
 })
 
-const resolver: FrameRepresentationResolver = {
+const representations: FrameRepresentationResolver & FrameSnapshotter = {
+  capture: () => Effect.die("snapshot must not run"),
   resolve: () => Effect.fail("unresolved")
 }
 
@@ -67,6 +69,10 @@ const render = (element: ReactElement) => root.render(<StrictMode>{element}</Str
 const waitFor = (assertion: () => void) => act(async() => vi.waitFor(assertion))
 
 beforeEach(() => {
+  vi.stubGlobal("IntersectionObserver", class {
+    disconnect() {}
+    observe() {}
+  })
   container = document.createElement("div")
   document.body.append(container)
   root = createRoot(container)
@@ -76,6 +82,7 @@ afterEach(async() => {
   await act(async() => root.unmount())
   container.remove()
   vi.restoreAllMocks()
+  vi.unstubAllGlobals()
 })
 
 describe("CritHost", () => {
@@ -91,7 +98,13 @@ describe("CritHost", () => {
     }
 
     await act(async() => render(
-      <CritHost canvasId={canvasId} ports={ports} resolver={resolver} run={makeRun()} />
+      <CritHost
+        canvasId={canvasId}
+        ports={ports}
+        resolver={representations}
+        run={makeRun()}
+        snapshotter={representations}
+      />
     ))
     expect(container.querySelector("[role='status']")?.textContent).toBe("Connecting to Crit…")
 
@@ -115,7 +128,13 @@ describe("CritHost", () => {
     }
 
     await act(async() => render(
-      <CritHost canvasId={canvasId} ports={ports} resolver={resolver} run={makeRun()} />
+      <CritHost
+        canvasId={canvasId}
+        ports={ports}
+        resolver={representations}
+        run={makeRun()}
+        snapshotter={representations}
+      />
     ))
 
     await waitFor(() =>

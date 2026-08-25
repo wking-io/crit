@@ -31,10 +31,12 @@ import {
   ApplicationBindingLookupFailure,
   ApplicationBindings,
   ArtifactStore,
+  LiveContent,
+  LocalRepresentationCaptureFailure,
   LocalRepresentationResolveFailure,
   RepresentationRuntimeLive
 } from "@crit/representations"
-import { Context, Effect, Fiber, Layer, Option, Schema, Stream, Tracer } from "effect"
+import { Context, Crypto, Effect, Fiber, Layer, Option, Schema, Stream, Tracer } from "effect"
 import { FetchHttpClient, HttpClient, HttpClientRequest, HttpServer } from "effect/unstable/http"
 import * as Socket from "effect/unstable/socket/Socket"
 import { describe, expect, it } from "vitest"
@@ -57,6 +59,16 @@ const instance = Schema.decodeUnknownSync(LocalDaemonInstanceNonce)("0123456789a
 const installationId = Id.installation("installation_daemon_test")
 const applicationId = Id.application("application_daemon_test")
 const artifactBytes = new TextEncoder().encode("artifact transport bytes")
+let randomSequence = 0
+const testCrypto = Layer.succeed(Crypto.Crypto, Crypto.make({
+  randomBytes: (size) => {
+    randomSequence += 1
+    const bytes = new Uint8Array(size)
+    bytes[bytes.length - 1] = randomSequence
+    return bytes
+  },
+  digest: (_algorithm, data) => Effect.succeed(data)
+}))
 
 const representationRuntime = RepresentationRuntimeLive.pipe(
   Layer.provide(Layer.succeed(ApplicationBindings, ApplicationBindings.of({
@@ -70,7 +82,11 @@ const representationRuntime = RepresentationRuntimeLive.pipe(
       digest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     })),
     read: () => Effect.succeed(artifactBytes)
-  })))
+  }))),
+  Layer.provide(Layer.succeed(LiveContent, LiveContent.of({
+    get: () => Effect.succeed(artifactBytes)
+  }))),
+  Layer.provide(testCrypto)
 )
 
 const tempDatabasePath = Effect.acquireRelease(
@@ -143,11 +159,29 @@ describe("LocalDaemon", () => {
         url: "https://example.com/preview"
       }))
       expect(web).toMatchObject({ _tag: "iframe", url: "https://example.com/preview" })
+      const captured = yield* representations.capture(WebUrlRepresentation.make({
+        url: "https://example.com/capture"
+      }))
+      expect(captured).toMatchObject({
+        _tag: "artifact",
+        digest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      })
+      expect(captured.artifactId).toMatch(/^artifact_[0-9a-f]{32}$/)
       const unavailable = yield* representations.resolve(ApplicationRouteRepresentation.make({
         applicationId: Id.application("application_unbound"),
         route: "/"
       }))
       expect(unavailable).toMatchObject({ _tag: "unavailable", reason: "application-unbound" })
+      const captureUnavailable = yield* representations.capture(
+        ApplicationRouteRepresentation.make({
+          applicationId: Id.application("application_unbound"),
+          route: "/"
+        })
+      ).pipe(Effect.flip)
+      expect(captureUnavailable).toEqual(new LocalRepresentationCaptureFailure({
+        schemaVersion: 1,
+        reason: "source-unavailable"
+      }))
       const artifact = ArtifactRepresentation.make({
         artifactId: Id.artifact("artifact_transport"),
         digest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
@@ -224,7 +258,11 @@ describe("LocalDaemon", () => {
             digest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
           })),
           read: () => Effect.succeed(artifactBytes)
-        })))
+        }))),
+        Layer.provide(Layer.succeed(LiveContent, LiveContent.of({
+          get: () => Effect.succeed(artifactBytes)
+        }))),
+        Layer.provide(testCrypto)
       )
       const serverContext = yield* Layer.buildWithScope(LocalDaemon.layer({
         databasePath,
@@ -449,6 +487,10 @@ describe("LocalDaemon", () => {
       url: "https://example.com/"
     })).pipe(Effect.flip)
     expect(representationFailure).toEqual(new LocalApiUnauthorized({ message: "Missing or invalid bearer token" }))
+    const captureFailure = yield* representations.capture(WebUrlRepresentation.make({
+      url: "https://example.com/"
+    })).pipe(Effect.flip)
+    expect(captureFailure).toEqual(new LocalApiUnauthorized({ message: "Missing or invalid bearer token" }))
     const socketFailure = yield* client.subscribe(Id.canvas("canvas_auth")).pipe(
       Effect.provide(Socket.layerWebSocketConstructorGlobal),
       Effect.flip

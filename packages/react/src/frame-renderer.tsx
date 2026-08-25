@@ -67,7 +67,14 @@ const unavailableCopy = (
   }
 }
 
-function ArtifactDownload({
+const artifactLooksLikeHtml = (bytes: Uint8Array): boolean => {
+  const prefix = new TextDecoder().decode(bytes.subarray(0, 1_024))
+  return /^(?:<!doctype html|<html)/i.test(
+    prefix.replace(/^\uFEFF/, "").trimStart()
+  )
+}
+
+function ArtifactContent({
   className,
   plan,
   title
@@ -77,29 +84,44 @@ function ArtifactDownload({
   readonly title: Frame["title"]
 }) {
   const artifactKey = `${plan.representation.artifactId}:${plan.representation.digest}`
-  const [download, setDownload] = useState<{
+  const html = artifactLooksLikeHtml(plan.bytes)
+  const [content, setContent] = useState<{
     readonly artifactKey: string
     readonly bytes: Uint8Array
+    readonly html: boolean
     readonly href: string
   }>()
 
   useEffect(() => {
     const href = URL.createObjectURL(new Blob(
       [new Uint8Array(plan.bytes)],
-      { type: "application/octet-stream" }
+      { type: html ? "text/html" : "application/octet-stream" }
     ))
-    setDownload({ artifactKey, bytes: plan.bytes, href })
+    setContent({ artifactKey, bytes: plan.bytes, html, href })
     return () => URL.revokeObjectURL(href)
-  }, [artifactKey, plan.bytes])
+  }, [artifactKey, html, plan.bytes])
 
-  if (download?.artifactKey !== artifactKey || download.bytes !== plan.bytes) {
-    return <div className={className} role="status">Preparing {title} for download.</div>
+  if (
+    content?.artifactKey !== artifactKey ||
+    content.bytes !== plan.bytes ||
+    content.html !== html
+  ) {
+    return <div className={className} role="status">Preparing {title}.</div>
+  }
+
+  if (html) {
+    return <iframe
+      className={className}
+      sandbox="allow-scripts"
+      src={content.href}
+      title={title}
+    />
   }
 
   return <a
     className={className}
     download={plan.representation.artifactId}
-    href={download.href}
+    href={content.href}
   >Download {title}</a>
 }
 
@@ -191,7 +213,7 @@ const ResolvedFrame = ({
       title={title}
     />
   ),
-  "artifact-bytes": (artifact) => <ArtifactDownload
+  "artifact-bytes": (artifact) => <ArtifactContent
     className={className}
     plan={artifact}
     title={title}

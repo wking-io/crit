@@ -7,19 +7,31 @@ import type { CanvasCamera } from "./canvas-camera.js"
 import { CanvasBoard } from "./canvas-board.js"
 import type { CanvasSelection } from "./canvas-selection.js"
 import type { FrameRepresentationResolver } from "./frame-renderer.js"
+import type { FrameSnapshotter } from "./frame-snapshot.js"
 import type { ReviewClientEffect } from "./review-actions.js"
 
-export interface ReplicaBoardProps {
+interface ReplicaBoardBaseProps {
   readonly view: ReplicaView
   readonly resolver: FrameRepresentationResolver
   readonly camera: CanvasCamera
   readonly onCameraChange: (camera: CanvasCamera) => void
   readonly selection: CanvasSelection
   readonly onSelectionChange: (selection: CanvasSelection) => void
-  readonly onSubmit?: (commands: CanvasCommandBatch) => void
   readonly onEffect?: (effect: ReviewClientEffect) => void
   readonly className?: string
 }
+
+type ReplicaBoardReviewProps =
+  | {
+    readonly onSubmit: (commands: CanvasCommandBatch) => void
+    readonly snapshotter: FrameSnapshotter
+  }
+  | {
+    readonly onSubmit?: undefined
+    readonly snapshotter?: undefined
+  }
+
+export type ReplicaBoardProps = ReplicaBoardBaseProps & ReplicaBoardReviewProps
 
 type PendingChange = ReplicaView["pending"][number]
 
@@ -103,6 +115,7 @@ export function ReplicaBoard({
   onSubmit,
   resolver,
   selection,
+  snapshotter,
   view
 }: ReplicaBoardProps): ReactElement {
   const status = statusFromPending(view.pending)
@@ -121,11 +134,13 @@ export function ReplicaBoard({
           : null}
       </section>
       <CanvasBoard
+        {...(onSubmit === undefined || snapshotter === undefined
+          ? {}
+          : { onSubmit, snapshotter })}
         camera={camera}
         onCameraChange={onCameraChange}
         onEffect={onEffect}
         onSelectionChange={onSelectionChange}
-        onSubmit={onSubmit}
         projection={view.projection}
         resolver={resolver}
         selection={selection}

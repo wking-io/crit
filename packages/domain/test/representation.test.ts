@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest"
 
 import {
   Id,
+  LiveRepresentation,
   RepresentationRef,
   RootedRoute,
   decodeRepresentationRef
@@ -54,6 +55,24 @@ describe("RepresentationRef", () => {
       route: Schema.decodeUnknownSync(RootedRoute)("/checkout")
     }
     expect(representation._tag).toBe("application-route")
+  })
+
+  it("accepts live representations and rejects artifacts", () => {
+    const decodeLive = Schema.decodeUnknownSync(LiveRepresentation)
+    expect(decodeLive({
+      _tag: "web-url",
+      url: "https://example.com/review"
+    })._tag).toBe("web-url")
+    expect(decodeLive({
+      _tag: "application-route",
+      applicationId: "application_storefront",
+      route: "/checkout"
+    })._tag).toBe("application-route")
+    expect(() => decodeLive({
+      _tag: "artifact",
+      artifactId: "artifact_checkout",
+      digest
+    })).toThrow()
   })
 
   it("preserves query order and duplicate keys as logical identity", () => {

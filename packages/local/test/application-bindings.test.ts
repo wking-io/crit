@@ -20,6 +20,7 @@ import {
   ApplicationBindings,
   ArtifactStore,
   ArtifactStoreIoFailure,
+  LiveContent,
   RepresentationRuntime,
   RepresentationRuntimeLive
 } from "@crit/representations"
@@ -74,6 +75,10 @@ const inertArtifactStore = Layer.succeed(ArtifactStore, ArtifactStore.of({
     operation: "read",
     reason: "Application route touched the artifact store"
   }))
+}))
+
+const inertLiveContent = Layer.succeed(LiveContent, LiveContent.of({
+  get: () => Effect.die("Application resolve touched live content")
 }))
 
 const applicationServer = (requests: Array<string>) => HttpRouter.serve(
@@ -166,7 +171,9 @@ describe("LocalProjectApplicationBindings", () => {
         return yield* runtime.resolve(representation)
       }).pipe(Effect.provide(RepresentationRuntimeLive.pipe(
         Layer.provideMerge(bindings(origin)),
-        Layer.provideMerge(inertArtifactStore)
+        Layer.provideMerge(inertArtifactStore),
+        Layer.provideMerge(inertLiveContent),
+        Layer.provideMerge(NodeCrypto.layer)
       )))
       expect(plan._tag).toBe("iframe")
       if (plan._tag !== "iframe") return
@@ -197,7 +204,9 @@ describe("LocalProjectApplicationBindings", () => {
       return yield* runtime.resolve(input)
     }).pipe(Effect.provide(RepresentationRuntimeLive.pipe(
       Layer.provideMerge(bindings(origin)),
-      Layer.provideMerge(inertArtifactStore)
+      Layer.provideMerge(inertArtifactStore),
+      Layer.provideMerge(inertLiveContent),
+      Layer.provideMerge(NodeCrypto.layer)
     )))
     const local = await Effect.runPromise(resolve("http://127.0.0.1:5173/"))
     const preview = await Effect.runPromise(resolve("https://preview.example/"))
@@ -231,7 +240,9 @@ describe("LocalProjectApplicationBindings", () => {
       return yield* runtime.resolve(representation)
     }).pipe(Effect.provide(RepresentationRuntimeLive.pipe(
       Layer.provideMerge(bindings("http://127.0.0.1:5173/")),
-      Layer.provideMerge(inertArtifactStore)
+      Layer.provideMerge(inertArtifactStore),
+      Layer.provideMerge(inertLiveContent),
+      Layer.provideMerge(NodeCrypto.layer)
     ))))
     expect(plan).toMatchObject({
       _tag: "unavailable",

@@ -9,6 +9,7 @@ import {
   ApplicationBindings,
   RepresentationRuntimeLive
 } from "@crit/representations"
+import { LiveContentHttp } from "@crit/representations/adapter"
 import {
   Context,
   Crypto,
@@ -21,7 +22,7 @@ import {
   Redacted,
   Schema
 } from "effect"
-import { HttpServer } from "effect/unstable/http"
+import { FetchHttpClient, HttpServer } from "effect/unstable/http"
 
 import { localDaemonWithBrowser, LocalDaemon } from "./daemon.js"
 import { LocalArtifactStore } from "./artifact-store.js"
@@ -217,7 +218,8 @@ export class LocalDevelopment extends Context.Service<
       })
       const representationRuntime = RepresentationRuntimeLive.pipe(
         Layer.provide(LocalArtifactStore.layer({ directory: options.dataRoot })),
-        Layer.provide(Layer.succeed(ApplicationBindings, applicationBindings))
+        Layer.provide(Layer.succeed(ApplicationBindings, applicationBindings)),
+        Layer.provide(LiveContentHttp.pipe(Layer.provide(FetchHttpClient.layer)))
       )
       const daemonContext = yield* Layer.buildWithScope(
         daemonLayer.pipe(Layer.provide(representationRuntime)),

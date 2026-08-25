@@ -16,7 +16,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import {
   CanvasBoard,
   CanvasSelection,
-  type FrameRepresentationResolver
+  type FrameRepresentationResolver,
+  type FrameSnapshotter
 } from "../src/index.js"
 import { requiredBoard } from "./required-board.js"
 
@@ -25,6 +26,9 @@ notifyManager.setNotifyFunction((callback) => act(callback))
 notifyManager.setScheduler(queueMicrotask)
 
 const url = "https://example.com/checkout"
+const snapshotter: FrameSnapshotter = {
+  capture: () => Effect.die("Snapshot capture must not run")
+}
 const reviewProjection = (status: "in-progress" | "ready-for-review") =>
   decodeCanvasProjection({
     schemaVersion: 3,
@@ -180,6 +184,7 @@ describe("CanvasBoard", () => {
         onSubmit={onSubmit}
         projection={projection}
         resolver={resolver}
+        snapshotter={snapshotter}
         selection={CanvasSelection.make([{
           _tag: "frame",
           frameId: "frame_checkout"
@@ -215,6 +220,7 @@ describe("CanvasBoard", () => {
         onSubmit={onSubmit}
         projection={projection}
         resolver={resolver}
+        snapshotter={snapshotter}
       />
     ))
     const frame = container.querySelector("[aria-label='Checkout']")
@@ -251,6 +257,7 @@ describe("CanvasBoard", () => {
         onSubmit={onSubmit}
         projection={projection}
         resolver={resolver}
+        snapshotter={snapshotter}
         selection={CanvasSelection.make([{
           _tag: "frame",
           frameId: "frame_checkout"
@@ -292,6 +299,7 @@ describe("CanvasBoard", () => {
         onSubmit={onSubmit}
         projection={projection}
         resolver={resolver}
+        snapshotter={snapshotter}
         selection={CanvasSelection.make([{
           _tag: "frame",
           frameId: "frame_checkout"
@@ -340,6 +348,7 @@ describe("CanvasBoard", () => {
         onSubmit={vi.fn()}
         projection={projection}
         resolver={resolver}
+        snapshotter={snapshotter}
         selection={CanvasSelection.make([{
           _tag: "frame",
           frameId: "frame_checkout"

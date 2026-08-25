@@ -142,11 +142,35 @@ describe("review actions", () => {
     expect(reviewActionPolicies.map((entry) => entry.id)).not.toContain("add-frame")
   })
 
+  it("snapshots only selected live Frames", () => {
+    const live = itemSelection([{ _tag: "frame", frameId: "frame_a" }])
+    const artifact = itemSelection([{ _tag: "frame", frameId: "frame_b" }])
+    const mixed = itemSelection([
+      { _tag: "frame", frameId: "frame_a" },
+      { _tag: "frame", frameId: "frame_b" }
+    ])
+
+    expect(policyById("snapshot").available(live, projection)).toBe(true)
+    expect(policyById("snapshot").available(itemSelection([]), projection)).toBe(false)
+    expect(policyById("snapshot").available(artifact, projection)).toBe(false)
+    expect(resolveReviewAction("snapshot", context(mixed))).toEqual({
+      _tag: "snapshot",
+      request: [{
+        title: "Alpha",
+        status: "in-progress",
+        geometry: { x: 10, y: 20, width: 100, height: 80 },
+        representation: { _tag: "web-url", url: "https://example.com/a" }
+      }]
+    })
+    expect(resolveReviewAction("snapshot", context(mixed))?._tag).not.toBe("batch")
+  })
+
   it("binds review shortcuts from the table", () => {
     expect(policyById("remove").shortcuts).toEqual(["Delete", "Backspace"])
     expect(policyById("exit-fullscreen").shortcuts).toEqual(["Escape"])
     expect(policyById("enter-fullscreen").shortcuts).toEqual(["F"])
     expect(policyById("open-url").shortcuts).toEqual(["O"])
+    expect(policyById("snapshot").shortcuts).toEqual(["S"])
     expect(policyById("copy-node-id").shortcuts).toEqual(["Mod+Shift+C"])
     expect(policyById("bring-to-front").shortcuts).toEqual(["Mod+]"])
     expect(policyById("send-to-back").shortcuts).toEqual(["Mod+["])

@@ -3,17 +3,17 @@ import {
   ArtifactRepresentation,
   DomainValue,
   HttpUrl,
+  Id,
+  LiveRepresentation,
   WebUrlRepresentation,
   type ApplicationId,
-  type RepresentationRef,
+  type RepresentationRef
 } from "@crit/domain"
-import { Context, Data, Effect, Layer, Match, Option, Result, Schema } from "effect"
+import { Context, Crypto, Data, Effect, Layer, Match, Option, Result, Schema } from "effect"
 
 import {
   ArtifactStore,
-  ArtifactStoreIoFailure,
-  type ArtifactConflict,
-  type PutArtifact
+  ArtifactStoreIoFailure
 } from "./store.js"
 
 const applicationBaseUrlFailure = (value: string) => {
@@ -61,11 +61,23 @@ export class ApplicationBindings extends Context.Service<ApplicationBindings, {
   ) => Effect.Effect<Option.Option<ApplicationBaseUrl>, ApplicationBindingLookupFailure>
 }>()("@crit/representations/ApplicationBindings") {}
 
+export class CaptureSourceUnavailable extends Data.TaggedError("CaptureSourceUnavailable")<{
+  readonly representation: ApplicationRouteRepresentation
+}> {}
+
+export class LiveContentUnreachable extends Data.TaggedError("LiveContentUnreachable")<{
+  readonly url: HttpUrl
+  readonly reason: string
+}> {}
+
+export class LiveContent extends Context.Service<LiveContent, {
+  readonly get: (
+    url: HttpUrl
+  ) => Effect.Effect<Uint8Array, LiveContentUnreachable>
+}>()("@crit/representations/LiveContent") {}
+
 export const IframeRenderPlan = Schema.TaggedStruct("iframe", {
-  representation: Schema.Union([
-    ApplicationRouteRepresentation,
-    WebUrlRepresentation
-  ]),
+  representation: LiveRepresentation,
   url: HttpUrl
 })
 
@@ -96,10 +108,16 @@ export type RepresentationRuntimeFailure =
   | ApplicationBindingLookupFailure
   | ArtifactStoreIoFailure
 
+export type CaptureFailure =
+  | ApplicationBindingLookupFailure
+  | ArtifactStoreIoFailure
+  | CaptureSourceUnavailable
+  | LiveContentUnreachable
+
 export interface RepresentationRuntimeService {
   readonly capture: (
-    input: PutArtifact
-  ) => Effect.Effect<ArtifactRepresentation, ArtifactConflict | ArtifactStoreIoFailure>
+    representation: LiveRepresentation
+  ) => Effect.Effect<ArtifactRepresentation, CaptureFailure>
   readonly resolve: (
     representation: RepresentationRef
   ) => Effect.Effect<RenderPlan, RepresentationRuntimeFailure>
@@ -120,6 +138,8 @@ const applicationUrl = (
 const makeRuntime = Effect.gen(function*() {
   const bindings = yield* ApplicationBindings
   const artifacts = yield* ArtifactStore
+  const liveContent = yield* LiveContent
+  const crypto = yield* Crypto.Crypto
 
   const resolveApplication = (input: ApplicationRouteRepresentation) => {
     const representation = DomainValue.detach(input)
@@ -170,8 +190,33 @@ const makeRuntime = Effect.gen(function*() {
     artifact: resolveArtifact
   }))
 
+  const captureUrl = Match.type<LiveRepresentation>().pipe(Match.tagsExhaustive({
+    "application-route": (representation) =>
+      bindings.get(representation.applicationId).pipe(
+        Effect.flatMap(Option.match({
+          onNone: () => Effect.fail(new CaptureSourceUnavailable({
+            representation: DomainValue.detach(representation)
+          })),
+          onSome: (baseUrl) => Effect.succeed(applicationUrl(baseUrl, representation))
+        }))
+      ),
+    "web-url": (representation) => Effect.succeed(representation.url)
+  }))
+
+  const capture = (representation: LiveRepresentation) => Effect.gen(function*() {
+    const url = yield* captureUrl(representation)
+    const bytes = yield* liveContent.get(url)
+    const artifactId = yield* crypto.randomUUIDv4.pipe(
+      Effect.map((uuid) => Id.artifact(`artifact_${uuid.replaceAll("-", "")}`)),
+      Effect.orDie
+    )
+    return yield* artifacts.put({ artifactId, bytes }).pipe(
+      Effect.catchTag("ArtifactConflict", Effect.die)
+    )
+  })
+
   return RepresentationRuntime.of({
-    capture: artifacts.put,
+    capture,
     resolve
   })
 })
@@ -179,5 +224,5 @@ const makeRuntime = Effect.gen(function*() {
 export const RepresentationRuntimeLive: Layer.Layer<
   RepresentationRuntime,
   never,
-  ApplicationBindings | ArtifactStore
+  ApplicationBindings | ArtifactStore | Crypto.Crypto | LiveContent
 > = Layer.effect(RepresentationRuntime, makeRuntime)

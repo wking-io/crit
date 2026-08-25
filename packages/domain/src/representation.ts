@@ -166,6 +166,12 @@ export const WebUrlRepresentation = Schema.TaggedStruct("web-url", {
 })
 export type WebUrlRepresentation = typeof WebUrlRepresentation.Type
 
+export const LiveRepresentation = Schema.Union([
+  ApplicationRouteRepresentation,
+  WebUrlRepresentation
+])
+export type LiveRepresentation = typeof LiveRepresentation.Type
+
 export const ArtifactRepresentation = Schema.TaggedStruct("artifact", {
   artifactId: ArtifactId,
   digest: Sha256Digest
