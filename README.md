@@ -29,7 +29,7 @@ npx crit login https://crit.acme.internal
 npx crit share checkout-redesign
 ```
 
-Crit selects the remembered accessible Workspace. Otherwise it selects the Installation's default Workspace. Run Workspace commands only to switch.
+v1 uses the Installation's implicit default Workspace. It does not expose workspace switching.
 
 ## Target review workflow
 
@@ -62,6 +62,7 @@ The Frame Bridge is on in local development. Ordinary production builds and prev
 - [`ARCHITECTURE.md`](ARCHITECTURE.md) defines the target system.
 - [`CONTEXT.md`](CONTEXT.md) defines Crit's domain language.
 - [`docs/plans/001-cloudflare-native-v1`](docs/plans/001-cloudflare-native-v1/overview.md) contains the clean-rewrite implementation plan.
+- [`docs/plans/001-cloudflare-native-v1/v1-todo.md`](docs/plans/001-cloudflare-native-v1/v1-todo.md) is the current done and remaining inventory.
 - [`docs/plans/001-cloudflare-native-v1/testing.md`](docs/plans/001-cloudflare-native-v1/testing.md) defines the verification program.
 
 Historical issue, research, and migration documents describe the alpha or prior investigations. They do not override the target architecture.

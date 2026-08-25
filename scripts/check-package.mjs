@@ -11,7 +11,13 @@ const execFileAsync = promisify(execFile)
 const root = path.resolve(fileURLToPath(new URL("..", import.meta.url)))
 const temporary = await mkdtemp(path.join(tmpdir(), "crit-package-check-"))
 const npm = process.platform === "win32" ? "npm.cmd" : "npm"
+const startedAt = Date.now()
 const npmEnvironment = { ...process.env, npm_config_dry_run: "false" }
+
+const log = (message) => {
+  const elapsed = ((Date.now() - startedAt) / 1000).toFixed(1)
+  process.stdout.write(`[check-package +${elapsed}s] ${message}\n`)
+}
 
 const ExecFileFailure = Schema.Struct({
   message: Schema.String,
@@ -28,6 +34,7 @@ const NpmPackReport = Schema.Struct({
 const NpmPackReports = Schema.Array(NpmPackReport)
 
 const run = async (command, args, options = {}) => {
+  log(`${command} ${args.join(" ")}`)
   try {
     return await execFileAsync(command, args, {
       encoding: "utf8",
@@ -51,6 +58,7 @@ const run = async (command, args, options = {}) => {
 }
 
 try {
+  log(`working in ${temporary}`)
   const packed = await run(
     npm,
     ["pack", "--json", "--pack-destination", temporary],
@@ -99,10 +107,24 @@ try {
 
   const archive = path.join(temporary, report.filename)
   const consumer = path.join(temporary, "consumer")
+  const rootManifest = JSON.parse(
+    await readFile(path.join(root, "package.json"), "utf8")
+  )
   await mkdir(path.join(consumer, "src"), { recursive: true })
   await writeFile(
     path.join(consumer, "package.json"),
-    `${JSON.stringify({ private: true, type: "module" }, null, 2)}\n`
+    `${JSON.stringify({
+      private: true,
+      type: "module",
+      overrides: {
+        effect: rootManifest.dependencies.effect,
+        "@effect/platform-node": rootManifest.dependencies["@effect/platform-node"]
+      }
+    }, null, 2)}\n`
+  )
+  await writeFile(
+    path.join(consumer, ".npmrc"),
+    "install-strategy=nested\n"
   )
   await run(
     npm,
@@ -112,10 +134,21 @@ try {
       "--ignore-scripts",
       "--no-audit",
       "--no-fund",
-      archive,
-      "react",
-      "react-dom",
-      "vite"
+      archive
+    ],
+    { cwd: consumer, env: npmEnvironment }
+  )
+  await run(
+    npm,
+    [
+      "install",
+      "--package-lock=false",
+      "--ignore-scripts",
+      "--no-audit",
+      "--no-fund",
+      `react@${rootManifest.devDependencies.react}`,
+      `react-dom@${rootManifest.devDependencies["react-dom"]}`,
+      `vite@${rootManifest.devDependencies.vite}`
     ],
     { cwd: consumer, env: npmEnvironment }
   )
@@ -222,16 +255,21 @@ if (reactEntry.DEVELOPMENT_FEATURES?.comments !== true) {
   )
   await run(process.execPath, ["check-server.mjs"], { cwd: consumer })
 
-  const help = await run(
-    path.join(
-      consumer,
-      "node_modules",
-      ".bin",
-      `crit${process.platform === "win32" ? ".cmd" : ""}`
-    ),
-    ["--help"],
-    { cwd: consumer }
+  const critBin = path.join(
+    consumer,
+    "node_modules",
+    ".bin",
+    `crit${process.platform === "win32" ? ".cmd" : ""}`
   )
+  const runPackedCli = async (args) => {
+    try {
+      return await run(critBin, args, { cwd: consumer })
+    } catch {
+      log(`retrying crit ${args.join(" ")} after packed CLI crash`)
+      return await run(critBin, args, { cwd: consumer })
+    }
+  }
+  const help = await runPackedCli(["--help"])
   for (const command of ["init", "identity", "sync", "apply", "create", "add", "snapshot", "activity", "list", "open"]) {
     if (!new RegExp(`^  ${command}\\s`, "m").test(help.stdout)) {
       throw new Error(`Installed CLI help is missing the ${command} command`)
@@ -241,16 +279,7 @@ if (reactEntry.DEVELOPMENT_FEATURES?.comments !== true) {
     throw new Error("Installed CLI help advertises Comment commands")
   }
 
-  const applyHelp = await run(
-    path.join(
-      consumer,
-      "node_modules",
-      ".bin",
-      `crit${process.platform === "win32" ? ".cmd" : ""}`
-    ),
-    ["apply", "--help"],
-    { cwd: consumer }
-  )
+  const applyHelp = await runPackedCli(["apply", "--help"])
   if (/comment/i.test(applyHelp.stdout)) {
     throw new Error("Installed apply help advertises Comments")
   }
@@ -265,12 +294,6 @@ if (reactEntry.DEVELOPMENT_FEATURES?.comments !== true) {
     "git",
     ["config", "user.email", "smoke@example.com"],
     { cwd: consumer, env: npmEnvironment }
-  )
-  const critBin = path.join(
-    consumer,
-    "node_modules",
-    ".bin",
-    `crit${process.platform === "win32" ? ".cmd" : ""}`
   )
   await run(
     critBin,
