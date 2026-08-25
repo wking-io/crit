@@ -9,6 +9,7 @@ This file records the product decisions supplied in the active architecture conv
 - Authors build canvases locally. Agents author only through local tools on a developer's machine.
 - The UI is the primary viewing and review interface. Agents are first-class authors of Frames.
 - After share, review is human-led. Teammates open the hosted UI through Cloudflare Access. They do not install Crit.
+- `crit login` reconciles the local Person with the Access-authenticated Person. Share and later sync use that bound Person. The bind is login. It is not an email match at share time.
 - Crit has no remote agent interface, MCP server, Code Mode runtime, or OAuth agent grants.
 - One customer-hosted installation is one tenant. The v1 model has no Organization.
 - Workspace stays in the data model as the authorization boundary. v1 does not expose Workspaces, ship workspace commands, or write workspace-switching product.

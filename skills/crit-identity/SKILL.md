@@ -1,6 +1,6 @@
 ---
 name: crit-identity
-description: Diagnoses Crit identity for local provenance or remote company authentication. Use when Crit reports missing local identity or Access login failure.
+description: Diagnoses Crit identity for local provenance or remote company authentication. Use when Crit reports missing local identity, Access login failure, or when implementing crit login Person reconcile.
 ---
 
 # Crit identity
@@ -9,11 +9,22 @@ First identify the boundary that failed.
 
 ## Local provenance
 
-Local-only work records a Person with unspecified email. Cloudflare Access supplies the company address later. Git name and email do not become the Person record and do not grant Workspace access.
+Local-only work records a Person with unspecified email. Git name and email do not become the Person record and do not grant Workspace access.
 
 1. If Crit is missing a local Person, first boot writes unspecified email. Do not invent an address.
 2. Do not repair local identity by changing Git configuration.
-3. Hosted review maps Access claims to Person email.
+3. Reconcile at `crit login`. That flow binds the local Person to the Access-authenticated Person.
+
+## Login reconcile
+
+`crit login` is the only join from local Person to company Person.
+
+1. Complete Access sign-in against the Installation hostname.
+2. Map Access claims onto the existing local Person. Email becomes `{ _tag: "access", address }`.
+3. Keep `personId` as the durable id.
+4. Share and later sync use that bound Person.
+
+Share does not invent a second join. Hosted reviewers sign in with Access on their own.
 
 ## Remote person identity
 

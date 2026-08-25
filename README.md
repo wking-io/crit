@@ -29,6 +29,8 @@ npx crit login https://crit.acme.internal
 npx crit share checkout-redesign
 ```
 
+`crit login` reconciles the local Person with the Access-authenticated Person. Share uses that bind.
+
 v1 uses the Installation's implicit default Workspace. It does not expose workspace switching.
 
 ## Target review workflow

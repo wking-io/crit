@@ -25,6 +25,8 @@ npx crit login https://crit.acme.internal
 npx crit share checkout-redesign
 ```
 
+`crit login` reconciles the local Person with the Access-authenticated Person. Share uses that bind.
+
 A teammate opens the hosted review UI and signs in with company Access. Agents stay on the author's machine. Crit has no remote agent interface.
 
 ## System shape
