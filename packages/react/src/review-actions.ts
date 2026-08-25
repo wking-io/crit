@@ -243,9 +243,11 @@ const frameStatusPolicies = ([
     selectedFrames(selection, projection).some((frame) => frame.status !== status),
   run: ({ projection, selection }) =>
     reviewBatch(
-      selectedFrames(selection, projection)
-        .filter((frame) => frame.status !== status)
-        .map((frame) => proposeSetFrameStatus(frame, status))
+      selectedFrames(selection, projection).flatMap((frame) =>
+        frame.status === status
+          ? []
+          : [proposeSetFrameStatus(frame, status)]
+      )
     )
 }))
 

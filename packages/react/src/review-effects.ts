@@ -52,6 +52,7 @@ export const useReviewEffects = (args: {
   }, [])
 
   useEffect(() => {
+    if (typeof IntersectionObserver === "undefined") return
     const observer = new IntersectionObserver((entries) => {
       setOffscreenFrames((current) => {
         const next = new Set(current)
