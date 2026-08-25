@@ -353,6 +353,48 @@ describe("FrameRenderer", () => {
     ).toBe("https://example.com/replacement"))
   })
 
+  it("renders HTML artifact bytes in a sandboxed iframe", async() => {
+    const created: Array<Blob> = []
+    Object.defineProperty(URL, "createObjectURL", {
+      configurable: true,
+      value: vi.fn((blob: Blob) => {
+        created.push(blob)
+        return "blob:html-artifact"
+      })
+    })
+    Object.defineProperty(URL, "revokeObjectURL", {
+      configurable: true,
+      value: vi.fn()
+    })
+    const plan = ArtifactBytesRenderPlan.make({
+      representation: ArtifactRepresentation.make({
+        artifactId: Id.artifact("artifact_react_html"),
+        digest: "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+      }),
+      bytes: Uint8Array.from(
+        new TextEncoder().encode("\uFEFF \n<HTML><body>Snapshot</body></HTML>")
+      )
+    })
+    const resolver: FrameRepresentationResolver = {
+      resolve: () => Effect.succeed(plan)
+    }
+
+    await act(async() => render(
+      <FrameRenderer
+        frame={frame("change_artifact_html", plan.representation)}
+        resolver={resolver}
+      />
+    ))
+    await waitFor(() => expect(container.querySelector("iframe")).not.toBeNull())
+
+    const iframe = container.querySelector("iframe")
+    expect(iframe?.getAttribute("src")).toBe("blob:html-artifact")
+    expect(iframe?.getAttribute("sandbox")).toBe("allow-scripts")
+    expect(iframe?.getAttribute("title")).toBe("Checkout")
+    expect(created[0]?.type).toBe("text/html")
+    expect(container.querySelector("a")).toBeNull()
+  })
+
   it("downloads opaque artifact bytes and revokes each object URL once", async() => {
     const created: Array<Blob> = []
     const revoked: Array<string> = []

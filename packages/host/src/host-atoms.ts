@@ -60,7 +60,7 @@ export const hostScreenAtom = Atom.family((fragment: string): Atom.Atom<HostScre
   const runtime = Atom.runtime(hostLayer(connection.success))
   const boot = runtime.atom(Effect.gen(function*() {
     const client = yield* LocalCanvasClient
-    const resolver = yield* LocalRepresentationClient
+    const representations = yield* LocalRepresentationClient
     const store = yield* KeyValueStore.KeyValueStore
     yield* Effect.ignore(ensureLocalCanvas({
       canvasId: localCanvasId,
@@ -72,7 +72,8 @@ export const hostScreenAtom = Atom.family((fragment: string): Atom.Atom<HostScre
     return {
       canvasId: localCanvasId,
       ports: localReplicaSessionPorts(client),
-      resolver,
+      resolver: representations,
+      snapshotter: representations,
       run
     }
   }))

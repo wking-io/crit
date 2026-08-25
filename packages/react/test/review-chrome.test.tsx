@@ -1,9 +1,15 @@
-import { decodeCanvasProjection } from "@crit/domain"
+import {
+  ArtifactRepresentation,
+  Id,
+  decodeCanvasProjection
+} from "@crit/domain"
+import { Effect } from "effect"
 import { act, type ReactElement } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { CanvasSelection } from "../src/canvas-selection.js"
+import type { FrameSnapshotter } from "../src/frame-snapshot.js"
 import { ReviewChrome } from "../src/review-chrome.js"
 import {
   reviewActionPolicies,
@@ -48,6 +54,41 @@ const selection = (
 const selectedFrame = selection([
   { _tag: "frame", frameId: "frame_checkout" }
 ])
+
+const artifactProjection = decodeCanvasProjection({
+  schemaVersion: 3,
+  canvasId: "canvas_artifact",
+  title: "Artifact review",
+  frames: [{
+    frameId: "frame_artifact",
+    title: "Captured checkout",
+    representation: {
+      _tag: "artifact",
+      artifactId: "artifact_existing",
+      digest: `sha256:${"1".repeat(64)}`
+    },
+    status: "approved",
+    geometry: { x: 10, y: 20, width: 300, height: 180 },
+    createdByChangeId: "change_1",
+    updatedByChangeId: "change_1",
+    titleChangedByChangeId: "change_1",
+    representationChangedByChangeId: "change_1",
+    statusChangedByChangeId: "change_1",
+    geometryChangedByChangeId: "change_1"
+  }],
+  stack: [{ _tag: "frame", frameId: "frame_artifact" }],
+  stackChangedByChangeId: "change_1",
+  issuedIds: { frameIds: ["frame_artifact"] }
+})
+
+const capturedArtifact = ArtifactRepresentation.make({
+  artifactId: Id.artifact("artifact_snapshot"),
+  digest: `sha256:${"a".repeat(64)}`
+})
+
+const frameSnapshotter = (): FrameSnapshotter => ({
+  capture: () => Effect.succeed(capturedArtifact)
+})
 
 const removePolicy = reviewActionPolicies.find((entry) => entry.id === "remove")
 if (removePolicy === undefined) throw new Error("Missing remove policy")
@@ -103,6 +144,102 @@ afterEach(async() => {
 })
 
 describe("ReviewChrome", () => {
+  it("submits a captured artifact Frame from the Snapshot button and S", async() => {
+    const onSubmit = vi.fn()
+    const snapshotter = frameSnapshotter()
+    await act(async() => render(
+      <ReviewChrome
+        onSubmit={onSubmit}
+        projection={projection}
+        selection={selectedFrame}
+        snapshotter={snapshotter}
+      />
+    ))
+
+    await act(async() => button("Snapshot").click())
+    await act(async() => vi.waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1)))
+    expect(onSubmit).toHaveBeenLastCalledWith([{
+      _tag: "add-frame",
+      frameId: expect.stringMatching(/^frame_[0-9a-f]{32}$/),
+      title: "Checkout",
+      representation: capturedArtifact,
+      status: "in-progress",
+      geometry: { x: 400, y: 80, width: 320, height: 200 }
+    }])
+
+    await act(async() => press("S"))
+    await act(async() => vi.waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(2)))
+    expect(onSubmit).toHaveBeenLastCalledWith([{
+      _tag: "add-frame",
+      frameId: expect.stringMatching(/^frame_[0-9a-f]{32}$/),
+      title: "Checkout",
+      representation: capturedArtifact,
+      status: "in-progress",
+      geometry: { x: 400, y: 80, width: 320, height: 200 }
+    }])
+  })
+
+  it("hides Snapshot for an artifact-only selection", async() => {
+    await act(async() => render(
+      <ReviewChrome
+        onSubmit={vi.fn()}
+        projection={artifactProjection}
+        selection={selection([{ _tag: "frame", frameId: "frame_artifact" }])}
+        snapshotter={frameSnapshotter()}
+      />
+    ))
+
+    expect(container.querySelector("[aria-label='Snapshot']")).toBeNull()
+  })
+
+  it("disables Snapshot and ignores S while capture is in flight", async() => {
+    let complete: (() => void) | undefined
+    const capture = vi.fn(() => Effect.callback<
+      typeof capturedArtifact,
+      unknown
+    >((resume) => {
+      complete = () => resume(Effect.succeed(capturedArtifact))
+    }))
+    const onSubmit = vi.fn()
+    await act(async() => render(
+      <ReviewChrome
+        onSubmit={onSubmit}
+        projection={projection}
+        selection={selectedFrame}
+        snapshotter={{ capture }}
+      />
+    ))
+
+    await act(async() => button("Snapshot").click())
+    expect(button("Snapshot").disabled).toBe(true)
+    expect(container.querySelector("[role='status']")?.textContent)
+      .toBe("Capturing snapshot.")
+    await act(async() => press("S"))
+    expect(capture).toHaveBeenCalledTimes(1)
+
+    await act(async() => complete?.())
+    await act(async() => vi.waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1)))
+  })
+
+  it("shows a bounded Snapshot failure", async() => {
+    await act(async() => render(
+      <ReviewChrome
+        onSubmit={vi.fn()}
+        projection={projection}
+        selection={selectedFrame}
+        snapshotter={{
+          capture: () => Effect.fail("private capture failure")
+        }}
+      />
+    ))
+
+    await act(async() => button("Snapshot").click())
+    await act(async() => vi.waitFor(() => expect(
+      container.querySelector("[role='alert']")?.textContent
+    ).toBe("Snapshot failed.")))
+    expect(container.textContent).not.toContain("private capture failure")
+  })
+
   it("submits remove, status, and stack batches", async() => {
     const onSubmit = vi.fn()
     await act(async() => render(

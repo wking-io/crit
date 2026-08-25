@@ -4,6 +4,7 @@ import {
   type CanvasCommandBatch,
   type CanvasProjection,
   type Frame,
+  type LiveRepresentation,
   type ReviewStatus,
   proposeBringToFront,
   proposeRemoveFrame,
@@ -26,6 +27,19 @@ import { FRAME_SIZE_PRESETS } from "./frame-breakpoints.js"
 export type ReviewAction =
   | { readonly _tag: "batch"; readonly commands: CanvasCommandBatch }
   | { readonly _tag: "effect"; readonly effect: ReviewClientEffect }
+  | { readonly _tag: "snapshot"; readonly request: SnapshotRequest }
+
+export interface SnapshotSource {
+  readonly title: Frame["title"]
+  readonly status: Frame["status"]
+  readonly geometry: Frame["geometry"]
+  readonly representation: LiveRepresentation
+}
+
+export type SnapshotRequest = readonly [
+  SnapshotSource,
+  ...SnapshotSource[]
+]
 
 export type ReviewClientEffect =
   | { readonly _tag: "open-url"; readonly url: string }
@@ -54,6 +68,7 @@ export type ReviewShortcut =
   | "Escape"
   | "F"
   | "O"
+  | "S"
   | "1"
   | "2"
   | "3"
@@ -109,6 +124,20 @@ const selectedFrame = (
   const frames = selectedFrames(selection, projection)
   return frames.length === 1 ? frames[0] : undefined
 }
+
+const snapshotSources = (
+  selection: ReviewSelection,
+  projection: CanvasProjection
+): readonly SnapshotSource[] =>
+  selectedFrames(selection, projection).flatMap((frame) => {
+    if (frame.representation._tag === "artifact") return []
+    return [{
+      title: frame.title,
+      status: frame.status,
+      geometry: frame.geometry,
+      representation: frame.representation
+    }]
+  })
 
 const reviewBatch = (
   commands: readonly CanvasCommand[]
@@ -181,6 +210,21 @@ const removePolicy = policy({
     selectedFrames(selection, projection).length > 0,
   run: ({ projection, selection }) =>
     reviewBatch(selectedFrames(selection, projection).map(proposeRemoveFrame))
+})
+
+const snapshotPolicy = policy({
+  id: "snapshot",
+  label: "Snapshot",
+  description: "Capture the selected live Frames into new artifact Frames.",
+  shortcuts: ["S"],
+  available: (selection, projection) =>
+    snapshotSources(selection, projection).length > 0,
+  run: ({ projection, selection }) => {
+    const [first, ...rest] = snapshotSources(selection, projection)
+    return first === undefined
+      ? null
+      : { _tag: "snapshot", request: [first, ...rest] }
+  }
 })
 
 const bringToFrontPolicy = policy({
@@ -404,6 +448,7 @@ const copyNodeIdPolicy = policy({
 export const reviewActionPolicies = [
   renameCanvasPolicy,
   removePolicy,
+  snapshotPolicy,
   bringToFrontPolicy,
   sendToBackPolicy,
   setFrameTitlePolicy,

@@ -3,6 +3,7 @@ import {
   ReplicaBoard,
   useReplicaSession,
   type FrameRepresentationResolver,
+  type FrameSnapshotter,
   type ReplicaSessionPorts,
   type ReplicaSessionRun
 } from "@crit/react"
@@ -14,10 +15,17 @@ export interface CritHostProps {
   readonly canvasId: CanvasId
   readonly ports: ReplicaSessionPorts
   readonly resolver: FrameRepresentationResolver
+  readonly snapshotter: FrameSnapshotter
   readonly run: ReplicaSessionRun
 }
 
-function CritHostSession({ canvasId, ports, resolver, run }: CritHostProps): ReactElement {
+function CritHostSession({
+  canvasId,
+  ports,
+  resolver,
+  run,
+  snapshotter
+}: CritHostProps): ReactElement {
   const { onCameraChange, onSelectionChange, session, submit } = useReplicaSession({
     canvasId,
     ports,
@@ -35,6 +43,7 @@ function CritHostSession({ canvasId, ports, resolver, run }: CritHostProps): Rea
         }}
         resolver={resolver}
         selection={selection}
+        snapshotter={snapshotter}
         view={view}
       />
     ),
