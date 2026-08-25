@@ -5,7 +5,11 @@ import {
   type ChangeRejected
 } from "@crit/authority"
 import type { CanvasId } from "@crit/domain"
-import { ArtifactRepresentation, type RepresentationRef } from "@crit/domain"
+import {
+  ArtifactRepresentation,
+  type LiveRepresentation,
+  type RepresentationRef
+} from "@crit/domain"
 import type { ReplicaChanged } from "@crit/protocol"
 import type {
   ReplicaChange,
@@ -16,9 +20,12 @@ import type {
 import { ReplicaNotOpen } from "@crit/replica"
 import {
   ArtifactBytesRenderPlan,
+  LocalRepresentationCaptureFailure,
+  LocalRepresentationCaptureRequest,
   LocalRepresentationJsonResponse,
   LocalRepresentationResolveFailure,
   LocalRepresentationResolveRequest,
+  localRepresentationCapturePath,
   localRepresentationResolvePath,
   type RenderPlan
 } from "@crit/representations"
@@ -107,7 +114,18 @@ export type LocalRepresentationClientFailure =
   | HttpClientError.HttpClientError
   | Schema.SchemaError
 
+export type LocalRepresentationCaptureClientFailure =
+  | LocalApiUnauthorized
+  | LocalApiOriginRejected
+  | LocalApiVersionUnsupported
+  | LocalRepresentationCaptureFailure
+  | HttpClientError.HttpClientError
+  | Schema.SchemaError
+
 export interface LocalRepresentationClientService {
+  readonly capture: (
+    representation: LiveRepresentation
+  ) => Effect.Effect<ArtifactRepresentation, LocalRepresentationCaptureClientFailure>
   readonly resolve: (
     representation: RepresentationRef
   ) => Effect.Effect<RenderPlan, LocalRepresentationClientFailure>
@@ -129,21 +147,40 @@ const withBrowserCredentials = <A, E, R>(
 
 const representationRequest = (
   options: LocalClientOptions,
-  representation: RepresentationRef
+  path: `/${string}`
 ) => {
-  const request = HttpClientRequest.post(localUrl(options, localRepresentationResolvePath)).pipe(
+  return HttpClientRequest.post(localUrl(options, path)).pipe(
     HttpClientRequest.setHeader(localApiVersionHeader, localApiVersion),
     options._tag === "bearer" ? HttpClientRequest.bearerToken(options.token) : (request) => request,
     options._tag === "bearer" && options.origin !== undefined
       ? HttpClientRequest.setHeader("origin", options.origin)
       : (request) => request
   )
-  return HttpClientRequest.bodyJsonUnsafe(request, LocalRepresentationResolveRequest.make({
+}
+
+const representationResolveRequest = (
+  options: LocalClientOptions,
+  representation: RepresentationRef
+) => HttpClientRequest.bodyJsonUnsafe(
+  representationRequest(options, localRepresentationResolvePath),
+  LocalRepresentationResolveRequest.make({
     _tag: "resolve-representation",
     schemaVersion: 1,
     representation
-  }))
-}
+  })
+)
+
+const representationCaptureRequest = (
+  options: LocalClientOptions,
+  representation: LiveRepresentation
+) => HttpClientRequest.bodyJsonUnsafe(
+  representationRequest(options, localRepresentationCapturePath),
+  LocalRepresentationCaptureRequest.make({
+    _tag: "capture-representation",
+    schemaVersion: 1,
+    representation
+  })
+)
 
 const decodeRepresentationFailure = (
   response: HttpClientResponse.HttpClientResponse
@@ -166,6 +203,27 @@ const decodeRepresentationFailure = (
   }
 }
 
+const decodeCaptureResponse = (
+  response: HttpClientResponse.HttpClientResponse
+): Effect.Effect<ArtifactRepresentation, LocalRepresentationCaptureClientFailure> => {
+  switch (response.status) {
+    case 401:
+      return HttpClientResponse.schemaBodyJson(LocalApiUnauthorized)(response).pipe(Effect.flatMap(Effect.fail))
+    case 403:
+      return HttpClientResponse.schemaBodyJson(LocalApiOriginRejected)(response).pipe(Effect.flatMap(Effect.fail))
+    case 426:
+      return HttpClientResponse.schemaBodyJson(LocalApiVersionUnsupported)(response).pipe(Effect.flatMap(Effect.fail))
+    case 500:
+      return HttpClientResponse.schemaBodyJson(LocalRepresentationCaptureFailure)(response).pipe(
+        Effect.flatMap(Effect.fail)
+      )
+    default:
+      return HttpClientResponse.filterStatusOk(response).pipe(
+        Effect.flatMap(HttpClientResponse.schemaBodyJson(ArtifactRepresentation))
+      )
+  }
+}
+
 export class LocalRepresentationClient extends Context.Service<
   LocalRepresentationClient,
   LocalRepresentationClientService
@@ -174,25 +232,30 @@ export class LocalRepresentationClient extends Context.Service<
     LocalRepresentationClient,
     Effect.gen(function*() {
       const http = yield* HttpClient.HttpClient
-      const execute = (representation: RepresentationRef) => withBrowserCredentials(
+      const execute = (request: HttpClientRequest.HttpClientRequest) => withBrowserCredentials(
         options,
-        http.execute(representationRequest(options, representation))
+        http.execute(request)
       )
-      const resolve = (representation: RepresentationRef) => execute(representation).pipe(
-        Effect.flatMap((response) => {
-          if (response.status === 200 && response.headers["content-type"]?.startsWith("application/octet-stream")) {
-            return Schema.decodeUnknownEffect(ArtifactRepresentation)(representation).pipe(
-              Effect.zipWith(response.arrayBuffer, (artifact, buffer): RenderPlan => ArtifactBytesRenderPlan.make({
-                representation: artifact,
-                bytes: new Uint8Array(buffer)
-              }))
-            )
-          }
-          if (response.status === 200) return HttpClientResponse.schemaBodyJson(LocalRepresentationJsonResponse)(response)
-          return decodeRepresentationFailure(response)
-        })
-      )
-      return LocalRepresentationClient.of({ resolve })
+      const capture = (representation: LiveRepresentation) =>
+        execute(representationCaptureRequest(options, representation)).pipe(
+          Effect.flatMap(decodeCaptureResponse)
+        )
+      const resolve = (representation: RepresentationRef) =>
+        execute(representationResolveRequest(options, representation)).pipe(
+          Effect.flatMap((response) => {
+            if (response.status === 200 && response.headers["content-type"]?.startsWith("application/octet-stream")) {
+              return Schema.decodeUnknownEffect(ArtifactRepresentation)(representation).pipe(
+                Effect.zipWith(response.arrayBuffer, (artifact, buffer): RenderPlan => ArtifactBytesRenderPlan.make({
+                  representation: artifact,
+                  bytes: new Uint8Array(buffer)
+                }))
+              )
+            }
+            if (response.status === 200) return HttpClientResponse.schemaBodyJson(LocalRepresentationJsonResponse)(response)
+            return decodeRepresentationFailure(response)
+          })
+        )
+      return LocalRepresentationClient.of({ capture, resolve })
     })
   )
 }

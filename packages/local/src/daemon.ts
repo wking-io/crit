@@ -29,9 +29,12 @@ import {
   localApiVersionHeader
 } from "@crit/replica/http"
 import {
+  LocalRepresentationCaptureFailure,
+  LocalRepresentationCaptureRequest,
   LocalRepresentationResolveFailure,
   LocalRepresentationResolveRequest,
   RepresentationRuntime,
+  localRepresentationCapturePath,
   localRepresentationResolvePath
 } from "@crit/representations"
 import { NodeHttpServer } from "@effect/platform-node"
@@ -363,19 +366,25 @@ const representationFailureResponse = (reason: "application-binding" | "artifact
     reason
   }), { status: 500 })
 
-const representationRequestBody = (request: HttpServerRequest.HttpServerRequest) => Effect.gen(function*() {
+const invalidRepresentationRequest = "invalid"
+const oversizedRepresentationRequest = "too-large"
+
+const representationRequestBody = <A, I>(
+  request: HttpServerRequest.HttpServerRequest,
+  schema: Schema.Codec<A, I>
+) => Effect.gen(function*() {
   const limit = 16_384
   const body = yield* request.arrayBuffer.pipe(
     Effect.provideService(HttpServerRequest.MaxBodySize, FileSystem.Size(limit)),
     Effect.option
   )
-  if (body._tag === "None") return "too-large" as const
+  if (body._tag === "None") return oversizedRepresentationRequest
   return Schema.decodeUnknownOption(
-    Schema.fromJsonString(LocalRepresentationResolveRequest),
+    Schema.fromJsonString(schema),
     { onExcessProperty: "error" }
   )(new TextDecoder().decode(body.value)).pipe(
     Option.match({
-      onNone: () => "invalid" as const,
+      onNone: () => invalidRepresentationRequest,
       onSome: (value) => value
     })
   )
@@ -393,9 +402,16 @@ const resolveRepresentation = Effect.fn(function*() {
   if (contentLength > 16_384) {
     return HttpServerResponse.empty({ status: 413 })
   }
-  const body = yield* representationRequestBody(request)
-  if (body === "too-large") return HttpServerResponse.empty({ status: 413 })
-  if (body === "invalid") return HttpServerResponse.empty({ status: 400 })
+  const body = yield* representationRequestBody(
+    request,
+    LocalRepresentationResolveRequest
+  )
+  if (body === oversizedRepresentationRequest) {
+    return HttpServerResponse.empty({ status: 413 })
+  }
+  if (body === invalidRepresentationRequest) {
+    return HttpServerResponse.empty({ status: 400 })
+  }
   return yield* runtime.resolve(body.representation).pipe(
     Effect.map(Match.valueTags({
       "artifact-bytes": (plan) => HttpServerResponse.uint8Array(plan.bytes, {
@@ -411,18 +427,71 @@ const resolveRepresentation = Effect.fn(function*() {
   )
 })
 
+const captureFailureResponse = (
+  reason:
+    | "source-unavailable"
+    | "source-unreachable"
+    | "application-binding"
+    | "artifact-store"
+) => HttpServerResponse.jsonUnsafe(new LocalRepresentationCaptureFailure({
+  schemaVersion: 1,
+  reason
+}), { status: 500 })
+
+const captureRepresentation = Effect.fn(function*() {
+  const runtime = yield* RepresentationRuntime
+  const request = yield* HttpServerRequest.HttpServerRequest
+  const contentLengthHeader = request.headers["content-length"]
+  if (contentLengthHeader === undefined) return HttpServerResponse.empty({ status: 411 })
+  const contentLength = Number(contentLengthHeader)
+  if (!Number.isSafeInteger(contentLength) || contentLength < 0) {
+    return HttpServerResponse.empty({ status: 400 })
+  }
+  if (contentLength > 16_384) {
+    return HttpServerResponse.empty({ status: 413 })
+  }
+  const body = yield* representationRequestBody(
+    request,
+    LocalRepresentationCaptureRequest
+  )
+  if (body === oversizedRepresentationRequest) {
+    return HttpServerResponse.empty({ status: 413 })
+  }
+  if (body === invalidRepresentationRequest) {
+    return HttpServerResponse.empty({ status: 400 })
+  }
+  return yield* runtime.capture(body.representation).pipe(
+    Effect.map(HttpServerResponse.jsonUnsafe),
+    Effect.catchTags({
+      ApplicationBindingLookupFailure: () =>
+        Effect.succeed(captureFailureResponse("application-binding")),
+      ArtifactStoreIoFailure: () =>
+        Effect.succeed(captureFailureResponse("artifact-store")),
+      CaptureSourceUnavailable: () =>
+        Effect.succeed(captureFailureResponse("source-unavailable")),
+      LiveContentUnreachable: () =>
+        Effect.succeed(captureFailureResponse("source-unreachable"))
+    })
+  )
+})
+
 const bearerRepresentationRoutes = (options: LocalDaemonOptions) => HttpRouter.use(Effect.fn(function*(router) {
   yield* router.add("POST", localRepresentationResolvePath, (request) => {
     const failure = bearerRequestAuthorizationFailure(request, options, bearerCredential(request))
     if (failure !== undefined) return Effect.succeed(authorizationFailureResponse(failure))
     return resolveRepresentation()
   })
+  yield* router.add("POST", localRepresentationCapturePath, (request) => {
+    const failure = bearerRequestAuthorizationFailure(request, options, bearerCredential(request))
+    if (failure !== undefined) return Effect.succeed(authorizationFailureResponse(failure))
+    return captureRepresentation()
+  })
 }))
 
 const browserRepresentationRoutes = HttpRouter.use(Effect.fn(function*(router) {
   const browser = yield* BrowserSession
-  const path: `/${string}` = `${browser.path}${localRepresentationResolvePath.slice(1)}`
-  yield* router.add("POST", path, (request) => Effect.gen(function*() {
+  const resolvePath: `/${string}` = `${browser.path}${localRepresentationResolvePath.slice(1)}`
+  yield* router.add("POST", resolvePath, (request) => Effect.gen(function*() {
     if (browserRequestAuthority(request, browser, browser.browserOrigin, true) !== undefined) {
       return authorizationFailureResponse(new LocalApiOriginRejected({
         origin: request.headers.origin ?? "missing"
@@ -431,6 +500,19 @@ const browserRepresentationRoutes = HttpRouter.use(Effect.fn(function*(router) {
     const failure = yield* browserSessionAuthorizationFailure(request, browser)
     const response = failure === undefined
       ? resolveRepresentation()
+      : Effect.succeed(authorizationFailureResponse(failure))
+    return yield* browserCors(browser.browserOrigin)(response)
+  }))
+  const capturePath: `/${string}` = `${browser.path}${localRepresentationCapturePath.slice(1)}`
+  yield* router.add("POST", capturePath, (request) => Effect.gen(function*() {
+    if (browserRequestAuthority(request, browser, browser.browserOrigin, true) !== undefined) {
+      return authorizationFailureResponse(new LocalApiOriginRejected({
+        origin: request.headers.origin ?? "missing"
+      }))
+    }
+    const failure = yield* browserSessionAuthorizationFailure(request, browser)
+    const response = failure === undefined
+      ? captureRepresentation()
       : Effect.succeed(authorizationFailureResponse(failure))
     return yield* browserCors(browser.browserOrigin)(response)
   }))
