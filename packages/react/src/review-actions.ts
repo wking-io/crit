@@ -108,7 +108,7 @@ const textInput = (input: ReviewActionInput) => {
 
 const noInput: ReviewActionInput = { _tag: "none" }
 
-const alignmentDescription: Record<CanvasAlignment, string> = {
+const alignmentDescription = {
   left: "Align the selected Frames to the left of their shared bounds.",
   "horizontal-center":
     "Align the selected Frames to the horizontal center of their shared bounds.",
@@ -117,7 +117,7 @@ const alignmentDescription: Record<CanvasAlignment, string> = {
   "vertical-center":
     "Align the selected Frames to the vertical center of their shared bounds.",
   bottom: "Align the selected Frames to the bottom of their shared bounds."
-}
+} as const satisfies Record<CanvasAlignment, string>
 
 const renameCanvasPolicy = policy({
   id: "rename-canvas",
