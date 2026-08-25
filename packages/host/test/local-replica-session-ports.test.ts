@@ -6,11 +6,15 @@ import {
   decodeCanvasCommandBatch,
   decodeCanvasProjection
 } from "@crit/domain"
-import { ReplicaChangeRejected, ReplicaSessionUnavailable } from "@crit/react"
+import {
+  ReplicaChangeRejected,
+  ReplicaSessionUnavailable,
+  ReplicaSubscriptionEvent
+} from "@crit/react"
 import { ReplicaModel, ReplicaView } from "@crit/replica"
 import { LocalApiUnauthorized } from "@crit/replica/http"
-import { Effect, Schema } from "effect"
-import { describe, expect, it } from "vitest"
+import { Effect, Schema, Stream } from "effect"
+import { describe, expect, it, vi } from "vitest"
 
 import { localReplicaSessionPorts } from "../src/index.js"
 
@@ -71,6 +75,60 @@ const unusedClient = (
   change,
   sync: () => Effect.die("unused"),
   subscribe: () => Effect.die("unused")
+})
+
+const subscriptionClient = (args: {
+  readonly open: LocalCanvasClientService["open"]
+  readonly subscribe: LocalCanvasClientService["subscribe"]
+}): LocalCanvasClientService => ({
+  status: () => Effect.die("unused"),
+  create: () => Effect.die("unused"),
+  open: args.open,
+  change: () => Effect.die("unused"),
+  sync: () => Effect.die("unused"),
+  subscribe: args.subscribe
+})
+
+describe("localReplicaSessionPorts.subscribe", () => {
+  it("does not emit a lost event when unsubscribed", async() => {
+    const events: Array<ReplicaSubscriptionEvent> = []
+    const ports = localReplicaSessionPorts(subscriptionClient({
+      open: () => Effect.succeed(view),
+      subscribe: () => Effect.succeed(Stream.never)
+    }))
+    const unsubscribe = ports.subscribe(canvasId, (event) => events.push(event))
+    await vi.waitFor(() => expect(events).toEqual([
+      ReplicaSubscriptionEvent.connected(),
+      ReplicaSubscriptionEvent.changed()
+    ]))
+
+    unsubscribe()
+    await new Promise((resolve) => setTimeout(resolve, 10))
+
+    expect(events).toEqual([
+      ReplicaSubscriptionEvent.connected(),
+      ReplicaSubscriptionEvent.changed()
+    ])
+  })
+
+  it("emits connected, gap-close changed, and lost when a stream ends", async() => {
+    const events: Array<ReplicaSubscriptionEvent> = []
+    const open = vi.fn(() => Effect.succeed(view))
+    const ports = localReplicaSessionPorts(subscriptionClient({
+      open,
+      subscribe: () => Effect.succeed(Stream.empty)
+    }))
+    const unsubscribe = ports.subscribe(canvasId, (event) => events.push(event))
+
+    await vi.waitFor(() => expect(events).toEqual([
+      ReplicaSubscriptionEvent.connected(),
+      ReplicaSubscriptionEvent.changed(),
+      ReplicaSubscriptionEvent.lost({ reason: "The local daemon is unreachable." })
+    ]))
+    expect(open).toHaveBeenCalledOnce()
+
+    unsubscribe()
+  })
 })
 
 describe("localReplicaSessionPorts.change", () => {

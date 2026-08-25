@@ -1,6 +1,6 @@
 import type { CanvasChangeFailure, CanvasCommandBatch, CanvasId } from "@crit/domain"
 import type { ReplicaView } from "@crit/replica"
-import { Data, Effect, Result } from "effect"
+import { Data, Effect, Match, Result } from "effect"
 import type { KeyValueStore } from "effect/unstable/persistence"
 import { useCallback, useEffect, useState } from "react"
 
@@ -25,9 +25,25 @@ export class ReplicaChangeRejected extends Data.TaggedError("ReplicaChangeReject
   readonly failure: CanvasChangeFailure
 }> {}
 
+export type ReplicaConnection = Data.TaggedEnum<{
+  readonly live: {}
+  readonly lost: { readonly reason: string }
+}>
+export const ReplicaConnection = Data.taggedEnum<ReplicaConnection>()
+
+export type ReplicaSubscriptionEvent = Data.TaggedEnum<{
+  readonly changed: {}
+  readonly connected: {}
+  readonly lost: { readonly reason: string }
+}>
+export const ReplicaSubscriptionEvent = Data.taggedEnum<ReplicaSubscriptionEvent>()
+
 export interface ReplicaSessionPorts {
   readonly open: (canvasId: CanvasId) => Effect.Effect<ReplicaView, ReplicaSessionUnavailable>
-  readonly subscribe: (canvasId: CanvasId, onChanged: () => void) => () => void
+  readonly subscribe: (
+    canvasId: CanvasId,
+    onEvent: (event: ReplicaSubscriptionEvent) => void
+  ) => () => void
   readonly change: (input: {
     readonly canvasId: CanvasId
     readonly commands: CanvasCommandBatch
@@ -41,6 +57,7 @@ export type ReplicaSession = Data.TaggedEnum<{
     readonly view: ReplicaView
     readonly camera: CanvasCamera
     readonly selection: CanvasSelection
+    readonly connection: ReplicaConnection
   }
 }>
 export const ReplicaSession = Data.taggedEnum<ReplicaSession>()
@@ -60,48 +77,137 @@ export interface ReplicaSessionHandle {
 
 const loading = ReplicaSession.loading()
 
-const unavailable = (reason: string): ReplicaSession =>
-  ReplicaSession.unavailable({ reason })
-
-const ready = (
-  view: ReplicaView,
-  camera: CanvasCamera,
-  selection: CanvasSelection
-): ReplicaSession => ReplicaSession.ready({ view, camera, selection })
-
 const defaultCamera = CanvasCamera.make({ x: 0, y: 0, zoom: 1 })
 const defaultSelection = CanvasSelection.make([])
+const liveConnection = ReplicaConnection.live()
 
-const openedSession = (args: {
+type ReplicaSessionAction = Data.TaggedEnum<{
+  readonly reset: {}
+  readonly openFailed: { readonly reason: string }
+  readonly opened: {
+    readonly view: ReplicaView
+    readonly camera: CanvasCamera
+    readonly selection: CanvasSelection
+  }
+  readonly refreshed: {
+    readonly opened: Result.Result<ReplicaView, ReplicaSessionUnavailable>
+  }
+  readonly subscription: { readonly event: ReplicaSubscriptionEvent }
+  readonly cameraChanged: { readonly camera: CanvasCamera }
+  readonly selectionChanged: { readonly selection: CanvasSelection }
+  readonly submitted: { readonly view: ReplicaView }
+}>
+const ReplicaSessionAction = Data.taggedEnum<ReplicaSessionAction>()
+
+const ready = (args: {
+  readonly view: ReplicaView
+  readonly camera: CanvasCamera
+  readonly selection: CanvasSelection
+  readonly connection: ReplicaConnection
+}): ReplicaSession => ReplicaSession.ready(args)
+
+const reduceSession = (
+  previous: ReplicaSession,
+  action: ReplicaSessionAction
+): ReplicaSession => Match.value(action).pipe(Match.tagsExhaustive({
+  reset: () => loading,
+  openFailed: ({ reason }) =>
+    previous._tag === "ready" ? previous : ReplicaSession.unavailable({ reason }),
+  opened: ({ camera, selection, view }) => ready({
+    view,
+    camera,
+    selection,
+    connection: previous._tag === "ready" ? previous.connection : liveConnection
+  }),
+  refreshed: ({ opened }) => {
+    if (Result.isFailure(opened)) {
+      return previous._tag === "ready"
+        ? previous
+        : ReplicaSession.unavailable({ reason: opened.failure.reason })
+    }
+    return previous._tag === "ready"
+      ? ready({
+        view: opened.success,
+        camera: previous.camera,
+        selection: previous.selection,
+        connection: previous.connection
+      })
+      : ready({
+        view: opened.success,
+        camera: defaultCamera,
+        selection: defaultSelection,
+        connection: liveConnection
+      })
+  },
+  subscription: ({ event }) => Match.value(event).pipe(Match.tagsExhaustive({
+    changed: () => previous,
+    connected: () => previous._tag === "ready"
+      ? ready({
+        view: previous.view,
+        camera: previous.camera,
+        selection: previous.selection,
+        connection: liveConnection
+      })
+      : previous,
+    lost: ({ reason }) => previous._tag === "ready"
+      ? ready({
+        view: previous.view,
+        camera: previous.camera,
+        selection: previous.selection,
+        connection: ReplicaConnection.lost({ reason })
+      })
+      : previous
+  })),
+  cameraChanged: ({ camera }) => previous._tag === "ready"
+    ? ready({
+      view: previous.view,
+      camera,
+      selection: previous.selection,
+      connection: previous.connection
+    })
+    : previous,
+  selectionChanged: ({ selection }) => previous._tag === "ready"
+    ? ready({
+      view: previous.view,
+      camera: previous.camera,
+      selection,
+      connection: previous.connection
+    })
+    : previous,
+  submitted: ({ view }) => previous._tag === "ready"
+    ? ready({
+      view,
+      camera: previous.camera,
+      selection: previous.selection,
+      connection: previous.connection
+    })
+    : ready({
+      view,
+      camera: defaultCamera,
+      selection: defaultSelection,
+      connection: liveConnection
+    })
+}))
+
+const openedSessionAction = (args: {
   readonly canvasId: CanvasId
   readonly ports: ReplicaSessionPorts
-}): Effect.Effect<ReplicaSession, never, KeyValueStore.KeyValueStore> =>
+}): Effect.Effect<ReplicaSessionAction, never, KeyValueStore.KeyValueStore> =>
   Effect.gen(function*() {
     const opened = yield* Effect.result(args.ports.open(args.canvasId))
-    if (Result.isFailure(opened)) return unavailable(opened.failure.reason)
+    if (Result.isFailure(opened)) {
+      return ReplicaSessionAction.openFailed({ reason: opened.failure.reason })
+    }
     const savedCamera = yield* getCanvasCameraSession({ canvasId: args.canvasId })
     const savedSelection = yield* getCanvasSelectionSession({
       canvasId: args.canvasId
     })
-    return ready(
-      opened.success,
-      savedCamera ?? defaultCamera,
-      savedSelection ?? defaultSelection
-    )
+    return ReplicaSessionAction.opened({
+      view: opened.success,
+      camera: savedCamera ?? defaultCamera,
+      selection: savedSelection ?? defaultSelection
+    })
   })
-
-const refreshed = (
-  previous: ReplicaSession,
-  opened: Result.Result<ReplicaView, ReplicaSessionUnavailable>
-): ReplicaSession => {
-  if (Result.isFailure(opened)) {
-    return previous._tag === "ready" ? previous : unavailable(opened.failure.reason)
-  }
-  if (previous._tag === "ready") {
-    return ready(opened.success, previous.camera, previous.selection)
-  }
-  return ready(opened.success, defaultCamera, defaultSelection)
-}
 
 export const useReplicaSession = (args: {
   readonly canvasId: CanvasId
@@ -113,14 +219,31 @@ export const useReplicaSession = (args: {
 
   useEffect(() => {
     let active = true
-    setSession(loading)
-    const unsubscribe = ports.subscribe(canvasId, () => {
+    setSession((previous) => reduceSession(previous, ReplicaSessionAction.reset()))
+    const refresh = () => {
       void run(Effect.result(ports.open(canvasId))).then((opened) => {
-        if (active) setSession((previous) => refreshed(previous, opened))
+        if (active) {
+          setSession((previous) => reduceSession(
+            previous,
+            ReplicaSessionAction.refreshed({ opened })
+          ))
+        }
       })
+    }
+    const unsubscribe = ports.subscribe(canvasId, (event) => {
+      setSession((previous) => reduceSession(
+        previous,
+        ReplicaSessionAction.subscription({ event })
+      ))
+      const shouldRefresh = Match.value(event).pipe(Match.tagsExhaustive({
+        changed: () => true,
+        connected: () => true,
+        lost: () => false
+      }))
+      if (shouldRefresh) refresh()
     })
-    void run(openedSession({ canvasId, ports })).then((next) => {
-      if (active) setSession(next)
+    void run(openedSessionAction({ canvasId, ports })).then((action) => {
+      if (active) setSession((previous) => reduceSession(previous, action))
     })
     return () => {
       active = false
@@ -130,13 +253,19 @@ export const useReplicaSession = (args: {
 
   const onCameraChange = useCallback((camera: CanvasCamera) => {
     if (session._tag !== "ready") return
-    setSession(ready(session.view, camera, session.selection))
+    setSession((previous) => reduceSession(
+      previous,
+      ReplicaSessionAction.cameraChanged({ camera })
+    ))
     void run(Effect.ignore(setCanvasCameraSession({ camera, canvasId })))
   }, [canvasId, run, session])
 
   const onSelectionChange = useCallback((selection: CanvasSelection) => {
     if (session._tag !== "ready") return
-    setSession(ready(session.view, session.camera, selection))
+    setSession((previous) => reduceSession(
+      previous,
+      ReplicaSessionAction.selectionChanged({ selection })
+    ))
     void run(Effect.ignore(setCanvasSelectionSession({ canvasId, selection })))
   }, [canvasId, run, session])
 
@@ -149,11 +278,10 @@ export const useReplicaSession = (args: {
     }
     return run(Effect.result(ports.change({ canvasId, commands }))).then((changed) => {
       if (Result.isSuccess(changed)) {
-        setSession((previous) =>
-          previous._tag === "ready"
-            ? ready(changed.success, previous.camera, previous.selection)
-            : ready(changed.success, defaultCamera, defaultSelection)
-        )
+        setSession((previous) => reduceSession(
+          previous,
+          ReplicaSessionAction.submitted({ view: changed.success })
+        ))
       }
       return changed
     })

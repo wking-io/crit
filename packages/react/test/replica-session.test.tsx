@@ -14,7 +14,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import {
   CanvasCamera,
   CanvasSelection,
+  ReplicaConnection,
   ReplicaChangeRejected,
+  ReplicaSubscriptionEvent,
   ReplicaSessionUnavailable,
   getCanvasCameraSession,
   getCanvasSelectionSession,
@@ -138,7 +140,10 @@ const makeRun = (): ReplicaSessionRun => {
 
 const makeReplica = (initial: ReadonlyArray<ReplicaView>) => {
   const views = new Map(initial.map((view) => [view.canvasId, view]))
-  const listeners = new Map<CanvasId, Set<() => void>>()
+  const listeners = new Map<
+    CanvasId,
+    Set<(event: ReplicaSubscriptionEvent) => void>
+  >()
   const ports: ReplicaSessionPorts = {
     open: (canvasId) => {
       const view = views.get(canvasId)
@@ -146,13 +151,13 @@ const makeReplica = (initial: ReadonlyArray<ReplicaView>) => {
         ? Effect.fail(new ReplicaSessionUnavailable({ canvasId, reason: "replica missing" }))
         : Effect.succeed(view)
     },
-    subscribe: (canvasId, onChanged) => {
+    subscribe: (canvasId, onEvent) => {
       const existing = listeners.get(canvasId)
       const set = existing ?? new Set()
       if (existing === undefined) listeners.set(canvasId, set)
-      set.add(onChanged)
+      set.add(onEvent)
       return () => {
-        set.delete(onChanged)
+        set.delete(onEvent)
       }
     },
     change: ({ canvasId }) => {
@@ -165,8 +170,11 @@ const makeReplica = (initial: ReadonlyArray<ReplicaView>) => {
   return {
     ports,
     views,
-    notify: (canvasId: CanvasId) => {
-      for (const listener of listeners.get(canvasId) ?? []) listener()
+    notify: (
+      canvasId: CanvasId,
+      event: ReplicaSubscriptionEvent = ReplicaSubscriptionEvent.changed()
+    ) => {
+      for (const listener of listeners.get(canvasId) ?? []) listener(event)
     },
     activeSubscriptions: (canvasId: CanvasId) => listeners.get(canvasId)?.size ?? 0
   }
@@ -209,6 +217,7 @@ const savedSelection = CanvasSelection.make([
   { _tag: "frame", frameId: "frame_checkout" }
 ])
 const defaultSelection = CanvasSelection.make([])
+const liveConnection = ReplicaConnection.live()
 
 describe("useReplicaSession", () => {
   it("restores a saved camera and selection when open succeeds", async() => {
@@ -229,7 +238,8 @@ describe("useReplicaSession", () => {
         _tag: "ready",
         view: viewOne,
         camera: savedCamera,
-        selection: savedSelection
+        selection: savedSelection,
+        connection: liveConnection
       })
     )
   })
@@ -246,7 +256,8 @@ describe("useReplicaSession", () => {
         _tag: "ready",
         view: viewOne,
         camera: defaultCamera,
-        selection: defaultSelection
+        selection: defaultSelection,
+        connection: liveConnection
       })
     )
   })
@@ -282,7 +293,8 @@ describe("useReplicaSession", () => {
         _tag: "ready",
         view: viewOne,
         camera: defaultCamera,
-        selection: defaultSelection
+        selection: defaultSelection,
+        connection: liveConnection
       })
     )
   })
@@ -301,6 +313,10 @@ describe("useReplicaSession", () => {
     ))
     await waitFor(() => expect(latest?.session._tag).toBe("ready"))
 
+    await act(async() => replica.notify(
+      canvasA,
+      ReplicaSubscriptionEvent.lost({ reason: "socket closed" })
+    ))
     replica.views.delete(canvasA)
     await act(async() => replica.notify(canvasA))
 
@@ -309,7 +325,63 @@ describe("useReplicaSession", () => {
         _tag: "ready",
         view: viewOne,
         camera: savedCamera,
-        selection: savedSelection
+        selection: savedSelection,
+        connection: ReplicaConnection.lost({ reason: "socket closed" })
+      })
+    )
+  })
+
+  it("keeps the ready payload when the subscription is lost", async() => {
+    const replica = makeReplica([viewOne])
+
+    await act(async() => render(
+      <Probe canvasId={canvasA} ports={replica.ports} run={makeRun()} />
+    ))
+    await waitFor(() => expect(latest?.session._tag).toBe("ready"))
+    const previous = latest?.session
+    expect(previous?._tag).toBe("ready")
+
+    await act(async() => replica.notify(
+      canvasA,
+      ReplicaSubscriptionEvent.lost({ reason: "socket closed" })
+    ))
+
+    expect(latest?.session).toEqual({
+      _tag: "ready",
+      view: viewOne,
+      camera: defaultCamera,
+      selection: defaultSelection,
+      connection: ReplicaConnection.lost({ reason: "socket closed" })
+    })
+    if (previous?._tag === "ready" && latest?.session._tag === "ready") {
+      expect(latest.session.view).toBe(previous.view)
+      expect(latest.session.camera).toBe(previous.camera)
+      expect(latest.session.selection).toBe(previous.selection)
+    }
+  })
+
+  it("refreshes the view when the subscription reconnects", async() => {
+    const replica = makeReplica([viewOne])
+
+    await act(async() => render(
+      <Probe canvasId={canvasA} ports={replica.ports} run={makeRun()} />
+    ))
+    await waitFor(() => expect(latest?.session._tag).toBe("ready"))
+    await act(async() => replica.notify(
+      canvasA,
+      ReplicaSubscriptionEvent.lost({ reason: "socket closed" })
+    ))
+    replica.views.set(canvasA, viewTwo)
+
+    await act(async() => replica.notify(canvasA, ReplicaSubscriptionEvent.connected()))
+
+    await waitFor(() =>
+      expect(latest?.session).toEqual({
+        _tag: "ready",
+        view: viewTwo,
+        camera: defaultCamera,
+        selection: defaultSelection,
+        connection: liveConnection
       })
     )
   })
@@ -336,7 +408,8 @@ describe("useReplicaSession", () => {
         _tag: "ready",
         view: viewTwo,
         camera: savedCamera,
-        selection: savedSelection
+        selection: savedSelection,
+        connection: liveConnection
       })
     )
   })
@@ -358,7 +431,8 @@ describe("useReplicaSession", () => {
         _tag: "ready",
         view: viewOne,
         camera: moved,
-        selection: defaultSelection
+        selection: defaultSelection,
+        connection: liveConnection
       })
     )
     await waitFor(async() =>
@@ -382,7 +456,8 @@ describe("useReplicaSession", () => {
         _tag: "ready",
         view: viewOne,
         camera: defaultCamera,
-        selection: savedSelection
+        selection: savedSelection,
+        connection: liveConnection
       })
     )
     await waitFor(async() =>
@@ -413,7 +488,8 @@ describe("useReplicaSession", () => {
         _tag: "ready",
         view: viewOther,
         camera: defaultCamera,
-        selection: defaultSelection
+        selection: defaultSelection,
+        connection: liveConnection
       })
     )
   })
@@ -443,7 +519,8 @@ describe("useReplicaSession", () => {
       _tag: "ready",
       view: viewAfterAdd,
       camera: savedCamera,
-      selection: savedSelection
+      selection: savedSelection,
+      connection: liveConnection
     })
   })
 
@@ -480,7 +557,8 @@ describe("useReplicaSession", () => {
       _tag: "ready",
       view: viewOne,
       camera: savedCamera,
-      selection: savedSelection
+      selection: savedSelection,
+      connection: liveConnection
     })
   })
 
@@ -502,7 +580,8 @@ describe("useReplicaSession", () => {
         _tag: "ready",
         view: viewAfterAdd,
         camera: defaultCamera,
-        selection: defaultSelection
+        selection: defaultSelection,
+        connection: liveConnection
       })
     )
 
@@ -514,7 +593,8 @@ describe("useReplicaSession", () => {
         _tag: "ready",
         view: viewTwo,
         camera: defaultCamera,
-        selection: defaultSelection
+        selection: defaultSelection,
+        connection: liveConnection
       })
     )
   })
