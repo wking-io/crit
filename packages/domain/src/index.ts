@@ -27,7 +27,7 @@ export {
   actorFromPrincipal,
   EmailAddress,
   PersonEmail,
-  ProvisionalPersonEmail,
+  AccessPersonEmail,
   UnspecifiedPersonEmail,
   HarnessDescriptor,
   ModelDescriptor,

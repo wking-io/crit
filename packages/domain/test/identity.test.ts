@@ -50,11 +50,11 @@ describe("ActorSnapshot", () => {
   })
 
   it("requires an email state and rejects a raw or malformed address", () => {
-    const provisional = {
+    const access = {
       ...person,
-      email: { _tag: "provisional" as const, address: "will@example.com" }
+      email: { _tag: "access" as const, address: "will@example.com" }
     }
-    expect(decodeActorSnapshot(provisional)).toEqual(provisional)
+    expect(decodeActorSnapshot(access)).toEqual(access)
     expect(decodeActorSnapshot(person)).toEqual(person)
     expect(() => decodeActorSnapshot({
       _tag: "person",
@@ -64,15 +64,15 @@ describe("ActorSnapshot", () => {
     expect(() => decodeActorSnapshot({ ...person, email: "will@example.com" })).toThrow()
     expect(() => decodeActorSnapshot({
       ...person,
-      email: { _tag: "provisional", address: "" }
+      email: { _tag: "access", address: "" }
     })).toThrow()
     expect(() => decodeActorSnapshot({
       ...person,
-      email: { _tag: "provisional", address: "not-an-email" }
+      email: { _tag: "access", address: "not-an-email" }
     })).toThrow()
     expect(() => decodeActorSnapshot({
       ...person,
-      email: { _tag: "provisional", address: "a@b" }
+      email: { _tag: "access", address: "a@b" }
     })).toThrow()
   })
 

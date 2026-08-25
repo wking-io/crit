@@ -93,7 +93,7 @@ The remote ledger begins with the authenticated import. Crit does not label unve
 
 A Principal is the authenticated request identity. An Actor is the durable author of accepted work.
 
-People authenticate locally through a provisional local identity and remotely through Cloudflare Access. Agents authenticate only through the local daemon on a developer's machine. There is no remote Agent principal.
+People work locally without an Access address and authenticate remotely through Cloudflare Access. Agents authenticate only through the local daemon on a developer's machine. There is no remote Agent principal.
 
 Human attribution records the Person who acted. Agent attribution records:
 

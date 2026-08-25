@@ -9,12 +9,11 @@ First identify the boundary that failed.
 
 ## Local provenance
 
-Local-only work may use repository Git name and email as provisional provenance. It is optional and does not grant Workspace access or become verified remote history.
+Local-only work records a Person with unspecified email. Cloudflare Access supplies the company address later. Git name and email do not become the Person record and do not grant Workspace access.
 
-1. Inspect effective repository values with `git config --get user.name` and `git config --get user.email`.
-2. If a value is missing, ask the user. Do not infer identity from history, remotes, or hosting accounts.
-3. With confirmation, set only repository-local values.
-4. Re-run the Crit identity diagnostic.
+1. If Crit is missing a local Person, first boot writes unspecified email. Do not invent an address.
+2. Do not repair local identity by changing Git configuration.
+3. Hosted review maps Access claims to Person email.
 
 ## Remote person identity
 

@@ -1,13 +1,11 @@
 import { AuthorityModel } from "@crit/authority"
 import {
   AuthSubject,
-  EmailAddress,
   Id,
   InstallationId,
   PersonPrincipal,
   PersonEmail,
   PersonSnapshot,
-  ProvisionalPersonEmail,
   UnspecifiedPersonEmail
 } from "@crit/domain"
 import {
@@ -85,7 +83,6 @@ export interface LocalDevelopmentOptions {
   readonly allowedOrigins?: ReadonlySet<string>
   readonly browserOrigin?: string
   readonly application?: LocalProjectApplicationBindingsOptions
-  readonly provisionalEmail?: EmailAddress
 }
 
 export interface LocalDevelopmentService {
@@ -104,11 +101,6 @@ const DatabaseOpenFailure = Schema.Struct({
   reason: Schema.String
 })
 const TaggedFailure = Schema.Struct({ _tag: Schema.String })
-
-const personEmail = (address: EmailAddress | undefined) =>
-  address === undefined
-    ? UnspecifiedPersonEmail.make({})
-    : ProvisionalPersonEmail.make({ address })
 
 const InstallationEmailProbe = Schema.Struct({
   principal: Schema.Struct({
@@ -174,7 +166,6 @@ export class LocalDevelopment extends Context.Service<
       const exists = yield* fs.exists(installationPath).pipe(
         Effect.mapError((cause) => fail("inspect installation", installationPath, String(cause)))
       )
-      const provisionalEmail = options.provisionalEmail
       const storedInstallation = exists
         ? yield* readInstallation
         : yield* Effect.gen(function*() {
@@ -193,7 +184,7 @@ export class LocalDevelopment extends Context.Service<
               person: PersonSnapshot.make({
                 personId: Id.person(`person_${suffix}`),
                 displayName: "Local Crit User",
-                email: personEmail(provisionalEmail)
+                email: UnspecifiedPersonEmail.make({})
               })
             }),
             bearerSecret: Encoding.encodeBase64Url(secretBytes),
@@ -213,14 +204,7 @@ export class LocalDevelopment extends Context.Service<
         })
 
       const storedText = exists ? yield* readInstallationText : undefined
-      const currentEmail = storedInstallation.principal.person.email
-      const nextEmail = currentEmail._tag === "provisional"
-        ? currentEmail
-        : personEmail(provisionalEmail)
-      const shouldRewrite = storedText !== undefined && (
-        installationLacksPersonEmail(storedText) ||
-        (currentEmail._tag === "unspecified" && nextEmail._tag === "provisional")
-      )
+      const shouldRewrite = storedText !== undefined && installationLacksPersonEmail(storedText)
       const installation = !shouldRewrite
         ? storedInstallation
         : yield* Effect.gen(function*() {
@@ -230,7 +214,7 @@ export class LocalDevelopment extends Context.Service<
               ...storedInstallation.principal,
               person: PersonSnapshot.make({
                 ...storedInstallation.principal.person,
-                email: nextEmail
+                email: UnspecifiedPersonEmail.make({})
               })
             })
           }

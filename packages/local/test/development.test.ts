@@ -16,9 +16,9 @@ import { createServer } from "node:net"
 import { NodeServices } from "@effect/platform-node"
 import { AuthorityModel } from "@crit/authority"
 import { LocalCanvasClient } from "@crit/client"
-import { EmailAddress, Id } from "@crit/domain"
+import { Id } from "@crit/domain"
 import { localApiToken, type LocalApiToken } from "@crit/replica/http"
-import { Context, Effect, Exit, Layer, Option, Result, Schema, Scope } from "effect"
+import { Context, Effect, Exit, Layer, Option, Result, Scope } from "effect"
 import { FetchHttpClient } from "effect/unstable/http"
 import { describe, expect, it } from "vitest"
 
@@ -41,8 +41,6 @@ const buildWith = (
 )
 
 const build = (dataRoot: string, scope: Scope.Scope) => buildWith(dataRoot, scope)
-
-const decodeEmail = (value: string) => Schema.decodeUnknownSync(EmailAddress)(value)
 
 const personFrom = (dataRoot: string) =>
   decodeStored(LocalInstallation, readFileSync(join(dataRoot, "installation.json"), "utf8")).principal.person
@@ -327,27 +325,13 @@ describe("LocalDevelopment", () => {
       expect(readdirSync(dataRoot).filter((name) => name.startsWith(".daemon-"))).toEqual([])
     }))))
 
-  it("stamps provisional email on first boot", () =>
-    Effect.runPromise(Effect.scoped(Effect.gen(function*() {
-      const directory = yield* temporaryRoot
-      const dataRoot = join(directory, ".crit", "v1")
-      yield* buildWith(dataRoot, yield* Effect.scope, {
-        provisionalEmail: decodeEmail("will@example.com")
-      })
-      const person = personFrom(dataRoot)
-      expect(person.email).toEqual({
-        _tag: "provisional",
-        address: "will@example.com"
-      })
-      expect(person.displayName).toBe("Local Crit User")
-    }))))
-
-  it("writes unspecified email when no provisional address is provided", () =>
+  it("writes unspecified email on first boot", () =>
     Effect.runPromise(Effect.scoped(Effect.gen(function*() {
       const directory = yield* temporaryRoot
       const dataRoot = join(directory, ".crit", "v1")
       yield* build(dataRoot, yield* Effect.scope)
       expect(personFrom(dataRoot).email).toEqual({ _tag: "unspecified" })
+      expect(personFrom(dataRoot).displayName).toBe("Local Crit User")
     }))))
 
   it("rewrites a stored Person that predates the email field", () =>
@@ -367,34 +351,12 @@ describe("LocalDevelopment", () => {
         .toEqual({ _tag: "unspecified" })
     }))))
 
-  it("adopts provisional email into a stored Person that is unspecified", () =>
-    Effect.runPromise(Effect.scoped(Effect.gen(function*() {
-      const directory = yield* temporaryRoot
-      const dataRoot = join(directory, ".crit", "v1")
-      yield* Effect.scoped(Effect.gen(function*() {
-        yield* build(dataRoot, yield* Effect.scope)
-      }))
-      expect(personFrom(dataRoot).email).toEqual({ _tag: "unspecified" })
-      yield* buildWith(dataRoot, yield* Effect.scope, {
-        provisionalEmail: decodeEmail("will@example.com")
-      })
-      expect(personFrom(dataRoot).email).toEqual({
-        _tag: "provisional",
-        address: "will@example.com"
-      })
-    }))))
-
   it("does not rewrite installation.json on a later boot once email is stored", () =>
     Effect.runPromise(Effect.scoped(Effect.gen(function*() {
       const directory = yield* temporaryRoot
       const dataRoot = join(directory, ".crit", "v1")
       yield* Effect.scoped(Effect.gen(function*() {
         yield* build(dataRoot, yield* Effect.scope)
-      }))
-      yield* Effect.scoped(Effect.gen(function*() {
-        yield* buildWith(dataRoot, yield* Effect.scope, {
-          provisionalEmail: decodeEmail("will@example.com")
-        })
       }))
       const installationPath = join(dataRoot, "installation.json")
       writeFileSync(installationPath, JSON.stringify(
@@ -403,27 +365,7 @@ describe("LocalDevelopment", () => {
         2
       ))
       const marked = readFileSync(installationPath, "utf8")
-      yield* buildWith(dataRoot, yield* Effect.scope, {
-        provisionalEmail: decodeEmail("will@example.com")
-      })
+      yield* build(dataRoot, yield* Effect.scope)
       expect(readFileSync(installationPath, "utf8")).toBe(marked)
-    }))))
-
-  it("never replaces an existing email", () =>
-    Effect.runPromise(Effect.scoped(Effect.gen(function*() {
-      const directory = yield* temporaryRoot
-      const dataRoot = join(directory, ".crit", "v1")
-      yield* Effect.scoped(Effect.gen(function*() {
-        yield* buildWith(dataRoot, yield* Effect.scope, {
-          provisionalEmail: decodeEmail("will@example.com")
-        })
-      }))
-      yield* buildWith(dataRoot, yield* Effect.scope, {
-        provisionalEmail: decodeEmail("other@example.com")
-      })
-      expect(personFrom(dataRoot).email).toEqual({
-        _tag: "provisional",
-        address: "will@example.com"
-      })
     }))))
 })

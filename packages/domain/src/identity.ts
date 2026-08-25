@@ -1,4 +1,4 @@
-import { Schema, SchemaGetter } from "effect"
+import { Effect, Schema } from "effect"
 
 import {
   AgentId,
@@ -21,14 +21,14 @@ export type EmailAddress = typeof EmailAddress.Type
 export const UnspecifiedPersonEmail = Schema.TaggedStruct("unspecified", {})
 export type UnspecifiedPersonEmail = typeof UnspecifiedPersonEmail.Type
 
-export const ProvisionalPersonEmail = Schema.TaggedStruct("provisional", {
+export const AccessPersonEmail = Schema.TaggedStruct("access", {
   address: EmailAddress
 })
-export type ProvisionalPersonEmail = typeof ProvisionalPersonEmail.Type
+export type AccessPersonEmail = typeof AccessPersonEmail.Type
 
 export const PersonEmail = Schema.Union([
   UnspecifiedPersonEmail,
-  ProvisionalPersonEmail
+  AccessPersonEmail
 ])
 export type PersonEmail = typeof PersonEmail.Type
 
@@ -39,24 +39,13 @@ export const PersonSnapshot = Schema.TaggedStruct("person", {
 })
 export type PersonSnapshot = typeof PersonSnapshot.Type
 
-const StoredPersonSnapshot = Schema.TaggedStruct("person", {
+const PersonSnapshotFromStored = Schema.TaggedStruct("person", {
   personId: PersonId,
   displayName: DisplayName,
-  email: Schema.optionalKey(PersonEmail)
+  email: PersonEmail.pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed(UnspecifiedPersonEmail.make({})))
+  )
 })
-
-const PersonSnapshotFromStored = StoredPersonSnapshot.pipe(
-  Schema.decodeTo(PersonSnapshot, {
-    decode: SchemaGetter.transform((stored) =>
-      PersonSnapshot.make({
-        personId: stored.personId,
-        displayName: stored.displayName,
-        email: stored.email ?? UnspecifiedPersonEmail.make({})
-      })
-    ),
-    encode: SchemaGetter.transform((person: PersonSnapshot) => person)
-  })
-)
 
 export const AgentSnapshot = Schema.TaggedStruct("agent", {
   agentId: AgentId,
