@@ -80,7 +80,7 @@ const reconcileEagerly = (replica: CanvasReplicaService) =>
         ReplicaDiverged: Effect.die,
         ReplicaInvariantFailure: Effect.die
       }),
-      Effect.forkDaemon,
+      Effect.forkDetach,
       Effect.asVoid
     )
 
