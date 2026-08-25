@@ -1,3 +1,6 @@
+import { existsSync } from "node:fs"
+import { join } from "node:path"
+
 import {
   AuthorityClock,
   AuthorityFailure,
@@ -6,24 +9,43 @@ import {
 } from "@crit/authority"
 import { AuthorityPolicy } from "@crit/authority/adapter"
 import { DomainValue, type CanvasId } from "@crit/domain"
-import { Effect, Layer, SynchronizedRef } from "effect"
+import { Effect, Layer, Scope, SynchronizedRef } from "effect"
 
-import { makeOneCanvas, type OneCanvas } from "./one-canvas.js"
+import { makeDatabase } from "./database.js"
+import {
+  createOneCanvas,
+  makeOneCanvas,
+  type OneCanvas
+} from "./one-canvas.js"
 
 type Registry = ReadonlyMap<CanvasId, OneCanvas>
 
-const make = Effect.gen(function*() {
+export interface CloudflareCanvasAuthorityOptions {
+  readonly directory: string
+}
+
+const make = (options: CloudflareCanvasAuthorityOptions) => Effect.gen(function*() {
   const clock = yield* AuthorityClock
+  const scope = yield* Effect.scope
   const registry = yield* SynchronizedRef.make<Registry>(new Map())
 
-  const lookup = (canvasId: CanvasId) => SynchronizedRef.get(registry).pipe(
-    Effect.flatMap((canvases) => {
-      const isolate = canvases.get(canvasId)
-      return isolate === undefined
-        ? Effect.fail(AuthorityFailure.canvasNotFound({ canvasId }))
-        : Effect.succeed(isolate)
-    })
-  )
+  const pathFor = (canvasId: CanvasId): string =>
+    join(options.directory, `${canvasId}.sqlite`)
+
+  const lookup = (canvasId: CanvasId) => SynchronizedRef.modifyEffect(registry, (canvases) => {
+    const cached = canvases.get(canvasId)
+    if (cached !== undefined) return Effect.succeed([cached, canvases])
+    const path = pathFor(canvasId)
+    if (!existsSync(path)) {
+      return Effect.fail(AuthorityFailure.canvasNotFound({ canvasId }))
+    }
+    return makeDatabase({ path }).pipe(
+      Effect.flatMap((sqlite) => makeOneCanvas({ canvasId, sqlite, clock })),
+      Effect.provideService(Scope.Scope, scope),
+      Effect.catchTag("CloudflareDatabaseOpenFailure", Effect.die),
+      Effect.map((isolate) => [isolate, new Map(canvases).set(canvasId, isolate)])
+    )
+  })
 
   const create: CanvasAuthority["Service"]["create"] = (command, invocation) =>
     Effect.suspend(() => {
@@ -35,17 +57,22 @@ const make = Effect.gen(function*() {
             canvasId: ownedCommand.canvasId
           }))
         }
-        return clock.now.pipe(Effect.map((createdAt): readonly [AuthorityView, Registry] => {
+        const path = pathFor(ownedCommand.canvasId)
+        return clock.now.pipe(Effect.flatMap((createdAt) => {
           const view = AuthorityPolicy.createCanvas({
             command: ownedCommand,
             invocation: ownedInvocation,
             createdAt
           })
-          const isolate = makeOneCanvas({ view, clock })
-          return [
-            DomainValue.detach(view),
-            new Map(canvases).set(ownedCommand.canvasId, isolate)
-          ]
+          return makeDatabase({ path }).pipe(
+            Effect.flatMap((sqlite) => createOneCanvas({ view, sqlite, clock })),
+            Effect.provideService(Scope.Scope, scope),
+            Effect.catchTag("CloudflareDatabaseOpenFailure", Effect.die),
+            Effect.map((isolate): readonly [AuthorityView, Registry] => [
+              DomainValue.detach(view),
+              new Map(canvases).set(ownedCommand.canvasId, isolate)
+            ])
+          )
         }))
       })
     })
@@ -75,5 +102,6 @@ const make = Effect.gen(function*() {
 })
 
 export const CloudflareCanvasAuthority = {
-  layer: Layer.effect(CanvasAuthority, make)
+  layer: (options: CloudflareCanvasAuthorityOptions) =>
+    Layer.effect(CanvasAuthority, make(options))
 }
