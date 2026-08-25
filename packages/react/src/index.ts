@@ -52,6 +52,7 @@ export {
   ReplicaConnection,
   ReplicaChangeRejected,
   ReplicaSession,
+  ReplicaSubmitNotice,
   ReplicaSubscriptionEvent,
   ReplicaSessionUnavailable,
   useReplicaSession
@@ -61,6 +62,7 @@ export type {
   ReplicaSessionHandle,
   ReplicaSessionPorts,
   ReplicaSessionRun,
+  ReplicaSubmitNotice,
   ReplicaSubscriptionEvent
 } from "./replica-session.js"
 export { ReviewChrome } from "./review-chrome.js"

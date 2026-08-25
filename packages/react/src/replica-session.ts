@@ -38,6 +38,12 @@ export type ReplicaSubscriptionEvent = Data.TaggedEnum<{
 }>
 export const ReplicaSubscriptionEvent = Data.taggedEnum<ReplicaSubscriptionEvent>()
 
+export type ReplicaSubmitNotice = Data.TaggedEnum<{
+  readonly rejected: { readonly failure: CanvasChangeFailure }
+  readonly unavailable: { readonly reason: string }
+}>
+export const ReplicaSubmitNotice = Data.taggedEnum<ReplicaSubmitNotice>()
+
 export interface ReplicaSessionPorts {
   readonly open: (canvasId: CanvasId) => Effect.Effect<ReplicaView, ReplicaSessionUnavailable>
   readonly subscribe: (
@@ -58,6 +64,7 @@ export type ReplicaSession = Data.TaggedEnum<{
     readonly camera: CanvasCamera
     readonly selection: CanvasSelection
     readonly connection: ReplicaConnection
+    readonly notice: ReplicaSubmitNotice | undefined
   }
 }>
 export const ReplicaSession = Data.taggedEnum<ReplicaSession>()
@@ -95,7 +102,12 @@ type ReplicaSessionAction = Data.TaggedEnum<{
   readonly subscription: { readonly event: ReplicaSubscriptionEvent }
   readonly cameraChanged: { readonly camera: CanvasCamera }
   readonly selectionChanged: { readonly selection: CanvasSelection }
-  readonly submitted: { readonly view: ReplicaView }
+  readonly submitted: {
+    readonly result: Result.Result<
+      ReplicaView,
+      ReplicaSessionUnavailable | ReplicaChangeRejected
+    >
+  }
 }>
 const ReplicaSessionAction = Data.taggedEnum<ReplicaSessionAction>()
 
@@ -104,7 +116,16 @@ const ready = (args: {
   readonly camera: CanvasCamera
   readonly selection: CanvasSelection
   readonly connection: ReplicaConnection
+  readonly notice: ReplicaSubmitNotice | undefined
 }): ReplicaSession => ReplicaSession.ready(args)
+
+const submitNotice = (
+  failure: ReplicaSessionUnavailable | ReplicaChangeRejected
+): ReplicaSubmitNotice => Match.value(failure).pipe(Match.tagsExhaustive({
+  ReplicaChangeRejected: ({ failure: changeFailure }) =>
+    ReplicaSubmitNotice.rejected({ failure: changeFailure }),
+  ReplicaSessionUnavailable: ({ reason }) => ReplicaSubmitNotice.unavailable({ reason })
+}))
 
 const reduceSession = (
   previous: ReplicaSession,
@@ -117,7 +138,8 @@ const reduceSession = (
     view,
     camera,
     selection,
-    connection: previous._tag === "ready" ? previous.connection : liveConnection
+    connection: previous._tag === "ready" ? previous.connection : liveConnection,
+    notice: previous._tag === "ready" ? previous.notice : undefined
   }),
   refreshed: ({ opened }) => {
     if (Result.isFailure(opened)) {
@@ -130,13 +152,15 @@ const reduceSession = (
         view: opened.success,
         camera: previous.camera,
         selection: previous.selection,
-        connection: previous.connection
+        connection: previous.connection,
+        notice: previous.notice
       })
       : ready({
         view: opened.success,
         camera: defaultCamera,
         selection: defaultSelection,
-        connection: liveConnection
+        connection: liveConnection,
+        notice: undefined
       })
   },
   subscription: ({ event }) => Match.value(event).pipe(Match.tagsExhaustive({
@@ -146,7 +170,8 @@ const reduceSession = (
         view: previous.view,
         camera: previous.camera,
         selection: previous.selection,
-        connection: liveConnection
+        connection: liveConnection,
+        notice: previous.notice
       })
       : previous,
     lost: ({ reason }) => previous._tag === "ready"
@@ -154,7 +179,8 @@ const reduceSession = (
         view: previous.view,
         camera: previous.camera,
         selection: previous.selection,
-        connection: ReplicaConnection.lost({ reason })
+        connection: ReplicaConnection.lost({ reason }),
+        notice: previous.notice
       })
       : previous
   })),
@@ -163,7 +189,8 @@ const reduceSession = (
       view: previous.view,
       camera,
       selection: previous.selection,
-      connection: previous.connection
+      connection: previous.connection,
+      notice: previous.notice
     })
     : previous,
   selectionChanged: ({ selection }) => previous._tag === "ready"
@@ -171,22 +198,38 @@ const reduceSession = (
       view: previous.view,
       camera: previous.camera,
       selection,
-      connection: previous.connection
+      connection: previous.connection,
+      notice: previous.notice
     })
     : previous,
-  submitted: ({ view }) => previous._tag === "ready"
-    ? ready({
-      view,
-      camera: previous.camera,
-      selection: previous.selection,
-      connection: previous.connection
-    })
-    : ready({
-      view,
-      camera: defaultCamera,
-      selection: defaultSelection,
-      connection: liveConnection
-    })
+  submitted: ({ result }) => {
+    if (Result.isFailure(result)) {
+      return previous._tag === "ready"
+        ? ready({
+          view: previous.view,
+          camera: previous.camera,
+          selection: previous.selection,
+          connection: previous.connection,
+          notice: submitNotice(result.failure)
+        })
+        : previous
+    }
+    return previous._tag === "ready"
+      ? ready({
+        view: result.success,
+        camera: previous.camera,
+        selection: previous.selection,
+        connection: previous.connection,
+        notice: undefined
+      })
+      : ready({
+        view: result.success,
+        camera: defaultCamera,
+        selection: defaultSelection,
+        connection: liveConnection,
+        notice: undefined
+      })
+  }
 }))
 
 const openedSessionAction = (args: {
@@ -277,12 +320,10 @@ export const useReplicaSession = (args: {
       })))
     }
     return run(Effect.result(ports.change({ canvasId, commands }))).then((changed) => {
-      if (Result.isSuccess(changed)) {
-        setSession((previous) => reduceSession(
-          previous,
-          ReplicaSessionAction.submitted({ view: changed.success })
-        ))
-      }
+      setSession((previous) => reduceSession(
+        previous,
+        ReplicaSessionAction.submitted({ result: changed })
+      ))
       return changed
     })
   }, [canvasId, ports, run, session])

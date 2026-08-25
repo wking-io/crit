@@ -16,6 +16,7 @@ import {
   CanvasSelection,
   ReplicaConnection,
   ReplicaChangeRejected,
+  ReplicaSubmitNotice,
   ReplicaSubscriptionEvent,
   ReplicaSessionUnavailable,
   getCanvasCameraSession,
@@ -239,7 +240,8 @@ describe("useReplicaSession", () => {
         view: viewOne,
         camera: savedCamera,
         selection: savedSelection,
-        connection: liveConnection
+        connection: liveConnection,
+        notice: undefined
       })
     )
   })
@@ -257,7 +259,8 @@ describe("useReplicaSession", () => {
         view: viewOne,
         camera: defaultCamera,
         selection: defaultSelection,
-        connection: liveConnection
+        connection: liveConnection,
+        notice: undefined
       })
     )
   })
@@ -294,7 +297,8 @@ describe("useReplicaSession", () => {
         view: viewOne,
         camera: defaultCamera,
         selection: defaultSelection,
-        connection: liveConnection
+        connection: liveConnection,
+        notice: undefined
       })
     )
   })
@@ -326,7 +330,8 @@ describe("useReplicaSession", () => {
         view: viewOne,
         camera: savedCamera,
         selection: savedSelection,
-        connection: ReplicaConnection.lost({ reason: "socket closed" })
+        connection: ReplicaConnection.lost({ reason: "socket closed" }),
+        notice: undefined
       })
     )
   })
@@ -351,7 +356,8 @@ describe("useReplicaSession", () => {
       view: viewOne,
       camera: defaultCamera,
       selection: defaultSelection,
-      connection: ReplicaConnection.lost({ reason: "socket closed" })
+      connection: ReplicaConnection.lost({ reason: "socket closed" }),
+      notice: undefined
     })
     if (previous?._tag === "ready" && latest?.session._tag === "ready") {
       expect(latest.session.view).toBe(previous.view)
@@ -381,7 +387,8 @@ describe("useReplicaSession", () => {
         view: viewTwo,
         camera: defaultCamera,
         selection: defaultSelection,
-        connection: liveConnection
+        connection: liveConnection,
+        notice: undefined
       })
     )
   })
@@ -409,7 +416,8 @@ describe("useReplicaSession", () => {
         view: viewTwo,
         camera: savedCamera,
         selection: savedSelection,
-        connection: liveConnection
+        connection: liveConnection,
+        notice: undefined
       })
     )
   })
@@ -432,7 +440,8 @@ describe("useReplicaSession", () => {
         view: viewOne,
         camera: moved,
         selection: defaultSelection,
-        connection: liveConnection
+        connection: liveConnection,
+        notice: undefined
       })
     )
     await waitFor(async() =>
@@ -457,7 +466,8 @@ describe("useReplicaSession", () => {
         view: viewOne,
         camera: defaultCamera,
         selection: savedSelection,
-        connection: liveConnection
+        connection: liveConnection,
+        notice: undefined
       })
     )
     await waitFor(async() =>
@@ -489,7 +499,8 @@ describe("useReplicaSession", () => {
         view: viewOther,
         camera: defaultCamera,
         selection: defaultSelection,
-        connection: liveConnection
+        connection: liveConnection,
+        notice: undefined
       })
     )
   })
@@ -520,11 +531,12 @@ describe("useReplicaSession", () => {
       view: viewAfterAdd,
       camera: savedCamera,
       selection: savedSelection,
-      connection: liveConnection
+      connection: liveConnection,
+      notice: undefined
     })
   })
 
-  it("keeps the last ready view when submit is rejected", async() => {
+  it("sets a rejection notice and clears it after the next successful submit", async() => {
     const run = makeRun()
     await run(setCanvasCameraSession({ camera: savedCamera, canvasId: canvasA }))
     await run(setCanvasSelectionSession({
@@ -536,10 +548,17 @@ describe("useReplicaSession", () => {
       canvasId: canvasA,
       failure: rejectedFailure
     })
+    let rejectNext = true
     const ports: ReplicaSessionPorts = {
       open: replica.ports.open,
       subscribe: replica.ports.subscribe,
-      change: () => Effect.fail(rejected)
+      change: () => {
+        if (rejectNext) {
+          rejectNext = false
+          return Effect.fail(rejected)
+        }
+        return Effect.succeed(viewAfterAdd)
+      }
     }
 
     await act(async() => render(
@@ -558,8 +577,55 @@ describe("useReplicaSession", () => {
       view: viewOne,
       camera: savedCamera,
       selection: savedSelection,
-      connection: liveConnection
+      connection: liveConnection,
+      notice: ReplicaSubmitNotice.rejected({ failure: rejectedFailure })
     })
+
+    await act(async() => {
+      submitted = await latest?.submit(addFrame)
+    })
+
+    expect(submitted).toEqual(Result.succeed(viewAfterAdd))
+    expect(latest?.session).toEqual({
+      _tag: "ready",
+      view: viewAfterAdd,
+      camera: savedCamera,
+      selection: savedSelection,
+      connection: liveConnection,
+      notice: undefined
+    })
+  })
+
+  it("keeps an unavailable notice through a failed refresh", async() => {
+    const replica = makeReplica([viewOne])
+    const failure = new ReplicaSessionUnavailable({
+      canvasId: canvasA,
+      reason: "daemon unavailable"
+    })
+    const ports: ReplicaSessionPorts = {
+      open: replica.ports.open,
+      subscribe: replica.ports.subscribe,
+      change: () => Effect.fail(failure)
+    }
+
+    await act(async() => render(
+      <Probe canvasId={canvasA} ports={ports} run={makeRun()} />
+    ))
+    await waitFor(() => expect(latest?.session._tag).toBe("ready"))
+    await act(async() => {
+      await latest?.submit(addFrame)
+    })
+    replica.views.delete(canvasA)
+    await act(async() => replica.notify(canvasA))
+
+    await waitFor(() => expect(latest?.session).toEqual({
+      _tag: "ready",
+      view: viewOne,
+      camera: defaultCamera,
+      selection: defaultSelection,
+      connection: liveConnection,
+      notice: ReplicaSubmitNotice.unavailable({ reason: "daemon unavailable" })
+    }))
   })
 
   it("still replaces the view from a later subscribe notify after submit", async() => {
@@ -581,7 +647,8 @@ describe("useReplicaSession", () => {
         view: viewAfterAdd,
         camera: defaultCamera,
         selection: defaultSelection,
-        connection: liveConnection
+        connection: liveConnection,
+        notice: undefined
       })
     )
 
@@ -594,7 +661,8 @@ describe("useReplicaSession", () => {
         view: viewTwo,
         camera: defaultCamera,
         selection: defaultSelection,
-        connection: liveConnection
+        connection: liveConnection,
+        notice: undefined
       })
     )
   })
