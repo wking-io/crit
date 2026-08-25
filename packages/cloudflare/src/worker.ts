@@ -1,5 +1,6 @@
-import type { IsoTimestamp } from "@crit/domain"
-import { Effect, Exit } from "effect"
+import { EmailAddress, type IsoTimestamp } from "@crit/domain"
+import { encodeAccessAuthenticatedPersonWire } from "@crit/protocol"
+import { Effect, Exit, Option, Schema } from "effect"
 
 import {
   CanvasDurableObject,
@@ -35,6 +36,25 @@ export const registerTestClock = (
 const worker: ExportedHandler<Cloudflare.Env> = {
   async fetch(request) {
     const url = new URL(request.url)
+    if (url.pathname === "/identity") {
+      if (request.method !== "GET") {
+        return new Response(null, { status: 405 })
+      }
+      const address = Schema.decodeUnknownOption(EmailAddress)(
+        request.headers.get("Cf-Access-Authenticated-User-Email")
+      )
+      if (Option.isNone(address)) {
+        return new Response(null, { status: 401 })
+      }
+      const body = encodeAccessAuthenticatedPersonWire({
+        kind: "access-authenticated-person",
+        schemaVersion: 1,
+        address: address.value
+      })
+      return new Response(JSON.stringify(body), {
+        headers: { "content-type": "application/json" }
+      })
+    }
     if (
       request.method === "DELETE" &&
       url.pathname.startsWith(testClockCancelPath)

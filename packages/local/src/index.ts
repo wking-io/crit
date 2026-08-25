@@ -43,3 +43,18 @@ export type {
   LocalDaemonDiscoveryOptions,
   LocalDaemonInspection
 } from "./discovery.js"
+export {
+  AccessPersonAlreadyBound,
+  AccessPersonBinding,
+  AccessPersonRequestFailed,
+  AccessPersonResponseInvalid,
+  AccessPersonResponseRejected,
+  AccessPersonUnauthenticated,
+  bindAccessPerson,
+  InstallationUrlInvalid,
+  loginToInstallation
+} from "./login.js"
+export type {
+  BindAccessPersonOptions,
+  LoginToInstallationOptions
+} from "./login.js"

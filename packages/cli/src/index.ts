@@ -11,6 +11,13 @@ import {
   WebUrlRepresentation
 } from "@crit/domain"
 import {
+  AccessPersonAlreadyBound,
+  AccessPersonBinding,
+  AccessPersonRequestFailed,
+  AccessPersonResponseInvalid,
+  AccessPersonResponseRejected,
+  AccessPersonUnauthenticated,
+  InstallationUrlInvalid,
   inspectLocalDaemon,
   LocalDaemonIdentityMismatch,
   LocalDaemonDescriptor,
@@ -20,6 +27,7 @@ import {
   LocalDaemonStateUnreadable,
   LocalDevelopment,
   LocalProjectManifest,
+  loginToInstallation,
   ProjectManifestInitialization,
   type ProjectManifestFailure,
   type LocalDaemonInspection
@@ -224,6 +232,52 @@ const dev = Command.make(
     }))
   })
 ).pipe(Command.withDescription("Run the project-local Crit daemon and browser application"))
+
+type LoginFailure =
+  | AccessPersonAlreadyBound
+  | AccessPersonRequestFailed
+  | AccessPersonResponseInvalid
+  | AccessPersonResponseRejected
+  | AccessPersonUnauthenticated
+  | InstallationUrlInvalid
+  | LocalDaemonStateMalformed
+  | LocalDaemonStateMissing
+  | LocalDaemonStateUnreadable
+
+const formatLoginFailure = Match.typeTags<LoginFailure, string>()({
+  AccessPersonAlreadyBound: ({ existingAddress }) =>
+    `Crit Person is already bound to ${existingAddress}`,
+  AccessPersonRequestFailed: () => "Unable to reach the Crit installation",
+  AccessPersonResponseInvalid: () =>
+    "Installation returned an invalid Access-authenticated Person",
+  AccessPersonResponseRejected: ({ status }) =>
+    `Installation returned an unexpected response (HTTP ${status})`,
+  AccessPersonUnauthenticated: () =>
+    "Installation did not return an Access-authenticated Person",
+  InstallationUrlInvalid: ({ installationUrl }) =>
+    `Invalid installation URL: ${installationUrl}`,
+  LocalDaemonStateMalformed: () => "Crit installation state is malformed",
+  LocalDaemonStateMissing: () => "Crit is not initialized at this data root",
+  LocalDaemonStateUnreadable: () => "Crit installation state cannot be read"
+})
+
+const login = Command.make("login", {
+  dataRoot,
+  json,
+  installationUrl: Argument.string("installation-url")
+}, ({ dataRoot: root, installationUrl, json: asJson }) =>
+  loginToInstallation({ dataRoot: root, installationUrl }).pipe(
+    Effect.flatMap((result) => asJson
+      ? Console.log(JSON.stringify(Schema.encodeSync(AccessPersonBinding)(result)))
+      : Console.log(`Person  ${result.personId}`).pipe(
+        Effect.andThen(Console.log(`Access  ${result.email.address}`))
+      )),
+    Effect.mapError((failure) => new CliOperationalFailure({
+      message: formatLoginFailure(failure)
+    }))
+  )).pipe(Command.withDescription(
+  "Bind the local Person through an installation such as https://crit.acme.internal"
+))
 
 const status = Command.make("status", { dataRoot, json }, ({ dataRoot: root, json: asJson }) =>
   Effect.scoped(inspectLocalDaemon({ dataRoot: root }).pipe(
@@ -449,6 +503,15 @@ const layout = Command.make("layout", {
   yield* Console.log(formatCanvasLayout(current))
 })).pipe(Command.withDescription("Print Canvas Frame geometry"))
 
-export const command = crit.pipe(Command.withSubcommands([init, dev, status, create, open, addFrame, layout]))
+export const command = crit.pipe(Command.withSubcommands([
+  init,
+  dev,
+  login,
+  status,
+  create,
+  open,
+  addFrame,
+  layout
+]))
 
 export const main = Command.run(command, { version: "0.0.0" })
