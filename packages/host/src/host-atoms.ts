@@ -5,7 +5,12 @@ import {
   type LocalBrowserConnectionDescriptor
 } from "@crit/client"
 import { CanvasTitle, Id } from "@crit/domain"
-import { layerMemory, layerStorage, type ReplicaSessionRun } from "@crit/react"
+import {
+  layerMemory,
+  layerStorage,
+  type PresenceRun,
+  type ReplicaSessionRun
+} from "@crit/react"
 import { Effect, Layer, Result, Schema } from "effect"
 import { FetchHttpClient } from "effect/unstable/http"
 import { KeyValueStore } from "effect/unstable/persistence"
@@ -14,6 +19,7 @@ import { Atom, AsyncResult } from "effect/unstable/reactivity"
 import type { CritHostProps } from "./crit-host.js"
 import { ensureLocalCanvas } from "./ensure-local-canvas.js"
 import { hostConnectionFromFragment } from "./host-connection.js"
+import { localPresencePorts } from "./local-presence-ports.js"
 import { localReplicaSessionPorts } from "./local-replica-session-ports.js"
 
 export const localCanvasId = Id.canvas("canvas_local")
@@ -44,6 +50,7 @@ const hostLayer = (descriptor: LocalBrowserConnectionDescriptor) => {
 
 const invalidScreen: HostScreen = { _tag: "invalid" }
 const connectingScreen: HostScreen = { _tag: "connecting" }
+const presenceRun: PresenceRun = (effect) => Effect.runFork(effect)
 
 const screenFromBoot = (boot: AsyncResult.AsyncResult<CritHostProps>): HostScreen =>
   AsyncResult.match(boot, {
@@ -72,6 +79,8 @@ export const hostScreenAtom = Atom.family((fragment: string): Atom.Atom<HostScre
     return {
       canvasId: localCanvasId,
       ports: localReplicaSessionPorts(client),
+      presencePorts: localPresencePorts(client),
+      presenceRun,
       resolver: representations,
       snapshotter: representations,
       run

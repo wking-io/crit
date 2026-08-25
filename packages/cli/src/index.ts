@@ -1,11 +1,15 @@
 import {
   ApplicationRouteRepresentation,
+  AgentId,
+  AgentSnapshot,
   ArtifactId,
   ArtifactRepresentation,
   AuthoredText,
   CanvasId,
   CanvasTitle,
+  ExecutionId,
   Id,
+  ReportedRuntime,
   RootedRoute,
   Sha256Digest,
   WebUrlRepresentation
@@ -25,10 +29,15 @@ import {
   type LocalDaemonInspection
 } from "@crit/local"
 import { ReplicaModel, ReplicaView } from "@crit/replica"
-import { LocalApiUnauthorized, LocalApiVersionUnsupported } from "@crit/replica/http"
+import {
+  ActiveAgentExecutionClaim,
+  LocalApiUnauthorized,
+  LocalApiVersionUnsupported
+} from "@crit/replica/http"
 import { ApplicationBaseUrl } from "@crit/representations"
-import { Console, Context, Crypto, Effect, FileSystem, Layer, Match, Option, Path, Redacted, Result, Schema, type Effect as EffectType } from "effect"
+import { Console, Context, Crypto, Effect, FileSystem, Layer, Match, Option, Path, Redacted, Result, Schema, Stream, type Effect as EffectType } from "effect"
 import { Argument, Command, Flag } from "effect/unstable/cli"
+import * as Socket from "effect/unstable/socket/Socket"
 
 import { frameCommand, frameSourceLabel, resolveFrameGeometry } from "./add-frame.js"
 import { HOST_ORIGIN, resolveHostRoot, startHostApp } from "./host-app.js"
@@ -428,6 +437,120 @@ const addFrame = Command.make("add-frame", {
   yield* Console.log(`${added.frameId}  ${frameSourceLabel(representation)}`)
 })).pipe(Command.withDescription("Add a Frame to a Canvas through the local daemon"))
 
+const harnessDescriptor = (value: string) => {
+  const separator = value.lastIndexOf("@")
+  return separator <= 0
+    ? { name: value }
+    : {
+        name: value.slice(0, separator),
+        version: value.slice(separator + 1)
+      }
+}
+
+const attendRuntime = (
+  harness: Option.Option<string>,
+  model: Option.Option<string>
+): EffectType.Effect<typeof ReportedRuntime.Type | undefined, CliOperationalFailure> => {
+  const harnessValue = Option.getOrUndefined(harness)
+  const modelValue = Option.getOrUndefined(model)
+  if (harnessValue === undefined && modelValue === undefined) {
+    return Effect.succeed(undefined)
+  }
+  return Effect.try({
+    try: () => {
+      const harnessDescriptorValue = harnessDescriptor(
+        harnessValue ?? "crit CLI"
+      )
+      return modelValue === undefined
+        ? Schema.decodeUnknownSync(ReportedRuntime)({
+            _tag: "reported-runtime",
+            source: "client-reported",
+            harness: harnessDescriptorValue
+          })
+        : Schema.decodeUnknownSync(ReportedRuntime)({
+            _tag: "reported-runtime",
+            source: "client-reported",
+            harness: harnessDescriptorValue,
+            model: { name: modelValue }
+          })
+    },
+    catch: () => new CliOperationalFailure({
+      message: "Invalid --harness or --model"
+    })
+  })
+}
+
+const attend = Command.make("attend", {
+  dataRoot,
+  canvasId: Argument.string("canvas-id"),
+  agentId: Flag.string("agent-id").pipe(
+    Flag.withDescription("Agent identity")
+  ),
+  agentName: Flag.string("agent-name").pipe(
+    Flag.withDescription("Agent display name")
+  ),
+  executionId: Flag.string("execution-id").pipe(
+    Flag.withDescription("Agent execution identity")
+  ),
+  harness: Flag.string("harness").pipe(
+    Flag.withDescription("Client harness name or name@version"),
+    Flag.optional
+  ),
+  model: Flag.string("model").pipe(
+    Flag.withDescription("Model name"),
+    Flag.optional
+  )
+}, ({
+  agentId,
+  agentName,
+  canvasId,
+  dataRoot: root,
+  executionId,
+  harness,
+  model
+}) => Effect.gen(function*() {
+  const decodedCanvasId = yield* decode(CanvasId, canvasId, "canvas ID")
+  const decodedAgentId = yield* decode(AgentId, agentId, "agent ID")
+  const decodedExecutionId = yield* decode(
+    ExecutionId,
+    executionId,
+    "execution ID"
+  )
+  const runtime = yield* attendRuntime(harness, model)
+  const agent = yield* Effect.try({
+    try: () => Schema.decodeUnknownSync(AgentSnapshot)({
+      _tag: "agent",
+      agentId: decodedAgentId,
+      displayName: agentName
+    }),
+    catch: () => new CliOperationalFailure({
+      message: `Invalid agent name: ${agentName}`
+    })
+  })
+  const claim = runtime === undefined
+    ? ActiveAgentExecutionClaim.make({
+        agent,
+        executionId: decodedExecutionId
+      })
+    : ActiveAgentExecutionClaim.make({
+        agent,
+        executionId: decodedExecutionId,
+        reportedRuntime: runtime
+      })
+  return yield* connected(root, ({ client }) => Effect.scoped(
+    client.attendPresence(
+      decodedCanvasId,
+      claim
+    ).pipe(
+      Effect.flatMap(Stream.runDrain),
+      Effect.provide(Socket.layerWebSocketConstructorGlobal),
+      Effect.mapError(() => new CliOperationalFailure({
+        message: "Unable to attend Canvas"
+      }))
+    )
+  ))
+})).pipe(Command.withDescription("Attend a Canvas as a local Agent run"))
+
 const layout = Command.make("layout", {
   dataRoot,
   json,
@@ -449,6 +572,15 @@ const layout = Command.make("layout", {
   yield* Console.log(formatCanvasLayout(current))
 })).pipe(Command.withDescription("Print Canvas Frame geometry"))
 
-export const command = crit.pipe(Command.withSubcommands([init, dev, status, create, open, addFrame, layout]))
+export const command = crit.pipe(Command.withSubcommands([
+  init,
+  dev,
+  status,
+  create,
+  open,
+  addFrame,
+  attend,
+  layout
+]))
 
 export const main = Command.run(command, { version: "0.0.0" })

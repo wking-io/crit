@@ -8,14 +8,13 @@ This file is the current inventory. Phase docs own the prove. [Decision record](
 
 ## Next
 
-- [ ] Presence of people and local Agent runs.
+- [ ] Person vs Agent authorship in the UI. Pending changes show a local display name. Agent work must not look like the Person who ran the Agent did it.
 
 ## Remaining
 
 ### Local review
 
 Plan: [phase 5](phase-05-review-ui.md), [phase 3](phase-03-local-daemon-and-cli.md), [phase 4](phase-04-representations-and-bridge.md).
-- [ ] Person vs Agent authorship in the UI. Pending changes show a local display name. Agent work must not look like the Person who ran the Agent did it.
 - [ ] Shared pending, conflict, unavailable, and offline states. Local pending/conflict/sync exists.
 - [ ] Inspect a Representation. `RepresentationRuntime` in the overview still names it. Nothing implements it.
 - [ ] Frame Bridge capability negotiation, route/revision reporting, highlighting, authorized inspection.
@@ -78,6 +77,7 @@ Local Frames authoring on one machine.
 - Review UI no longer adds Frames
 - Contextual help and keyboard shortcuts from the review action table
 - Snapshot a live Frame into a new artifact Frame (`S`)
+- Presence of the local Person and local Agent runs (`crit attend`)
 
 ## Out of v1
 

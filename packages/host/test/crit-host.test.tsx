@@ -1,15 +1,21 @@
-import { Id, decodeCanvasProjection } from "@crit/domain"
+import {
+  Id,
+  decodeCanvasProjection,
+  decodePresenceRoster
+} from "@crit/domain"
 import {
   ReplicaSessionUnavailable,
   layerMemory,
   type FrameRepresentationResolver,
   type FrameSnapshotter,
+  type PresencePorts,
+  type PresenceRun,
   type ReplicaSessionPorts,
   type ReplicaSessionRun
 } from "@crit/react"
 import { ReplicaView } from "@crit/replica"
 import { notifyManager } from "@tanstack/react-query"
-import { Effect, Layer, Schema } from "effect"
+import { Effect, Layer, Schema, Stream } from "effect"
 import { StrictMode, act, type ReactElement } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
@@ -57,6 +63,11 @@ const representations: FrameRepresentationResolver & FrameSnapshotter = {
   resolve: () => Effect.fail("unresolved")
 }
 
+const presenceRun: PresenceRun = (effect) => Effect.runFork(effect)
+const emptyPresencePorts: PresencePorts = {
+  attend: () => Effect.succeed(Stream.empty)
+}
+
 const makeRun = (): ReplicaSessionRun => {
   const services = Effect.runSync(Effect.scoped(Layer.build(layerMemory)))
   return (effect) => Effect.runPromise(Effect.provide(effect, services))
@@ -101,6 +112,8 @@ describe("CritHost", () => {
       <CritHost
         canvasId={canvasId}
         ports={ports}
+        presencePorts={emptyPresencePorts}
+        presenceRun={presenceRun}
         resolver={representations}
         run={makeRun()}
         snapshotter={representations}
@@ -117,6 +130,52 @@ describe("CritHost", () => {
     expect(container.textContent).toContain("Review is synchronized.")
   })
 
+  it("attends presence only after the replica is ready", async() => {
+    let release!: () => void
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const ports: ReplicaSessionPorts = {
+      open: () => Effect.promise(() => gate.then(() => view)),
+      subscribe: () => () => undefined,
+      change: () => Effect.die("change must not run")
+    }
+    const roster = decodePresenceRoster({
+      _tag: "presence-roster",
+      canvasId,
+      people: [{
+        _tag: "connected-person",
+        person: {
+          _tag: "person",
+          personId: "person_host_presence",
+          displayName: "Host Person"
+        }
+      }],
+      agentRuns: []
+    })
+    const attend = vi.fn(() => Effect.succeed(Stream.succeed(roster)))
+
+    await act(async() => render(
+      <CritHost
+        canvasId={canvasId}
+        ports={ports}
+        presencePorts={{ attend }}
+        presenceRun={presenceRun}
+        resolver={representations}
+        run={makeRun()}
+        snapshotter={representations}
+      />
+    ))
+    expect(attend).not.toHaveBeenCalled()
+
+    await act(async() => release())
+    await waitFor(() =>
+      expect(container.querySelector("[aria-label='Review presence']")?.textContent)
+        .toBe("Host Person")
+    )
+    expect(attend).toHaveBeenCalledWith(canvasId)
+  })
+
   it("shows the unavailable reason when open fails", async() => {
     const ports: ReplicaSessionPorts = {
       open: (requested) => Effect.fail(new ReplicaSessionUnavailable({
@@ -131,6 +190,8 @@ describe("CritHost", () => {
       <CritHost
         canvasId={canvasId}
         ports={ports}
+        presencePorts={emptyPresencePorts}
+        presenceRun={presenceRun}
         resolver={representations}
         run={makeRun()}
         snapshotter={representations}

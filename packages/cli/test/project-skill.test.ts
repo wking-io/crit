@@ -33,6 +33,12 @@ describe("project skill", () => {
     expect(projectSkillSource).toContain("web-url")
     expect(projectSkillSource).toContain("artifact")
     expect(projectSkillSource).toContain("crit add-frame")
+    expect(projectSkillSource).toContain(
+      "crit attend <canvas-id> --agent-id ID --agent-name Name --execution-id ID"
+    )
+    expect(projectSkillSource).toContain(
+      "Agents should attend while they work on that Canvas."
+    )
     expect(projectSkillSource).toContain("Frame Bridge")
     expect(projectSkillSource).not.toContain("comment thread")
     expect(projectSkillSource).not.toContain("Note")
