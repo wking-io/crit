@@ -73,7 +73,6 @@ const bound = (
   personId: PersonId,
   email: AccessPersonEmail
 ): AccessPersonBinding => AccessPersonBinding.make({
-  _tag: "access-person-bound",
   personId,
   email
 })
