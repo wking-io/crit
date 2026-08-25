@@ -1,4 +1,4 @@
-import { Brand, Match } from "effect"
+import { Brand, Context, Effect, Layer, Match } from "effect"
 
 import {
   CanvasCommand,
@@ -474,5 +474,20 @@ export const makeCommentThreadReview = (
     focus,
     perform,
     settle
+  }
+}
+
+export class CommentThreadReviews extends Context.Service<CommentThreadReviews, {
+  readonly create: (input: MakeCommentThreadReviewInput) => CommentThreadReview
+}>()("@crit/session/CommentThreadReviews") {
+  static readonly layer = Layer.succeed(CommentThreadReviews, {
+    create: makeCommentThreadReview
+  })
+
+  static create(input: MakeCommentThreadReviewInput): CommentThreadReview {
+    return Effect.runSync(Effect.gen(function*() {
+      const reviews = yield* CommentThreadReviews
+      return reviews.create(input)
+    }).pipe(Effect.provide(CommentThreadReviews.layer)))
   }
 }

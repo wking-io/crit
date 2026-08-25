@@ -138,7 +138,8 @@ import {
   type ConfirmationDetails
 } from "./confirmation-dialog.js"
 import {
-  makeCommentThreadReview,
+  CommentThreadReviews,
+  type CommentThreadReview,
   type CommentThreadReviewTarget,
   type CommentThreadReviewTransition
 } from "../session/comment-thread-review.js"
@@ -332,9 +333,9 @@ function CanvasViewportContent({
   } | null>(null)
   const [signInOpen, setSignInOpen] = useState(false)
   const idleCommentReview = { kind: "idle" as const, notice: null }
-  const commentReviewRef = useRef<ReturnType<typeof makeCommentThreadReview> | null>(null)
+  const commentReviewRef = useRef<CommentThreadReview | null>(null)
   if (commentsEnabled) {
-    commentReviewRef.current ??= makeCommentThreadReview({
+    commentReviewRef.current ??= CommentThreadReviews.create({
       document,
       currentAuthor: author,
       clock: { now: () => new Date().toISOString() },
@@ -632,7 +633,7 @@ function CanvasViewportContent({
       setTool((current) => current === "comment" ? "select" : current)
       return
     }
-    commentReviewRef.current ??= makeCommentThreadReview({
+    commentReviewRef.current ??= CommentThreadReviews.create({
       document,
       currentAuthor: author,
       clock: { now: () => new Date().toISOString() },
