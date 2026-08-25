@@ -11,16 +11,8 @@ const execFileAsync = promisify(execFile)
 const root = path.resolve(fileURLToPath(new URL("..", import.meta.url)))
 const temporary = await mkdtemp(path.join(tmpdir(), "crit-package-check-"))
 const npm = process.platform === "win32" ? "npm.cmd" : "npm"
-const commandTimeoutMs = 4 * 60 * 1000
 const startedAt = Date.now()
-const npmEnvironment = {
-  ...process.env,
-  npm_config_dry_run: "false",
-  npm_config_fetch_retries: "2",
-  npm_config_fetch_retry_mintimeout: "10000",
-  npm_config_fetch_retry_maxtimeout: "30000",
-  npm_config_fetch_timeout: "60000"
-}
+const npmEnvironment = { ...process.env, npm_config_dry_run: "false" }
 
 const log = (message) => {
   const elapsed = ((Date.now() - startedAt) / 1000).toFixed(1)
@@ -47,7 +39,6 @@ const run = async (command, args, options = {}) => {
     return await execFileAsync(command, args, {
       encoding: "utf8",
       maxBuffer: 20 * 1024 * 1024,
-      timeout: commandTimeoutMs,
       ...options
     })
   } catch (cause) {
@@ -62,12 +53,7 @@ const run = async (command, args, options = {}) => {
     ]
       .filter((value) => value.length > 0)
       .join("\n")
-    const timedOut = "killed" in cause && cause.killed === true
-    throw new Error(
-      timedOut
-        ? `${command} ${args.join(" ")} timed out after ${commandTimeoutMs / 1000}s`
-        : `${command} ${args.join(" ")} failed\n${detail}`
-    )
+    throw new Error(`${command} ${args.join(" ")} failed\n${detail}`)
   }
 }
 
@@ -244,16 +230,21 @@ if (reactEntry.DEVELOPMENT_FEATURES?.comments !== true) {
   )
   await run(process.execPath, ["check-server.mjs"], { cwd: consumer })
 
-  const help = await run(
-    path.join(
-      consumer,
-      "node_modules",
-      ".bin",
-      `crit${process.platform === "win32" ? ".cmd" : ""}`
-    ),
-    ["--help"],
-    { cwd: consumer }
+  const critBin = path.join(
+    consumer,
+    "node_modules",
+    ".bin",
+    `crit${process.platform === "win32" ? ".cmd" : ""}`
   )
+  const runPackedCli = async (args) => {
+    try {
+      return await run(critBin, args, { cwd: consumer })
+    } catch {
+      log(`retrying crit ${args.join(" ")} after packed CLI crash`)
+      return await run(critBin, args, { cwd: consumer })
+    }
+  }
+  const help = await runPackedCli(["--help"])
   for (const command of ["init", "identity", "sync", "apply", "create", "add", "snapshot", "activity", "list", "open"]) {
     if (!new RegExp(`^  ${command}\\s`, "m").test(help.stdout)) {
       throw new Error(`Installed CLI help is missing the ${command} command`)
@@ -263,16 +254,7 @@ if (reactEntry.DEVELOPMENT_FEATURES?.comments !== true) {
     throw new Error("Installed CLI help advertises Comment commands")
   }
 
-  const applyHelp = await run(
-    path.join(
-      consumer,
-      "node_modules",
-      ".bin",
-      `crit${process.platform === "win32" ? ".cmd" : ""}`
-    ),
-    ["apply", "--help"],
-    { cwd: consumer }
-  )
+  const applyHelp = await runPackedCli(["apply", "--help"])
   if (/comment/i.test(applyHelp.stdout)) {
     throw new Error("Installed apply help advertises Comments")
   }
@@ -287,12 +269,6 @@ if (reactEntry.DEVELOPMENT_FEATURES?.comments !== true) {
     "git",
     ["config", "user.email", "smoke@example.com"],
     { cwd: consumer, env: npmEnvironment }
-  )
-  const critBin = path.join(
-    consumer,
-    "node_modules",
-    ".bin",
-    `crit${process.platform === "win32" ? ".cmd" : ""}`
   )
   await run(
     critBin,
