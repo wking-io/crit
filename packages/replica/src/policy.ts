@@ -36,12 +36,18 @@ const pendingAuthor = (invocation: PendingRecord["invocation"]): PendingAuthor =
   Match.value(invocation).pipe(Match.tagsExhaustive({
     person: ({ principal }) => PersonPendingAuthor.make({ displayName: principal.person.displayName }),
     agent: ({ principal, executionId, reportedRuntime }) =>
-      AgentPendingAuthor.make({
-        displayName: principal.agent.displayName,
-        runBy: principal.delegatedBy.displayName,
-        executionId,
-        ...(reportedRuntime === undefined ? {} : { reportedRuntime })
-      })
+      reportedRuntime === undefined
+        ? AgentPendingAuthor.make({
+          displayName: principal.agent.displayName,
+          runBy: principal.delegatedBy.displayName,
+          executionId
+        })
+        : AgentPendingAuthor.make({
+          displayName: principal.agent.displayName,
+          runBy: principal.delegatedBy.displayName,
+          executionId,
+          reportedRuntime
+        })
   }))
 
 const rebuild = (state: ReplicaState) => {

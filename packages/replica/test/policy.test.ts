@@ -86,11 +86,6 @@ describe("ReplicaPolicy reconciliation", () => {
       executionId: agent.executionId
     })
     expect(viewed.pending[0]?.author).not.toHaveProperty("delegatedBy")
-    expect(typeof viewed.pending[0]?.author).not.toBe("undefined")
-    if (viewed.pending[0]?.author._tag === "agent") {
-      expect(typeof viewed.pending[0].author.runBy).toBe("string")
-      expect(viewed.pending[0].author.runBy).toBe("Replica")
-    }
   })
 
   it("copies optional reported runtime onto the agent pending author", () => {

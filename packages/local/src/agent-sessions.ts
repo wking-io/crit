@@ -86,17 +86,18 @@ export class AgentSessions extends Context.Service<AgentSessions, AgentSessionsS
             agentId,
             displayName: declaration.displayName
           })
-          const invocation = AgentInvocation.make({
-            principal: AgentPrincipal.make({
-              subject: Schema.decodeUnknownSync(AuthSubject)(`local-agent|${executionId}`),
-              agent,
-              delegatedBy
-            }),
-            executionId,
-            ...(declaration.reportedRuntime === undefined ? {} : {
+          const principal = AgentPrincipal.make({
+            subject: Schema.decodeUnknownSync(AuthSubject)(`local-agent|${executionId}`),
+            agent,
+            delegatedBy
+          })
+          const invocation = declaration.reportedRuntime === undefined
+            ? AgentInvocation.make({ principal, executionId })
+            : AgentInvocation.make({
+              principal,
+              executionId,
               reportedRuntime: declaration.reportedRuntime
             })
-          })
           const stored = yield* Ref.modify(live, (map) => {
             if (map.size >= AGENT_SESSION_LIMIT) return [false, map] as const
             const next = new Map(map)

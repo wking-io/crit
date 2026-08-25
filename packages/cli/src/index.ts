@@ -528,23 +528,50 @@ const runtimeFromFlags = (flags: {
       }))
       : Effect.succeed(undefined),
     onSome: (harnessName) => Effect.try({
-      try: () => Schema.decodeUnknownSync(ReportedRuntime)({
-        _tag: "reported-runtime",
-        source: "client-reported",
-        harness: {
-          name: harnessName,
-          ...(Option.isSome(flags.harnessVersion) ? { version: flags.harnessVersion.value } : {})
-        },
-        ...(Option.isSome(flags.model) ? {
-          model: {
-            name: flags.model.value,
-            ...(Option.isSome(flags.modelProvider) ? { provider: flags.modelProvider.value } : {}),
-            ...(Option.isSome(flags.modelVersion) ? { version: flags.modelVersion.value } : {})
-          }
-        } : {}),
-        ...(Option.isSome(flags.session) ? { sessionId: flags.session.value } : {}),
-        ...(Option.isSome(flags.task) ? { taskId: flags.task.value } : {})
-      }),
+      try: () => {
+        const harness = Option.isSome(flags.harnessVersion)
+          ? { name: harnessName, version: flags.harnessVersion.value }
+          : { name: harnessName }
+        const model = Option.isSome(flags.model)
+          ? Option.isSome(flags.modelProvider) && Option.isSome(flags.modelVersion)
+            ? {
+              name: flags.model.value,
+              provider: flags.modelProvider.value,
+              version: flags.modelVersion.value
+            }
+            : Option.isSome(flags.modelProvider)
+              ? { name: flags.model.value, provider: flags.modelProvider.value }
+              : Option.isSome(flags.modelVersion)
+                ? { name: flags.model.value, version: flags.modelVersion.value }
+                : { name: flags.model.value }
+          : undefined
+        const sessionId = Option.getOrUndefined(flags.session)
+        const taskId = Option.getOrUndefined(flags.task)
+        if (model !== undefined && sessionId !== undefined && taskId !== undefined) {
+          return ReportedRuntime.make({
+            source: "client-reported", harness, model, sessionId, taskId
+          })
+        }
+        if (model !== undefined && sessionId !== undefined) {
+          return ReportedRuntime.make({ source: "client-reported", harness, model, sessionId })
+        }
+        if (model !== undefined && taskId !== undefined) {
+          return ReportedRuntime.make({ source: "client-reported", harness, model, taskId })
+        }
+        if (sessionId !== undefined && taskId !== undefined) {
+          return ReportedRuntime.make({ source: "client-reported", harness, sessionId, taskId })
+        }
+        if (model !== undefined) {
+          return ReportedRuntime.make({ source: "client-reported", harness, model })
+        }
+        if (sessionId !== undefined) {
+          return ReportedRuntime.make({ source: "client-reported", harness, sessionId })
+        }
+        if (taskId !== undefined) {
+          return ReportedRuntime.make({ source: "client-reported", harness, taskId })
+        }
+        return ReportedRuntime.make({ source: "client-reported", harness })
+      },
       catch: () => new CliOperationalFailure({ message: "Invalid reported runtime" })
     })
   })
@@ -604,10 +631,10 @@ const agentBegin = Command.make("begin", {
     session,
     task
   })
-  const grant = yield* connected(root, ({ client }) => client.agentBegin({
-    displayName,
-    ...(reportedRuntime === undefined ? {} : { reportedRuntime })
-  }).pipe(Effect.mapError((failure) => Match.value(failure).pipe(
+  const declaration = reportedRuntime === undefined
+    ? { displayName }
+    : { displayName, reportedRuntime }
+  const grant = yield* connected(root, ({ client }) => client.agentBegin(declaration).pipe(Effect.mapError((failure) => Match.value(failure).pipe(
     Match.when({ _tag: "AgentSessionRejected", reason: "session-limit" }, () =>
       new CliOperationalFailure({ message: "Crit agent session limit reached" })),
     Match.when({ _tag: "AgentSessionRejected" }, () =>
