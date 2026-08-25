@@ -54,11 +54,13 @@ export interface ReviewActionContext {
   readonly pauseOffscreen: boolean
 }
 
+export type ReviewShortcut = "Delete" | "Backspace" | "Escape"
+
 export interface ReviewActionPolicy<Id extends string = string> {
   readonly id: Id
   readonly label: string
   readonly description: string
-  readonly shortcuts: readonly string[]
+  readonly shortcuts: readonly ReviewShortcut[]
   readonly available: (
     selection: ReviewSelection,
     projection: CanvasProjection
