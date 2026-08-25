@@ -19,6 +19,7 @@ import {
   decodeCanvasCommandBatch
 } from "@crit/domain"
 import {
+  AgentSessionRejected,
   LocalDaemonInstanceNonce,
   LocalApiOriginRejected,
   LocalApiUnauthorized,
@@ -36,7 +37,7 @@ import {
   LocalRepresentationResolveFailure,
   RepresentationRuntimeLive
 } from "@crit/representations"
-import { Context, Crypto, Effect, Fiber, Layer, Option, Schema, Stream, Tracer } from "effect"
+import { Context, Crypto, Effect, Fiber, Layer, Option, Redacted, Schema, Stream, Tracer } from "effect"
 import { FetchHttpClient, HttpClient, HttpClientRequest, HttpServer } from "effect/unstable/http"
 import * as Socket from "effect/unstable/socket/Socket"
 import { describe, expect, it } from "vitest"
@@ -591,5 +592,153 @@ describe("LocalDaemon", () => {
       const stored = yield* Context.get(authorityContext, CanvasAuthority).open(canvasId)
       expect(stored.createdBy).toEqual({ _tag: "person", person: invocation.principal.person })
       expect(stored.createdAt).not.toBe("2020-01-01T00:00:00.000Z")
+    }))))
+
+  it("stamps installation bearer create and change as the boot Person", () =>
+    Effect.runPromise(Effect.scoped(Effect.gen(function*() {
+      const databasePath = yield* tempDatabasePath
+      const token = "person-stamp-token-with-at-least-32-characters"
+      const { client } = yield* clientFor({ databasePath, token })
+      const canvasId = Id.canvas("canvas_person_stamp")
+      const created = yield* client.create(AuthorityModel.createCanvas({
+        canvasId,
+        title: "Person stamp"
+      }))
+      expect(created.pending).toHaveLength(0)
+      const changed = yield* client.change(ReplicaModel.change({
+        canvasId,
+        commands: decodeCanvasCommandBatch([{
+          _tag: "rename-canvas",
+          expectedTitle: "Person stamp",
+          title: "Person changed"
+        }])
+      }))
+      expect(changed.view.pending[0]?.author).toEqual({
+        _tag: "person",
+        displayName: invocation.principal.person.displayName
+      })
+      const scope = yield* Effect.scope
+      const authorityContext = yield* Layer.buildWithScope(
+        SqliteCanvasAuthority.layer({ path: databasePath }).pipe(Layer.provide(AuthorityClockLive)),
+        scope
+      )
+      const stored = yield* Context.get(authorityContext, CanvasAuthority).open(canvasId)
+      expect(stored.createdBy).toEqual({ _tag: "person", person: invocation.principal.person })
+    }))))
+
+  it("stamps an agent session change with the installation Person as delegatedBy", () =>
+    Effect.runPromise(Effect.scoped(Effect.gen(function*() {
+      const databasePath = yield* tempDatabasePath
+      const token = "agent-stamp-token-with-at-least-32-characters"
+      const { client, baseUrl } = yield* clientFor({ databasePath, token })
+      const canvasId = Id.canvas("canvas_agent_stamp")
+      yield* client.create(AuthorityModel.createCanvas({ canvasId, title: "Agent stamp" }))
+      const grant = yield* client.agentBegin({ displayName: "Codex" })
+      const agentContext = yield* Layer.buildWithScope(
+        LocalCanvasClient.layer({
+          _tag: "bearer",
+          baseUrl,
+          token: localApiToken(Redacted.value(grant.token))
+        }).pipe(Layer.provide(FetchHttpClient.layer)),
+        yield* Effect.scope
+      )
+      const agentClient = Context.get(agentContext, LocalCanvasClient)
+      const changed = yield* agentClient.change(ReplicaModel.change({
+        canvasId,
+        commands: decodeCanvasCommandBatch([{
+          _tag: "rename-canvas",
+          expectedTitle: "Agent stamp",
+          title: "Agent changed"
+        }])
+      }))
+      expect(changed.view.pending[0]?.author).toEqual({
+        _tag: "agent",
+        displayName: "Codex",
+        runBy: invocation.principal.person.displayName,
+        executionId: grant.executionId
+      })
+      expect(changed.view.pending[0]?.author).not.toHaveProperty("delegatedBy")
+      const synced = yield* agentClient.sync(canvasId)
+      expect(synced.view.pending).toHaveLength(0)
+      const scope = yield* Effect.scope
+      const authorityContext = yield* Layer.buildWithScope(
+        SqliteCanvasAuthority.layer({ path: databasePath }).pipe(Layer.provide(AuthorityClockLive)),
+        scope
+      )
+      const page = yield* Context.get(authorityContext, CanvasAuthority).changesAfter(
+        AuthorityModel.changesAfter({
+          canvasId,
+          after: null,
+          limit: AuthorityModel.pageLimit(10)
+        })
+      )
+      const attributed = page.changes.find((change) => change.changeId === changed.changeId)
+      expect(attributed?.attribution).toEqual({
+        _tag: "agent",
+        agent: grant.agent,
+        delegatedBy: invocation.principal.person,
+        executionId: grant.executionId
+      })
+    }))))
+
+  it("rejects begin for an agent session token", () =>
+    Effect.runPromise(Effect.scoped(Effect.gen(function*() {
+      const databasePath = yield* tempDatabasePath
+      const token = "begin-reject-token-with-at-least-32-characters"
+      const { client, baseUrl } = yield* clientFor({ databasePath, token })
+      const grant = yield* client.agentBegin({ displayName: "Codex" })
+      const agentContext = yield* Layer.buildWithScope(
+        LocalCanvasClient.layer({
+          _tag: "bearer",
+          baseUrl,
+          token: localApiToken(Redacted.value(grant.token))
+        }).pipe(Layer.provide(FetchHttpClient.layer)),
+        yield* Effect.scope
+      )
+      const failure = yield* Context.get(agentContext, LocalCanvasClient).agentBegin({
+        displayName: "Other"
+      }).pipe(Effect.flip)
+      expect(failure).toEqual(new AgentSessionRejected({ reason: "delegation-not-person" }))
+    }))))
+
+  it("ignores extra authorship keys on /change", () =>
+    Effect.runPromise(Effect.scoped(Effect.gen(function*() {
+      const databasePath = yield* tempDatabasePath
+      const token = "change-keys-token-with-at-least-32-characters"
+      const { baseUrl, client } = yield* clientFor({ databasePath, token })
+      const canvasId = Id.canvas("canvas_change_keys")
+      yield* client.create(AuthorityModel.createCanvas({ canvasId, title: "Trusted change" }))
+      const response = yield* Effect.promise(() => fetch(`${baseUrl}/api/v1/change`, {
+        method: "POST",
+        headers: rawHeaders(token),
+        body: JSON.stringify({
+          _tag: "replica-change",
+          canvasId,
+          commands: [{
+            _tag: "rename-canvas",
+            expectedTitle: "Trusted change",
+            title: "Still person"
+          }],
+          author: { _tag: "agent", displayName: "Attacker", runBy: "Nobody" },
+          invocation: {
+            _tag: "agent",
+            executionId: "execution_attacker",
+            principal: {
+              _tag: "agent",
+              subject: "local-agent|execution_attacker",
+              agent: { _tag: "agent", agentId: "agent_attacker", displayName: "Attacker" },
+              delegatedBy: invocation.principal.person
+            }
+          },
+          delegatedBy: { _tag: "person", personId: "person_attacker", displayName: "Attacker" },
+          executionId: "execution_attacker"
+        })
+      }))
+      expect(response.status).toBe(200)
+      const body = yield* Effect.promise(() => response.json())
+      expect(body.view.pending[0]?.author).toEqual({
+        _tag: "person",
+        displayName: invocation.principal.person.displayName
+      })
     }))))
 })

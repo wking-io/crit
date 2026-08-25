@@ -5,7 +5,13 @@ import * as Reactivity from "effect/unstable/reactivity/Reactivity"
 import * as SqlClient from "effect/unstable/sql/SqlClient"
 import * as SqlError from "effect/unstable/sql/SqlError"
 
-import { authorityTableSql, migrationEntries, migrations, replicaTableSql } from "./migrations.js"
+import {
+  agentIdentityTableSql,
+  authorityTableSql,
+  migrationEntries,
+  migrations,
+  replicaTableSql
+} from "./migrations.js"
 
 export class LocalDatabaseOpenFailure extends Data.TaggedError("LocalDatabaseOpenFailure")<{
   readonly path: string
@@ -58,6 +64,7 @@ const adoptLegacyAuthority = (sql: SqliteClient.SqliteClient) => Effect.gen(func
       for (const [name, definition] of Object.entries(authorityTableSql)) requireTable(tables, name, definition)
     }
     if (stored.length >= 2) requireTable(tables, "replica_states", replicaTableSql)
+    if (stored.length >= 3) requireTable(tables, "agent_identities", agentIdentityTableSql)
     if (version !== 0) yield* sql.unsafe("PRAGMA user_version = 0")
     return
   }

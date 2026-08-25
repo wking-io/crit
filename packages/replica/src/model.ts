@@ -5,7 +5,9 @@ import {
   CanvasId,
   CanvasProjection,
   ChangeId,
-  PersonSnapshot
+  ExecutionId,
+  PersonSnapshot,
+  ReportedRuntime
 } from "@crit/domain"
 import {
   AcceptedCanvasChangeSchema,
@@ -33,7 +35,10 @@ export const PersonPendingAuthor = Schema.TaggedStruct("person", {
   displayName: DisplayName
 })
 export const AgentPendingAuthor = Schema.TaggedStruct("agent", {
-  displayName: DisplayName
+  displayName: DisplayName,
+  runBy: DisplayName,
+  executionId: ExecutionId,
+  reportedRuntime: Schema.optionalKey(ReportedRuntime)
 })
 export const PendingAuthor = Schema.Union([PersonPendingAuthor, AgentPendingAuthor])
 export type PendingAuthor = typeof PendingAuthor.Type

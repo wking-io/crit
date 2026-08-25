@@ -282,7 +282,8 @@ describe("SQLite ReplicaStore", () => {
     const inspect = new DatabaseSync(path)
     expect(inspect.prepare("SELECT migration_id, name FROM crit_migrations ORDER BY migration_id").all()).toEqual([
       { migration_id: 1, name: "authority" },
-      { migration_id: 2, name: "replica_state" }
+      { migration_id: 2, name: "replica_state" },
+      { migration_id: 3, name: "agent_identities" }
     ])
     expect(inspect.prepare("PRAGMA user_version").get()).toEqual({ user_version: 0 })
     inspect.close()
@@ -311,6 +312,7 @@ describe("SQLite ReplicaStore", () => {
     }))
     const legacy = new DatabaseSync(path)
     legacy.exec("DROP TABLE replica_states")
+    legacy.exec("DROP TABLE agent_identities")
     legacy.exec("DROP TABLE crit_migrations")
     legacy.exec("PRAGMA user_version = 1")
     legacy.close()
@@ -342,7 +344,7 @@ describe("SQLite ReplicaStore", () => {
     const path = yield* tempDatabasePath
     yield* Effect.scoped(buildStore(path))
     const future = new DatabaseSync(path)
-    future.prepare("INSERT INTO crit_migrations (migration_id, name) VALUES (?, ?)").run(3, "future")
+    future.prepare("INSERT INTO crit_migrations (migration_id, name) VALUES (?, ?)").run(4, "future")
     future.close()
     const result = yield* Effect.result(Effect.scoped(buildStore(path)))
     expect(result).toMatchObject({ _tag: "Failure", failure: { _tag: "LocalDatabaseOpenFailure" } })
