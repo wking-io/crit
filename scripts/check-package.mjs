@@ -11,7 +11,21 @@ const execFileAsync = promisify(execFile)
 const root = path.resolve(fileURLToPath(new URL("..", import.meta.url)))
 const temporary = await mkdtemp(path.join(tmpdir(), "crit-package-check-"))
 const npm = process.platform === "win32" ? "npm.cmd" : "npm"
-const npmEnvironment = { ...process.env, npm_config_dry_run: "false" }
+const commandTimeoutMs = 4 * 60 * 1000
+const startedAt = Date.now()
+const npmEnvironment = {
+  ...process.env,
+  npm_config_dry_run: "false",
+  npm_config_fetch_retries: "2",
+  npm_config_fetch_retry_mintimeout: "10000",
+  npm_config_fetch_retry_maxtimeout: "30000",
+  npm_config_fetch_timeout: "60000"
+}
+
+const log = (message) => {
+  const elapsed = ((Date.now() - startedAt) / 1000).toFixed(1)
+  process.stdout.write(`[check-package +${elapsed}s] ${message}\n`)
+}
 
 const ExecFileFailure = Schema.Struct({
   message: Schema.String,
@@ -28,10 +42,12 @@ const NpmPackReport = Schema.Struct({
 const NpmPackReports = Schema.Array(NpmPackReport)
 
 const run = async (command, args, options = {}) => {
+  log(`${command} ${args.join(" ")}`)
   try {
     return await execFileAsync(command, args, {
       encoding: "utf8",
       maxBuffer: 20 * 1024 * 1024,
+      timeout: commandTimeoutMs,
       ...options
     })
   } catch (cause) {
@@ -46,11 +62,17 @@ const run = async (command, args, options = {}) => {
     ]
       .filter((value) => value.length > 0)
       .join("\n")
-    throw new Error(`${command} ${args.join(" ")} failed\n${detail}`)
+    const timedOut = "killed" in cause && cause.killed === true
+    throw new Error(
+      timedOut
+        ? `${command} ${args.join(" ")} timed out after ${commandTimeoutMs / 1000}s`
+        : `${command} ${args.join(" ")} failed\n${detail}`
+    )
   }
 }
 
 try {
+  log(`working in ${temporary}`)
   const packed = await run(
     npm,
     ["pack", "--json", "--pack-destination", temporary],
