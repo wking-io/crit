@@ -8,6 +8,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { HostRoot } from "../src/index.js"
 
+const fetchMock = vi.hoisted(() => {
+  const mock = vi.fn<typeof globalThis.fetch>()
+  vi.stubGlobal("fetch", mock)
+  return mock
+})
+
 Object.defineProperty(globalThis, "IS_REACT_ACT_ENVIRONMENT", { value: true })
 
 const instance = Schema.decodeUnknownSync(LocalDaemonInstanceNonce)(
@@ -41,7 +47,7 @@ afterEach(async() => {
   await act(async() => root.unmount())
   container.remove()
   vi.restoreAllMocks()
-  vi.unstubAllGlobals()
+  fetchMock.mockReset()
 })
 
 describe("HostRoot", () => {
@@ -119,7 +125,7 @@ describe("HostRoot", () => {
   }, 15_000)
 
   it("lists hosted canvases from the same-origin directory", async() => {
-    const fetch = vi.fn(async() => new Response(JSON.stringify({
+    fetchMock.mockImplementation(async() => new Response(JSON.stringify({
       kind: "canvas-directory",
       schemaVersion: 1,
       canvases: [{
@@ -131,21 +137,19 @@ describe("HostRoot", () => {
       status: 200,
       headers: { "content-type": "application/json" }
     }))
-    vi.stubGlobal("fetch", fetch)
-
     await act(async() => render(hostAt("/", "", "https://crit.example")))
 
     await act(async() => vi.waitFor(() => {
       expect(container.querySelector("a")?.textContent).toBe("Hosted review")
     }))
-    expect(fetch).toHaveBeenCalledWith(
+    expect(fetchMock).toHaveBeenCalledWith(
       "/canvas",
       expect.objectContaining({ method: "GET" })
     )
   })
 
   it("builds hosted canvas ports without a local capability", async() => {
-    const fetch = vi.fn(async(input: RequestInfo | URL) => {
+    fetchMock.mockImplementation(async(input: RequestInfo | URL) => {
       const url = String(input)
       if (url === "/identity") {
         return new Response(JSON.stringify({
@@ -165,8 +169,6 @@ describe("HostRoot", () => {
         headers: { "content-type": "application/json" }
       })
     })
-    vi.stubGlobal("fetch", fetch)
-
     await act(async() => render(hostAt(
       "/canvas/canvas_shop",
       "",
@@ -178,11 +180,11 @@ describe("HostRoot", () => {
         "The canvas does not exist."
       )
     ))
-    expect(fetch).toHaveBeenCalledWith(
+    expect(fetchMock).toHaveBeenCalledWith(
       "/identity",
       expect.objectContaining({ method: "GET" })
     )
-    expect(fetch).toHaveBeenCalledWith(
+    expect(fetchMock).toHaveBeenCalledWith(
       "/canvas/canvas_shop",
       expect.objectContaining({ method: "GET" })
     )
