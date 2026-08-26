@@ -2,7 +2,6 @@ import { AuthorityModel, CreateCanvas } from "@crit/authority"
 import {
   AccessPersonEmail,
   AuthSubject,
-  EmailAddress,
   IsoTimestamp,
   PersonEmail,
   PersonPrincipal,
@@ -15,16 +14,19 @@ import {
   decodeShareCanvasWire,
   encodeAccessAuthenticatedPersonWire,
   encodeCanvasSharedWire,
+  parseRemoteAuthorityPath,
   type RegisterDeploymentWire
 } from "@crit/protocol"
 import { Effect, Exit, Option, Schema } from "effect"
 
+import { readAccessEmail } from "./access.js"
 import {
   CanvasDurableObject,
   testClockCancelPath,
   testClockPath
 } from "./canvas-object.js"
 import { registerControlDeployment } from "./deployments.js"
+import { handleLedgerRequest } from "./ledger-http.js"
 
 const testClocks = new Map<string, Effect.Effect<IsoTimestamp>>()
 const runningClocks = new Map<string, string>()
@@ -66,9 +68,7 @@ const shareCanvas = async (
   request: Request,
   env: Cloudflare.Env
 ): Promise<Response> => {
-  const address = Schema.decodeUnknownOption(EmailAddress)(
-    request.headers.get("Cf-Access-Authenticated-User-Email")
-  )
+  const address = readAccessEmail(request)
   if (Option.isNone(address)) return emptyResponse(401)
 
   let input: unknown
@@ -173,9 +173,7 @@ const registerDeployment = async (
 
 const readIdentity = (request: Request): Response => {
   if (request.method !== "GET") return emptyResponse(405)
-  const address = Schema.decodeUnknownOption(EmailAddress)(
-    request.headers.get("Cf-Access-Authenticated-User-Email")
-  )
+  const address = readAccessEmail(request)
   if (Option.isNone(address)) return emptyResponse(401)
   const body = encodeAccessAuthenticatedPersonWire({
     kind: "access-authenticated-person",
@@ -236,6 +234,8 @@ const worker: ExportedHandler<Cloudflare.Env> = {
         ? shareCanvas(request, env)
         : emptyResponse(405)
     }
+    const ledger = parseRemoteAuthorityPath(url.pathname)
+    if (ledger !== undefined) return handleLedgerRequest(request, env, ledger)
     if (
       request.method === "DELETE" &&
       url.pathname.startsWith(testClockCancelPath)

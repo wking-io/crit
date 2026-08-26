@@ -58,6 +58,12 @@ export {
   LocalBrowserConnectionDescriptor,
   LocalBrowserConnectionInvalid
 } from "./browser-connection.js"
+export {
+  overlayRemoteLedger,
+  RemoteAuthorityOptions,
+  RemoteCanvasAuthority
+} from "./remote-authority.js"
+export type { RemoteCanvasAuthorityService } from "./remote-authority.js"
 
 export type LocalClientOptions = Data.TaggedEnum<{
   readonly bearer: {

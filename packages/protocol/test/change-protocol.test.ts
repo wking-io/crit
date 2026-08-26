@@ -111,16 +111,21 @@ describe("ChangeProtocol", () => {
       "FrameInputBridgeMessageSchema", "FrameInputIntentSchema",
       "FrameRoute", "FrameRouteBridgeMessageSchema",
       "PresenceChangedSchema", "ProposedCanvasChangeSchema", "ProtocolValue",
-      "RegisterDeploymentWire", "ReplicaChangedSchema", "SequenceSchema",
-      "ShareCanvasWire", "SubmitChangeReceiptSchema",
+      "RegisterDeploymentWire", "RemoteAuthorityRoute", "ReplicaChangedSchema",
+      "SequenceSchema",
+      "ShareCanvasWire", "SubmitCanvasChangeWire", "SubmitChangeReceiptSchema",
       "decodeAccessAuthenticatedPersonWire", "decodeCanvasSharedWire",
       "decodeCritProjectManifestV2", "decodeDeploymentRegisteredWire",
       "decodeFrameInputBridgeMessage", "decodeFrameRouteBridgeMessage",
       "decodeRegisterDeploymentWire", "decodeShareCanvasWire",
+      "decodeSubmitCanvasChangeWire",
       "encodeAccessAuthenticatedPersonWire",
-      "encodeCanvasSharedWire", "encodeCritProjectManifestV2",
+      "encodeCanvasSharedWire", "encodeChangesAfterSearch",
+      "encodeCritProjectManifestV2",
       "encodeDeploymentRegisteredWire", "encodeRegisterDeploymentWire",
-      "encodeShareCanvasWire"
+      "encodeShareCanvasWire", "encodeSubmitCanvasChangeWire",
+      "parseChangesAfterSearch", "parseRemoteAuthorityPath",
+      "remoteCanvasChangesPath", "remoteCanvasPath", "remoteChangesPageLimit"
     ])
   })
 

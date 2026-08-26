@@ -8,7 +8,7 @@ This file is the current inventory. Phase docs own the prove. [Decision record](
 
 ## Next
 
-- [ ] Push/pull by change ID and cursor against a remote authority.
+- [ ] First share with share/import IDs and a projection digest.
 
 ## Remaining
 
@@ -23,7 +23,7 @@ Plan: [phase 5](phase-05-review-ui.md), [phase 3](phase-03-local-daemon-and-cli.
 
 Plan: [phase 6](phase-06-cloudflare-platform.md), [phase 7](phase-07-sync-and-sharing.md), [phase 8](phase-08-hosted-review.md).
 
-- [ ] Push/pull by change ID and cursor against a remote authority.
+- [x] Push/pull by change ID and cursor against a remote authority.
 - [ ] First share with share/import IDs and a projection digest.
 - [ ] Two author replicas edit offline and converge.
 - [ ] Recoverable remote conflicts that keep dependent pending work. Local replica policy exists.
@@ -83,6 +83,7 @@ Local Frames authoring on one machine.
 - Mid-session daemon loss keeps the last projection and shows a connection alert.
 - Enqueue rejection is a submit notice. Conflict repair stays later.
 - Official HTML renderer and optional Vite adapter inject the route script. Ordinary production stays unmarked.
+- Remote authority HTTP push/pull. Submit is keyed by change ID. Pull resumes after an opaque cursor. Access stamps the caller. The Worker exposes `/canvases/:id` and `/canvases/:id/changes`.
 
 ## Out of v1
 

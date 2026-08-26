@@ -48,6 +48,24 @@ export type {
   ProposedCanvasChange,
   SubmitChangeReceipt
 } from "./change.js"
+export {
+  decodeSubmitCanvasChangeWire,
+  encodeChangesAfterSearch,
+  encodeSubmitCanvasChangeWire,
+  parseChangesAfterSearch,
+  parseRemoteAuthorityPath,
+  remoteCanvasChangesPath,
+  remoteCanvasPath,
+  remoteChangesPageLimit,
+  RemoteAuthorityRoute,
+  SubmitCanvasChangeWire
+} from "./sync.js"
+export type {
+  ChangesAfterQuery,
+  SubmitCanvasChange,
+  SubmitCanvasChangeDecodeFailure,
+  SubmitInvocation
+} from "./sync.js"
 export type { DecodeResult, ProtocolFailure } from "./failure.js"
 export {
   FRAME_INPUT_BRIDGE_SCHEMA_VERSION,
