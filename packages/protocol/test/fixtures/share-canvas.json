@@ -1,0 +1,15 @@
+{
+  "kind": "share-canvas",
+  "schemaVersion": 1,
+  "canvasId": "canvas_checkout",
+  "title": "Checkout",
+  "person": {
+    "_tag": "person",
+    "personId": "person_ada",
+    "displayName": "Ada Lovelace",
+    "email": {
+      "_tag": "access",
+      "address": "ada@acme.com"
+    }
+  }
+}

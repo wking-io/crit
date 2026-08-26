@@ -26,6 +26,14 @@ export {
   decodeAccessAuthenticatedPersonWire,
   encodeAccessAuthenticatedPersonWire
 } from "./identity.js"
+export {
+  CanvasSharedWire,
+  decodeCanvasSharedWire,
+  decodeShareCanvasWire,
+  encodeCanvasSharedWire,
+  encodeShareCanvasWire,
+  ShareCanvasWire
+} from "./share.js"
 export type {
   AcceptedCanvasChange,
   ChangePage,

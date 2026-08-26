@@ -59,3 +59,15 @@ export type {
   BindAccessPersonOptions,
   LoginToInstallationOptions
 } from "./login.js"
+export {
+  CanvasShareSuccess,
+  LocalShares,
+  shareCanvas,
+  SharedCanvas,
+  SharePersistenceFailure,
+  ShareRequestFailed,
+  ShareRequiresLogin,
+  ShareResponseInvalid,
+  ShareResponseRejected
+} from "./share.js"
+export type { ShareCanvasOptions } from "./share.js"

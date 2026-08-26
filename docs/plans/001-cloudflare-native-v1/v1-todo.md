@@ -26,12 +26,11 @@ Plan: [phase 5](phase-05-review-ui.md), [phase 3](phase-03-local-daemon-and-cli.
 
 Plan: [phase 6](phase-06-cloudflare-platform.md), [phase 7](phase-07-sync-and-sharing.md), [phase 8](phase-08-hosted-review.md).
 
-- [ ] `crit share`.
 - [ ] Push/pull by change ID and cursor against a remote authority.
 - [ ] First share with share/import IDs and a projection digest.
 - [ ] Two author replicas edit offline and converge.
 - [ ] Recoverable remote conflicts that keep dependent pending work. Local replica policy exists.
-- [ ] Worker, static assets, Access, D1, R2 artifacts. `packages/cloudflare` has the one-Canvas SQLite authority and a workerd Durable Object. The hosted Worker is still missing.
+- [ ] Worker, static assets, Access, D1, R2 artifacts. `packages/cloudflare` has the one-Canvas SQLite authority, a workerd Durable Object, and `POST /canvases`. The hosted Worker is still missing.
 - [ ] Hosted review UI served from the Worker.
 - [ ] Teammate signs in with Access, views Frames and shared previews, and sets review status. No Crit install.
 - [ ] Presence of Access-authenticated people viewing a shared Canvas. Local review does not attend.
@@ -59,6 +58,7 @@ Local Frames authoring on one machine.
 
 - `crit init`, `crit dev`, `crit status`, `create`, `open`, `layout`, `add-frame`
 - `crit login` reconciles the local Person with the Access-authenticated Person and binds the Access email.
+- `crit share` registers a local Canvas with the installation Worker.
 - Project-local agent skill
 - Named Canvas, rename
 - Add, title, move, resize, stack, and remove Frames

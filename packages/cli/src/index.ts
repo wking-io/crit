@@ -19,6 +19,7 @@ import {
   AccessPersonResponseInvalid,
   AccessPersonResponseRejected,
   AccessPersonUnauthenticated,
+  CanvasShareSuccess,
   InstallationUrlInvalid,
   AGENT_SESSION_ENV,
   inspectLocalDaemon,
@@ -32,6 +33,12 @@ import {
   LocalProjectManifest,
   loginToInstallation,
   ProjectManifestInitialization,
+  shareCanvas,
+  SharePersistenceFailure,
+  ShareRequestFailed,
+  ShareRequiresLogin,
+  ShareResponseInvalid,
+  ShareResponseRejected,
   type ProjectManifestFailure,
   type LocalDaemonInspection
 } from "@crit/local"
@@ -282,6 +289,30 @@ const login = Command.make("login", {
   "Bind the local Person through an installation such as https://crit.acme.internal"
 ))
 
+type ShareFailure =
+  | AccessPersonUnauthenticated
+  | LocalDaemonStateMalformed
+  | LocalDaemonStateMissing
+  | LocalDaemonStateUnreadable
+  | SharePersistenceFailure
+  | ShareRequestFailed
+  | ShareRequiresLogin
+  | ShareResponseInvalid
+  | ShareResponseRejected
+
+const formatShareFailure = Match.typeTags<ShareFailure, string>()({
+  AccessPersonUnauthenticated: () => "Installation did not accept the share",
+  LocalDaemonStateMalformed: () => "Run crit login",
+  LocalDaemonStateMissing: () => "Run crit login",
+  LocalDaemonStateUnreadable: () => "Run crit login",
+  SharePersistenceFailure: () => "Unable to record the shared Canvas",
+  ShareRequestFailed: () => "Unable to reach the Crit installation",
+  ShareRequiresLogin: () => "Run crit login",
+  ShareResponseInvalid: () => "Installation returned an invalid share receipt",
+  ShareResponseRejected: ({ status }) =>
+    `Installation returned an unexpected share response (HTTP ${status})`
+})
+
 const status = Command.make("status", { dataRoot, json }, ({ dataRoot: root, json: asJson }) =>
   Effect.scoped(inspectLocalDaemon({ dataRoot: root }).pipe(
     Effect.flatMap((inspection) => Match.value(inspection).pipe(
@@ -337,6 +368,42 @@ const open = Command.make("open", {
   ))
   yield* printView(view, asJson)
 })).pipe(Command.withDescription("Open a Canvas through the local daemon"))
+
+const share = Command.make("share", {
+  dataRoot,
+  json,
+  canvasId: Argument.string("canvas-id")
+}, ({ canvasId, dataRoot: root, json: asJson }) => Effect.gen(function*() {
+  const id = yield* decode(CanvasId, canvasId, "canvas ID")
+  const view = yield* connected(root, ({ client }) => client.open(id).pipe(
+    Effect.mapError((failure) => Match.value(failure).pipe(
+      Match.when({ _tag: "canvas-not-found" }, ({ canvasId }) => new CliOperationalFailure({
+        message: `Canvas not found: ${canvasId}`
+      })),
+      Match.orElse(() => new CliOperationalFailure({ message: "Unable to open Canvas" }))
+    ))
+  )).pipe(
+    Effect.mapError((failure) => failure.message === "Crit is not initialized at this data root"
+      ? new CliOperationalFailure({ message: "Run crit login" })
+      : failure)
+  )
+  const result = yield* shareCanvas({
+    dataRoot: root,
+    canvasId: id,
+    title: view.projection.title
+  }).pipe(
+    Effect.mapError((failure) => new CliOperationalFailure({
+      message: formatShareFailure(failure)
+    }))
+  )
+  if (asJson) {
+    return yield* Console.log(JSON.stringify(
+      Schema.encodeSync(CanvasShareSuccess)(result)
+    ))
+  }
+  yield* Console.log(`Canvas  ${result.canvasId}`)
+  yield* Console.log(`Installation  ${result.installationOrigin}`)
+})).pipe(Command.withDescription("Share a local Canvas with the Crit installation"))
 
 const readProjectManifest = (projectRoot: string) =>
   Effect.gen(function*() {
@@ -663,6 +730,7 @@ export const command = crit.pipe(Command.withSubcommands([
   status,
   create,
   open,
+  share,
   addFrame,
   layout,
   agent

@@ -193,6 +193,51 @@ describe("Access Person login", () => {
         _tag: "access",
         address: "ada@acme.com"
       })
+      expect(installationFrom(dataRoot).installationOrigin).toBe(serverOrigin(server))
+    })).pipe(Effect.provide(NodeServices.layer))))
+
+  it("keeps the Person unchanged when logging in to the same origin again", () =>
+    Effect.runPromise(Effect.scoped(Effect.gen(function*() {
+      const directory = yield* temporaryRoot
+      const dataRoot = join(directory, ".crit", "v1")
+      yield* mintInstallation(dataRoot)
+      const server = yield* identityServer(200)
+      const origin = serverOrigin(server)
+      yield* loginToInstallation({ dataRoot, installationUrl: origin })
+      const first = installationFrom(dataRoot)
+      const firstContents = readFileSync(join(dataRoot, "installation.json"), "utf8")
+
+      yield* loginToInstallation({ dataRoot, installationUrl: origin })
+
+      const second = installationFrom(dataRoot)
+      expect(second.principal.person.personId).toBe(first.principal.person.personId)
+      expect(second.principal.person.email).toEqual(first.principal.person.email)
+      expect(readFileSync(join(dataRoot, "installation.json"), "utf8")).toBe(firstContents)
+    })).pipe(Effect.provide(NodeServices.layer))))
+
+  it("updates the origin after logging in through another installation URL", () =>
+    Effect.runPromise(Effect.scoped(Effect.gen(function*() {
+      const directory = yield* temporaryRoot
+      const dataRoot = join(directory, ".crit", "v1")
+      yield* mintInstallation(dataRoot)
+      const firstServer = yield* identityServer(200)
+      yield* loginToInstallation({
+        dataRoot,
+        installationUrl: serverOrigin(firstServer)
+      })
+      const first = installationFrom(dataRoot)
+      const secondServer = yield* identityServer(200)
+      const secondOrigin = serverOrigin(secondServer)
+
+      yield* loginToInstallation({
+        dataRoot,
+        installationUrl: `${secondOrigin}/path?query=yes`
+      })
+
+      const second = installationFrom(dataRoot)
+      expect(second.principal.person.personId).toBe(first.principal.person.personId)
+      expect(second.principal.person.email).toEqual(first.principal.person.email)
+      expect(second.installationOrigin).toBe(secondOrigin)
     })).pipe(Effect.provide(NodeServices.layer))))
 
   it("leaves the Person unspecified when Access rejects the request", () =>
