@@ -307,7 +307,7 @@ describe("CanvasBoard camera navigation", () => {
     )
   })
 
-  it("notifies the host of a bridged Frame wheel pan", async() => {
+  it("does not listen for bridged Frame wheel pan messages", async() => {
     const onCameraChange = vi.fn()
     await act(async() => render(
       <CanvasBoard
@@ -342,9 +342,7 @@ describe("CanvasBoard camera navigation", () => {
       }))
     })
 
-    expect(onCameraChange).toHaveBeenCalledWith(
-      CanvasCamera.make({ x: 6, y: 12, zoom: 1 })
-    )
+    expect(onCameraChange).not.toHaveBeenCalled()
   })
 
   it("leaves a sole selected Frame's wheel for the Frame", async() => {
@@ -398,7 +396,7 @@ describe("CanvasBoard camera navigation", () => {
     expect(onCameraChange).not.toHaveBeenCalled()
   })
 
-  it("keeps the camera when more than one item is selected", async() => {
+  it("routes canvas wheel when more than one item is selected", async() => {
     const onCameraChange = vi.fn()
     await act(async() => render(
       <CanvasBoard
@@ -415,28 +413,13 @@ describe("CanvasBoard camera navigation", () => {
     ))
     await waitFor(() => expect(container.querySelector("iframe")).not.toBeNull())
     const board = container.querySelector("[aria-label='Review']")
-    const iframe = container.querySelector("iframe")
     expect(board).toBeInstanceOf(HTMLElement)
-    expect(iframe).toBeInstanceOf(HTMLIFrameElement)
-    if (!(board instanceof HTMLElement) ||
-      !(iframe instanceof HTMLIFrameElement)) return
+    if (!(board instanceof HTMLElement)) return
     stubBoardRect(board)
-    const frameWindow = iframe.contentWindow
-    expect(frameWindow).not.toBeNull()
-    if (frameWindow === null) return
 
-    await act(async() => {
-      window.dispatchEvent(new MessageEvent("message", {
-        origin: new URL(url).origin,
-        source: frameWindow,
-        data: {
-          source: FRAME_INPUT_BRIDGE_SOURCE,
-          schemaVersion: FRAME_INPUT_BRIDGE_SCHEMA_VERSION,
-          intent: { type: "wheel", ...wheel, deltaX: 4, deltaY: 8 }
-        }
-      }))
-    })
+    const event = dispatchWheel(window)
 
+    expect(event.defaultPrevented).toBe(true)
     expect(onCameraChange).toHaveBeenCalledWith(
       CanvasCamera.make({ x: 6, y: 12, zoom: 1 })
     )

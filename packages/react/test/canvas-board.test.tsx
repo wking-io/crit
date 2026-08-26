@@ -135,6 +135,48 @@ describe("CanvasBoard", () => {
     expect(container.querySelector("iframe")?.getAttribute("src")).toBe(url)
   })
 
+  it("captures unselected Frames but leaves the sole selected Frame interactive", async() => {
+    const resolver: FrameRepresentationResolver = {
+      resolve: () => Effect.succeed(IframeRenderPlan.make({
+        representation: projection.frames[0]!.representation,
+        url
+      }) satisfies RenderPlan)
+    }
+
+    await act(async() => render(
+      <CanvasBoard {...requiredBoard} projection={projection} resolver={resolver} />
+    ))
+    await waitFor(() => expect(container.querySelector("iframe")).not.toBeNull())
+
+    const capture = container.querySelector("[data-crit-frame-capture]")
+    expect(capture).toBeInstanceOf(HTMLElement)
+    if (!(capture instanceof HTMLElement)) return
+    expect(capture.getAttribute("aria-hidden")).toBe("true")
+    expect(capture.style.inset).toBe("0")
+    expect(capture.style.pointerEvents).toBe("auto")
+    expect(capture.style.position).toBe("absolute")
+
+    const iframe = container.querySelector("iframe")
+    iframe?.dispatchEvent(new Event("load"))
+    expect(
+      iframe?.contentDocument?.querySelector("script[data-crit-input-bridge]")
+    ).toBeNull()
+
+    await act(async() => render(
+      <CanvasBoard
+        {...requiredBoard}
+        projection={projection}
+        resolver={resolver}
+        selection={CanvasSelection.make([{
+          _tag: "frame",
+          frameId: "frame_checkout"
+        }])}
+      />
+    ))
+
+    expect(container.querySelector("[data-crit-frame-capture]")).toBeNull()
+  })
+
   it("shows an empty canvas without looking up missing items", async() => {
     const resolver: FrameRepresentationResolver = {
       resolve: () => Effect.die("empty canvas must not resolve a Frame")

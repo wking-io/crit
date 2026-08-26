@@ -195,18 +195,8 @@ export function CanvasBoard({
     )
     : frameEntries.map(({ frame, item, zIndex }) => {
       const { frameId } = item
-      const frameReceivesInput = inputTarget._tag === "camera" ||
-        inputTarget.frameId !== frameId
-      const onFrameInputIntent = (intent: FrameInputIntent) => {
-        if (intent.type === "select") {
-          applySelectionCommand(CanvasSelectionCommand.item({
-            item,
-            additive: intent.additive
-          }))
-          return
-        }
-        applyCameraIntent(intent)
-      }
+      const frameIsInputTarget = inputTarget._tag === "frame" &&
+        inputTarget.frameId === frameId
       return (
         <div
           ref={(element) => {
@@ -227,11 +217,23 @@ export function CanvasBoard({
         >
           {reviewStatusLabel[frame.status]}
           <FrameRenderer
-            {...(frameReceivesInput ? { onInputIntent: onFrameInputIntent } : {})}
             frame={frame}
             paused={reviewEffects.isFramePaused(frameId)}
             resolver={resolver}
           />
+          {frameIsInputTarget
+            ? null
+            : (
+              <div
+                aria-hidden
+                data-crit-frame-capture=""
+                style={{
+                  inset: 0,
+                  pointerEvents: "auto",
+                  position: "absolute"
+                }}
+              />
+            )}
           {CanvasSelection.has(selection, item) && onSubmit !== undefined
             ? (
               <span
