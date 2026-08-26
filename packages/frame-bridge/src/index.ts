@@ -25,9 +25,15 @@ export {
   frameBridgeOriginFromHref,
   isTrustedFrameBridgeEvent
 } from "./origin.js"
+export {
+  assignLiveFrameRoute,
+  connectLiveFrameRoute,
+  critFrameRouteBridgeScript
+} from "./route.js"
 export type {
   FrameBridgeOrigin,
-  FrameInputIntent
+  FrameInputIntent,
+  FrameRoute
 } from "@crit/protocol"
 
 export const connectBridgedFrameInput = (input: {
