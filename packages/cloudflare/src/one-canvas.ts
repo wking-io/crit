@@ -33,7 +33,7 @@ import {
   type ProtocolFailure,
   type SubmitChangeReceipt
 } from "@crit/protocol"
-import { Data, Effect, Result, Schema } from "effect"
+import { Context, Data, Effect, Layer, Result, Schema } from "effect"
 import type { SqlError } from "effect/unstable/sql/SqlError"
 
 import type { DurableSqlite } from "./durable-sqlite.js"
@@ -362,6 +362,14 @@ export const makeOneCanvas = (args: {
   }
   return bound.oneCanvas
 })
+
+export class OneCanvasLoader extends Context.Service<OneCanvasLoader, {
+  readonly open: typeof makeOneCanvas
+}>()("@crit/cloudflare/OneCanvasLoader") {
+  static readonly layer = Layer.succeed(OneCanvasLoader, {
+    open: makeOneCanvas
+  })
+}
 
 export const createOneCanvas = (args: {
   readonly view: AuthorityView

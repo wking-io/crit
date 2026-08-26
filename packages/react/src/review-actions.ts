@@ -14,7 +14,7 @@ import {
   proposeSetFrameStatus,
   proposeSetFrameTitle
 } from "@crit/domain"
-import { Effect, Option, Schema } from "effect"
+import { Data, Effect, Option, Schema } from "effect"
 
 import {
   CanvasArrangement,
@@ -24,10 +24,12 @@ import {
 import type { CanvasSelection } from "./canvas-selection.js"
 import { FRAME_SIZE_PRESETS } from "./frame-breakpoints.js"
 
-export type ReviewAction =
-  | { readonly _tag: "batch"; readonly commands: CanvasCommandBatch }
-  | { readonly _tag: "effect"; readonly effect: ReviewClientEffect }
-  | { readonly _tag: "snapshot"; readonly request: SnapshotRequest }
+export type ReviewAction = Data.TaggedEnum<{
+  readonly batch: { readonly commands: CanvasCommandBatch }
+  readonly effect: { readonly effect: ReviewClientEffect }
+  readonly snapshot: { readonly request: SnapshotRequest }
+}>
+export const ReviewAction = Data.taggedEnum<ReviewAction>()
 
 export interface SnapshotSource {
   readonly title: Frame["title"]
@@ -41,19 +43,23 @@ export type SnapshotRequest = readonly [
   ...SnapshotSource[]
 ]
 
-export type ReviewClientEffect =
-  | { readonly _tag: "open-url"; readonly url: string }
-  | { readonly _tag: "fullscreen"; readonly target: "frame" | "exit" }
-  | { readonly _tag: "copy"; readonly text: string }
+export type ReviewClientEffect = Data.TaggedEnum<{
+  readonly openUrl: { readonly url: string }
+  readonly fullscreen: { readonly target: "frame" | "exit" }
+  readonly copy: { readonly text: string }
+}>
+export const ReviewClientEffect = Data.taggedEnum<ReviewClientEffect>()
 
 export type ReviewSelection = {
   readonly _tag: "items"
   readonly items: CanvasSelection
 }
 
-export type ReviewActionInput =
-  | { readonly _tag: "none" }
-  | { readonly _tag: "text"; readonly text: string }
+export type ReviewActionInput = Data.TaggedEnum<{
+  readonly none: {}
+  readonly text: { readonly text: string }
+}>
+export const ReviewActionInput = Data.taggedEnum<ReviewActionInput>()
 
 export interface ReviewActionContext {
   readonly projection: CanvasProjection
@@ -145,7 +151,7 @@ const reviewBatch = (
   const [first, ...rest] = commands
   return first === undefined
     ? null
-    : { _tag: "batch", commands: [first, ...rest] }
+    : ReviewAction.batch({ commands: [first, ...rest] })
 }
 
 const textInput = (input: ReviewActionInput) => {
@@ -154,8 +160,6 @@ const textInput = (input: ReviewActionInput) => {
     Schema.decodeUnknownOption(AuthoredText)(input.text.trim())
   )
 }
-
-const noInput: ReviewActionInput = { _tag: "none" }
 
 const alignmentDescription = {
   left: "Align the selected Frames to the left of their shared bounds.",
@@ -223,7 +227,7 @@ const snapshotPolicy = policy({
     const [first, ...rest] = snapshotSources(selection, projection)
     return first === undefined
       ? null
-      : { _tag: "snapshot", request: [first, ...rest] }
+      : ReviewAction.snapshot({ request: [first, ...rest] })
   }
 })
 
@@ -396,10 +400,9 @@ const openUrlPolicy = policy({
   run: ({ projection, selection }) => {
     const frame = selectedFrame(selection, projection)
     return frame?.representation._tag === "web-url"
-      ? {
-        _tag: "effect",
-        effect: { _tag: "open-url", url: frame.representation.url }
-      }
+      ? ReviewAction.effect({
+        effect: ReviewClientEffect.openUrl({ url: frame.representation.url })
+      })
       : null
   }
 })
@@ -413,7 +416,9 @@ const enterFullscreenPolicy = policy({
     selectedFrame(selection, projection) !== undefined,
   run: ({ fullscreen }) => fullscreen
     ? null
-    : { _tag: "effect", effect: { _tag: "fullscreen", target: "frame" } }
+    : ReviewAction.effect({
+      effect: ReviewClientEffect.fullscreen({ target: "frame" })
+    })
 })
 
 const exitFullscreenPolicy = policy({
@@ -424,7 +429,9 @@ const exitFullscreenPolicy = policy({
   available: (selection, projection) =>
     selectedFrame(selection, projection) !== undefined,
   run: ({ fullscreen }) => fullscreen
-    ? { _tag: "effect", effect: { _tag: "fullscreen", target: "exit" } }
+    ? ReviewAction.effect({
+      effect: ReviewClientEffect.fullscreen({ target: "exit" })
+    })
     : null
 })
 
@@ -438,10 +445,9 @@ const copyNodeIdPolicy = policy({
   run: ({ projection, selection }) => {
     const frame = selectedFrame(selection, projection)
     if (frame === undefined) return null
-    return {
-      _tag: "effect",
-      effect: { _tag: "copy", text: frame.frameId }
-    }
+    return ReviewAction.effect({
+      effect: ReviewClientEffect.copy({ text: frame.frameId })
+    })
   }
 })
 
@@ -489,6 +495,3 @@ export const resolveReviewAction = (
     : candidate.run(context)
 }
 
-export const ReviewActionInput = {
-  none: noInput
-} as const

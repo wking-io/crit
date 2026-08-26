@@ -1,5 +1,20 @@
-import { EmailAddress, type IsoTimestamp } from "@crit/domain"
-import { encodeAccessAuthenticatedPersonWire } from "@crit/protocol"
+import { AuthorityModel, CreateCanvas } from "@crit/authority"
+import {
+  AccessPersonEmail,
+  AuthSubject,
+  EmailAddress,
+  PersonEmail,
+  PersonPrincipal,
+  PersonSnapshot,
+  type CanvasId,
+  type CanvasTitle,
+  type IsoTimestamp
+} from "@crit/domain"
+import {
+  decodeShareCanvasWire,
+  encodeAccessAuthenticatedPersonWire,
+  encodeCanvasSharedWire
+} from "@crit/protocol"
 import { Effect, Exit, Option, Schema } from "effect"
 
 import {
@@ -15,6 +30,97 @@ const canceledClocks = new Set<string>()
 interface RegisteredTestClock {
   readonly id: string
   readonly close: () => void
+}
+
+const SharePersonEmailProbe = Schema.Struct({
+  kind: Schema.Literal("share-canvas"),
+  schemaVersion: Schema.Literal(1),
+  person: Schema.Struct({ email: PersonEmail })
+})
+
+const emptyResponse = (status: number) => new Response(null, { status })
+
+const canvasSharedResponse = (
+  canvasId: CanvasId,
+  title: CanvasTitle
+) => new Response(JSON.stringify(encodeCanvasSharedWire({
+  kind: "canvas-shared",
+  schemaVersion: 1,
+  canvasId,
+  title
+})), {
+  status: 200,
+  headers: { "content-type": "application/json" }
+})
+
+const shareCanvas = async (
+  request: Request,
+  env: Cloudflare.Env
+): Promise<Response> => {
+  const address = Schema.decodeUnknownOption(EmailAddress)(
+    request.headers.get("Cf-Access-Authenticated-User-Email")
+  )
+  if (Option.isNone(address)) return emptyResponse(401)
+
+  let input: unknown
+  try {
+    input = await request.json()
+  } catch {
+    return emptyResponse(400)
+  }
+
+  let share: ReturnType<typeof decodeShareCanvasWire>
+  try {
+    share = decodeShareCanvasWire(input)
+  } catch {
+    const probe = Schema.decodeUnknownOption(
+      SharePersonEmailProbe,
+      { onExcessProperty: "ignore" }
+    )(input)
+    return Option.isSome(probe) && probe.value.person.email._tag !== "access"
+      ? emptyResponse(401)
+      : emptyResponse(400)
+  }
+  if (share.person.email.address !== address.value) {
+    return emptyResponse(401)
+  }
+
+  const person = PersonSnapshot.make({
+    personId: share.person.personId,
+    displayName: share.person.displayName,
+    email: AccessPersonEmail.make({
+      address: share.person.email.address
+    })
+  })
+  const principal = PersonPrincipal.make({
+    subject: Schema.decodeUnknownSync(AuthSubject)(`access|${address.value}`),
+    person
+  })
+  const invocation = AuthorityModel.personInvocation({ principal })
+  const stub = env.CANVASES.get(env.CANVASES.idFromName(share.canvasId))
+  const created = await stub.create(CreateCanvas.make({
+    canvasId: share.canvasId,
+    title: share.title
+  }), invocation)
+  if (created._tag === "success") {
+    return canvasSharedResponse(
+      created.value.projection.canvasId,
+      created.value.projection.title
+    )
+  }
+  if (
+    created._tag !== "failure" ||
+    created.error._tag !== "canvas-already-exists"
+  ) {
+    return emptyResponse(500)
+  }
+  const opened = await stub.open()
+  return opened._tag === "success"
+    ? canvasSharedResponse(
+      opened.value.projection.canvasId,
+      opened.value.projection.title
+    )
+    : emptyResponse(500)
 }
 
 export const registerTestClock = (
@@ -34,7 +140,7 @@ export const registerTestClock = (
 }
 
 const worker: ExportedHandler<Cloudflare.Env> = {
-  async fetch(request) {
+  async fetch(request, env) {
     const url = new URL(request.url)
     if (url.pathname === "/identity") {
       if (request.method !== "GET") {
@@ -54,6 +160,11 @@ const worker: ExportedHandler<Cloudflare.Env> = {
       return new Response(JSON.stringify(body), {
         headers: { "content-type": "application/json" }
       })
+    }
+    if (url.pathname === "/canvases") {
+      return request.method === "POST"
+        ? shareCanvas(request, env)
+        : emptyResponse(405)
     }
     if (
       request.method === "DELETE" &&

@@ -225,6 +225,10 @@ describe("browser session HTTP protocol", () => {
           }])
         }))
         expect(changed.view.projection.title).toBe("Browser changed")
+        expect(changed.view.pending[0]?.author).toEqual({
+          _tag: "person",
+          displayName: "Local Crit User"
+        })
         expect(yield* Fiber.join(notification)).toEqual(Option.some({
           kind: "replica-changed",
           schemaVersion: 1,

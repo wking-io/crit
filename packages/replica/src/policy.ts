@@ -35,7 +35,19 @@ const active = (record: PendingRecord) => record.state._tag === "ready" || recor
 const pendingAuthor = (invocation: PendingRecord["invocation"]): PendingAuthor =>
   Match.value(invocation).pipe(Match.tagsExhaustive({
     person: ({ principal }) => PersonPendingAuthor.make({ displayName: principal.person.displayName }),
-    agent: ({ principal }) => AgentPendingAuthor.make({ displayName: principal.agent.displayName })
+    agent: ({ principal, executionId, reportedRuntime }) =>
+      reportedRuntime === undefined
+        ? AgentPendingAuthor.make({
+          displayName: principal.agent.displayName,
+          runBy: principal.delegatedBy.displayName,
+          executionId
+        })
+        : AgentPendingAuthor.make({
+          displayName: principal.agent.displayName,
+          runBy: principal.delegatedBy.displayName,
+          executionId,
+          reportedRuntime
+        })
   }))
 
 const rebuild = (state: ReplicaState) => {

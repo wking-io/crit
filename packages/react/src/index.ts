@@ -26,8 +26,11 @@ export {
   CanvasArrangementRequest,
   CanvasArrangementUnavailable
 } from "./canvas-arrangement.js"
-export { CanvasSelection } from "./canvas-selection.js"
-export type { CanvasInputTarget } from "./canvas-selection.js"
+export {
+  CanvasInputTarget,
+  CanvasSelection,
+  CanvasSelectionCommand
+} from "./canvas-selection.js"
 export {
   getCanvasSelectionSession,
   removeCanvasSelectionSession,
@@ -39,40 +42,43 @@ export type {
   FrameRendererProps,
   FrameRepresentationResolver
 } from "./frame-renderer.js"
-export { useSnapshotRunner } from "./frame-snapshot.js"
-export type {
-  FrameSnapshotter,
-  SnapshotRunState
-} from "./frame-snapshot.js"
+export { SnapshotRunState, useSnapshotRunner } from "./frame-snapshot.js"
+export type { FrameSnapshotter } from "./frame-snapshot.js"
 export { FRAME_SIZE_PRESETS } from "./frame-breakpoints.js"
 export type { FrameSizePreset } from "./frame-breakpoints.js"
 export { ReplicaBoard } from "./replica-board.js"
 export type { ReplicaBoardProps } from "./replica-board.js"
 export {
+  ReplicaConnection,
   ReplicaChangeRejected,
+  ReplicaSession,
+  ReplicaSubmitNotice,
+  ReplicaSubscriptionEvent,
   ReplicaSessionUnavailable,
   useReplicaSession
 } from "./replica-session.js"
 export type {
-  ReplicaSession,
+  ReplicaConnection,
   ReplicaSessionHandle,
   ReplicaSessionPorts,
-  ReplicaSessionRun
+  ReplicaSessionRun,
+  ReplicaSubmitNotice,
+  ReplicaSubscriptionEvent
 } from "./replica-session.js"
 export { ReviewChrome } from "./review-chrome.js"
 export type { ReviewChromeProps } from "./review-chrome.js"
 export {
+  ReviewAction,
   ReviewActionInput,
+  ReviewClientEffect,
   availableReviewActions,
   resolveReviewAction,
   reviewActionPolicies
 } from "./review-actions.js"
 export type {
-  ReviewAction,
   ReviewActionContext,
   ReviewActionId,
   ReviewActionPolicy,
-  ReviewClientEffect,
   ReviewSelection,
   SnapshotRequest,
   SnapshotSource

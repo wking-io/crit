@@ -8,11 +8,12 @@ import {
   ReplicaStore,
   type ReplicaState
 } from "@crit/replica/adapter"
+import * as SqliteClient from "@effect/sql-sqlite-node/SqliteClient"
 import { Effect, Layer, Result, Schema } from "effect"
 
 import {
   LocalDatabaseOpenFailure,
-  makeDatabase,
+  localDatabaseLayer,
   retryTransaction,
   type SqliteLocalOptions
 } from "./database.js"
@@ -32,8 +33,8 @@ type StoredReplica = {
   readonly revision: number
 }
 
-const makeStore = (options: SqliteCanvasReplicaOptions) => Effect.gen(function*() {
-  const sql = yield* makeDatabase(options)
+const makeStore = () => Effect.gen(function*() {
+  const sql = yield* SqliteClient.SqliteClient
 
   const read = (canvasId: typeof CanvasId.Type): Effect.Effect<StoredReplica | undefined> =>
     Effect.gen(function*() {
@@ -92,7 +93,7 @@ const makeStore = (options: SqliteCanvasReplicaOptions) => Effect.gen(function*(
 })
 
 export const sqliteReplicaStoreLayer = (options: SqliteCanvasReplicaOptions) =>
-  Layer.effect(ReplicaStore, makeStore(options))
+  Layer.effect(ReplicaStore, makeStore()).pipe(Layer.provide(localDatabaseLayer(options)))
 
 export const SqliteCanvasReplica = {
   layer: (options: SqliteCanvasReplicaOptions): Layer.Layer<

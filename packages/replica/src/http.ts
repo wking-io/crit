@@ -5,7 +5,14 @@ import {
   CreateCanvas,
   VerifiedInvocation
 } from "@crit/authority"
-import { CanvasId, InstallationId } from "@crit/domain"
+import {
+  AgentSnapshot,
+  CanvasId,
+  ExecutionId,
+  InstallationId,
+  PersonSnapshot,
+  ReportedRuntime
+} from "@crit/domain"
 import { ReplicaChangedSchema } from "@crit/protocol"
 import { Context, Schema } from "effect"
 import {
@@ -140,3 +147,51 @@ export class LocalCanvasApiGroup extends HttpApiGroup.make("canvas", { topLevel:
   .prefix(localApiPathPrefix) {}
 
 export class LocalCanvasApi extends HttpApi.make("crit-local").add(LocalCanvasApiGroup) {}
+
+const DisplayName = PersonSnapshot.fields.displayName
+
+export const AgentSessionDeclaration = Schema.Struct({
+  displayName: DisplayName,
+  reportedRuntime: Schema.optionalKey(ReportedRuntime)
+})
+export type AgentSessionDeclaration = typeof AgentSessionDeclaration.Type
+
+const AgentSessionSecret = Schema.String.check(
+  Schema.isMinLength(32),
+  Schema.isMaxLength(256)
+).pipe(Schema.brand("AgentSessionToken"))
+export const AgentSessionToken = Schema.RedactedFromValue(AgentSessionSecret, {
+  label: "Crit agent session"
+})
+export type AgentSessionToken = typeof AgentSessionToken.Type
+
+export const AgentSessionGrant = Schema.Struct({
+  token: AgentSessionToken,
+  agent: AgentSnapshot,
+  executionId: ExecutionId
+})
+export type AgentSessionGrant = typeof AgentSessionGrant.Type
+
+export class AgentSessionRejected extends Schema.TaggedError<AgentSessionRejected>()(
+  "AgentSessionRejected",
+  {
+    reason: Schema.Literals([
+      "delegation-not-person",
+      "session-limit"
+    ])
+  },
+  { httpApiStatus: 403 }
+) {}
+
+export class LocalAgentApiGroup extends HttpApiGroup.make("agent", { topLevel: true })
+  .add(
+    HttpApiEndpoint.post("begin", "/agent/begin", {
+      payload: AgentSessionDeclaration,
+      success: AgentSessionGrant,
+      error: AgentSessionRejected
+    })
+  )
+  .middleware(LocalApiAuthorization)
+  .prefix(localApiPathPrefix) {}
+
+export class LocalAgentApi extends HttpApi.make("crit-local-agent").add(LocalAgentApiGroup) {}

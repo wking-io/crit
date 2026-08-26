@@ -8,14 +8,13 @@ This file is the current inventory. Phase docs own the prove. [Decision record](
 
 ## Next
 
-- [ ] Stamp and show Agent as author, plus the local Person who ran it, execution, and optional harness/model/session/task. Types exist. Pending rows already mark Agent copy.
+- [ ] Inspect a Representation. `RepresentationRuntime` in the overview still names it. Nothing implements it.
 
 ## Remaining
 
 ### Local review
 
 Plan: [phase 5](phase-05-review-ui.md), [phase 3](phase-03-local-daemon-and-cli.md), [phase 4](phase-04-representations-and-bridge.md).
-- [ ] Shared pending, conflict, unavailable, and offline states. Local pending/conflict/sync exists.
 - [ ] Inspect a Representation. `RepresentationRuntime` in the overview still names it. Nothing implements it.
 - [ ] Frame Bridge capability negotiation, route/revision reporting, highlighting, authorized inspection.
 - [ ] Bridge off in ordinary production. Opt-in only on shared review previews.
@@ -27,12 +26,11 @@ Plan: [phase 5](phase-05-review-ui.md), [phase 3](phase-03-local-daemon-and-cli.
 
 Plan: [phase 6](phase-06-cloudflare-platform.md), [phase 7](phase-07-sync-and-sharing.md), [phase 8](phase-08-hosted-review.md).
 
-- [ ] `crit share`.
 - [ ] Push/pull by change ID and cursor against a remote authority.
 - [ ] First share with share/import IDs and a projection digest.
 - [ ] Two author replicas edit offline and converge.
 - [ ] Recoverable remote conflicts that keep dependent pending work. Local replica policy exists.
-- [ ] Worker, static assets, Access, D1, R2 artifacts. `packages/cloudflare` has the one-Canvas SQLite authority and a workerd Durable Object. The hosted Worker is still missing.
+- [ ] Worker, static assets, Access, D1, R2 artifacts. `packages/cloudflare` has the one-Canvas SQLite authority, a workerd Durable Object, and `POST /canvases`. The hosted Worker is still missing.
 - [ ] Hosted review UI served from the Worker.
 - [ ] Teammate signs in with Access, views Frames and shared previews, and sets review status. No Crit install.
 - [ ] Presence of Access-authenticated people viewing a shared Canvas. Local review does not attend.
@@ -41,7 +39,7 @@ Plan: [phase 6](phase-06-cloudflare-platform.md), [phase 7](phase-07-sync-and-sh
 ### Agents
 
 Local only. Plan: [decision record](decision-record.md), [ADR 0001](../../adr/0001-hosted-review-no-mcp.md).
-See the Agent attribution item under [Next](#next).
+`crit agent begin` mints a local Agent session. Pending rows show Agent, runner, execution, and reported runtime.
 
 ### Release
 
@@ -60,6 +58,7 @@ Local Frames authoring on one machine.
 
 - `crit init`, `crit dev`, `crit status`, `create`, `open`, `layout`, `add-frame`
 - `crit login` reconciles the local Person with the Access-authenticated Person and binds the Access email.
+- `crit share` registers a local Canvas with the installation Worker.
 - Project-local agent skill
 - Named Canvas, rename
 - Add, title, move, resize, stack, and remove Frames
@@ -75,10 +74,14 @@ Local Frames authoring on one machine.
 - Local SQLite authority, replica, restart-safe pending work
 - Person and Agent as domain Actors
 - Pending rows distinguish Person and Agent authorship.
+- `crit agent begin` stamps local Agent work with the installation Person as runner.
 - Review UI no longer adds Frames
 - Contextual help and keyboard shortcuts from the review action table
 - Snapshot a live Frame into a new artifact Frame (`S`)
 - In-memory shared Deployment record and ApplicationBindings adapter. D1 persistence and Worker registration remain.
+- Local review pending resolves. The daemon reconciles after open and change.
+- Mid-session daemon loss keeps the last projection and shows a connection alert.
+- Enqueue rejection is a submit notice. Conflict repair stays later.
 
 ## Out of v1
 

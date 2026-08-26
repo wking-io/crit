@@ -1,4 +1,4 @@
-import { Effect, Match, Schema } from "effect"
+import { Context, Effect, Layer, Match, Schema } from "effect"
 import { causeMessage } from "../internal/cause-message.js"
 
 import {
@@ -412,6 +412,17 @@ export const makeCritHttpHandler = (
       Canvas: (canvasRoute) => handleCanvas(request, canvasRoute)
     })
   }
+}
+
+export class CritHttp extends Context.Service<CritHttp, {
+  readonly handler: (
+    services: CritHttpServices,
+    options?: CritHttpHandlerOptions
+  ) => CritHttpHandler
+}>()("@crit/http/CritHttp") {
+  static readonly layer = Layer.succeed(CritHttp, {
+    handler: makeCritHttpHandler
+  })
 }
 
 export const decodeCanvasDocument = (input: Schema.Json, id: string) =>

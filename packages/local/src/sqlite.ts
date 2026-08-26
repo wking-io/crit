@@ -31,10 +31,11 @@ import {
   type ProposedCanvasChange,
   type ProtocolFailure
 } from "@crit/protocol"
+import * as SqliteClient from "@effect/sql-sqlite-node/SqliteClient"
 import { Data, Effect, Layer, Result, Schema } from "effect"
 import type { SqlError } from "effect/unstable/sql/SqlError"
 
-import { LocalDatabaseOpenFailure, makeDatabase, retryTransaction } from "./database.js"
+import { LocalDatabaseOpenFailure, localDatabaseLayer, retryTransaction } from "./database.js"
 import { decodeStored, encodeStored } from "./stored-json.js"
 
 export { LocalDatabaseOpenFailure }
@@ -111,11 +112,9 @@ const readAccepted = (stored: typeof AcceptedRow.Type): AcceptedCanvasChange => 
   return change
 }
 
-const make = (
-  options: SqliteCanvasAuthorityOptions
-) => Effect.gen(function*() {
+const make = () => Effect.gen(function*() {
   const clock = yield* AuthorityClock
-  const sql = yield* makeDatabase(options)
+  const sql = yield* SqliteClient.SqliteClient
   const transaction = <A, R>(body: Effect.Effect<A, SqlError, R>): Effect.Effect<A, SqlError, R> =>
     retryTransaction(sql, body)
 
@@ -319,5 +318,6 @@ const make = (
 })
 
 export const SqliteCanvasAuthority = {
-  layer: (options: SqliteCanvasAuthorityOptions) => Layer.effect(CanvasAuthority, make(options))
+  layer: (options: SqliteCanvasAuthorityOptions) =>
+    Layer.effect(CanvasAuthority, make()).pipe(Layer.provide(localDatabaseLayer(options)))
 }

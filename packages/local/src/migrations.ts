@@ -44,9 +44,15 @@ export const replicaTableSql = `CREATE TABLE replica_states (
   state_json TEXT NOT NULL CHECK (json_valid(state_json))
 ) STRICT`
 
+export const agentIdentityTableSql = `CREATE TABLE agent_identities (
+  display_name TEXT PRIMARY KEY,
+  agent_id TEXT NOT NULL UNIQUE
+) STRICT`
+
 export const migrationEntries = [
   [1, "authority"],
-  [2, "replica_state"]
+  [2, "replica_state"],
+  [3, "agent_identities"]
 ] as const
 
 const createAuthority = Effect.gen(function*() {
@@ -61,7 +67,13 @@ const createReplica = Effect.gen(function*() {
   yield* sql.unsafe(replicaTableSql)
 })
 
+const createAgentIdentities = Effect.gen(function*() {
+  const sql = yield* SqlClient.SqlClient
+  yield* sql.unsafe(agentIdentityTableSql)
+})
+
 export const migrations = SqliteMigrator.fromRecord({
   "0001_authority": createAuthority,
-  "0002_replica_state": createReplica
+  "0002_replica_state": createReplica,
+  "0003_agent_identities": createAgentIdentities
 })

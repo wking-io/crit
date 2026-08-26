@@ -18,6 +18,14 @@ crit dev
 
 \`dev\` prints a bootstrap URL. Give that URL to the person. The browser opens \`canvas_local\`.
 
+Before writing as an agent, begin a session so your work is stamped:
+
+\`\`\`
+eval "$(crit agent begin --name <agent-name> --harness <harness>)"
+\`\`\`
+
+Run it once per task. Without it your changes are attributed to the local person.
+
 If the app is not already reachable at a trailing-slash origin, pass it.
 
 \`\`\`

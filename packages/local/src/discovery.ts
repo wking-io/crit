@@ -65,6 +65,8 @@ export interface LocalDaemonDiscoveryOptions {
   readonly probeTimeout?: Duration.Input
 }
 
+export const AGENT_SESSION_ENV = "CRIT_AGENT_SESSION"
+
 export const inspectLocalDaemon = (options: LocalDaemonDiscoveryOptions) => Effect.gen(function*() {
   const fs = yield* FileSystem.FileSystem
   const path = yield* Path.Path
@@ -113,11 +115,19 @@ export const inspectLocalDaemon = (options: LocalDaemonDiscoveryOptions) => Effe
     })
   }
 
+  const presentedSession = process.env[AGENT_SESSION_ENV]
+  const bearerSecret = presentedSession !== undefined && presentedSession.length > 0
+    ? presentedSession
+    : installation.bearerSecret
+  const token = yield* Effect.try({
+    try: () => localApiToken(bearerSecret),
+    catch: () => new LocalDaemonProtocolFailure({ reason: "Bearer credential is invalid" })
+  })
   const clientContext = yield* Layer.buildWithScope(
     LocalCanvasClient.layer({
       _tag: "bearer",
       baseUrl: descriptor.baseUrl,
-      token: localApiToken(installation.bearerSecret)
+      token
     }).pipe(Layer.provide(FetchHttpClient.layer)),
     yield* Effect.scope
   )

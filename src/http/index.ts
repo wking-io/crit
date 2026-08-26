@@ -10,6 +10,7 @@ export {
   critFrameSnapshotUrl,
   decodeAgentActivities,
   decodeCurrentAuthor,
+  CritHttp,
   makeCritHttpHandler,
   parseCritHttpRoute,
   type CritHttpHandler,

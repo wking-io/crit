@@ -6,7 +6,7 @@ import {
   type FrameId,
   type LiveRepresentation
 } from "@crit/domain"
-import { Effect } from "effect"
+import { Data, Effect } from "effect"
 import { useRef, useState } from "react"
 
 import type {
@@ -20,14 +20,16 @@ export interface FrameSnapshotter {
   ) => Effect.Effect<ArtifactRepresentation, unknown>
 }
 
-export type SnapshotRunState =
-  | { readonly _tag: "idle" }
-  | { readonly _tag: "capturing" }
-  | { readonly _tag: "failed" }
+export type SnapshotRunState = Data.TaggedEnum<{
+  readonly idle: {}
+  readonly capturing: {}
+  readonly failed: {}
+}>
+export const SnapshotRunState = Data.taggedEnum<SnapshotRunState>()
 
-const idleState: SnapshotRunState = { _tag: "idle" }
-const capturingState: SnapshotRunState = { _tag: "capturing" }
-const failedState: SnapshotRunState = { _tag: "failed" }
+const idleState = SnapshotRunState.idle()
+const capturingState = SnapshotRunState.capturing()
+const failedState = SnapshotRunState.failed()
 
 const defaultMintFrameId = (): FrameId =>
   Id.frame(`frame_${crypto.randomUUID().replaceAll("-", "")}`)

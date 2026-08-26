@@ -2,17 +2,20 @@ import {
   presenceKey,
   type CanvasChangeFailure,
   type CanvasCommandBatch,
-  type PresenceRoster
+  type ExecutionId,
+  type PresenceRoster,
+  type ReportedRuntime
 } from "@crit/domain"
 import type { ReplicaView } from "@crit/replica"
-import { Match } from "effect"
+import { Data, Match } from "effect"
 import type { ReactElement } from "react"
 
 import type { CanvasCamera } from "./canvas-camera.js"
-import { CanvasBoard } from "./canvas-board.js"
+import { CanvasBoard, type CanvasBoardProps } from "./canvas-board.js"
 import type { CanvasSelection } from "./canvas-selection.js"
 import type { FrameRepresentationResolver } from "./frame-renderer.js"
 import type { FrameSnapshotter } from "./frame-snapshot.js"
+import type { ReplicaConnection, ReplicaSubmitNotice } from "./replica-session.js"
 import type { ReviewClientEffect } from "./review-actions.js"
 
 interface ReplicaBoardBaseProps {
@@ -23,6 +26,8 @@ interface ReplicaBoardBaseProps {
   readonly selection: CanvasSelection
   readonly onSelectionChange: (selection: CanvasSelection) => void
   readonly presence?: PresenceRoster | undefined
+  readonly connection?: ReplicaConnection | undefined
+  readonly notice?: ReplicaSubmitNotice | undefined
   readonly onEffect?: (effect: ReviewClientEffect) => void
   readonly className?: string
 }
@@ -41,17 +46,18 @@ export type ReplicaBoardProps = ReplicaBoardBaseProps & ReplicaBoardReviewProps
 
 type PendingChange = ReplicaView["pending"][number]
 
-type ReplicaBoardStatus =
-  | { readonly _tag: "synchronized" }
-  | {
-    readonly _tag: "outstanding"
+type ReplicaBoardStatus = Data.TaggedEnum<{
+  readonly synchronized: {}
+  readonly outstanding: {
     readonly changes: readonly [PendingChange, ...PendingChange[]]
   }
+}>
+const ReplicaBoardStatus = Data.taggedEnum<ReplicaBoardStatus>()
 
 const statusFromPending = (pending: ReplicaView["pending"]): ReplicaBoardStatus => {
   const [first, ...rest] = pending
-  if (first === undefined) return { _tag: "synchronized" }
-  return { _tag: "outstanding", changes: [first, ...rest] }
+  if (first === undefined) return ReplicaBoardStatus.synchronized()
+  return ReplicaBoardStatus.outstanding({ changes: [first, ...rest] })
 }
 
 const changeCount = (count: number): string =>
@@ -84,11 +90,40 @@ const entryStateCopy = (state: PendingChange["state"]): string =>
 const authorCopy = (author: PendingChange["author"]): string =>
   Match.value(author).pipe(Match.tagsExhaustive({
     person: ({ displayName }) => `Proposed by ${displayName}.`,
-    agent: ({ displayName }) => `Proposed by Agent ${displayName}.`
+    agent: ({ displayName, runBy }) => `Proposed by Agent ${displayName}. Run by ${runBy}.`
   }))
 
-const entryCopy = (change: PendingChange): string =>
-  `${entryStateCopy(change.state)} ${authorCopy(change.author)}`
+const runtimeCopy = (runtime: ReportedRuntime | undefined): string => {
+  if (runtime === undefined) return ""
+  const harness = runtime.harness.version === undefined
+    ? runtime.harness.name
+    : `${runtime.harness.name} ${runtime.harness.version}`
+  const model = runtime.model === undefined
+    ? undefined
+    : runtime.model.version === undefined
+      ? runtime.model.name
+      : `${runtime.model.name} ${runtime.model.version}`
+  const via = model === undefined ? `Via reported ${harness}.` : `Via reported ${harness} (${model}).`
+  const session = runtime.sessionId === undefined ? undefined : `Reported session ${runtime.sessionId}.`
+  const task = runtime.taskId === undefined ? undefined : `Reported task ${runtime.taskId}.`
+  return [via, session, task].filter((part) => part !== undefined).join(" ")
+}
+
+const executionCopy = (executionId: ExecutionId): string => {
+  const visible = executionId.length > 14 ? `${executionId.slice(0, 14)}…` : executionId
+  return `Run ${visible}`
+}
+
+const entryCopy = (change: PendingChange): string => {
+  if (change.author._tag === "person") {
+    return `${entryStateCopy(change.state)} ${authorCopy(change.author)}`
+  }
+  const runtime = runtimeCopy(change.author.reportedRuntime)
+  const execution = executionCopy(change.author.executionId)
+  return runtime === ""
+    ? `${entryStateCopy(change.state)} ${authorCopy(change.author)} ${execution}`
+    : `${entryStateCopy(change.state)} ${authorCopy(change.author)} ${runtime} ${execution}`
+}
 
 const connectedPersonCopy = (
   person: PresenceRoster["people"][number]
@@ -122,13 +157,43 @@ const statusTone = (status: ReplicaBoardStatus): "status" | "alert" =>
     ? "alert"
     : "status"
 
+const connectionAlert = (
+  connection: ReplicaConnection | undefined
+): string | undefined => connection === undefined
+  ? undefined
+  : Match.value(connection).pipe(Match.tagsExhaustive({
+    live: () => undefined,
+    lost: ({ reason }) =>
+      `Connection lost. ${reason} Showing the last known state.`
+  }))
+
+const noticeAlert = (
+  notice: ReplicaSubmitNotice | undefined
+): string | undefined => notice === undefined
+  ? undefined
+  : Match.value(notice).pipe(Match.tagsExhaustive({
+    rejected: ({ failure }) =>
+      `Your last edit was not applied. ${conflictCopy(failure)}`,
+    unavailable: ({ reason }) => `Your last edit was not applied. ${reason}`
+  }))
+
+const connectionAllowsMutation = (
+  connection: ReplicaConnection | undefined
+): boolean => connection === undefined ||
+  Match.value(connection).pipe(Match.tagsExhaustive({
+    live: () => true,
+    lost: () => false
+  }))
+
 export function ReplicaBoard({
   camera,
   className,
+  connection,
   onCameraChange,
   onEffect,
   onSelectionChange,
   onSubmit,
+  notice,
   presence,
   resolver,
   selection,
@@ -137,8 +202,38 @@ export function ReplicaBoard({
 }: ReplicaBoardProps): ReactElement {
   const status = statusFromPending(view.pending)
   const showPresence = presence !== undefined && presence.people.length > 0
+  const connectionCopy = connectionAlert(connection)
+  const noticeCopy = noticeAlert(notice)
+  const canvasBoardProps: CanvasBoardProps =
+    !connectionAllowsMutation(connection) ||
+      onSubmit === undefined ||
+      snapshotter === undefined
+      ? {
+        camera,
+        onCameraChange,
+        onEffect,
+        onSelectionChange,
+        onSubmit: undefined,
+        projection: view.projection,
+        resolver,
+        selection,
+        snapshotter: undefined
+      }
+      : {
+        camera,
+        onCameraChange,
+        onEffect,
+        onSelectionChange,
+        onSubmit,
+        projection: view.projection,
+        resolver,
+        selection,
+        snapshotter
+      }
   return (
     <div className={className}>
+      {connectionCopy === undefined ? null : <p role="alert">{connectionCopy}</p>}
+      {noticeCopy === undefined ? null : <p role="alert">{noticeCopy}</p>}
       {showPresence
         ? (
           <section
@@ -165,18 +260,7 @@ export function ReplicaBoard({
           )
           : null}
       </section>
-      <CanvasBoard
-        {...(onSubmit === undefined || snapshotter === undefined
-          ? {}
-          : { onSubmit, snapshotter })}
-        camera={camera}
-        onCameraChange={onCameraChange}
-        {...(onEffect === undefined ? {} : { onEffect })}
-        onSelectionChange={onSelectionChange}
-        projection={view.projection}
-        resolver={resolver}
-        selection={selection}
-      />
+      <CanvasBoard {...canvasBoardProps} />
     </div>
   )
 }

@@ -1,3 +1,4 @@
+import { Data } from "effect"
 import {
   createContext,
   useContext,
@@ -12,19 +13,19 @@ import {
   type ReviewActionPolicy
 } from "./review-actions.js"
 
-export type ReviewHelpDetails =
-  | {
-    readonly _tag: "action"
+export type ReviewHelpDetails = Data.TaggedEnum<{
+  readonly action: {
     readonly name: string
     readonly description: string
     readonly shortcut: string | null
     readonly availabilityMessage: string | null
   }
-  | {
-    readonly _tag: "informational"
+  readonly informational: {
     readonly name: string
     readonly description: string
   }
+}>
+export const ReviewHelpDetails = Data.taggedEnum<ReviewHelpDetails>()
 
 type ReviewHelpAttributes = {
   readonly "data-crit-help-kind": ReviewHelpDetails["_tag"]
@@ -34,11 +35,10 @@ type ReviewHelpAttributes = {
   readonly "data-crit-help-availability": string | undefined
 }
 
-const idleReviewHelp: ReviewHelpDetails = {
-  _tag: "informational",
+const idleReviewHelp = ReviewHelpDetails.informational({
   name: "Review",
   description: "Hover or focus a control to see what it does."
-}
+})
 
 const helpTarget = (details: ReviewHelpDetails): ReviewHelpAttributes => ({
   "data-crit-help-kind": details._tag,
@@ -54,13 +54,13 @@ const helpTarget = (details: ReviewHelpDetails): ReviewHelpAttributes => ({
 
 export const reviewHelpForPolicy = (
   policy: ReviewActionPolicy
-): Extract<ReviewHelpDetails, { readonly _tag: "action" }> => ({
-  _tag: "action",
-  name: policy.label,
-  description: policy.description,
-  shortcut: policy.shortcuts[0] ?? null,
-  availabilityMessage: null
-})
+): Extract<ReviewHelpDetails, { readonly _tag: "action" }> =>
+  ReviewHelpDetails.action({
+    name: policy.label,
+    description: policy.description,
+    shortcut: policy.shortcuts[0] ?? null,
+    availabilityMessage: null
+  })
 
 export const reviewActionHelpTarget = (
   policy: ReviewActionPolicy
@@ -85,27 +85,27 @@ const detailsFromTarget = (
     (critHelpKind !== "action" && critHelpKind !== "informational")
   ) return null
   return critHelpKind === "informational"
-    ? {
-      _tag: "informational",
+    ? ReviewHelpDetails.informational({
       name: critHelpName,
       description: critHelpDescription
-    }
-    : {
-      _tag: "action",
+    })
+    : ReviewHelpDetails.action({
       name: critHelpName,
       description: critHelpDescription,
       shortcut: critHelpShortcut ?? null,
       availabilityMessage: critHelpAvailability ?? null
-    }
+    })
 }
 
 const ReviewHelpContext = createContext<ReviewHelpDetails | null>(null)
 
-export type ReviewHelpPointer =
-  | { readonly _tag: "away" }
-  | { readonly _tag: "over"; readonly details: ReviewHelpDetails | null }
+export type ReviewHelpPointer = Data.TaggedEnum<{
+  readonly away: {}
+  readonly over: { readonly details: ReviewHelpDetails | null }
+}>
+export const ReviewHelpPointer = Data.taggedEnum<ReviewHelpPointer>()
 
-const pointerAway = { _tag: "away" } as const satisfies ReviewHelpPointer
+const pointerAway = ReviewHelpPointer.away()
 
 export const activeReviewHelpDetails = (
   pointer: ReviewHelpPointer,
@@ -144,16 +144,17 @@ export function ReviewHelpSurface({
           setPointer(
             event.relatedTarget instanceof Node &&
               event.currentTarget.contains(event.relatedTarget)
-              ? { _tag: "over", details: detailsFromTarget(event.relatedTarget) }
+              ? ReviewHelpPointer.over({
+                details: detailsFromTarget(event.relatedTarget)
+              })
               : pointerAway
           )
         }}
         onPointerOver={(event) => {
           onPointerOver?.(event)
-          setPointer({
-            _tag: "over",
+          setPointer(ReviewHelpPointer.over({
             details: detailsFromTarget(event.target)
-          })
+          }))
         }}
       >
         {children}

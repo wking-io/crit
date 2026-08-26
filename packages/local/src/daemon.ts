@@ -9,10 +9,13 @@ import { CanvasId, Id, type InstallationId } from "@crit/domain"
 import {
   CanvasReplica,
   ChangeIdGenerationFailure,
-  ReplicaChangeIds
+  ReplicaChangeIds,
+  type CanvasReplicaService
 } from "@crit/replica"
 import {
+  AgentSessionRejected,
   AuthenticatedInvocation,
+  LocalAgentApi,
   LocalApiAuthorization,
   LocalApiOriginRejected,
   LocalApiToken,
@@ -49,6 +52,7 @@ import { HttpApiBuilder } from "effect/unstable/httpapi"
 import * as Socket from "effect/unstable/socket/Socket"
 import { createServer } from "node:http"
 
+import { AgentSessions, type AgentSessionsService } from "./agent-sessions.js"
 import {
   BrowserCapability,
   BrowserSession,
@@ -66,6 +70,19 @@ export interface LocalDaemonOptions {
   readonly installationId: InstallationId
   readonly port?: number
 }
+
+const reconcileEagerly = (replica: CanvasReplicaService) =>
+  (canvasId: CanvasId): Effect.Effect<void> =>
+    replica.sync(canvasId).pipe(
+      Effect.catchTags({
+        ReplicaNotOpen: Effect.ignore,
+        ReplicaCanvasNotFound: Effect.ignore,
+        ReplicaDiverged: Effect.die,
+        ReplicaInvariantFailure: Effect.die
+      }),
+      Effect.forkDetach,
+      Effect.asVoid
+    )
 
 const handlers = (options: LocalDaemonOptions) => HttpApiBuilder.group(
   LocalCanvasApi,
@@ -89,11 +106,12 @@ const handlers = (options: LocalDaemonOptions) => HttpApiBuilder.group(
         Effect.mapError((failure) => failure._tag === "ReplicaCanvasNotFound"
           ? AuthorityFailure.canvasNotFound({ canvasId: failure.canvasId })
           : failure),
-        Effect.catchTag("ReplicaInvariantFailure", Effect.die)
+        Effect.catchTag("ReplicaInvariantFailure", Effect.die),
+        Effect.tap(() => reconcileEagerly(replica)(params.canvasId))
       ),
       change: Effect.fn(function*({ payload }) {
         const invocation = yield* AuthenticatedInvocation
-        return yield* replica.change(payload, invocation).pipe(
+        const receipt = yield* replica.change(payload, invocation).pipe(
           Effect.mapError((failure) => {
             switch (failure._tag) {
               case "ReplicaNotOpen":
@@ -114,6 +132,8 @@ const handlers = (options: LocalDaemonOptions) => HttpApiBuilder.group(
             ReplicaInvariantFailure: Effect.die
           })
         )
+        yield* reconcileEagerly(replica)(payload.canvasId)
+        return receipt
       }),
       sync: ({ params }) => replica.sync(params.canvasId).pipe(
         Effect.mapError((failure) => failure._tag === "ReplicaNotOpen" || failure._tag === "ReplicaCanvasNotFound"
@@ -133,36 +153,49 @@ type LocalRequestAuthorizationFailure =
   | LocalApiOriginRejected
   | LocalApiVersionUnsupported
 
-const bearerCredentialAuthorizationFailure = (
+const resolveBearerInvocation = (
   request: HttpServerRequest.HttpServerRequest,
   options: LocalDaemonOptions,
+  sessions: AgentSessionsService,
   credential: string | undefined
-) : LocalRequestAuthorizationFailure | undefined => {
-  if (credential !== Redacted.value(options.token)) {
-    return new LocalApiUnauthorized({ message: "Missing or invalid bearer token" })
-  }
-  const origin = request.headers.origin
-  if (origin !== undefined && !options.allowedOrigins.has(origin)) {
-    return new LocalApiOriginRejected({ origin })
-  }
-  return undefined
-}
+): Effect.Effect<VerifiedInvocation, LocalRequestAuthorizationFailure> =>
+  Effect.gen(function*() {
+    if (credential === undefined) {
+      return yield* new LocalApiUnauthorized({ message: "Missing or invalid bearer token" })
+    }
+    const agent = yield* sessions.invocationFor(credential)
+    const invocation = Option.isSome(agent)
+      ? agent.value
+      : credential === Redacted.value(options.token)
+        ? options.invocation
+        : undefined
+    if (invocation === undefined) {
+      return yield* new LocalApiUnauthorized({ message: "Missing or invalid bearer token" })
+    }
+    const origin = request.headers.origin
+    if (origin !== undefined && !options.allowedOrigins.has(origin)) {
+      return yield* new LocalApiOriginRejected({ origin })
+    }
+    return invocation
+  })
 
-const bearerRequestAuthorizationFailure = (
+const authorizeBearerRequest = (
   request: HttpServerRequest.HttpServerRequest,
   options: LocalDaemonOptions,
+  sessions: AgentSessionsService,
   credential: string | undefined
-): LocalRequestAuthorizationFailure | undefined => {
-  const credentialFailure = bearerCredentialAuthorizationFailure(request, options, credential)
-  if (credentialFailure !== undefined) return credentialFailure
-  const requestedVersion = request.headers[localApiVersionHeader]
-  return requestedVersion === localApiVersion
-    ? undefined
-    : new LocalApiVersionUnsupported({
-      requestedVersion: requestedVersion ?? null,
-      supportedVersion: localApiVersion
-    })
-}
+): Effect.Effect<VerifiedInvocation, LocalRequestAuthorizationFailure> =>
+  Effect.gen(function*() {
+    const invocation = yield* resolveBearerInvocation(request, options, sessions, credential)
+    const requestedVersion = request.headers[localApiVersionHeader]
+    if (requestedVersion !== localApiVersion) {
+      return yield* new LocalApiVersionUnsupported({
+        requestedVersion: requestedVersion ?? null,
+        supportedVersion: localApiVersion
+      })
+    }
+    return invocation
+  })
 
 const bearerCredential = (request: HttpServerRequest.HttpServerRequest) =>
   request.headers.authorization?.startsWith("Bearer ")
@@ -180,18 +213,43 @@ const authorizationFailureResponse = (failure: LocalRequestAuthorizationFailure)
   }
 }
 
-const bearerAuthorizationLayer = (options: LocalDaemonOptions) => Layer.succeed(
+const bearerAuthorizationLayer = (options: LocalDaemonOptions) => Layer.effect(
   LocalApiAuthorization,
-  LocalApiAuthorization.of({
-    bearer: Effect.fn(function*(httpEffect, { credential }) {
-      const request = yield* HttpServerRequest.HttpServerRequest
-      const failure = bearerRequestAuthorizationFailure(request, options, Redacted.value(credential))
-      if (failure !== undefined) return yield* failure
-      return yield* Effect.provideService(
-        httpEffect,
-        AuthenticatedInvocation,
-        options.invocation
-      )
+  Effect.gen(function*() {
+    const sessions = yield* AgentSessions
+    return LocalApiAuthorization.of({
+      bearer: Effect.fn(function*(httpEffect, { credential }) {
+        const request = yield* HttpServerRequest.HttpServerRequest
+        const invocation = yield* authorizeBearerRequest(
+          request,
+          options,
+          sessions,
+          Redacted.value(credential)
+        )
+        return yield* Effect.provideService(
+          httpEffect,
+          AuthenticatedInvocation,
+          invocation
+        )
+      })
+    })
+  })
+)
+
+const agentHandlers = HttpApiBuilder.group(
+  LocalAgentApi,
+  "agent",
+  Effect.fn(function*(group) {
+    const sessions = yield* AgentSessions
+    return group.handleAll({
+      begin: Effect.fn(function*({ payload }) {
+        const invocation = yield* AuthenticatedInvocation
+        if (invocation._tag !== "person") {
+          return yield* new AgentSessionRejected({ reason: "delegation-not-person" })
+        }
+        const { grant } = yield* sessions.begin(payload, invocation.principal.person)
+        return grant
+      })
     })
   })
 )
@@ -253,7 +311,8 @@ const isWebSocketUpgrade = (request: HttpServerRequest.HttpServerRequest) =>
 const notificationSocket = (
   replica: CanvasReplica["Service"],
   canvasId: CanvasId,
-  bearerOptions: LocalDaemonOptions | undefined
+  bearerOptions: LocalDaemonOptions | undefined,
+  sessions: AgentSessionsService | undefined
 ) => Effect.gen(function*() {
   const request = yield* HttpServerRequest.HttpServerRequest
   const upgraded = yield* Effect.result(request.upgrade)
@@ -274,7 +333,15 @@ const notificationSocket = (
       return HttpServerResponse.empty()
     }
     const hello = Schema.decodeUnknownOption(Schema.fromJsonString(LocalReplicaSocketHello))(candidate.value)
-    if (hello._tag === "None" || bearerCredentialAuthorizationFailure(request, bearerOptions, hello.value.bearer) !== undefined) {
+    const authorized = hello._tag === "None" || sessions === undefined
+      ? undefined
+      : yield* Effect.result(resolveBearerInvocation(
+        request,
+        bearerOptions,
+        sessions,
+        hello.value.bearer
+      ))
+    if (authorized === undefined || authorized._tag === "Failure") {
       yield* write(new Socket.CloseEvent(localReplicaSocketCloseCode.unauthorized, "authentication rejected"))
       return HttpServerResponse.empty()
     }
@@ -304,6 +371,7 @@ const notificationSocket = (
 
 const bearerNotificationRoutes = (options: LocalDaemonOptions) => HttpRouter.use(Effect.fn(function*(router) {
   const replica = yield* CanvasReplica
+  const sessions = yield* AgentSessions
   yield* router.add("GET", localReplicaNotificationsPath, (request) => Effect.gen(function*() {
     if (!isWebSocketUpgrade(request)) return HttpServerResponse.empty({ status: 400 })
     const origin = request.headers.origin
@@ -313,7 +381,7 @@ const bearerNotificationRoutes = (options: LocalDaemonOptions) => HttpRouter.use
     const route = yield* HttpRouter.RouteContext
     const decoded = Schema.decodeUnknownOption(CanvasId)(route.params.canvasId)
     if (decoded._tag === "None") return HttpServerResponse.empty({ status: 400 })
-    return yield* notificationSocket(replica, decoded.value, options).pipe(
+    return yield* notificationSocket(replica, decoded.value, options, sessions).pipe(
       Effect.catch(() => Effect.succeed(HttpServerResponse.empty()))
     )
   }))
@@ -335,7 +403,7 @@ const browserNotificationRoutes = HttpRouter.use(Effect.fn(function*(router) {
     const route = yield* HttpRouter.RouteContext
     const decoded = Schema.decodeUnknownOption(CanvasId)(route.params.canvasId)
     if (decoded._tag === "None") return HttpServerResponse.empty({ status: 400 })
-    return yield* notificationSocket(replica, decoded.value, undefined).pipe(
+    return yield* notificationSocket(replica, decoded.value, undefined, undefined).pipe(
       Effect.catch(() => Effect.succeed(HttpServerResponse.empty()))
     )
   }))
@@ -476,16 +544,21 @@ const captureRepresentation = Effect.fn(function*() {
 })
 
 const bearerRepresentationRoutes = (options: LocalDaemonOptions) => HttpRouter.use(Effect.fn(function*(router) {
-  yield* router.add("POST", localRepresentationResolvePath, (request) => {
-    const failure = bearerRequestAuthorizationFailure(request, options, bearerCredential(request))
-    if (failure !== undefined) return Effect.succeed(authorizationFailureResponse(failure))
-    return resolveRepresentation()
-  })
-  yield* router.add("POST", localRepresentationCapturePath, (request) => {
-    const failure = bearerRequestAuthorizationFailure(request, options, bearerCredential(request))
-    if (failure !== undefined) return Effect.succeed(authorizationFailureResponse(failure))
-    return captureRepresentation()
-  })
+  const sessions = yield* AgentSessions
+  yield* router.add("POST", localRepresentationResolvePath, (request) =>
+    authorizeBearerRequest(request, options, sessions, bearerCredential(request)).pipe(
+      Effect.matchEffect({
+        onFailure: (failure) => Effect.succeed(authorizationFailureResponse(failure)),
+        onSuccess: () => resolveRepresentation()
+      })
+    ))
+  yield* router.add("POST", localRepresentationCapturePath, (request) =>
+    authorizeBearerRequest(request, options, sessions, bearerCredential(request)).pipe(
+      Effect.matchEffect({
+        onFailure: (failure) => Effect.succeed(authorizationFailureResponse(failure)),
+        onSuccess: () => captureRepresentation()
+      })
+    ))
 }))
 
 const browserRepresentationRoutes = HttpRouter.use(Effect.fn(function*(router) {
@@ -567,7 +640,7 @@ const browserBootstrapRoutes = HttpRouter.use(Effect.fn(function*(router) {
     )
     if (body._tag === "None") return HttpServerResponse.empty({ status: 400 })
     const exchange = yield* browser.exchange(body.value.capability)
-    if (exchange.kind === "rejected") return HttpServerResponse.empty({ status: 401 })
+    if (exchange._tag === "rejected") return HttpServerResponse.empty({ status: 401 })
     return yield* HttpServerResponse.setCookie(
       HttpServerResponse.jsonUnsafe({
         redirectTo: `${browser.browserOrigin}${LocalBrowserConnection.encode(browser.connection)}`
@@ -606,8 +679,13 @@ const daemonLayer = (
       Layer.provide(changeIds),
       Layer.provideMerge(authority)
     )
+    const sessions = AgentSessions.layer({ databasePath: options.databasePath })
     const bearerRoutes = HttpApiBuilder.layer(LocalCanvasApi).pipe(
       Layer.provide(handlers(options)),
+      Layer.provide(bearerAuthorizationLayer(options))
+    )
+    const agentRoutes = HttpApiBuilder.layer(LocalAgentApi).pipe(
+      Layer.provide(agentHandlers),
       Layer.provide(bearerAuthorizationLayer(options))
     )
     const browserCanvasRoutes = HttpRouter.use(Effect.fn(function*(router) {
@@ -621,11 +699,11 @@ const daemonLayer = (
       )
     }))
     const routeDefinitions = browser === undefined
-      ? Layer.mergeAll(bearerRoutes, bearerNotificationRoutes(options), bearerRepresentationRoutes(options))
-      : Layer.mergeAll(bearerRoutes, bearerNotificationRoutes(options), bearerRepresentationRoutes(options), browserBootstrapRoutes, browserCanvasRoutes, browserNotificationRoutes, browserRepresentationRoutes).pipe(
+      ? Layer.mergeAll(bearerRoutes, agentRoutes, bearerNotificationRoutes(options), bearerRepresentationRoutes(options))
+      : Layer.mergeAll(bearerRoutes, agentRoutes, bearerNotificationRoutes(options), bearerRepresentationRoutes(options), browserBootstrapRoutes, browserCanvasRoutes, browserNotificationRoutes, browserRepresentationRoutes).pipe(
         Layer.provide(Layer.succeed(BrowserSession, browser))
       )
-    const routes = routeDefinitions.pipe(Layer.provide(services))
+    const routes = routeDefinitions.pipe(Layer.provide(services), Layer.provide(sessions))
     return HttpRouter.serve(routes).pipe(
       Layer.provideMerge(NodeHttpServer.layer(createServer, {
         host: "127.0.0.1",
