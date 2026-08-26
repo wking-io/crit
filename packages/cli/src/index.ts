@@ -60,6 +60,7 @@ import {
   FRAME_BRIDGE_SKILL_RELATIVE_PATH,
   frameBridgeSkillSource
 } from "./frame-bridge-skill.js"
+import { formatPendingConflicts } from "./sync-result.js"
 import { HOST_ORIGIN, resolveHostRoot, startHostApp } from "./host-app.js"
 import { CanvasLayout, canvasLayout, formatCanvasLayout } from "./layout.js"
 import { PROJECT_SKILL_RELATIVE_PATH, projectSkillSource } from "./project-skill.js"
@@ -544,6 +545,10 @@ const sync = Command.make("sync", {
     return yield* Console.log(JSON.stringify(Schema.encodeSync(SyncResult)(result)))
   }
   yield* printView(result.view, asJson)
+  const pending = formatPendingConflicts(result.conflicted, result.blocked)
+  if (pending !== undefined) {
+    yield* Console.log(pending)
+  }
 })).pipe(Command.withDescription("Push pending changes and pull accepted remote history"))
 
 const share = Command.make("share", {
