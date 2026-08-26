@@ -15,14 +15,21 @@ const executable = join(import.meta.dirname, "..", "dist", "main.js")
 const TcpAddress = Schema.Struct({ port: Schema.Number })
 const ShareRequest = Schema.Struct({
   canvasId: Schema.String,
-  title: Schema.String
+  title: Schema.String,
+  shareId: Schema.String,
+  importId: Schema.String,
+  projectionDigest: Schema.String
 })
 const StoredShares = Schema.Struct({
   version: Schema.Literal(1),
   canvases: Schema.Array(Schema.TaggedStruct("sharedCanvas", {
     canvasId: Schema.String,
     installationOrigin: Schema.String,
-    personId: Schema.String
+    personId: Schema.String,
+    shareId: Schema.String,
+    importId: Schema.String,
+    projectionDigest: Schema.String,
+    workspaceId: Schema.String
   }))
 })
 const directories: Array<string> = []
@@ -142,9 +149,14 @@ const startMockInstallation = () => new Promise<MockInstallation>((resolve, reje
       shares.push(share)
       response.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({
         kind: "canvas-shared",
-        schemaVersion: 1,
+        schemaVersion: 2,
         canvasId: share.canvasId,
-        title: share.title
+        title: share.title,
+        shareId: share.shareId,
+        importId: share.importId,
+        projectionDigest: share.projectionDigest,
+        workspaceId: "workspace_default",
+        personId: "person_ada"
       }))
     })
   })
@@ -184,10 +196,14 @@ describe("built crit share", () => {
     expect(result.code, result.stderr).toBe(0)
     expect(result.stdout).toContain("Canvas  canvas_share_cli")
     expect(result.stdout).toContain(`Installation  ${installation.origin}`)
-    expect(installation.shares).toEqual([{
+    expect(installation.shares).toHaveLength(1)
+    expect(installation.shares[0]).toMatchObject({
       canvasId: "canvas_share_cli",
-      title: "Shared"
-    }])
+      title: "Shared",
+      shareId: "share_canvas_share_cli",
+      importId: "import_canvas_share_cli"
+    })
+    expect(installation.shares[0]?.projectionDigest).toMatch(/^sha256:[0-9a-f]{64}$/)
     const stored = Schema.decodeUnknownSync(StoredShares)(
       JSON.parse(readFileSync(join(dataRoot, "shares.json"), "utf8"))
     )

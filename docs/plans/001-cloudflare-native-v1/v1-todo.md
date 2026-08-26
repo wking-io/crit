@@ -8,7 +8,7 @@ This file is the current inventory. Phase docs own the prove. [Decision record](
 
 ## Next
 
-- [ ] First share with share/import IDs and a projection digest.
+- [ ] Two author replicas edit offline and converge.
 
 ## Remaining
 
@@ -24,7 +24,7 @@ Plan: [phase 5](phase-05-review-ui.md), [phase 3](phase-03-local-daemon-and-cli.
 Plan: [phase 6](phase-06-cloudflare-platform.md), [phase 7](phase-07-sync-and-sharing.md), [phase 8](phase-08-hosted-review.md).
 
 - [x] Push/pull by change ID and cursor against a remote authority.
-- [ ] First share with share/import IDs and a projection digest.
+- [x] First share with share/import IDs and a projection digest.
 - [ ] Two author replicas edit offline and converge.
 - [ ] Recoverable remote conflicts that keep dependent pending work. Local replica policy exists.
 - [ ] Worker, static assets, Access, D1, R2 artifacts. `packages/cloudflare` has the one-Canvas SQLite authority, a workerd Durable Object, and `POST /canvas`. The hosted Worker is still missing.
@@ -84,6 +84,7 @@ Local Frames authoring on one machine.
 - Enqueue rejection is a submit notice. Conflict repair stays later.
 - Official HTML renderer and optional Vite adapter inject the route script. Ordinary production stays unmarked.
 - Remote authority HTTP push/pull. Submit is keyed by change ID. Pull resumes after an opaque cursor. Access stamps the caller. The Worker exposes `/canvas/:id` and `/canvas/:id/changes`.
+- First share is idempotent. Stable share and import IDs plus a projection digest bind one remote Canvas. A retry returns that receipt. A changed digest under the same share ID fails.
 
 ## Out of v1
 

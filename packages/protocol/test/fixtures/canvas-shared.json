@@ -1,6 +1,11 @@
 {
   "kind": "canvas-shared",
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "canvasId": "canvas_checkout",
-  "title": "Checkout"
+  "title": "Checkout",
+  "shareId": "share_canvas_checkout",
+  "importId": "import_canvas_checkout",
+  "projectionDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "workspaceId": "workspace_default",
+  "personId": "person_ada"
 }

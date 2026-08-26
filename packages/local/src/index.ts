@@ -61,9 +61,12 @@ export type {
 } from "./login.js"
 export {
   CanvasShareSuccess,
+  importIdForCanvas,
   LocalShares,
   shareCanvas,
+  shareIdForCanvas,
   SharedCanvas,
+  ShareDigestMismatch,
   SharePersistenceFailure,
   ShareRequestFailed,
   ShareRequiresLogin,
@@ -71,6 +74,7 @@ export {
   ShareResponseRejected
 } from "./share.js"
 export type { ShareCanvasOptions } from "./share.js"
+export { projectionDigest } from "./projection-digest.js"
 export {
   DeploymentRegistrationRequestFailed,
   DeploymentRegistrationResponseInvalid,
