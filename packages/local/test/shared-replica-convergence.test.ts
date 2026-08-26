@@ -63,7 +63,7 @@ const changeIds = (prefix: string) => {
 }
 
 const frameIds = (view: { readonly projection: { readonly frames: ReadonlyArray<{ readonly frameId: string }> } }) =>
-  [...view.projection.frames.map((frame) => frame.frameId)].sort()
+  view.projection.frames.map((frame) => frame.frameId).sort()
 
 const converge = (order: "left-first" | "right-first") => Effect.scoped(Effect.gen(function*() {
   const canvasId = Id.canvas(`canvas_converge_${order}`)
@@ -114,6 +114,7 @@ const converge = (order: "left-first" | "right-first") => Effect.scoped(Effect.g
   const second = order === "left-first" ? right : left
   yield* first.sync(canvasId)
   yield* second.sync(canvasId)
+  yield* first.sync(canvasId)
   const firstAfter = yield* first.current(canvasId)
   const secondAfter = yield* second.current(canvasId)
 

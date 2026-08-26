@@ -14,7 +14,7 @@ import {
   type ReplicaOpenFailure
 } from "@crit/replica"
 import { NodeFileSystem, NodePath } from "@effect/platform-node"
-import { Effect, Layer } from "effect"
+import { Effect, FileSystem, Layer, Path } from "effect"
 import { FetchHttpClient, HttpClient } from "effect/unstable/http"
 
 import { LocalCanvasCatalog } from "./sqlite.js"
@@ -40,18 +40,35 @@ const makeLinkedCanvasAuthority = (dataRoot: string) =>
   Effect.gen(function*() {
     const local = yield* CanvasAuthority
     const http = yield* HttpClient.HttpClient
+    const fs = yield* FileSystem.FileSystem
+    const path = yield* Path.Path
+    const loadShares = readLocalShares(dataRoot).pipe(
+      Effect.provideService(FileSystem.FileSystem, fs),
+      Effect.provideService(Path.Path, path),
+      Effect.orDie
+    )
+    const loadInstallation = readLocalInstallation(dataRoot).pipe(
+      Effect.provideService(FileSystem.FileSystem, fs),
+      Effect.provideService(Path.Path, path),
+      Effect.orDie
+    )
     const remoteFor = (canvasId: CanvasId) =>
       Effect.gen(function*() {
-        const shares = yield* readLocalShares(dataRoot)
+        const shares = yield* loadShares
         const share = shares.canvases.find((row) => row.canvasId === canvasId)
         if (share === undefined) {
           return yield* Effect.die(new Error(`shared canvas ${canvasId} missing from shares.json`))
         }
-        const installation = yield* readLocalInstallation(dataRoot).pipe(Effect.orDie)
+        const installation = yield* loadInstallation
         const email = installation.principal.person.email
+        if (email._tag === "access") {
+          return makeRemoteCanvasAuthority(http, RemoteAuthorityOptions.make({
+            baseUrl: share.installationOrigin,
+            accessEmail: email.address
+          }))
+        }
         return makeRemoteCanvasAuthority(http, RemoteAuthorityOptions.make({
-          baseUrl: share.installationOrigin,
-          ...(email._tag === "access" ? { accessEmail: email.address } : {})
+          baseUrl: share.installationOrigin
         }))
       })
     const remote: RemoteCanvasAuthorityService = {
@@ -66,9 +83,8 @@ const makeLinkedCanvasAuthority = (dataRoot: string) =>
     return CanvasAuthority.of(routeSharedCanvases(
       local,
       remote,
-      (canvasId) => readLocalShares(dataRoot).pipe(
-        Effect.map((shares) => shares.canvases.some((row) => row.canvasId === canvasId)),
-        Effect.orDie
+      (canvasId) => loadShares.pipe(
+        Effect.map((shares) => shares.canvases.some((row) => row.canvasId === canvasId))
       )
     ))
   })
