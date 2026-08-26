@@ -26,6 +26,7 @@ export {
   isTrustedFrameBridgeEvent
 } from "./origin.js"
 export {
+  FRAME_ROUTE_BRIDGE_HTML_MARKER,
   assignLiveFrameRoute,
   connectLiveFrameRoute,
   critFrameRouteBridgeScript

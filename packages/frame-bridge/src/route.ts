@@ -56,6 +56,8 @@ export const connectLiveFrameRoute = (input: {
   }
 }
 
+export const FRAME_ROUTE_BRIDGE_HTML_MARKER = "data-crit-route-bridge"
+
 export const critFrameRouteBridgeScript = (input: {
   readonly parentOrigin: FrameBridgeOrigin
 }) => String.raw`

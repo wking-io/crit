@@ -79,7 +79,7 @@ Project pages are application-route Frames. Localhost is not a web-url.
 
 Unselected Frames are not interactive. Crit covers them. The selected Frame is the live page.
 
-The Frame Bridge reports the page route to Crit. Turn it on for local development. Leave ordinary production builds off. Use the official adapter. Production HTML must not contain Frame Bridge markers.
+The Frame Bridge reports the page route to Crit. Use the \`install-crit-frame-bridge\` skill to install \`@crit/frame-bridge\`. Turn it on for local development. Leave ordinary production builds off. Production HTML must not contain Frame Bridge markers.
 
 ## Shared work
 

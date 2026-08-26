@@ -1,72 +1,82 @@
 ---
 name: install-crit-frame-bridge
-description: Installs or configures the Crit Frame Bridge in a web application with development-only activation and production verification. Use when adding Crit route reporting or Crit bridge instrumentation to a host project.
+description: Install and configure @crit/frame-bridge in a web application. Use when application Frames need route reporting through the official adapter, when adding the HTML renderer or Vite adapter, or when proving ordinary production stays unmarked.
 ---
 
-# Install Crit Frame Bridge
+# Install Frame Bridge
 
-The Frame Bridge reports the live page route. The host assigns iframe src.
+The host owns activation. The adapter receives a validated parent origin or does not exist. The adapter only reports route. The host assigns iframe src.
 
-Install the narrowest adapter supported by the host. Preserve its package manager,
-framework conventions, build modes, and existing configuration.
+## Start
 
-## Invariant
+1. Inspect the package manager, framework, HTML entry point, development command, production build, production preview, environment loading, and Content Security Policy. Finish when every command and injection boundary is known.
+2. Install `@crit/frame-bridge` with the project's package manager. Finish when the project manifest records it.
+3. Name the host's local-development condition and shared-review-preview mode. Finish when ordinary production matches neither condition.
 
-Use the closed activation matrix: local development is on, ordinary production
-builds and previews are off, and an explicit shared review preview may opt in.
-A missing or malformed review-preview flag must remain disabled.
+## Activation
 
-Configure every bridge switch explicitly. Do not rely on package defaults.
+Use this closed policy:
 
-## Workflow
+- Local development is active.
+- A build in the explicit `crit-review-preview` mode is active.
+- Ordinary production builds and previews are inactive.
+- A missing or malformed `CRIT_PARENT_ORIGIN` is inactive.
 
-1. Inspect the package manager, framework, build commands, environment handling,
-   Content Security Policy, and existing Crit configuration. Finish only when
-   the actual production and preview commands are known.
-2. Install `@riff-refine/crit` with the project's package manager when it is not
-   already present. Reuse the installed version when compatible.
-3. Use the official adapter for the detected stack. For Vite, configure the
-   plugin from the config callback so `command` and `mode` participate in the
-   decision:
+Keep this choice in the server or build configuration. Application components receive no bridge flag.
 
-   ```ts
-   export default defineConfig(({ command, mode }) => {
-     const critEnabled = command === "serve" && mode === "development"
+## HTML first
 
-     return {
-       plugins: [
-         crit({
-           enabled: critEnabled
-         })
-       ]
-     }
-   })
-   ```
+Use the framework-neutral renderer at the server or build HTML boundary:
 
-   Adapt the condition to established mode names, but keep ordinary production,
-   staging, CI builds, and production preview disabled.
-4. For a stack without an official adapter, add a development-gated browser
-   entry using that stack's server-only environment mechanism. Keep the gate at
-   the composition root; application components must not decide whether the
-   bridge is active. Do not invent a framework adapter inside the host project.
-5. Preserve restrictive CSP and iframe policy. Add only the exact development
-   origins required by Crit. Do not add wildcard origins, production proxying,
-   embedded credentials, or automatic localhost tunneling.
-6. Verify both branches:
-   - Start the development command, open an instrumented page inside Crit, and
-     prove the page can report its route.
-   - Run the real production build and production preview. Inspect emitted HTML
-     and assets for `data-crit-frame-input-bridge`,
-     `data-crit-frame-comment-bridge`, `data-crit-route-bridge`, and
-     `@riff-refine/crit/frame-`. Finish only when all are absent and the
-     application still works.
-7. Run the project's focused checks and report the files changed, development
-   activation condition, and production proof.
+```ts
+import {
+  parseFrameBridgeParentOrigin,
+  renderFrameRouteBridgeTag
+} from "@crit/frame-bridge/html"
 
-## Shared review preview opt-in
+const parentOrigin = wantsBridge
+  ? parseFrameBridgeParentOrigin(process.env.CRIT_PARENT_ORIGIN)
+  : undefined
+const bridgeTag = parentOrigin === undefined
+  ? ""
+  : renderFrameRouteBridgeTag({ parentOrigin })
+```
 
-Enable the bridge outside local development only for a known review Deployment.
-Use one positively named, server-controlled flag scoped to that Deployment,
-require its exact affirmative value, register its allowed parent origin, and
-tie every bridge option to the same result. Verify the review preview contains
-the bridge while an ordinary build and preview from the same source do not.
+Insert `bridgeTag` immediately after the opening `head` tag. Keep it empty when the policy or origin parser disables the bridge.
+
+## Vite
+
+Use the optional Vite leaf when the project uses Vite:
+
+```ts
+import { parseFrameBridgeParentOrigin } from "@crit/frame-bridge/html"
+import { frameRouteBridgeVitePlugin } from "@crit/frame-bridge/vite"
+import { defineConfig, loadEnv } from "vite"
+
+export default defineConfig(({ command, mode }) => {
+  const env = loadEnv(mode, process.cwd(), "CRIT_")
+  const wantsBridge =
+    (command === "serve" && mode === "development") ||
+    mode === "crit-review-preview"
+  const parentOrigin = wantsBridge
+    ? parseFrameBridgeParentOrigin(env.CRIT_PARENT_ORIGIN)
+    : undefined
+
+  return {
+    plugins: [
+      parentOrigin === undefined
+        ? undefined
+        : frameRouteBridgeVitePlugin({ parentOrigin })
+    ]
+  }
+})
+```
+
+Set `CRIT_PARENT_ORIGIN` to the exact HTTP or HTTPS origin of the Crit parent page. Keep credentials, paths, queries, fragments, and wildcard targets out of this value.
+
+## Verify
+
+1. Run the real local-development command. Fetch its HTML and require exactly one `data-crit-route-bridge` marker with the configured parent origin.
+2. Run the real ordinary production build. Search every emitted file and require zero markers.
+3. Start the real production preview from that build. Fetch its HTML and require zero markers.
+4. Build in `crit-review-preview` mode with the parent origin set. Require exactly one marker.
