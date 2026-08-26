@@ -8,14 +8,13 @@ This file is the current inventory. Phase docs own the prove. [Decision record](
 
 ## Next
 
-- [ ] Inspect a Representation. `RepresentationRuntime` in the overview still names it. Nothing implements it.
+- [ ] Frame Bridge capability negotiation, route/revision reporting, highlighting, authorized inspection.
 
 ## Remaining
 
 ### Local review
 
 Plan: [phase 5](phase-05-review-ui.md), [phase 3](phase-03-local-daemon-and-cli.md), [phase 4](phase-04-representations-and-bridge.md).
-- [ ] Inspect a Representation. `RepresentationRuntime` in the overview still names it. Nothing implements it.
 - [ ] Frame Bridge capability negotiation, route/revision reporting, highlighting, authorized inspection.
 - [ ] Bridge off in ordinary production. Opt-in only on shared review previews.
 - [x] Same Frame resolves to localhost for the author and a registered preview for a teammate.
@@ -88,6 +87,7 @@ Local Frames authoring on one machine.
 
 Do not pick these up.
 
+- `RepresentationRuntime.inspect`. Parked until a caller needs a canvas health walk without artifact bytes. That is a handoff check across Frames, plus `actualDigest` when an artifact is corrupt. `resolve` already answers renderability. Not Frame Bridge authorized inspection.
 - Notes and Comments
 - Undo and redo
 - Fit-page display mode

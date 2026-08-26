@@ -74,7 +74,7 @@ packages/
 ├── protocol/         wire schemas, cursors, sync, bridge, and errors
 ├── authority/        canonical Canvas authority and conformance tests
 ├── replica/          optimistic local state, pending work, and rebase
-├── representations/  resolution, inspection, capture, and RenderPlan
+├── representations/  resolution, capture, and RenderPlan
 ├── client/           typed HTTP and WebSocket client
 ├── react/            primary review UI
 ├── frame-bridge/     framework-neutral browser bridge
@@ -108,7 +108,6 @@ interface CanvasReplica {
 
 interface RepresentationRuntime {
   resolve(ref: RepresentationRef, context: ResolutionContext): Promise<RenderPlan>
-  inspect(ref: RepresentationRef, context: InspectionContext): Promise<Inspection>
   capture(ref: RepresentationRef, context: CaptureContext): Promise<ArtifactRef>
 }
 ```
