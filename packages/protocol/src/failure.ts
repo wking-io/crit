@@ -3,19 +3,19 @@ import { type Result, Schema } from "effect"
 const FailureLocation = Schema.Literals(["message", "change", "command"])
 const FailureMessage = Schema.Trimmed.check(Schema.isNonEmpty())
 
-const MalformedMessage = Schema.TaggedStruct("malformed-message", {
+const MalformedMessage = Schema.TaggedStruct("malformedMessage", {
   location: FailureLocation,
   message: FailureMessage
 })
-const MessageKindMismatch = Schema.TaggedStruct("message-kind-mismatch", {
+const MessageKindMismatch = Schema.TaggedStruct("messageKindMismatch", {
   location: FailureLocation,
   message: FailureMessage
 })
-const UnsupportedVersion = Schema.TaggedStruct("unsupported-version", {
+const UnsupportedVersion = Schema.TaggedStruct("unsupportedVersion", {
   location: FailureLocation,
   message: FailureMessage
 })
-const TrustedField = Schema.TaggedStruct("trusted-field", {
+const TrustedField = Schema.TaggedStruct("trustedField", {
   location: FailureLocation,
   message: FailureMessage
 })

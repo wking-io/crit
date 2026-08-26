@@ -26,7 +26,7 @@ const projection = decodeCanvasProjection({
     {
       frameId: "frame_a",
       title: "Alpha",
-      representation: { _tag: "web-url", url: "https://example.com/a" },
+      representation: { _tag: "webUrl", url: "https://example.com/a" },
       status: "in-progress",
       geometry: { x: 10, y: 20, width: 100, height: 80 },
       createdByChangeId: "change_1",
@@ -159,7 +159,7 @@ describe("review actions", () => {
         title: "Alpha",
         status: "in-progress",
         geometry: { x: 10, y: 20, width: 100, height: 80 },
-        representation: { _tag: "web-url", url: "https://example.com/a" }
+        representation: { _tag: "webUrl", url: "https://example.com/a" }
       }]
     })
     expect(resolveReviewAction("snapshot", context(mixed))?._tag).not.toBe("batch")

@@ -151,7 +151,7 @@ describe("Cloudflare CanvasAuthority", () => {
         }, person))
         expect(
           changedRetry._tag === "Failure" && changedRetry.failure._tag
-        ).toBe("change-id-reused")
+        ).toBe("changeIdReused")
 
         const next = yield* authority.submit({
           canvasId,
@@ -166,7 +166,7 @@ describe("Cloudflare CanvasAuthority", () => {
         expect(next.change.sequence).toBe(2)
 
         const page = yield* authority.changesAfter({
-          _tag: "changes-after",
+          _tag: "changesAfter",
           canvasId,
           after: null,
           limit: AuthorityModel.pageLimit(100)
@@ -207,7 +207,7 @@ describe("Cloudflare CanvasAuthority", () => {
             frameId: "frame_oversized",
             title: "Oversized",
             representation: {
-              _tag: "application-route",
+              _tag: "applicationRoute",
               applicationId: "application_oversized",
               route: "/",
               state: { value: "x".repeat(durableObjectSqlRowLimitBytes) }

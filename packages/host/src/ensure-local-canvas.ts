@@ -10,5 +10,5 @@ export const ensureLocalCanvas = ({ canvasId, client, title }: {
   readonly title: CanvasTitle
 }) =>
   client.create({ canvasId, title }).pipe(
-    Effect.catchTag("canvas-already-exists", () => client.open(canvasId))
+    Effect.catchTag("canvasAlreadyExists", () => client.open(canvasId))
   )

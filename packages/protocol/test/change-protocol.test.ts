@@ -47,13 +47,13 @@ describe("ChangeProtocol", () => {
 
   it("classifies headers before bodies and never throws", () => {
     const cases = [
-      [{}, "malformed-message"],
-      [{ kind: "other", schemaVersion: 99 }, "message-kind-mismatch"],
-      [{ kind: "proposed-canvas-change", schemaVersion: 99, attribution: {} }, "unsupported-version"],
-      [{ ...fixture("proposed"), attribution: {} }, "trusted-field"],
-      [{ ...fixture("proposed"), commands: [{ ...fixture("proposed").commands[0], sequence: 1 }] }, "trusted-field"],
-      [{ ...fixture("proposed"), commands: [{ _tag: "delete-canvas" }] }, "message-kind-mismatch"],
-      [{ ...fixture("proposed"), changeId: "bad" }, "malformed-message"]
+      [{}, "malformedMessage"],
+      [{ kind: "other", schemaVersion: 99 }, "messageKindMismatch"],
+      [{ kind: "proposed-canvas-change", schemaVersion: 99, attribution: {} }, "unsupportedVersion"],
+      [{ ...fixture("proposed"), attribution: {} }, "trustedField"],
+      [{ ...fixture("proposed"), commands: [{ ...fixture("proposed").commands[0], sequence: 1 }] }, "trustedField"],
+      [{ ...fixture("proposed"), commands: [{ _tag: "deleteCanvas" }] }, "messageKindMismatch"],
+      [{ ...fixture("proposed"), changeId: "bad" }, "malformedMessage"]
     ] as const
     for (const [input, tag] of cases) {
       expect(() => ChangeProtocol.proposed.decode(input)).not.toThrow()
@@ -71,11 +71,11 @@ describe("ChangeProtocol", () => {
     ]
     for (const field of fields) {
       const root = ChangeProtocol.proposed.decode({ ...fixture("proposed"), [field]: "forged" })
-      expect(Result.isFailure(root) && root.failure).toMatchObject({ _tag: "trusted-field", location: "message" })
+      expect(Result.isFailure(root) && root.failure).toMatchObject({ _tag: "trustedField", location: "message" })
       const proposed = fixture("proposed")
       proposed.commands[0][field] = "forged"
       const command = ChangeProtocol.proposed.decode(proposed)
-      expect(Result.isFailure(command) && command.failure).toMatchObject({ _tag: "trusted-field", location: "command" })
+      expect(Result.isFailure(command) && command.failure).toMatchObject({ _tag: "trustedField", location: "command" })
     }
   })
 
@@ -93,7 +93,7 @@ describe("ChangeProtocol", () => {
     const wrongNestedVersion = fixture("page")
     wrongNestedVersion.changes[0].schemaVersion = 1
     const versionResult = ChangeProtocol.page.decode(wrongNestedVersion)
-    expect(Result.isFailure(versionResult) && versionResult.failure._tag).toBe("unsupported-version")
+    expect(Result.isFailure(versionResult) && versionResult.failure._tag).toBe("unsupportedVersion")
     const privateReceipt = fixture("receipt-first")
     privateReceipt.digest = "authority-private"
     expect(Result.isFailure(ChangeProtocol.receipt.decode(privateReceipt))).toBe(true)
@@ -169,7 +169,7 @@ describe("ChangeProtocol", () => {
   it("round trips every command tag", () => {
     const g = { x: 0, y: 0, width: 100, height: 80 }
     const item = { _tag: "frame", frameId: "frame_a" }
-    const representation = { _tag: "application-route", applicationId: "application_a", route: "/review" }
+    const representation = { _tag: "applicationRoute", applicationId: "application_a", route: "/review" }
     const commands = [
       { _tag: "renameCanvas", expectedTitle: "Old", title: "New" },
       { _tag: "addFrame", frameId: "frame_a", title: "Frame", representation, status: "in-progress", geometry: g },
@@ -192,7 +192,7 @@ describe("ChangeProtocol", () => {
       input.schemaVersion = 1
       const codec = name === "proposed" ? ChangeProtocol.proposed : name === "accepted" ? ChangeProtocol.accepted : name === "page" ? ChangeProtocol.page : ChangeProtocol.receipt
       const result = codec.decode(input)
-      expect(Result.isFailure(result) && result.failure._tag).toBe("unsupported-version")
+      expect(Result.isFailure(result) && result.failure._tag).toBe("unsupportedVersion")
     }
   })
 
@@ -202,7 +202,7 @@ describe("ChangeProtocol", () => {
       _tag: "addFrame", frameId: "frame_a", title: "Frame", status: "in-progress",
       geometry: { x: 0, y: 0, width: 100, height: 80 },
       representation: {
-        _tag: "application-route", applicationId: "application_a", route: "/review",
+        _tag: "applicationRoute", applicationId: "application_a", route: "/review",
         state: { actor: "npc", source: "checkout", nested: { displayName: "Merchant" } }
       }
     }]
@@ -210,7 +210,7 @@ describe("ChangeProtocol", () => {
     input.commands[0].representation.personId = "person_forged"
     expect(ChangeProtocol.proposed.decode(input)).toMatchObject({
       _tag: "Failure",
-      failure: { _tag: "trusted-field", location: "command" }
+      failure: { _tag: "trustedField", location: "command" }
     })
   })
 })

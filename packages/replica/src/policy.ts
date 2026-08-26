@@ -30,7 +30,7 @@ import {
 } from "./model.js"
 
 const decodeNonEmptyChangeIds = Schema.decodeUnknownSync(Schema.NonEmptyArray(ChangeId))
-const active = (record: PendingRecord) => record.state._tag === "ready" || record.state._tag === "accepted-unconfirmed"
+const active = (record: PendingRecord) => record.state._tag === "ready" || record.state._tag === "acceptedUnconfirmed"
 
 const pendingAuthor = (invocation: PendingRecord["invocation"]): PendingAuthor =>
   Match.value(invocation).pipe(Match.tagsExhaustive({
@@ -52,7 +52,7 @@ const pendingAuthor = (invocation: PendingRecord["invocation"]): PendingAuthor =
 
 const rebuild = (state: ReplicaState) => {
   const replay = CanvasEngine.replay(state.genesisProjection, state.accepted)
-  if (replay._tag === "replay-failed") return Result.fail(new ReplicaInvariantFailure({
+  if (replay._tag === "replayFailed") return Result.fail(new ReplicaInvariantFailure({
     canvasId: state.canvasId,
     reason: `accepted history failed at ${replay.failure._tag}`
   }))
@@ -82,7 +82,7 @@ const rebuild = (state: ReplicaState) => {
       statuses.set(record.proposal.changeId, next.state)
       continue
     }
-    const stateValue = record.state._tag === "accepted-unconfirmed" ? record.state : Ready.make({})
+    const stateValue = record.state._tag === "acceptedUnconfirmed" ? record.state : Ready.make({})
     const next = { ...record, state: stateValue }
     pending.push(next)
     statuses.set(record.proposal.changeId, next.state)
@@ -121,7 +121,7 @@ const enqueue = (state: ReplicaState, input: ReplicaChange, invocation: PendingR
   if (current._tag === "Failure") return current
   const proposal: ProposedCanvasChange = { changeId, canvasId: input.canvasId, observedCursor: state.acknowledgedCursor, commands: input.commands }
   const onAcknowledged = CanvasEngine.replay(state.genesisProjection, state.accepted)
-  if (onAcknowledged._tag === "replay-failed") return Result.fail(new ReplicaInvariantFailure({ canvasId: state.canvasId, reason: "accepted history is invalid" }))
+  if (onAcknowledged._tag === "replayFailed") return Result.fail(new ReplicaInvariantFailure({ canvasId: state.canvasId, reason: "accepted history is invalid" }))
   const acknowledgedResult = CanvasEngine.apply(onAcknowledged.projection, proposal)
   const optimisticResult = CanvasEngine.apply(current.success.projection, proposal)
   if (optimisticResult._tag === "rejected") return Result.fail(new LocalChangeRejected({ canvasId: state.canvasId, changeId, failure: optimisticResult.failure }))

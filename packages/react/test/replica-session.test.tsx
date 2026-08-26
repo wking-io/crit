@@ -39,7 +39,7 @@ const makeView = (args: {
   readonly cursor: string
 }): ReplicaView =>
   Schema.decodeUnknownSync(ReplicaView)({
-    _tag: "replica-view",
+    _tag: "replicaView",
     canvasId: args.canvasId,
     acknowledgedCursor: args.cursor,
     projection: decodeCanvasProjection({
@@ -49,7 +49,7 @@ const makeView = (args: {
       frames: [{
         frameId: "frame_checkout",
         title: "Checkout",
-        representation: { _tag: "web-url", url: "https://example.com/checkout" },
+        representation: { _tag: "webUrl", url: "https://example.com/checkout" },
         status: "in-progress",
         geometry: { x: 40, y: 80, width: 320, height: 200 },
         createdByChangeId: "change_1",
@@ -76,13 +76,13 @@ const addFrame = decodeCanvasCommandBatch([{
   _tag: "addFrame",
   frameId: "frame_added",
   title: "Added",
-  representation: { _tag: "web-url", url: "https://example.com/added" },
+  representation: { _tag: "webUrl", url: "https://example.com/added" },
   status: "in-progress",
   geometry: { x: 400, y: 80, width: 320, height: 200 }
 }])
 
 const viewAfterAdd = Schema.decodeUnknownSync(ReplicaView)({
-  _tag: "replica-view",
+  _tag: "replicaView",
   canvasId: canvasA,
   acknowledgedCursor: "cursor_after_add",
   projection: decodeCanvasProjection({
@@ -92,7 +92,7 @@ const viewAfterAdd = Schema.decodeUnknownSync(ReplicaView)({
     frames: [{
       frameId: "frame_added",
       title: "Added",
-      representation: { _tag: "web-url", url: "https://example.com/added" },
+      representation: { _tag: "webUrl", url: "https://example.com/added" },
       status: "in-progress",
       geometry: { x: 400, y: 80, width: 320, height: 200 },
       createdByChangeId: "change_2",
@@ -104,7 +104,7 @@ const viewAfterAdd = Schema.decodeUnknownSync(ReplicaView)({
     }, {
       frameId: "frame_checkout",
       title: "Checkout",
-      representation: { _tag: "web-url", url: "https://example.com/checkout" },
+      representation: { _tag: "webUrl", url: "https://example.com/checkout" },
       status: "in-progress",
       geometry: { x: 40, y: 80, width: 320, height: 200 },
       createdByChangeId: "change_1",
@@ -127,7 +127,7 @@ const viewAfterAdd = Schema.decodeUnknownSync(ReplicaView)({
 })
 
 const rejectedFailure = Schema.decodeUnknownSync(CanvasChangeFailureSchema)({
-  _tag: "entity-not-found",
+  _tag: "entityNotFound",
   commandIndex: 0,
   entity: "frame",
   id: "frame_missing"

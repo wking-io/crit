@@ -265,8 +265,8 @@ describe("RepresentationRuntime", () => {
       const service = yield* RepresentationRuntime
       return yield* service.resolve(artifact)
     }).pipe(Effect.provide(runtime)))
-    expect(plan._tag).toBe("artifact-bytes")
-    if (plan._tag !== "artifact-bytes") return
+    expect(plan._tag).toBe("artifactBytes")
+    if (plan._tag !== "artifactBytes") return
     expect(transferred).toBeDefined()
     expect(plan.bytes).toBe(transferred)
   })
@@ -324,8 +324,8 @@ describe("RepresentationRuntime", () => {
     }).pipe(Effect.provide(runtime)))
     expect(result.artifact.artifactId).toMatch(/^artifact_[0-9a-f]{32}$/)
     expect(result.artifact.digest).toBe(digestOf(bytes))
-    expect(result.plan._tag).toBe("artifact-bytes")
-    if (result.plan._tag !== "artifact-bytes") return
+    expect(result.plan._tag).toBe("artifactBytes")
+    if (result.plan._tag !== "artifactBytes") return
     expect([...result.plan.bytes]).toEqual([2, 7, 1])
   })
 

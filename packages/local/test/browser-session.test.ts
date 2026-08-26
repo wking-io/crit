@@ -26,7 +26,7 @@ const browserOrigin = "http://127.0.0.1:5173"
 const BrowserSessionResponse = Schema.Struct({ redirectTo: Schema.String })
 
 const temporaryRoot = Effect.acquireRelease(
-  Effect.sync(() => mkdtempSync(join(tmpdir(), "crit-browser-session-"))),
+  Effect.sync(() => mkdtempSync(join(tmpdir(), "crit-browserSession-"))),
   (directory) => Effect.sync(() => rmSync(directory, { recursive: true, force: true }))
 )
 
@@ -90,7 +90,7 @@ const createCanvas = (args: {
     method: "POST",
     headers,
     body: JSON.stringify({
-      _tag: "create-canvas",
+      _tag: "createCanvas",
       canvasId: args.canvasId ?? "canvas_browser_session",
       title: "Browser session"
     })
@@ -114,9 +114,9 @@ const resolveRepresentation = (args: {
     method: "POST",
     headers,
     body: JSON.stringify({
-      _tag: "resolve-representation",
+      _tag: "resolveRepresentation",
       schemaVersion: 1,
-      representation: { _tag: "web-url", url: "https://example.com/browser" }
+      representation: { _tag: "webUrl", url: "https://example.com/browser" }
     })
   })
 }

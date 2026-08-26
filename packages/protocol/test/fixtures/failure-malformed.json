@@ -1,1 +1,1 @@
-{"kind":"protocol-failure","schemaVersion":1,"failure":{"_tag":"malformed-message","location":"message","message":"Malformed"}}
+{"kind":"protocol-failure","schemaVersion":1,"failure":{"_tag":"malformedMessage","location":"message","message":"Malformed"}}

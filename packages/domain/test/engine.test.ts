@@ -79,7 +79,7 @@ describe("CanvasEngine.apply", () => {
     expect(CanvasEngine.apply(initial, change)).toEqual({
       _tag: "rejected",
       failure: {
-        _tag: "canvas-title-mismatch",
+        _tag: "canvasTitleMismatch",
         commandIndex: 1,
         expectedTitle: "Checkout",
         actualTitle: "Review"
@@ -116,7 +116,7 @@ describe("CanvasEngine.apply", () => {
     expect(CanvasEngine.apply(initial, other)).toEqual({
       _tag: "rejected",
       failure: {
-        _tag: "canvas-mismatch",
+        _tag: "canvasMismatch",
         expectedCanvasId: "canvas_checkout",
         actualCanvasId: "canvas_other"
       }
@@ -138,9 +138,9 @@ describe("CanvasEngine.replay", () => {
     if (first === undefined) throw new Error("Replay fixture needs a change")
 
     expect(CanvasEngine.replay(initial, [first, first])).toEqual({
-      _tag: "replay-failed",
+      _tag: "replayFailed",
       failure: {
-        _tag: "duplicate-change",
+        _tag: "duplicateChange",
         changeId: "change_review",
         firstIndex: 0,
         currentIndex: 1
@@ -153,13 +153,13 @@ describe("CanvasEngine.replay", () => {
     const reordered = [...changes].reverse()
 
     expect(CanvasEngine.replay(initial, reordered)).toMatchObject({
-      _tag: "replay-failed",
+      _tag: "replayFailed",
       failure: {
-        _tag: "change-rejected",
+        _tag: "changeRejected",
         changeIndex: 0,
         changeId: "change_critique",
         failure: {
-          _tag: "canvas-title-mismatch",
+          _tag: "canvasTitleMismatch",
           commandIndex: 0
         }
       }

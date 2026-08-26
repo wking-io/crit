@@ -26,10 +26,10 @@ describe("ReplicaChanged", () => {
 describe("PresenceChanged", () => {
   it("decodes a versioned full-roster notification", () => {
     const roster = {
-      _tag: "presence-roster",
+      _tag: "presenceRoster",
       canvasId: "canvas_notification_presence",
       people: [{
-        _tag: "connected-person",
+        _tag: "connectedPerson",
         person: {
           _tag: "person",
           personId: "person_notification",

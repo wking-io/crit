@@ -30,7 +30,7 @@ const populated = () => {
           frameId: "frame_checkout",
           title: "Checkout",
           representation: {
-            _tag: "application-route",
+            _tag: "applicationRoute",
             applicationId: "application_storefront",
             route: "/checkout"
           },
@@ -58,7 +58,7 @@ describe("canvasLayout", () => {
           frameId: "frame_checkout",
           title: "Checkout",
           geometry: { x: 0, y: 0, width: 1200, height: 800 },
-          representation: "application-route"
+          representation: "applicationRoute"
         }
       ]
     })
@@ -151,7 +151,7 @@ describe("built crit-target layout", () => {
       "add-frame",
       "canvas_cli_layout",
       "--type",
-      "web-url",
+      "webUrl",
       "--url",
       "https://example.com/pricing",
       "--title",
@@ -176,7 +176,7 @@ describe("built crit-target layout", () => {
     expect(layout.items).toHaveLength(1)
     expect(layout.items[0]._tag).toBe("frame")
     expect(layout.items[0].title).toBe("Pricing")
-    expect(layout.items[0].representation).toBe("web-url")
+    expect(layout.items[0].representation).toBe("webUrl")
     expect(layout.items[0].geometry).toEqual({ x: 80, y: 40, width: 1200, height: 800 })
     await stop(started.child)
   })

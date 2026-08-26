@@ -12,7 +12,7 @@ const empty = () => decodeCanvasProjection({
   issuedIds: { frameIds: [] }
 })
 const geometry = (x = 0, y = 0) => ({ x, y, width: 100, height: 80 })
-const representation = { _tag: "application-route", applicationId: "application_shop", route: "/checkout" }
+const representation = { _tag: "applicationRoute", applicationId: "application_shop", route: "/checkout" }
 const change = (changeId: string, commands: readonly unknown[]) =>
   decodeCanvasChange({ canvasId: "canvas_review", changeId, commands })
 const apply = (
@@ -60,7 +60,7 @@ describe("Canvas content", () => {
     ]))
     expect(result).toMatchObject({
       _tag: "rejected",
-      failure: { _tag: "precondition-failed", commandIndex: 1, field: "titleChangedByChangeId" }
+      failure: { _tag: "preconditionFailed", commandIndex: 1, field: "titleChangedByChangeId" }
     })
     expect(initial.frames[0]?.title).toBe("Old")
   })
@@ -78,7 +78,7 @@ describe("Canvas content", () => {
     ])
     expect(CanvasEngine.apply(removed, change("change_reuse", [
       { _tag: "addFrame", frameId: "frame_a", title: "Again", representation, status: "in-progress", geometry: geometry() }
-    ]))).toMatchObject({ _tag: "rejected", failure: { _tag: "id-already-issued" } })
+    ]))).toMatchObject({ _tag: "rejected", failure: { _tag: "idAlreadyIssued" } })
     expect(() => decodeCanvasProjection(JSON.parse(JSON.stringify(removed)))).not.toThrow()
   })
 
@@ -135,14 +135,14 @@ describe("Canvas content", () => {
     ])
     expect(CanvasEngine.apply(created, change("change_duplicate", [
       { _tag: "addFrame", frameId: "frame_a", title: "Again", representation, status: "in-progress", geometry: geometry() }
-    ]))).toMatchObject({ _tag: "rejected", failure: { _tag: "id-already-issued" } })
+    ]))).toMatchObject({ _tag: "rejected", failure: { _tag: "idAlreadyIssued" } })
 
     const removed = apply(created, "change_remove", [
       { _tag: "removeFrame", frameId: "frame_a", expectedUpdatedByChangeId: "change_create" }
     ])
     expect(CanvasEngine.apply(removed, change("change_reuse", [
       { _tag: "addFrame", frameId: "frame_a", title: "Again", representation, status: "in-progress", geometry: geometry() }
-    ]))).toMatchObject({ _tag: "rejected", failure: { _tag: "id-already-issued" } })
+    ]))).toMatchObject({ _tag: "rejected", failure: { _tag: "idAlreadyIssued" } })
   })
 
   it("rejects duplicate stack entries at projection decode", () => {

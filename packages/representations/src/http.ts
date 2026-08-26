@@ -13,13 +13,13 @@ import {
 export const localRepresentationResolvePath = "/api/v1/representations/resolve"
 export const localRepresentationCapturePath = "/api/v1/representations/capture"
 
-export const LocalRepresentationResolveRequest = Schema.TaggedStruct("resolve-representation", {
+export const LocalRepresentationResolveRequest = Schema.TaggedStruct("resolveRepresentation", {
   schemaVersion: Schema.Literal(1),
   representation: RepresentationRef
 })
 export type LocalRepresentationResolveRequest = typeof LocalRepresentationResolveRequest.Type
 
-export const LocalRepresentationCaptureRequest = Schema.TaggedStruct("capture-representation", {
+export const LocalRepresentationCaptureRequest = Schema.TaggedStruct("captureRepresentation", {
   schemaVersion: Schema.Literal(1),
   representation: LiveRepresentation
 })

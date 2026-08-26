@@ -18,7 +18,7 @@ describe("LocalBrowserConnection", () => {
       instance
     })
     expect(descriptor).toEqual(LocalBrowserConnectionDescriptor.make({
-      _tag: "local-browser-connection",
+      _tag: "localBrowserConnection",
       schemaVersion: 1,
       baseUrl: "http://127.0.0.1:49152",
       browserPath: "/browser/0123456789abcdef0123456789abcdef/"
@@ -44,49 +44,49 @@ describe("LocalBrowserConnection", () => {
     { name: "malformed base64url", fragment: "#crit=not+base64", failure: new LocalBrowserConnectionInvalid({ reason: "fragment-not-base64url" }) },
     { name: "oversized", fragment: `#crit=${"a".repeat(2_048)}`, failure: new LocalBrowserConnectionInvalid({ reason: "fragment-too-large" }) },
     { name: "wrong version", failure: new LocalBrowserConnectionInvalid({ reason: "descriptor-invalid" }), fragment: encodedJson({
-      _tag: "local-browser-connection",
+      _tag: "localBrowserConnection",
       schemaVersion: 2,
       baseUrl: "http://127.0.0.1:49152",
       browserPath: "/browser/0123456789abcdef0123456789abcdef/"
     }) },
     { name: "wrong tag", failure: new LocalBrowserConnectionInvalid({ reason: "descriptor-invalid" }), fragment: encodedJson({
-      _tag: "browser-session",
+      _tag: "browserSession",
       schemaVersion: 1,
       baseUrl: "http://127.0.0.1:49152",
       browserPath: "/browser/0123456789abcdef0123456789abcdef/"
     }) },
     { name: "non-loopback origin", failure: new LocalBrowserConnectionInvalid({ reason: "descriptor-invalid" }), fragment: encodedJson({
-      _tag: "local-browser-connection",
+      _tag: "localBrowserConnection",
       schemaVersion: 1,
       baseUrl: "http://localhost:49152",
       browserPath: "/browser/0123456789abcdef0123456789abcdef/"
     }) },
     { name: "credentialed origin", failure: new LocalBrowserConnectionInvalid({ reason: "descriptor-invalid" }), fragment: encodedJson({
-      _tag: "local-browser-connection",
+      _tag: "localBrowserConnection",
       schemaVersion: 1,
       baseUrl: "http://user:pass@127.0.0.1:49152",
       browserPath: "/browser/0123456789abcdef0123456789abcdef/"
     }) },
     { name: "origin with path", failure: new LocalBrowserConnectionInvalid({ reason: "descriptor-invalid" }), fragment: encodedJson({
-      _tag: "local-browser-connection",
+      _tag: "localBrowserConnection",
       schemaVersion: 1,
       baseUrl: "http://127.0.0.1:49152/api",
       browserPath: "/browser/0123456789abcdef0123456789abcdef/"
     }) },
     { name: "port zero", failure: new LocalBrowserConnectionInvalid({ reason: "descriptor-invalid" }), fragment: encodedJson({
-      _tag: "local-browser-connection",
+      _tag: "localBrowserConnection",
       schemaVersion: 1,
       baseUrl: "http://127.0.0.1:0",
       browserPath: "/browser/0123456789abcdef0123456789abcdef/"
     }) },
     { name: "malformed browser path", failure: new LocalBrowserConnectionInvalid({ reason: "descriptor-invalid" }), fragment: encodedJson({
-      _tag: "local-browser-connection",
+      _tag: "localBrowserConnection",
       schemaVersion: 1,
       baseUrl: "http://127.0.0.1:49152",
       browserPath: "/browser/wrong/"
     }) },
     { name: "excess field", failure: new LocalBrowserConnectionInvalid({ reason: "descriptor-invalid" }), fragment: encodedJson({
-      _tag: "local-browser-connection",
+      _tag: "localBrowserConnection",
       schemaVersion: 1,
       baseUrl: "http://127.0.0.1:49152",
       browserPath: "/browser/0123456789abcdef0123456789abcdef/",

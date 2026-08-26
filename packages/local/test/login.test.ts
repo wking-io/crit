@@ -92,7 +92,7 @@ describe("Access Person login", () => {
       const after = installationFrom(dataRoot)
 
       expect(result).toEqual({
-        _tag: "access-person-bound",
+        _tag: "accessPersonBound",
         personId: before.principal.person.personId,
         email: { _tag: "access", address: "ada@acme.com" }
       })

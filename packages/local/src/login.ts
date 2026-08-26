@@ -27,7 +27,7 @@ import {
 } from "./discovery.js"
 import { decodeStored, encodeStored } from "./stored-json.js"
 
-export const AccessPersonBinding = Schema.TaggedStruct("access-person-bound", {
+export const AccessPersonBinding = Schema.TaggedStruct("accessPersonBound", {
   personId: PersonId,
   email: AccessPersonEmail
 })

@@ -48,7 +48,7 @@ const addFrame = (frameId: string, title = "Frame") => decodeCanvasCommandBatch(
   _tag: "addFrame",
   frameId,
   title,
-  representation: { _tag: "application-route", applicationId: "application_replica", route: "/", state: {} },
+  representation: { _tag: "applicationRoute", applicationId: "application_replica", route: "/", state: {} },
   status: "in-progress",
   geometry: { x: 0, y: 0, width: 800, height: 600 }
 }])

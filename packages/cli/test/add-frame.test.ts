@@ -146,7 +146,7 @@ describe("resolveFrameGeometry", () => {
 })
 
 describe("built crit-target add-frame", () => {
-  it("adds an application-route Frame from the project manifest", async() => {
+  it("adds an applicationRoute Frame from the project manifest", async() => {
     const directory = mkdtempSync(join(tmpdir(), "crit-cli-add-frame-"))
     directories.push(directory)
     const dataRoot = join(directory, ".crit", "v1")
@@ -166,7 +166,7 @@ describe("built crit-target add-frame", () => {
       "add-frame",
       "canvas_cli_frames",
       "--type",
-      "application-route",
+      "applicationRoute",
       "--route",
       "/checkout",
       ...placed("Checkout", "0", "0"),
@@ -178,7 +178,7 @@ describe("built crit-target add-frame", () => {
     const view = JSON.parse(added.stdout)
     expect(view.projection.frames).toHaveLength(1)
     const frame = view.projection.frames[0]
-    expect(frame.representation._tag).toBe("application-route")
+    expect(frame.representation._tag).toBe("applicationRoute")
     expect(frame.representation.applicationId).toBe(applicationId)
     expect(frame.representation.route).toBe("/checkout")
     expect(frame.title).toBe("Checkout")
@@ -189,7 +189,7 @@ describe("built crit-target add-frame", () => {
       "add-frame",
       "canvas_cli_frames",
       "--type",
-      "application-route",
+      "applicationRoute",
       "--route",
       "/about",
       ...placed("About", "1240", "0"),
@@ -206,7 +206,7 @@ describe("built crit-target add-frame", () => {
     await stop(started.child)
   })
 
-  it("adds a web-url Frame at an explicit position", async() => {
+  it("adds a webUrl Frame at an explicit position", async() => {
     const directory = mkdtempSync(join(tmpdir(), "crit-cli-add-frame-url-"))
     directories.push(directory)
     const dataRoot = join(directory, ".crit", "v1")
@@ -222,7 +222,7 @@ describe("built crit-target add-frame", () => {
       "add-frame",
       "canvas_cli_frames",
       "--type",
-      "web-url",
+      "webUrl",
       "--url",
       "https://example.com/pricing",
       ...placed("Pricing", "80", "40"),
@@ -235,7 +235,7 @@ describe("built crit-target add-frame", () => {
     expect(added.status, added.stderr).toBe(0)
     const frame = JSON.parse(added.stdout).projection.frames[0]
     expect(frame.representation).toEqual({
-      _tag: "web-url",
+      _tag: "webUrl",
       url: "https://example.com/pricing"
     })
     expect(frame.title).toBe("Pricing")
@@ -295,7 +295,7 @@ describe("built crit-target add-frame", () => {
       "add-frame",
       "canvas_cli_frames",
       "--type",
-      "application-route",
+      "applicationRoute",
       "--route",
       "/checkout",
       ...placed("Checkout", "0", "0"),
@@ -323,7 +323,7 @@ describe("built crit-target add-frame", () => {
       "add-frame",
       "canvas_cli_missing",
       "--type",
-      "application-route",
+      "applicationRoute",
       "--route",
       "/checkout",
       ...placed("Checkout", "0", "0"),
@@ -340,7 +340,7 @@ describe("built crit-target add-frame", () => {
       "add-frame",
       "canvas_cli_frames",
       "--type",
-      "application-route",
+      "applicationRoute",
       "--route",
       "products",
       ...placed("Products", "0", "0")
@@ -349,12 +349,12 @@ describe("built crit-target add-frame", () => {
     expect(result.stderr).toContain("Invalid route: products")
   })
 
-  it("rejects a localhost web-url", () => {
+  it("rejects a localhost webUrl", () => {
     const result = run(join(tmpdir(), "crit-cli-add-frame-localhost"), [
       "add-frame",
       "canvas_cli_frames",
       "--type",
-      "web-url",
+      "webUrl",
       "--url",
       "http://localhost:3000/app",
       ...placed("App", "0", "0")
@@ -368,7 +368,7 @@ describe("built crit-target add-frame", () => {
       "add-frame",
       "canvas_cli_frames",
       "--type",
-      "web-url",
+      "webUrl",
       "--url",
       "https://example.com/pricing",
       "--x",
@@ -385,7 +385,7 @@ describe("built crit-target add-frame", () => {
       "add-frame",
       "canvas_cli_frames",
       "--type",
-      "web-url",
+      "webUrl",
       "--url",
       "https://example.com/pricing",
       "--title",
@@ -400,7 +400,7 @@ describe("built crit-target add-frame", () => {
       "add-frame",
       "canvas_cli_frames",
       "--type",
-      "web-url",
+      "webUrl",
       "--url",
       "https://example.com/pricing",
       ...placed("Pricing", "0", "0"),
@@ -428,7 +428,7 @@ describe("built crit-target add-frame", () => {
       "add-frame",
       "canvas_cli_frames",
       "--type",
-      "application-route",
+      "applicationRoute",
       "--route",
       "/checkout",
       ...placed("Checkout", "0", "0"),

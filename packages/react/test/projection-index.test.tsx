@@ -10,7 +10,7 @@ const projection = decodeCanvasProjection({
   frames: [{
     frameId: "frame_checkout",
     title: "Checkout",
-    representation: { _tag: "web-url", url: "https://example.com/checkout" },
+    representation: { _tag: "webUrl", url: "https://example.com/checkout" },
     status: "in-progress",
     geometry: { x: 40, y: 80, width: 320, height: 200 },
     createdByChangeId: "change_1",

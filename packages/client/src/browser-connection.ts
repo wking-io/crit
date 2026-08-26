@@ -9,7 +9,7 @@ const LocalDaemonBaseUrl = Schema.String.check(Schema.isPattern(
 
 const LocalBrowserPath = Schema.TemplateLiteral(["/browser/", LocalDaemonInstanceNonce, "/"])
 
-export const LocalBrowserConnectionDescriptor = Schema.TaggedStruct("local-browser-connection", {
+export const LocalBrowserConnectionDescriptor = Schema.TaggedStruct("localBrowserConnection", {
   schemaVersion: Schema.Literal(1),
   baseUrl: LocalDaemonBaseUrl,
   browserPath: LocalBrowserPath
@@ -44,7 +44,7 @@ const make = ({
   readonly instance: LocalDaemonInstanceNonce
 }) =>
   Schema.decodeUnknownSync(LocalBrowserConnectionDescriptor, { onExcessProperty: "error" })({
-    _tag: "local-browser-connection",
+    _tag: "localBrowserConnection",
     schemaVersion: 1,
     baseUrl,
     browserPath: `/browser/${instance}/`

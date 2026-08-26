@@ -22,7 +22,7 @@ This skill describes the stable v1 contract. Before running a command, check `cr
 3. Submit related semantic commands as one atomic change.
 4. Use narrow expected-content preconditions for edits that can conflict.
 5. Preserve unresolved local work. Report recoverable conflicts instead of discarding them.
-6. Use `application-route` for a project page, `web-url` for an intentional external URL, and `artifact` for immutable captured content.
+6. Use `applicationRoute` for a project page, `webUrl` for an intentional external URL, and `artifact` for immutable captured content.
 7. Use `ready-for-review` when work awaits assessment. Use `approved` only after that assessment.
 8. Ask before deleting or replacing another Actor's review content.
 

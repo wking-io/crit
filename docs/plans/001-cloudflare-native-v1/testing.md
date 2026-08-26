@@ -18,7 +18,7 @@ Run one suite against the local replica store. Cover offline restart, pending re
 
 ### Representation conformance
 
-Run one suite against local and shared resolvers. Cover `application-route`, `web-url`, `artifact`, missing bindings, revision mismatch, blocked embedding, and immutable artifact integrity.
+Run one suite against local and shared resolvers. Cover `applicationRoute`, `webUrl`, `artifact`, missing bindings, revision mismatch, blocked embedding, and immutable artifact integrity.
 
 ### Protocol contracts
 
@@ -40,7 +40,7 @@ Open one shared Canvas from two isolated local replicas. Disconnect both. Make i
 
 ### Representation workflow
 
-Resolve one `application-route` Frame to localhost in the developer UI and to a registered preview in the hosted review UI. Remove the shared binding and confirm that the hosted UI shows an unavailable state without mutating the Frame. Capture the Frame and confirm that both viewers render the same R2 artifact digest.
+Resolve one `applicationRoute` Frame to localhost in the developer UI and to a registered preview in the hosted review UI. Remove the shared binding and confirm that the hosted UI shows an unavailable state without mutating the Frame. Capture the Frame and confirm that both viewers render the same R2 artifact digest.
 
 ### Hosted review workflow
 

@@ -150,7 +150,7 @@ describe("CanvasDurableObject", () => {
       }, person))
       expect(
         changedRetry._tag === "Failure" && changedRetry.failure._tag
-      ).toBe("change-id-reused")
+      ).toBe("changeIdReused")
 
       const next = yield* authority.submit({
         canvasId,
@@ -165,7 +165,7 @@ describe("CanvasDurableObject", () => {
       expect(next.change.sequence).toBe(2)
 
       const page = yield* authority.changesAfter({
-        _tag: "changes-after",
+        _tag: "changesAfter",
         canvasId,
         after: null,
         limit: AuthorityModel.pageLimit(100)
@@ -203,7 +203,7 @@ describe("CanvasDurableObject", () => {
             frameId: "frame_workerd_oversized",
             title: "Oversized",
             representation: {
-              _tag: "application-route",
+              _tag: "applicationRoute",
               applicationId: "application_workerd_oversized",
               route: "/",
               state: { value: "x".repeat(durableObjectSqlRowLimitBytes) }

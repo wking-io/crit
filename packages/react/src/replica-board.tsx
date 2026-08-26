@@ -69,23 +69,23 @@ const changeCount = (count: number): string =>
 
 const conflictCopy = (failure: CanvasChangeFailure): string =>
   Match.value(failure).pipe(Match.tagsExhaustive({
-    "canvas-mismatch": () => "Rejected because it targets a different Canvas.",
-    "canvas-title-mismatch": () =>
+    "canvasMismatch": () => "Rejected because it targets a different Canvas.",
+    "canvasTitleMismatch": () =>
       "Rejected because the Canvas title changed since this was proposed.",
-    "entity-not-found": ({ entity }) =>
+    "entityNotFound": ({ entity }) =>
       `Rejected because its ${entity} no longer exists.`,
-    "id-already-issued": ({ entity }) =>
+    "idAlreadyIssued": ({ entity }) =>
       `Rejected because its new ${entity} id was already taken.`,
-    "precondition-failed": ({ field }) =>
+    "preconditionFailed": ({ field }) =>
       `Rejected because ${field} changed since this was proposed.`,
-    "invalid-reference": ({ field }) =>
+    "invalidReference": ({ field }) =>
       `Rejected because ${field} points at a missing item.`
   }))
 
 const entryStateCopy = (state: PendingChange["state"]): string =>
   Match.value(state).pipe(Match.tagsExhaustive({
     ready: () => "Waiting to sync.",
-    "accepted-unconfirmed": () => "Accepted, awaiting confirmation.",
+    "acceptedUnconfirmed": () => "Accepted, awaiting confirmation.",
     conflicted: ({ failure }) => conflictCopy(failure),
     blocked: ({ blockedBy }) =>
       `Blocked by ${changeCount(blockedBy.length)} ahead of it.`

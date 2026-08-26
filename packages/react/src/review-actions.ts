@@ -396,10 +396,10 @@ const openUrlPolicy = policy({
   description: "Open this Frame's page in a new browser tab.",
   shortcuts: ["O"],
   available: (selection, projection) =>
-    selectedFrame(selection, projection)?.representation._tag === "web-url",
+    selectedFrame(selection, projection)?.representation._tag === "webUrl",
   run: ({ projection, selection }) => {
     const frame = selectedFrame(selection, projection)
-    return frame?.representation._tag === "web-url"
+    return frame?.representation._tag === "webUrl"
       ? ReviewAction.effect({
         effect: ReviewClientEffect.openUrl({ url: frame.representation.url })
       })

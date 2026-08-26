@@ -303,7 +303,7 @@ describe("FrameRenderer", () => {
     const resolver: FrameRepresentationResolver = {
       resolve: (input) => Effect.uninterruptible(Effect.callback<RenderPlan, unknown>((resume) => {
         resolves += 1
-        if (input._tag === "web-url") {
+        if (input._tag === "webUrl") {
           completions.set(input.url, (plan) => resume(Effect.succeed(plan)))
         }
       }))

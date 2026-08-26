@@ -482,7 +482,7 @@ const resolveRepresentation = Effect.fn(function*() {
   }
   return yield* runtime.resolve(body.representation).pipe(
     Effect.map(Match.valueTags({
-      "artifact-bytes": (plan) => HttpServerResponse.uint8Array(plan.bytes, {
+      "artifactBytes": (plan) => HttpServerResponse.uint8Array(plan.bytes, {
         contentType: "application/octet-stream"
       }),
       iframe: (plan) => HttpServerResponse.jsonUnsafe(plan),

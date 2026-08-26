@@ -44,7 +44,7 @@ Known local verbs:
 crit create <canvas-id> --title Title
 crit open <canvas-id>
 crit layout <canvas-id>
-crit add-frame <canvas-id> --type application-route --route /path --title Title --x 0 --y 0
+crit add-frame <canvas-id> --type applicationRoute --route /path --title Title --x 0 --y 0
 \`\`\`
 
 \`--type\`, \`--title\`, \`--x\`, and \`--y\` are required on add-frame. Width and height default to 1200x800.
@@ -59,11 +59,11 @@ Reuse IDs. Edit in place. Deleting and recreating a Frame drops its review state
 
 ## Representations
 
-- \`application-route\` for a page in this project. Route is rooted (\`/checkout\`). Crit binds it through \`crit.manifest.json\`.
-- \`web-url\` for a public HTTP URL. Use a real public hostname.
+- \`applicationRoute\` for a page in this project. Route is rooted (\`/checkout\`). Crit binds it through \`crit.manifest.json\`.
+- \`webUrl\` for a public HTTP URL. Use a real public hostname.
 - \`artifact\` for an immutable capture. Needs \`--artifact-id\` and \`--digest\`.
 
-Project pages are application-route Frames. Localhost is not a web-url.
+Project pages are applicationRoute Frames. Localhost is not a webUrl.
 
 ## Work
 

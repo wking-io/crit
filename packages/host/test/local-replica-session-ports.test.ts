@@ -21,7 +21,7 @@ import { localReplicaSessionPorts } from "../src/index.js"
 const canvasId = Id.canvas("canvas_review")
 
 const view = Schema.decodeUnknownSync(ReplicaView)({
-  _tag: "replica-view",
+  _tag: "replicaView",
   canvasId,
   acknowledgedCursor: "cursor_one",
   projection: decodeCanvasProjection({
@@ -31,7 +31,7 @@ const view = Schema.decodeUnknownSync(ReplicaView)({
     frames: [{
       frameId: "frame_checkout",
       title: "Checkout",
-      representation: { _tag: "web-url", url: "https://example.com/checkout" },
+      representation: { _tag: "webUrl", url: "https://example.com/checkout" },
       status: "in-progress",
       geometry: { x: 40, y: 80, width: 320, height: 200 },
       createdByChangeId: "change_1",
@@ -54,13 +54,13 @@ const commands = decodeCanvasCommandBatch([{
   _tag: "addFrame",
   frameId: "frame_added",
   title: "Added",
-  representation: { _tag: "web-url", url: "https://example.com/added" },
+  representation: { _tag: "webUrl", url: "https://example.com/added" },
   status: "in-progress",
   geometry: { x: 400, y: 80, width: 320, height: 200 }
 }])
 
 const domainFailure = Schema.decodeUnknownSync(CanvasChangeFailureSchema)({
-  _tag: "entity-not-found",
+  _tag: "entityNotFound",
   commandIndex: 0,
   entity: "frame",
   id: "frame_missing"
@@ -150,7 +150,7 @@ describe("localReplicaSessionPorts.subscribe", () => {
 })
 
 describe("localReplicaSessionPorts.change", () => {
-  it("returns the receipt view from a replica-change payload", async() => {
+  it("returns the receipt view from a replicaChange payload", async() => {
     const calls: Array<Parameters<LocalCanvasClientService["change"]>[0]> = []
     const receipt = { changeId: Id.change("change_receipt"), view }
     const ports = localReplicaSessionPorts(unusedClient((input) => {
@@ -164,7 +164,7 @@ describe("localReplicaSessionPorts.change", () => {
     expect(changed).toEqual(receipt.view)
   })
 
-  it("maps change-rejected to ReplicaChangeRejected", async() => {
+  it("maps changeRejected to ReplicaChangeRejected", async() => {
     const ports = localReplicaSessionPorts(unusedClient(() =>
       Effect.fail(ChangeRejected.make({
         canvasId,

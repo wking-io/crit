@@ -98,14 +98,14 @@ describe("SQLite CanvasAuthority", () => {
         ...rejectedProposal,
         commands: decodeCanvasCommandBatch([{ _tag: "renameCanvas", expectedTitle: "Review", title: "Other" }])
       }, person))
-      expect(changedRetry._tag === "Failure" && changedRetry.failure._tag).toBe("change-id-reused")
+      expect(changedRetry._tag === "Failure" && changedRetry.failure._tag).toBe("changeIdReused")
       const next = yield* authority.submit({
         canvasId, changeId: Id.change("change_restart_next"), observedCursor: null,
         commands: decodeCanvasCommandBatch([{ _tag: "renameCanvas", expectedTitle: "Review", title: "Final" }])
       }, person)
       expect(next.change.sequence).toBe(2)
       const page = yield* authority.changesAfter({
-        _tag: "changes-after", canvasId, after: null, limit: AuthorityModel.pageLimit(100)
+        _tag: "changesAfter", canvasId, after: null, limit: AuthorityModel.pageLimit(100)
       })
       const view = yield* authority.open(canvasId)
       const replay = CanvasEngine.replay(emptyCanvasProjection(canvasId, "Authority"), page.changes)
@@ -130,7 +130,7 @@ describe("SQLite CanvasAuthority", () => {
           _tag: "addFrame",
           frameId: "frame_semantic",
           title: "Frame",
-          representation: { _tag: "application-route", applicationId: "application_semantic", route: "/", state: { a: 1, b: 2 } },
+          representation: { _tag: "applicationRoute", applicationId: "application_semantic", route: "/", state: { a: 1, b: 2 } },
           status: "in-progress",
           geometry: { x: 0, y: 0, width: 10, height: 10 }
         }])
@@ -142,7 +142,7 @@ describe("SQLite CanvasAuthority", () => {
           _tag: "addFrame",
           frameId: "frame_semantic",
           title: "Frame",
-          representation: { _tag: "application-route", applicationId: "application_semantic", route: "/", state: { b: 2, a: 1 } },
+          representation: { _tag: "applicationRoute", applicationId: "application_semantic", route: "/", state: { b: 2, a: 1 } },
           status: "in-progress",
           geometry: { x: 0, y: 0, width: 10, height: 10 }
         }])
@@ -204,7 +204,7 @@ describe("SQLite CanvasAuthority", () => {
           _tag: "addFrame",
           frameId: `frame_handle_${index}`,
           title: `Frame ${index}`,
-          representation: { _tag: "web-url", url: `https://example.com/${index}` },
+          representation: { _tag: "webUrl", url: `https://example.com/${index}` },
           status: "in-progress",
           geometry: { x: index, y: 0, width: 10, height: 10 }
         }])

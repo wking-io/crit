@@ -72,7 +72,7 @@ export const ModelDescriptor = Schema.Struct({
 })
 export type ModelDescriptor = typeof ModelDescriptor.Type
 
-export const ReportedRuntime = Schema.TaggedStruct("reported-runtime", {
+export const ReportedRuntime = Schema.TaggedStruct("reportedRuntime", {
   source: Schema.Literal("client-reported"),
   harness: HarnessDescriptor,
   model: Schema.optionalKey(ModelDescriptor),

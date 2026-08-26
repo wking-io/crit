@@ -15,12 +15,12 @@ const person = {
 }
 
 const connectedPerson = {
-  _tag: "connected-person",
+  _tag: "connectedPerson",
   person
 }
 
 const roster = {
-  _tag: "presence-roster",
+  _tag: "presenceRoster",
   canvasId: "canvas_presence",
   people: [connectedPerson]
 }
@@ -44,7 +44,7 @@ describe("PresenceRoster", () => {
       people: [
         connectedPerson,
         {
-          _tag: "connected-person",
+          _tag: "connectedPerson",
           person: { ...person, displayName: "Another display name" }
         }
       ]

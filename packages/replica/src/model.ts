@@ -16,14 +16,14 @@ import {
 } from "@crit/protocol"
 import { Context, Data, type Effect, Schema } from "effect"
 
-export const ReplicaChange = Schema.TaggedStruct("replica-change", {
+export const ReplicaChange = Schema.TaggedStruct("replicaChange", {
   canvasId: CanvasId,
   commands: CanvasCommandBatch
 })
 export type ReplicaChange = typeof ReplicaChange.Type
 
 export const Ready = Schema.TaggedStruct("ready", {})
-export const AcceptedUnconfirmed = Schema.TaggedStruct("accepted-unconfirmed", {})
+export const AcceptedUnconfirmed = Schema.TaggedStruct("acceptedUnconfirmed", {})
 export const Conflicted = Schema.TaggedStruct("conflicted", { failure: CanvasChangeFailureSchema })
 export const Blocked = Schema.TaggedStruct("blocked", { blockedBy: Schema.NonEmptyArray(ChangeId) })
 export const PendingState = Schema.Union([Ready, AcceptedUnconfirmed, Conflicted, Blocked])
@@ -51,7 +51,7 @@ export const PendingChange = Schema.Struct({
 })
 export type PendingChange = typeof PendingChange.Type
 
-export const ReplicaView = Schema.TaggedStruct("replica-view", {
+export const ReplicaView = Schema.TaggedStruct("replicaView", {
   canvasId: CanvasId,
   acknowledgedCursor: CursorSchema,
   projection: CanvasProjection,
