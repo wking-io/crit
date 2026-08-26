@@ -1,18 +1,12 @@
 import { AuthorityModel, CreateCanvas } from "@crit/authority"
 import {
   AccessPersonEmail,
-  ApplicationId,
   AuthSubject,
-  DeploymentChannel,
-  DeploymentId,
-  DeploymentUrl,
   EmailAddress,
-  Id,
   IsoTimestamp,
   PersonEmail,
   PersonPrincipal,
   PersonSnapshot,
-  SourceRevision,
   type CanvasId,
   type CanvasTitle
 } from "@crit/domain"
@@ -21,7 +15,6 @@ import {
   decodeShareCanvasWire,
   encodeAccessAuthenticatedPersonWire,
   encodeCanvasSharedWire,
-  encodeDeploymentRegisteredWire,
   type RegisterDeploymentWire
 } from "@crit/protocol"
 import { Effect, Exit, Option, Schema } from "effect"
@@ -31,97 +24,17 @@ import {
   testClockCancelPath,
   testClockPath
 } from "./canvas-object.js"
+import { registerControlDeployment } from "./deployments.js"
 
 const testClocks = new Map<string, Effect.Effect<IsoTimestamp>>()
 const runningClocks = new Map<string, string>()
 const canceledClocks = new Set<string>()
-
-const deploymentTable = `
-CREATE TABLE IF NOT EXISTS deployments (
-  application_id TEXT NOT NULL,
-  channel TEXT NOT NULL,
-  deployment_id TEXT NOT NULL,
-  url TEXT NOT NULL,
-  source_revision TEXT,
-  expires_at TEXT,
-  PRIMARY KEY (application_id, channel)
-) STRICT;
-`
-
-const DeploymentRow = Schema.Struct({
-  deploymentId: DeploymentId,
-  applicationId: ApplicationId,
-  channel: DeploymentChannel,
-  url: DeploymentUrl,
-  sourceRevision: Schema.NullOr(SourceRevision),
-  expiresAt: Schema.NullOr(IsoTimestamp)
-})
-
-interface DeploymentDetails {
-  sourceRevision?: SourceRevision
-  expiresAt?: IsoTimestamp
-}
 
 const isDeploymentAuthorized = (
   request: Request,
   env: Cloudflare.Env
 ) => env.CRIT_DEPLOY_TOKEN.trim().length > 0
   && request.headers.get("Authorization") === `Bearer ${env.CRIT_DEPLOY_TOKEN}`
-
-const registerDeployment = async(
-  registration: RegisterDeploymentWire,
-  env: Cloudflare.Env
-) => {
-  await env.CONTROL.prepare(deploymentTable).run()
-  const deploymentId = Id.deployment(
-    `deployment_${crypto.randomUUID().replaceAll("-", "")}`
-  )
-  const result = await env.CONTROL.prepare(`
-    INSERT INTO deployments (
-      application_id,
-      channel,
-      deployment_id,
-      url,
-      source_revision,
-      expires_at
-    ) VALUES (?, ?, ?, ?, ?, ?)
-    ON CONFLICT (application_id, channel) DO UPDATE SET
-      url = excluded.url,
-      source_revision = excluded.source_revision,
-      expires_at = excluded.expires_at
-    RETURNING
-      deployment_id AS deploymentId,
-      application_id AS applicationId,
-      channel,
-      url,
-      source_revision AS sourceRevision,
-      expires_at AS expiresAt
-  `).bind(
-    registration.applicationId,
-    registration.channel,
-    deploymentId,
-    registration.url,
-    registration.sourceRevision ?? null,
-    registration.expiresAt ?? null
-  ).first()
-  const row = Schema.decodeUnknownSync(DeploymentRow)(result)
-  const details: DeploymentDetails = {}
-  if (row.sourceRevision !== null) {
-    details.sourceRevision = row.sourceRevision
-  }
-  if (row.expiresAt !== null) {
-    details.expiresAt = row.expiresAt
-  }
-  return encodeDeploymentRegisteredWire({
-    kind: "deployment-registered",
-    schemaVersion: 1,
-    deploymentId: row.deploymentId,
-    applicationId: row.applicationId,
-    channel: row.channel,
-    url: row.url,
-    ...details
-  })
-}
 
 interface RegisteredTestClock {
   readonly id: string
@@ -252,7 +165,7 @@ const worker: ExportedHandler<Cloudflare.Env> = {
         return new Response(null, { status: 400 })
       }
       try {
-        const body = await registerDeployment(registration, env)
+        const body = await registerControlDeployment(registration, env)
         return new Response(JSON.stringify(body), {
           status: 200,
           headers: { "content-type": "application/json" }
