@@ -58,6 +58,7 @@ import {
   BrowserSession,
   type BrowserSessionService
 } from "./browser-session.js"
+import { LinkedCanvasAuthority, rebaseIfRemoteCursorUnknown } from "./linked-authority.js"
 import { SqliteCanvasReplica } from "./sqlite-replica.js"
 import { LocalCanvasCatalog, SqliteCanvasAuthority } from "./sqlite.js"
 
@@ -69,6 +70,7 @@ export interface LocalDaemonOptions {
   readonly instance: LocalDaemonInstanceNonce
   readonly installationId: InstallationId
   readonly port?: number
+  readonly dataRoot?: string
 }
 
 const reconcileEagerly = (replica: CanvasReplicaService) =>
@@ -91,6 +93,7 @@ const handlers = (options: LocalDaemonOptions) => HttpApiBuilder.group(
     const authority = yield* CanvasAuthority
     const replica = yield* CanvasReplica
     const catalog = yield* LocalCanvasCatalog
+    const rebase = rebaseIfRemoteCursorUnknown(replica, authority)
     return group.handleAll({
       status: () => Effect.succeed(LocalDaemonStatus.make({
         version: 1,
@@ -104,7 +107,8 @@ const handlers = (options: LocalDaemonOptions) => HttpApiBuilder.group(
         yield* authority.create(payload, invocation)
         return yield* replica.open(payload.canvasId).pipe(Effect.orDie)
       }),
-      open: ({ params }) => replica.open(params.canvasId).pipe(
+      open: ({ params }) => rebase(params.canvasId).pipe(
+        Effect.andThen(replica.open(params.canvasId)),
         Effect.mapError((failure) => failure._tag === "ReplicaCanvasNotFound"
           ? AuthorityFailure.canvasNotFound({ canvasId: failure.canvasId })
           : failure),
@@ -113,6 +117,12 @@ const handlers = (options: LocalDaemonOptions) => HttpApiBuilder.group(
       ),
       change: Effect.fn(function*({ payload }) {
         const invocation = yield* AuthenticatedInvocation
+        yield* rebase(payload.canvasId).pipe(
+          Effect.mapError((failure) => failure._tag === "ReplicaCanvasNotFound"
+            ? AuthorityFailure.canvasNotFound({ canvasId: failure.canvasId })
+            : failure),
+          Effect.catchTag("ReplicaInvariantFailure", Effect.die)
+        )
         const receipt = yield* replica.change(payload, invocation).pipe(
           Effect.mapError((failure) => {
             switch (failure._tag) {
@@ -137,7 +147,8 @@ const handlers = (options: LocalDaemonOptions) => HttpApiBuilder.group(
         yield* reconcileEagerly(replica)(payload.canvasId)
         return receipt
       }),
-      sync: ({ params }) => replica.sync(params.canvasId).pipe(
+      sync: ({ params }) => rebase(params.canvasId).pipe(
+        Effect.andThen(replica.sync(params.canvasId)),
         Effect.mapError((failure) => failure._tag === "ReplicaNotOpen" || failure._tag === "ReplicaCanvasNotFound"
           ? AuthorityFailure.canvasNotFound({ canvasId: failure.canvasId })
           : failure),
@@ -674,9 +685,12 @@ const daemonLayer = (
   options: LocalDaemonOptions,
   browser: BrowserSessionService | undefined
 ) => {
-    const authority = SqliteCanvasAuthority.layer({ path: options.databasePath }).pipe(
+    const sqliteAuthority = SqliteCanvasAuthority.layer({ path: options.databasePath }).pipe(
       Layer.provide(AuthorityClockLive)
     )
+    const authority = options.dataRoot === undefined
+      ? sqliteAuthority
+      : LinkedCanvasAuthority.layer(options.dataRoot).pipe(Layer.provide(sqliteAuthority))
     const services = SqliteCanvasReplica.layer({ path: options.databasePath }).pipe(
       Layer.provide(changeIds),
       Layer.provideMerge(authority)

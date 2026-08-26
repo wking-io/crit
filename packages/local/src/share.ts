@@ -112,7 +112,7 @@ export interface ShareCanvasOptions {
   readonly projection: CanvasProjection
 }
 
-const readInstallation = (dataRoot: string) => Effect.gen(function*() {
+export const readLocalInstallation = (dataRoot: string) => Effect.gen(function*() {
   const fs = yield* FileSystem.FileSystem
   const path = yield* Path.Path
   const installationPath = path.join(dataRoot, "installation.json")
@@ -223,10 +223,30 @@ const rejectedShare = (status: number, body: string) => {
   }
 }
 
+export const readLocalShares = (dataRoot: string) => Effect.gen(function*() {
+  const fs = yield* FileSystem.FileSystem
+  const path = yield* Path.Path
+  const sharesPath = path.join(dataRoot, "shares.json")
+  const failure = (
+    operation: "inspect" | "read" | "decode" | "write"
+  ) => new SharePersistenceFailure({ operation, path: sharesPath })
+  const exists = yield* fs.exists(sharesPath).pipe(
+    Effect.mapError(() => failure("inspect"))
+  )
+  if (!exists) return LocalShares.make({ version: 1, canvases: [] })
+  return yield* fs.readFileString(sharesPath).pipe(
+    Effect.mapError(() => failure("read")),
+    Effect.flatMap((contents) => Effect.try({
+      try: () => decodeStored(LocalShares, contents),
+      catch: () => failure("decode")
+    }))
+  )
+})
+
 export const shareCanvas = (
   options: ShareCanvasOptions
 ) => Effect.gen(function*() {
-  const installation = yield* readInstallation(options.dataRoot)
+  const installation = yield* readLocalInstallation(options.dataRoot)
   const email = installation.principal.person.email
   const installationOrigin = installation.installationOrigin
   if (email._tag !== "access" || installationOrigin === undefined) {
