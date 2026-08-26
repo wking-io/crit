@@ -42,6 +42,34 @@ await page.waitForFunction(
 mkdirSync(proofDir, { recursive: true })
 await page.screenshot({ path: proofDir + "/access-live-iframe-first.png" })
 const iframeFirst = await page.evaluate(() => document.body.dataset.proof)
+const childFrames = page.frames().filter((frame) => frame !== page.mainFrame()).map((frame) => frame.url())
+let signIn = null
+const accessFrame = page.frames().find((frame) => frame.url().includes("cloudflareaccess.com"))
+if (accessFrame) {
+  try {
+    const clicked = await accessFrame.evaluate(() => {
+      const button = [...document.querySelectorAll("button, a, [role=button]")].find((el) => /cloudflare|sign in/i.test(el.textContent ?? ""))
+      if (!button) return false
+      button.click()
+      return true
+    })
+    await new Promise((resolve) => setTimeout(resolve, 4000))
+    await page.screenshot({ path: proofDir + "/access-live-iframe-signin.png" })
+    signIn = {
+      clicked,
+      frames: page.frames().filter((frame) => frame !== page.mainFrame()).map((frame) => {
+        try {
+          return { url: frame.url(), title: frame.url() }
+        } catch {
+          return { url: "unreadable" }
+        }
+      }),
+      status: await page.evaluate(() => document.body.dataset.proof)
+    }
+  } catch (error) {
+    signIn = { error: String(error) }
+  }
+}
 await browser.close()
 
 const report = {
@@ -57,6 +85,8 @@ const report = {
   preflightAcao: header(preflight, "access-control-allow-origin"),
   preflightXfo: header(preflight, "x-frame-options"),
   iframeFirst,
+  childFrames,
+  signIn,
   allowIframe: Boolean(login && !header(login, "x-frame-options") && !(header(login, "content-security-policy").includes("frame-ancestors 'none'")))
 }
 writeFileSync(proofDir + "/access-live-report.json", JSON.stringify(report, null, 2))

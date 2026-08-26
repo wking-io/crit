@@ -204,6 +204,13 @@ const html = ({ appOrigin, canvasOrigin, accessOrigin }) => `<!doctype html>
       paint()
     }
 
+    iframe.addEventListener("load", () => {
+      if (state.status === "loading" && state.accessOrigin && state.framing === "allowed") {
+        state.status = "gate"
+        paint()
+      }
+    })
+
     window.addEventListener("message", (event) => {
       if (accessOrigin && event.origin === accessOrigin && event.data?.source === "proto-access") {
         state.status = "gate"

@@ -10,11 +10,11 @@
   "checkoutStatus": 302,
   "checkoutLocationHost": "wking-dev.cloudflareaccess.com",
   "loginStatus": 200,
-  "loginXfo": "DENY",
-  "loginCsp": "frame-ancestors 'none'; connect-src 'self' http://127.0.0.1:*; default-src https: 'unsafe-inline'",
-  "preflightStatus": 403,
-  "preflightAcao": "",
-  "preflightXfo": "SAMEORIGIN",
+  "loginXfo": "",
+  "loginCsp": "connect-src 'self' http://127.0.0.1:*; default-src https: 'unsafe-inline'",
+  "preflightStatus": 200,
+  "preflightAcao": "https://proto-remote-canvas.contact-1c8.workers.dev",
+  "preflightXfo": "",
   "iframeFirst": "blocked",
-  "allowIframe": false
+  "allowIframe": true
 }

@@ -62,9 +62,7 @@ Live Workers on the logged-in account, no Turnstile:
 - Canvas `https://proto-remote-canvas.contact-1c8.workers.dev`
 - App `https://proto-remote-app.contact-1c8.workers.dev`
 
-Wrangler OAuth can deploy those. It cannot create or edit Access apps. Access is already on `proto-remote-app`. Checkout 302s to `wking-dev.cloudflareaccess.com`. The login page still sends `X-Frame-Options: DENY`.
-
-Turn on Allow iframe and CORS for `https://proto-remote-canvas.contact-1c8.workers.dev` on that Access app. Then `npm run prove:access-live` should flip `allowIframe` to true and `iframeFirst` off `blocked`.
+Wrangler OAuth can deploy those. It cannot create or edit Access apps. An Account API token with Access: Apps and Policies Edit can. After `allow_iframe` and CORS for the canvas origin, the Access login page drops `X-Frame-Options` and `frame-ancestors 'none'`. The login renders inside the canvas Frame. The canvas marks that `gate` on iframe load. Real Access does not send the mock `proto-access` postMessage.
 
 ```
 export CLOUDFLARE_API_TOKEN=...
