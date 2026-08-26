@@ -8,6 +8,7 @@ import {
   AuthSubject,
   CanvasId,
   ChangeId,
+  DeploymentId,
   ExecutionId,
   FrameId,
   HttpUrl,
@@ -27,6 +28,7 @@ const semanticIds = [
   { name: "PersonId", valid: "person_will", parse: Id.person, roundTrip: () => Schema.encodeSync(PersonId)(Id.person("person_will")) },
   { name: "AgentId", valid: "agent_codex", parse: Id.agent, roundTrip: () => Schema.encodeSync(AgentId)(Id.agent("agent_codex")) },
   { name: "ApplicationId", valid: "application_storefront", parse: Id.application, roundTrip: () => Schema.encodeSync(ApplicationId)(Id.application("application_storefront")) },
+  { name: "DeploymentId", valid: "deployment_review", parse: Id.deployment, roundTrip: () => Schema.encodeSync(DeploymentId)(Id.deployment("deployment_review")) },
   { name: "ArtifactId", valid: "artifact_capture", parse: Id.artifact, roundTrip: () => Schema.encodeSync(ArtifactId)(Id.artifact("artifact_capture")) },
   { name: "ChangeId", valid: "change_01KABC", parse: Id.change, roundTrip: () => Schema.encodeSync(ChangeId)(Id.change("change_01KABC")) },
   { name: "ExecutionId", valid: "execution_01KABC", parse: Id.execution, roundTrip: () => Schema.encodeSync(ExecutionId)(Id.execution("execution_01KABC")) }

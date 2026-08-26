@@ -5,6 +5,7 @@ export {
   AuthSubject,
   CanvasId,
   ChangeId,
+  DeploymentId,
   ExecutionId,
   FrameId,
   HttpUrl,
@@ -16,6 +17,14 @@ export {
   WorkspaceId
 } from "./ids.js"
 export { DomainValue } from "./value.js"
+
+export {
+  Deployment,
+  DeploymentChannel,
+  DeploymentUrl,
+  SourceRevision,
+  decodeDeployment
+} from "./deployment.js"
 
 export {
   AcceptedAttribution,

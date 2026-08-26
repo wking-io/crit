@@ -30,6 +30,14 @@ export type {
   RepresentationRuntimeService
 } from "./runtime.js"
 export {
+  DeploymentApplicationBindings,
+  DeploymentBindingConflict,
+  DeploymentIdentityConflict
+} from "./deployment-bindings.js"
+export type {
+  DeploymentApplicationBindingsOptions
+} from "./deployment-bindings.js"
+export {
   localRepresentationCapturePath,
   localRepresentationResolvePath,
   LocalRepresentationCaptureFailure,

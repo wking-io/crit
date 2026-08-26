@@ -30,6 +30,9 @@ export type AgentId = typeof AgentId.Type
 export const ApplicationId = semanticId("application_", "ApplicationId")
 export type ApplicationId = typeof ApplicationId.Type
 
+export const DeploymentId = semanticId("deployment_", "DeploymentId")
+export type DeploymentId = typeof DeploymentId.Type
+
 export const ArtifactId = semanticId("artifact_", "ArtifactId")
 export type ArtifactId = typeof ArtifactId.Type
 
@@ -77,6 +80,7 @@ export const Id = {
   person: Schema.decodeUnknownSync(PersonId),
   agent: Schema.decodeUnknownSync(AgentId),
   application: Schema.decodeUnknownSync(ApplicationId),
+  deployment: Schema.decodeUnknownSync(DeploymentId),
   artifact: Schema.decodeUnknownSync(ArtifactId),
   change: Schema.decodeUnknownSync(ChangeId),
   execution: Schema.decodeUnknownSync(ExecutionId)

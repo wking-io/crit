@@ -18,8 +18,8 @@ Plan: [phase 5](phase-05-review-ui.md), [phase 3](phase-03-local-daemon-and-cli.
 - [ ] Inspect a Representation. `RepresentationRuntime` in the overview still names it. Nothing implements it.
 - [ ] Frame Bridge capability negotiation, route/revision reporting, highlighting, authorized inspection.
 - [ ] Bridge off in ordinary production. Opt-in only on shared review previews.
-- [ ] Same Frame resolves to localhost for the author and a registered preview for a teammate.
-- [ ] Shared Deployment bindings.
+- [x] Same Frame resolves to localhost for the author and a registered preview for a teammate.
+- [x] Shared Deployment bindings.
 - [ ] Host UI that can open a Canvas other than `canvas_local`. CLI already can.
 
 ### Share and hosted review
@@ -78,6 +78,7 @@ Local Frames authoring on one machine.
 - Review UI no longer adds Frames
 - Contextual help and keyboard shortcuts from the review action table
 - Snapshot a live Frame into a new artifact Frame (`S`)
+- In-memory shared Deployment record and ApplicationBindings adapter. D1 persistence and Worker registration remain.
 - Local review pending resolves. The daemon reconciles after open and change.
 - Mid-session daemon loss keeps the last projection and shows a connection alert.
 - Enqueue rejection is a submit notice. Conflict repair stays later.
