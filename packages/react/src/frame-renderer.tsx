@@ -4,7 +4,9 @@ import {
 } from "@crit/domain"
 import {
   connectBridgedFrameInput,
+  connectLiveFrameRoute,
   critFrameInputBridgeScript,
+  critFrameRouteBridgeScript,
   frameBridgeOriginFromHref
 } from "@crit/frame-bridge"
 import {
@@ -39,6 +41,7 @@ export interface FrameRendererProps {
   readonly resolver: FrameRepresentationResolver
   readonly className?: string
   readonly onInputIntent?: (intent: FrameInputIntent) => void
+  readonly onRouteChange?: (route: string) => void
   readonly paused?: boolean
 }
 
@@ -136,11 +139,13 @@ const frameOrigin = (url: string): FrameBridgeOrigin | undefined => {
 function LiveFrame({
   className,
   onInputIntent,
+  onRouteChange,
   plan,
   title
 }: {
   readonly className: string | undefined
   readonly onInputIntent?: (intent: FrameInputIntent) => void
+  readonly onRouteChange?: (route: string) => void
   readonly plan: Extract<RenderPlan, { readonly _tag: "iframe" }>
   readonly title: Frame["title"]
 }): ReactElement {
@@ -184,6 +189,44 @@ function LiveFrame({
     }
   }, [onInputIntent, plan.url])
 
+  useEffect(() => {
+    if (onRouteChange === undefined) return
+    const iframe = iframeRef.current
+    const origin = frameOrigin(plan.url)
+    if (iframe === null || origin === undefined) return
+    const disconnect = connectLiveFrameRoute({
+      target: window,
+      frameElement: iframe,
+      frameOrigin: origin,
+      onRoute: onRouteChange
+    })
+    const parentOrigin = Option.getOrUndefined(
+      frameBridgeOriginFromHref(window.location.href)
+    )
+    const inject = () => {
+      if (parentOrigin === undefined) return
+      try {
+        const frameDocument = iframe.contentDocument
+        if (
+          frameDocument === null ||
+          frameDocument.querySelector("script[data-crit-route-bridge]") !== null
+        ) return
+        const script = frameDocument.createElement("script")
+        script.dataset.critRouteBridge = ""
+        script.textContent = critFrameRouteBridgeScript({ parentOrigin })
+        frameDocument.documentElement.append(script)
+      } catch {
+        return
+      }
+    }
+    iframe.addEventListener("load", inject)
+    inject()
+    return () => {
+      iframe.removeEventListener("load", inject)
+      disconnect()
+    }
+  }, [onRouteChange, plan.url])
+
   return (
     <UnsandboxedLiveReviewIframe
       className={className}
@@ -197,11 +240,13 @@ function LiveFrame({
 const ResolvedFrame = ({
   className,
   onInputIntent,
+  onRouteChange,
   plan,
   title
 }: {
   readonly className: string | undefined
   readonly onInputIntent?: (intent: FrameInputIntent) => void
+  readonly onRouteChange?: (route: string) => void
   readonly plan: RenderPlan
   readonly title: Frame["title"]
 }): ReactElement => Match.value(plan).pipe(Match.tagsExhaustive({
@@ -209,6 +254,7 @@ const ResolvedFrame = ({
     <LiveFrame
       className={className}
       {...(onInputIntent === undefined ? {} : { onInputIntent })}
+      {...(onRouteChange === undefined ? {} : { onRouteChange })}
       plan={iframe}
       title={title}
     />
@@ -227,6 +273,7 @@ export function FrameRenderer({
   className,
   frame,
   onInputIntent,
+  onRouteChange,
   paused = false,
   resolver
 }: FrameRendererProps): ReactElement {
@@ -263,6 +310,7 @@ export function FrameRenderer({
     <ResolvedFrame
       className={className}
       {...(onInputIntent === undefined ? {} : { onInputIntent })}
+      {...(onRouteChange === undefined ? {} : { onRouteChange })}
       plan={query.data}
       title={frame.title}
     />

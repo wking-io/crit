@@ -80,7 +80,8 @@ _Avoid_: OAuth grant holder
 
 **Presence**: Ephemeral awareness of connected People and active Agent Executions. Presence is not Canvas history.
 
-**Frame Bridge**: The versioned browser protocol used for input relay, route and revision reporting, highlighting, and authorized inspection.
+**Frame Bridge**: The versioned browser protocol that lets the host assign a live Frame URL and receive the page's route.
+_Avoid_: session, capability negotiation, highlight, authorized inspection
 
 **Hosted Review UI**: The Crit review interface served from the customer Installation. People use it after share. They do not install Crit.
 _Avoid_: remote MCP, shared agent endpoint

@@ -367,7 +367,7 @@ describe("CanvasBoard selection", () => {
     }
   )
 
-  it("selects a Frame from its bridged select intent without moving the camera", async() => {
+  it("does not select a Frame from bridged input traffic", async() => {
     const onCameraChange = vi.fn()
     const onSelectionChange = vi.fn()
     await renderReady(
@@ -398,8 +398,8 @@ describe("CanvasBoard selection", () => {
       }))
     })
 
-    expect(onSelectionChange).toHaveBeenCalledTimes(1)
-    expect(onSelectionChange).toHaveBeenCalledWith(checkoutSelection)
+    expect(container.querySelector("[data-crit-frame-capture]")).not.toBeNull()
+    expect(onSelectionChange).not.toHaveBeenCalled()
     expect(onCameraChange).not.toHaveBeenCalled()
   })
 

@@ -126,7 +126,9 @@ Local bindings belong to project and machine configuration. Shared Applications 
 
 ## Frame Bridge
 
-The framework-neutral Frame Bridge provides a versioned browser protocol for input relay, element anchors, route and revision reporting, anchor health, highlighting, and authorized inspection.
+The host sets a live Frame URL by assigning iframe src. The page reports pathname plus search on a one-way channel. Wrong origin stays silent.
+
+Unselected Frames use a capture overlay. The sole selected Frame is native-interactive.
 
 The bridge activation matrix is closed:
 
@@ -157,7 +159,7 @@ The hosted review UI talks to the Worker and Canvas Durable Object directly. A r
 
 ## Explicit v1 exclusions
 
-Crit v1 has no whole-Canvas CRDT, cross-Canvas transaction, automatic localhost tunnel, unrestricted URL proxy, multi-Organization tenancy, MCP server, Code Mode runtime, or OAuth agent grant. Git and document diffs are not synchronization protocols.
+Crit v1 has no whole-Canvas CRDT, cross-Canvas transaction, automatic localhost tunnel, unrestricted URL proxy, multi-Organization tenancy, MCP server, Code Mode runtime, or OAuth agent grant. Git and document diffs are not synchronization protocols. Frame Bridge has no session, highlight, inspect, or capability set.
 
 ## Verification
 

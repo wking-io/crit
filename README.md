@@ -57,7 +57,7 @@ One Installation is one tenant. Crit v1 has no Organization model.
 
 A Frame stores a logical Representation, not an environment URL. An Application Route can resolve to localhost for a developer and a registered preview for a teammate. An immutable Artifact resolves to the same digest everywhere.
 
-The Frame Bridge is on in local development. Ordinary production builds and previews keep it off. An explicit shared review preview can opt in.
+The Frame Bridge reports the live page route. It is on in local development. Ordinary production builds and previews keep it off. An explicit shared review preview can opt in.
 
 ## Register previews from CI
 

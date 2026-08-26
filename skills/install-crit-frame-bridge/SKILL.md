@@ -1,9 +1,11 @@
 ---
 name: install-crit-frame-bridge
-description: Installs or configures the Crit Frame Bridge in a web application with development-only activation and production verification. Use when adding Crit live-page comments, frame input relay, DOM-aware review, or Crit bridge instrumentation to a host project.
+description: Installs or configures the Crit Frame Bridge in a web application with development-only activation and production verification. Use when adding Crit route reporting or Crit bridge instrumentation to a host project.
 ---
 
 # Install Crit Frame Bridge
+
+The Frame Bridge reports the live page route. The host assigns iframe src.
 
 Install the narrowest adapter supported by the host. Preserve its package manager,
 framework conventions, build modes, and existing configuration.
@@ -34,9 +36,7 @@ Configure every bridge switch explicitly. Do not rely on package defaults.
      return {
        plugins: [
          crit({
-           enabled: critEnabled,
-           frameInputBridge: critEnabled,
-           frameCommentBridge: critEnabled
+           enabled: critEnabled
          })
        ]
      }
@@ -54,14 +54,14 @@ Configure every bridge switch explicitly. Do not rely on package defaults.
    embedded credentials, or automatic localhost tunneling.
 6. Verify both branches:
    - Start the development command, open an instrumented page inside Crit, and
-     prove the input and comment bridge handshake works.
+     prove the page can report its route.
    - Run the real production build and production preview. Inspect emitted HTML
      and assets for `data-crit-frame-input-bridge`,
-     `data-crit-frame-comment-bridge`, and `@riff-refine/crit/frame-`. Finish
-     only when all are absent and the application still works.
+     `data-crit-frame-comment-bridge`, `data-crit-route-bridge`, and
+     `@riff-refine/crit/frame-`. Finish only when all are absent and the
+     application still works.
 7. Run the project's focused checks and report the files changed, development
-   activation condition, production proof, and any reduced capability caused
-   by CSP or an unsupported adapter.
+   activation condition, and production proof.
 
 ## Shared review preview opt-in
 

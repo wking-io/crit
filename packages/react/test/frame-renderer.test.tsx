@@ -6,7 +6,9 @@ import {
 } from "@crit/domain"
 import {
   FRAME_INPUT_BRIDGE_SCHEMA_VERSION,
-  FRAME_INPUT_BRIDGE_SOURCE
+  FRAME_INPUT_BRIDGE_SOURCE,
+  FRAME_ROUTE_BRIDGE_SCHEMA_VERSION,
+  FRAME_ROUTE_BRIDGE_SOURCE
 } from "@crit/protocol"
 import {
   ApplicationUnavailableRenderPlan,
@@ -154,6 +156,52 @@ describe("FrameRenderer", () => {
     })
   })
 
+  it("injects and connects the route bridge for a same-origin live iframe", async() => {
+    const url = "https://example.com/fixture-route"
+    const resolver: FrameRepresentationResolver = {
+      resolve: () => Effect.succeed(iframePlan(url))
+    }
+    const onRouteChange = vi.fn()
+
+    await act(async() => render(
+      <FrameRenderer
+        frame={frame("change_frame_route_bridge")}
+        onRouteChange={onRouteChange}
+        resolver={resolver}
+      />
+    ))
+    await waitFor(() => expect(container.querySelector("iframe")).not.toBeNull())
+    const iframe = container.querySelector("iframe")
+    if (iframe === null) throw new Error("Expected a live Frame")
+    const frameDocument = prepareFrameDocument(iframe)
+
+    iframe.dispatchEvent(new Event("load"))
+    iframe.dispatchEvent(new Event("load"))
+
+    const scripts = frameDocument.querySelectorAll(
+      "script[data-crit-route-bridge]"
+    )
+    expect(scripts).toHaveLength(1)
+    expect(scripts[0]?.textContent).toContain(FRAME_ROUTE_BRIDGE_SOURCE)
+
+    const frameWindow = iframe.contentWindow
+    if (frameWindow === null) throw new Error("Expected a live Frame window")
+    onRouteChange.mockClear()
+    await act(async() => {
+      window.dispatchEvent(new MessageEvent("message", {
+        origin: new URL(url).origin,
+        source: frameWindow,
+        data: {
+          source: FRAME_ROUTE_BRIDGE_SOURCE,
+          schemaVersion: FRAME_ROUTE_BRIDGE_SCHEMA_VERSION,
+          route: "/checkout?x=1"
+        }
+      }))
+    })
+
+    expect(onRouteChange).toHaveBeenCalledWith("/checkout?x=1")
+  })
+
   it("does not inject the input bridge without an input callback", async() => {
     const url = "https://example.com/fixture-without-input"
     const resolver: FrameRepresentationResolver = {
@@ -175,6 +223,9 @@ describe("FrameRenderer", () => {
 
     expect(
       frameDocument.querySelector("script[data-crit-input-bridge]")
+    ).toBeNull()
+    expect(
+      frameDocument.querySelector("script[data-crit-route-bridge]")
     ).toBeNull()
   })
 
