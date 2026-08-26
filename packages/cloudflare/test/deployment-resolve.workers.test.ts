@@ -36,20 +36,23 @@ const postDeployment = (applicationId: string, channel = "review") => SELF.fetch
 const resolve = (
   representation: ApplicationRouteRepresentation,
   access = true
-) => SELF.fetch(`https://crit.example${hostedApplicationResolvePath}`, {
-  method: "POST",
-  headers: {
-    ...(access
-      ? { "Cf-Access-Authenticated-User-Email": "ada@acme.com" }
-      : {}),
+) => {
+  const headers: Record<string, string> = {
     "content-type": "application/json"
-  },
-  body: JSON.stringify(encodeHostedApplicationResolveRequest({
-    kind: "resolveApplicationRoute",
-    schemaVersion: 1,
-    representation
-  }))
-})
+  }
+  if (access) {
+    headers["Cf-Access-Authenticated-User-Email"] = "ada@acme.com"
+  }
+  return SELF.fetch(`https://crit.example${hostedApplicationResolvePath}`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(encodeHostedApplicationResolveRequest({
+      kind: "resolveApplicationRoute",
+      schemaVersion: 1,
+      representation
+    }))
+  })
+}
 
 describe("Worker hosted application route resolve", () => {
   it("requires Access", async() => {

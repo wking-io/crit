@@ -1,6 +1,7 @@
 import {
   AuthorityModel,
-  type AuthorityView
+  type AuthorityView,
+  type SubmitCanvasChangeFailure
 } from "@crit/authority"
 import type { RemoteCanvasAuthorityService } from "@crit/client"
 import {
@@ -124,20 +125,29 @@ export const hostedReplicaSessionPorts = (
   const change: ReplicaSessionPorts["change"] = ({
     canvasId,
     commands
-  }) => Effect.gen(function*() {
-    const receipt = yield* deps.authority.submit({
-      changeId: mintChangeId(),
-      canvasId,
-      observedCursor: cursors.get(canvasId) ?? null,
-      commands
-    }, AuthorityModel.personInvocation({ principal: deps.principal }))
-    cursors.set(canvasId, receipt.change.cursor)
-    const view = yield* deps.authority.open(canvasId)
-    cursors.set(canvasId, view.cursor)
-    return widen(view)
-  }).pipe(
-    Effect.matchCauseEffect({
-      onFailure: (cause) => {
+  }) => {
+    const changed: Effect.Effect<
+      ReplicaView,
+      SubmitCanvasChangeFailure
+    > = Effect.gen(function*() {
+      const receipt = yield* deps.authority.submit({
+        changeId: mintChangeId(),
+        canvasId,
+        observedCursor: cursors.get(canvasId) ?? null,
+        commands
+      }, AuthorityModel.personInvocation({ principal: deps.principal }))
+      cursors.set(canvasId, receipt.change.cursor)
+      const view = yield* deps.authority.open(canvasId)
+      cursors.set(canvasId, view.cursor)
+      return widen(view)
+    })
+    return changed.pipe(Effect.matchCauseEffect({
+      onFailure: (
+        cause
+      ): Effect.Effect<
+        never,
+        ReplicaSessionUnavailable | ReplicaChangeRejected
+      > => {
         const found = Cause.findError(cause)
         if (Result.isSuccess(found) && found.success._tag === "changeRejected") {
           return Effect.fail(new ReplicaChangeRejected({
@@ -151,9 +161,9 @@ export const hostedReplicaSessionPorts = (
           : "The hosted service is unreachable."
         return Effect.fail(unavailable(canvasId, reason))
       },
-      onSuccess: Effect.succeed
-    })
-  )
+      onSuccess: (view) => Effect.succeed(view)
+    }))
+  }
 
   return { open, subscribe, change }
 }

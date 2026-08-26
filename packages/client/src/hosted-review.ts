@@ -4,9 +4,7 @@ import {
   decodeCanvasDirectoryWire,
   decodeHostedApplicationResolveResponse,
   encodeHostedApplicationResolveRequest,
-  hostedApplicationResolvePath,
-  type CanvasDirectoryWire,
-  type HostedApplicationResolveResponse
+  hostedApplicationResolvePath
 } from "@crit/protocol"
 import { CanvasListing } from "@crit/replica/http"
 import { RenderPlan } from "@crit/representations"
@@ -45,21 +43,16 @@ const unavailable = (operation: string) => new HostedReviewUnreachable({
   reason: `The hosted ${operation} request failed.`
 })
 
-const responseJson = <A>(
+const responseJson = (
   response: HttpClientResponse.HttpClientResponse,
-  decode: (input: unknown) => A,
   operation: string
-): Effect.Effect<A, HostedReviewFailure> => {
+): Effect.Effect<unknown, HostedReviewFailure> => {
   if (response.status === 401) return Effect.fail(new HostedAccessDenied())
   if (response.status !== 200) return Effect.fail(unavailable(operation))
   return response.text.pipe(
     Effect.mapError(() => unavailable(operation)),
     Effect.flatMap((contents) => Effect.try({
       try: () => JSON.parse(contents),
-      catch: () => unavailable(operation)
-    })),
-    Effect.flatMap((input) => Effect.try({
-      try: () => decode(input),
       catch: () => unavailable(operation)
     }))
   )
@@ -87,9 +80,12 @@ export class HostedReviewClient extends Context.Service<
       ).pipe(
         Effect.flatMap((response) => responseJson(
           response,
-          decodeAccessAuthenticatedPersonWire,
           "identity"
         )),
+        Effect.flatMap((body) => Effect.try({
+          try: () => decodeAccessAuthenticatedPersonWire(body),
+          catch: () => unavailable("identity")
+        })),
         Effect.map((wire) => wire.address)
       )
       const directory = () => execute(
@@ -98,10 +94,13 @@ export class HostedReviewClient extends Context.Service<
       ).pipe(
         Effect.flatMap((response) => responseJson(
           response,
-          decodeCanvasDirectoryWire,
           "canvas directory"
         )),
-        Effect.map((wire: CanvasDirectoryWire) => wire.canvases.map((entry) =>
+        Effect.flatMap((body) => Effect.try({
+          try: () => decodeCanvasDirectoryWire(body),
+          catch: () => unavailable("canvas directory")
+        })),
+        Effect.map((wire) => wire.canvases.map((entry) =>
           CanvasListing.make({
             canvasId: entry.canvasId,
             title: entry.title
@@ -125,10 +124,13 @@ export class HostedReviewClient extends Context.Service<
       ).pipe(
         Effect.flatMap((response) => responseJson(
           response,
-          decodeHostedApplicationResolveResponse,
           "application route"
         )),
-        Effect.flatMap((wire: HostedApplicationResolveResponse) =>
+        Effect.flatMap((body) => Effect.try({
+          try: () => decodeHostedApplicationResolveResponse(body),
+          catch: () => unavailable("application route")
+        })),
+        Effect.flatMap((wire) =>
           Schema.decodeUnknownEffect(RenderPlan)(wire).pipe(
             Effect.mapError(() => unavailable("application route"))
           ))

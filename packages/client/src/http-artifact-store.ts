@@ -1,4 +1,7 @@
-import type { ArtifactId, ArtifactRepresentation } from "@crit/domain"
+import {
+  ArtifactRepresentation,
+  type ArtifactId
+} from "@crit/domain"
 import {
   ArtifactContentCorrupt,
   ArtifactDigestConflict,
@@ -61,36 +64,36 @@ export const HttpArtifactStore = {
             "application/octet-stream"
           )
         )
-        return execute(request, failure).pipe(
-          Effect.flatMap((response) => {
-            if (response.status === 200) {
-              return responseJson(response, failure).pipe(
-                Effect.flatMap((body) => Effect.try({
-                  try: () => decodeArtifactStoredWire(body),
-                  catch: () => failure
-                }))
-              )
-            }
-            if (response.status === 409) {
-              return responseJson(response, failure).pipe(
-                Effect.flatMap((body) =>
-                  Schema.decodeUnknownEffect(ArtifactDigestConflict)(body).pipe(
-                    Effect.mapError(() => failure)
-                  )),
-                Effect.flatMap((conflict) => Effect.fail(new ArtifactConflict({
-                  artifactId: conflict.artifactId,
-                  storedDigest: conflict.storedDigest,
-                  suppliedDigest: conflict.suppliedDigest
-                })))
-              )
-            }
-            return Effect.fail(ioFailure(
+        return Effect.gen(function*() {
+          const response = yield* execute(request, failure)
+          if (response.status === 200) {
+            const body = yield* responseJson(response, failure)
+            const stored = yield* Effect.try({
+              try: () => decodeArtifactStoredWire(body),
+              catch: () => failure
+            })
+            return ArtifactRepresentation.make({
+              artifactId: stored.artifactId,
+              digest: stored.digest
+            })
+          }
+          if (response.status === 409) {
+            const body = yield* responseJson(response, failure)
+            const conflict = yield* Schema.decodeUnknownEffect(
+              ArtifactDigestConflict
+            )(body).pipe(Effect.mapError(() => failure))
+            return yield* Effect.fail(new ArtifactConflict({
+              artifactId: conflict.artifactId,
+              storedDigest: conflict.storedDigest,
+              suppliedDigest: conflict.suppliedDigest
+            }))
+          }
+          return yield* Effect.fail(ioFailure(
               input.artifactId,
               "put",
               `Hosted artifact write returned ${response.status}`
-            ))
-          })
-        )
+          ))
+        })
       }
 
       const read: ArtifactStore["Service"]["read"] = (
@@ -104,36 +107,33 @@ export const HttpArtifactStore = {
         const url = `${rootUrl(options.baseUrl)}${remoteArtifactPath(
           artifact.artifactId
         )}?digest=${encodeURIComponent(artifact.digest)}`
-        return execute(HttpClientRequest.get(url), failure).pipe(
-          Effect.flatMap((response) => {
-            if (response.status === 200) {
-              return response.arrayBuffer.pipe(
-                Effect.map((buffer) => new Uint8Array(buffer)),
-                Effect.mapError(() => failure)
-              )
-            }
-            if (response.status === 404) {
-              return Effect.fail(new ArtifactNotFound({ artifact }))
-            }
-            if (response.status === 409) {
-              return responseJson(response, failure).pipe(
-                Effect.flatMap((body) =>
-                  Schema.decodeUnknownEffect(ArtifactContentCorrupt)(body).pipe(
-                    Effect.mapError(() => failure)
-                  )),
-                Effect.flatMap((corrupt) => Effect.fail(new ArtifactCorrupt({
-                  artifact,
-                  actualDigest: corrupt.actualDigest
-                })))
-              )
-            }
-            return Effect.fail(ioFailure(
+        return Effect.gen(function*() {
+          const response = yield* execute(HttpClientRequest.get(url), failure)
+          if (response.status === 200) {
+            const buffer = yield* response.arrayBuffer.pipe(
+              Effect.mapError(() => failure)
+            )
+            return new Uint8Array(buffer)
+          }
+          if (response.status === 404) {
+            return yield* Effect.fail(new ArtifactNotFound({ artifact }))
+          }
+          if (response.status === 409) {
+            const body = yield* responseJson(response, failure)
+            const corrupt = yield* Schema.decodeUnknownEffect(
+              ArtifactContentCorrupt
+            )(body).pipe(Effect.mapError(() => failure))
+            return yield* Effect.fail(new ArtifactCorrupt({
+              artifact,
+              actualDigest: corrupt.actualDigest
+            }))
+          }
+          return yield* Effect.fail(ioFailure(
               artifact.artifactId,
               "read",
               `Hosted artifact read returned ${response.status}`
-            ))
-          })
-        )
+          ))
+        })
       }
 
       return ArtifactStore.of({ put, read })
