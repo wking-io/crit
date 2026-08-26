@@ -16,6 +16,7 @@ import { HostIndexView, HostScreenView } from "./host-views.js"
 
 export type HostRouterContext = {
   readonly fragment: string
+  readonly origin: string
 }
 
 const rootRoute = createRootRouteWithContext<HostRouterContext>()({
@@ -26,8 +27,8 @@ const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/",
   component: function HostIndexPage(): ReactElement {
-    const { fragment } = useRouter().options.context
-    return <HostIndexView fragment={fragment} />
+    const { fragment, origin } = useRouter().options.context
+    return <HostIndexView fragment={fragment} origin={origin} />
   }
 })
 
@@ -35,10 +36,12 @@ const canvasRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/canvas/$canvasId",
   component: function HostCanvasPage(): ReactElement {
-    const { fragment } = useRouter().options.context
+    const { fragment, origin } = useRouter().options.context
     return Result.match(parseHostCanvasId(canvasRoute.useParams().canvasId), {
       onFailure: () => <p role="alert">That is not a Canvas ID.</p>,
-      onSuccess: (canvasId) => <HostScreenView canvasId={canvasId} fragment={fragment} />
+      onSuccess: (canvasId) => (
+        <HostScreenView canvasId={canvasId} fragment={fragment} origin={origin} />
+      )
     })
   }
 })
@@ -47,21 +50,26 @@ export const hostRouteTree = rootRoute.addChildren([indexRoute, canvasRoute])
 
 export const createHostRouter = (options: {
   readonly fragment: string
+  readonly origin: string
   readonly history?: RouterHistory | undefined
 }) =>
   createRouter({
     routeTree: hostRouteTree,
-    context: { fragment: options.fragment },
+    context: {
+      fragment: options.fragment,
+      origin: options.origin
+    },
     defaultNotFoundComponent: () => <p role="alert">That page does not exist.</p>,
     history: options.history ?? createBrowserHistory(),
     scrollRestoration: () => false
   })
 
-export function HostRouter({ fragment, history }: {
+export function HostRouter({ fragment, history, origin }: {
   readonly fragment: string
   readonly history?: RouterHistory | undefined
+  readonly origin: string
 }): ReactElement {
-  const [router] = useState(() => createHostRouter({ fragment, history }))
+  const [router] = useState(() => createHostRouter({ fragment, history, origin }))
   return <RouterProvider router={router} />
 }
 

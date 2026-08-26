@@ -19,10 +19,15 @@ let root: Root
 
 const render = (element: ReactElement) => root.render(<StrictMode>{element}</StrictMode>)
 
-const hostAt = (path: string, fragment: string) => (
+const hostAt = (
+  path: string,
+  fragment: string,
+  origin = "http://127.0.0.1:5173"
+) => (
   <HostRoot
     fragment={fragment}
     history={createMemoryHistory({ initialEntries: [path] })}
+    origin={origin}
   />
 )
 
@@ -36,6 +41,7 @@ afterEach(async() => {
   await act(async() => root.unmount())
   container.remove()
   vi.restoreAllMocks()
+  vi.unstubAllGlobals()
 })
 
 describe("HostRoot", () => {
@@ -111,4 +117,74 @@ describe("HostRoot", () => {
       { timeout: 10_000 }
     ))
   }, 15_000)
+
+  it("lists hosted canvases from the same-origin directory", async() => {
+    const fetch = vi.fn(async() => new Response(JSON.stringify({
+      kind: "canvas-directory",
+      schemaVersion: 1,
+      canvases: [{
+        canvasId: "canvas_hosted",
+        workspaceId: "workspace_default",
+        title: "Hosted review"
+      }]
+    }), {
+      status: 200,
+      headers: { "content-type": "application/json" }
+    }))
+    vi.stubGlobal("fetch", fetch)
+
+    await act(async() => render(hostAt("/", "", "https://crit.example")))
+
+    await act(async() => vi.waitFor(() => {
+      expect(container.querySelector("a")?.textContent).toBe("Hosted review")
+    }))
+    expect(fetch).toHaveBeenCalledWith(
+      "/canvas",
+      expect.objectContaining({ method: "GET" })
+    )
+  })
+
+  it("builds hosted canvas ports without a local capability", async() => {
+    const fetch = vi.fn(async(input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url === "/identity") {
+        return new Response(JSON.stringify({
+          kind: "access-authenticated-person",
+          schemaVersion: 1,
+          address: "ada@acme.com"
+        }), {
+          status: 200,
+          headers: { "content-type": "application/json" }
+        })
+      }
+      return new Response(JSON.stringify({
+        _tag: "canvasNotFound",
+        canvasId: "canvas_shop"
+      }), {
+        status: 404,
+        headers: { "content-type": "application/json" }
+      })
+    })
+    vi.stubGlobal("fetch", fetch)
+
+    await act(async() => render(hostAt(
+      "/canvas/canvas_shop",
+      "",
+      "https://crit.example"
+    )))
+
+    await act(async() => vi.waitFor(() =>
+      expect(container.querySelector("[role='alert']")?.textContent).toBe(
+        "The canvas does not exist."
+      )
+    ))
+    expect(fetch).toHaveBeenCalledWith(
+      "/identity",
+      expect.objectContaining({ method: "GET" })
+    )
+    expect(fetch).toHaveBeenCalledWith(
+      "/canvas/canvas_shop",
+      expect.objectContaining({ method: "GET" })
+    )
+  })
 })

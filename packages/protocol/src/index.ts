@@ -58,6 +58,15 @@ export {
   encodeRegisterDeploymentWire,
   RegisterDeploymentWire
 } from "./deployment.js"
+export {
+  decodeHostedApplicationResolveRequest,
+  decodeHostedApplicationResolveResponse,
+  encodeHostedApplicationResolveRequest,
+  encodeHostedApplicationResolveResponse,
+  HostedApplicationResolveRequest,
+  HostedApplicationResolveResponse,
+  hostedApplicationResolvePath
+} from "./hosted-representation.js"
 export type {
   AcceptedCanvasChange,
   ChangePage,

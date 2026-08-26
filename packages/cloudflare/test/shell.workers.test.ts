@@ -20,9 +20,9 @@ describe("Worker hosted shell", () => {
 
     expect(home.status).toBe(200)
     expect(home.headers.get("content-type")).toContain("text/html")
-    expect(await home.text()).toContain("Canvases")
+    expect(await home.text()).toContain("id=\"root\"")
     expect(canvas.status).toBe(200)
-    expect(await canvas.text()).toContain("Canvases")
+    expect(await canvas.text()).toContain("id=\"root\"")
     expect(missing.status).toBe(404)
   })
 

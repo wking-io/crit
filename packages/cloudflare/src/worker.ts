@@ -13,6 +13,7 @@ import {
   encodeAccessAuthenticatedPersonWire,
   encodeCanvasDirectoryWire,
   encodeCanvasSharedWire,
+  hostedApplicationResolvePath,
   parseArtifactPath,
   parseRemoteAuthorityPath,
   remoteCanvasCollectionPath,
@@ -29,6 +30,7 @@ import {
   testClockPath
 } from "./canvas-object.js"
 import { registerControlDeployment } from "./deployments.js"
+import { handleHostedApplicationResolve } from "./hosted-representation.js"
 import { handleLedgerRequest } from "./ledger-http.js"
 import { isDocumentRequest, isHostDocumentPath, serveShell } from "./shell.js"
 import {
@@ -308,6 +310,9 @@ const worker: ExportedHandler<Cloudflare.Env> = {
       return serveShell(request, env)
     }
     if (url.pathname === "/deployments") return registerDeployment(request, env)
+    if (url.pathname === hostedApplicationResolvePath) {
+      return handleHostedApplicationResolve(request, env)
+    }
     if (url.pathname === "/identity") return readIdentity(request)
     if (url.pathname === remoteCanvasCollectionPath) {
       if (request.method === "GET") return readCanvasDirectory(request, env)
