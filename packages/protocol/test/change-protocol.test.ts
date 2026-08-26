@@ -104,17 +104,19 @@ describe("ChangeProtocol", () => {
     expect(Object.keys(await import("../src/index.js")).sort()).toEqual([
       "AcceptedCanvasChangeSchema", "AccessAuthenticatedPersonWire",
       "CanvasSharedWire", "ChangePageSchema", "ChangeProtocol", "ChangeValue",
-      "CritProjectManifestV2", "CursorSchema",
+      "CritProjectManifestV2", "CursorSchema", "DeploymentRegisteredWire",
       "FRAME_INPUT_BRIDGE_SCHEMA_VERSION", "FRAME_INPUT_BRIDGE_SOURCE",
       "FrameBridgeOrigin",
       "FrameInputBridgeMessageSchema", "FrameInputIntentSchema",
       "PresenceChangedSchema", "ProposedCanvasChangeSchema", "ProtocolValue",
-      "ReplicaChangedSchema", "SequenceSchema",
+      "RegisterDeploymentWire", "ReplicaChangedSchema", "SequenceSchema",
       "ShareCanvasWire", "SubmitChangeReceiptSchema",
       "decodeAccessAuthenticatedPersonWire", "decodeCanvasSharedWire",
-      "decodeCritProjectManifestV2", "decodeFrameInputBridgeMessage",
+      "decodeCritProjectManifestV2", "decodeDeploymentRegisteredWire",
+      "decodeFrameInputBridgeMessage", "decodeRegisterDeploymentWire",
       "decodeShareCanvasWire", "encodeAccessAuthenticatedPersonWire",
       "encodeCanvasSharedWire", "encodeCritProjectManifestV2",
+      "encodeDeploymentRegisteredWire", "encodeRegisterDeploymentWire",
       "encodeShareCanvasWire"
     ])
   })
