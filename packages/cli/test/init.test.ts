@@ -71,6 +71,17 @@ describe("built crit-target init", () => {
     expect(skill).toContain("name: crit")
     expect(skill).toContain("crit add-frame")
     expect(skill).toContain("crit --help")
+    const frameBridgeSkillPath = path.join(
+      root,
+      ".agents",
+      "skills",
+      "install-crit-frame-bridge",
+      "SKILL.md"
+    )
+    const frameBridgeSkill = readFileSync(frameBridgeSkillPath, "utf8")
+    expect(frameBridgeSkill).toContain("name: install-crit-frame-bridge")
+    expect(frameBridgeSkill).toContain("@crit/frame-bridge/html")
+    expect(frameBridgeSkill).toContain("@crit/frame-bridge/vite")
     const registrationSkillPath = path.join(
       root,
       ".agents",
@@ -83,10 +94,14 @@ describe("built crit-target init", () => {
     expect(registrationSkill).toContain("crit register-deployment --help")
     expect(registrationSkill).toContain("CRIT_DEPLOY_TOKEN")
     writeFileSync(skillPath, "agent owned\n")
+    writeFileSync(frameBridgeSkillPath, "frame bridge agent owned\n")
     writeFileSync(registrationSkillPath, "deployment agent owned\n")
     const again = run()
     expect(again.status, again.stderr).toBe(0)
     expect(readFileSync(skillPath, "utf8")).toBe("agent owned\n")
+    expect(readFileSync(frameBridgeSkillPath, "utf8")).toBe(
+      "frame bridge agent owned\n"
+    )
     expect(readFileSync(registrationSkillPath, "utf8")).toBe(
       "deployment agent owned\n"
     )
