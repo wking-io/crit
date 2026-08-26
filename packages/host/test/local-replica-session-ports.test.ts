@@ -92,28 +92,28 @@ const subscriptionClient = (args: {
 describe("localReplicaSessionPorts.subscribe", () => {
   it("does not emit a lost event when unsubscribed", async() => {
     const events: Array<ReplicaSubscriptionEvent> = []
+    const open = vi.fn(() => Effect.die("subscribe must not open"))
     const ports = localReplicaSessionPorts(subscriptionClient({
-      open: () => Effect.succeed(view),
+      open,
       subscribe: () => Effect.succeed(Stream.never)
     }))
     const unsubscribe = ports.subscribe(canvasId, (event) => events.push(event))
     await vi.waitFor(() => expect(events).toEqual([
-      ReplicaSubscriptionEvent.connected(),
-      ReplicaSubscriptionEvent.changed()
+      ReplicaSubscriptionEvent.connected()
     ]))
 
     unsubscribe()
     await new Promise((resolve) => setTimeout(resolve, 10))
 
     expect(events).toEqual([
-      ReplicaSubscriptionEvent.connected(),
-      ReplicaSubscriptionEvent.changed()
+      ReplicaSubscriptionEvent.connected()
     ])
+    expect(open).not.toHaveBeenCalled()
   })
 
-  it("emits connected, gap-close changed, and lost when a stream ends", async() => {
+  it("emits connected and lost when a stream ends", async() => {
     const events: Array<ReplicaSubscriptionEvent> = []
-    const open = vi.fn(() => Effect.succeed(view))
+    const open = vi.fn(() => Effect.die("subscribe must not open"))
     const ports = localReplicaSessionPorts(subscriptionClient({
       open,
       subscribe: () => Effect.succeed(Stream.empty)
@@ -122,10 +122,28 @@ describe("localReplicaSessionPorts.subscribe", () => {
 
     await vi.waitFor(() => expect(events).toEqual([
       ReplicaSubscriptionEvent.connected(),
-      ReplicaSubscriptionEvent.changed(),
       ReplicaSubscriptionEvent.lost({ reason: "The local daemon is unreachable." })
     ]))
-    expect(open).toHaveBeenCalledOnce()
+    expect(open).not.toHaveBeenCalled()
+
+    unsubscribe()
+  })
+
+  it("maps an unauthorized subscribe failure to the authorized lost copy", async() => {
+    const events: Array<ReplicaSubscriptionEvent> = []
+    const ports = localReplicaSessionPorts(subscriptionClient({
+      open: () => Effect.die("subscribe must not open"),
+      subscribe: () => Effect.fail(new LocalApiUnauthorized({
+        message: "Missing or invalid bearer token"
+      }))
+    }))
+    const unsubscribe = ports.subscribe(canvasId, (event) => events.push(event))
+
+    await vi.waitFor(() => expect(events).toEqual([
+      ReplicaSubscriptionEvent.lost({
+        reason: "The browser session is no longer authorized."
+      })
+    ]))
 
     unsubscribe()
   })

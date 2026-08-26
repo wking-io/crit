@@ -16,7 +16,6 @@ import {
   CanvasSelection,
   ReplicaConnection,
   ReplicaChangeRejected,
-  ReplicaSubmitNotice,
   ReplicaSubscriptionEvent,
   ReplicaSessionUnavailable,
   getCanvasCameraSession,
@@ -578,7 +577,7 @@ describe("useReplicaSession", () => {
       camera: savedCamera,
       selection: savedSelection,
       connection: liveConnection,
-      notice: ReplicaSubmitNotice.rejected({ failure: rejectedFailure })
+      notice: rejected
     })
 
     await act(async() => {
@@ -624,7 +623,7 @@ describe("useReplicaSession", () => {
       camera: defaultCamera,
       selection: defaultSelection,
       connection: liveConnection,
-      notice: ReplicaSubmitNotice.unavailable({ reason: "daemon unavailable" })
+      notice: failure
     }))
   })
 
@@ -719,5 +718,57 @@ describe("useReplicaSession", () => {
       reason: "The replica is not ready."
     })))
     expect(unavailableChange).not.toHaveBeenCalled()
+  })
+
+  it("does not apply a late submit after the canvas changes", async() => {
+    let release!: (view: typeof viewAfterAdd) => void
+    const gate = new Promise<typeof viewAfterAdd>((resolve) => {
+      release = resolve
+    })
+    const replica = makeReplica([viewOne, viewOther])
+    const ports: ReplicaSessionPorts = {
+      open: replica.ports.open,
+      subscribe: replica.ports.subscribe,
+      change: ({ canvasId }) => canvasId === canvasA
+        ? Effect.promise(() => gate)
+        : replica.ports.change({ canvasId, commands: addFrame })
+    }
+    const run = makeRun()
+
+    await act(async() => render(
+      <Probe canvasId={canvasA} ports={ports} run={run} />
+    ))
+    await waitFor(() => expect(latest?.session._tag).toBe("ready"))
+
+    let submitted: Awaited<ReturnType<ReplicaSessionHandle["submit"]>> | undefined
+    const pending = latest?.submit(addFrame)
+    await act(async() => render(
+      <Probe canvasId={canvasB} ports={ports} run={run} />
+    ))
+    await waitFor(() =>
+      expect(latest?.session).toEqual({
+        _tag: "ready",
+        view: viewOther,
+        camera: defaultCamera,
+        selection: defaultSelection,
+        connection: liveConnection,
+        notice: undefined
+      })
+    )
+
+    await act(async() => {
+      release(viewAfterAdd)
+      submitted = await pending
+    })
+
+    expect(submitted).toEqual(Result.succeed(viewAfterAdd))
+    expect(latest?.session).toEqual({
+      _tag: "ready",
+      view: viewOther,
+      camera: defaultCamera,
+      selection: defaultSelection,
+      connection: liveConnection,
+      notice: undefined
+    })
   })
 })
