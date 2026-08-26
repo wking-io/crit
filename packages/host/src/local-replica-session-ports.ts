@@ -1,4 +1,4 @@
-import type { LocalCanvasClientService, OpenFailure } from "@crit/client"
+import type { LocalCanvasClientService, OpenFailure, SubscriptionFailure } from "@crit/client"
 import {
   ReplicaChangeRejected,
   ReplicaSubscriptionEvent,
@@ -18,28 +18,15 @@ const openFailureReason = (failure: OpenFailure): string =>
     SchemaError: () => "The local daemon sent an unexpected response."
   }))
 
-const errorTag = (value: unknown): string | undefined => {
-  if (typeof value !== "object" || value === null) return undefined
-  if (!Object.hasOwn(value, "_tag")) return undefined
-  const tag = Reflect.get(value, "_tag")
-  return typeof tag === "string" ? tag : undefined
-}
-
-const subscriptionLostReason = (cause: Cause.Cause<unknown>): string => {
-  const found = Cause.findError(cause)
-  if (Result.isFailure(found)) return "The local daemon is unreachable."
-  return Match.value(errorTag(found.success)).pipe(
-    Match.when("LocalApiUnauthorized", () => "The browser session is no longer authorized."),
-    Match.when("LocalApiOriginRejected", () => "The local daemon rejected this origin."),
-    Match.when("LocalApiVersionUnsupported", () =>
-      "The local daemon speaks an unsupported API version."),
-    Match.when("SchemaError", () => "The local daemon sent an unexpected response."),
-    Match.when("LocalSubscriptionProtocolError", () =>
+const subscriptionLostReason = (failure: SubscriptionFailure): string =>
+  Match.value(failure).pipe(
+    Match.tag("LocalApiUnauthorized", () => "The browser session is no longer authorized."),
+    Match.tag("ReplicaNotOpen", () => "The canvas does not exist on the local daemon."),
+    Match.tag("LocalSubscriptionProtocolError", () =>
       "The local daemon sent an unexpected response."),
-    Match.when("ReplicaNotOpen", () => "The canvas does not exist on the local daemon."),
+    Match.tag("SchemaError", () => "The local daemon sent an unexpected response."),
     Match.orElse(() => "The local daemon is unreachable.")
   )
-}
 
 const initialReconnectDelay = 500
 const maximumReconnectDelay = 5_000
@@ -55,26 +42,30 @@ export const localReplicaSessionPorts = (
   ),
   subscribe: (canvasId, onEvent) => {
     const emit = (event: ReplicaSubscriptionEvent) => Effect.sync(() => onEvent(event))
-    const subscribeOnce = Effect.scoped(client.subscribe(canvasId).pipe(
-      Effect.tap(() => emit(ReplicaSubscriptionEvent.connected())),
-      Effect.flatMap(Stream.runForEach(() => emit(ReplicaSubscriptionEvent.changed())))
-    )).pipe(Effect.provide(Socket.layerWebSocketConstructorGlobal))
+    const subscribeOnce: Effect.Effect<void, SubscriptionFailure> = Effect.scoped(
+      client.subscribe(canvasId).pipe(
+        Effect.tap(() => emit(ReplicaSubscriptionEvent.connected())),
+        Effect.flatMap(Stream.runForEach(() => emit(ReplicaSubscriptionEvent.changed())))
+      )
+    ).pipe(Effect.provide(Socket.layerWebSocketConstructorGlobal))
     const loop = (delay: number): Effect.Effect<void> => subscribeOnce.pipe(
       Effect.matchCauseEffect({
-        onFailure: (cause) => Cause.hasInterruptsOnly(cause)
-          ? Effect.void
-          : reconnect(delay, cause),
+        onFailure: (cause) => {
+          if (Cause.hasInterruptsOnly(cause)) return Effect.void
+          const found = Cause.findError(cause)
+          return reconnect(delay, Result.getOrUndefined(found))
+        },
         onSuccess: () => reconnect(delay)
       })
     )
     const reconnect = (
       delay: number,
-      cause?: Cause.Cause<unknown>
+      failure?: SubscriptionFailure
     ): Effect.Effect<void> => emit(
       ReplicaSubscriptionEvent.lost({
-        reason: cause === undefined
+        reason: failure === undefined
           ? "The local daemon is unreachable."
-          : subscriptionLostReason(cause)
+          : subscriptionLostReason(failure)
       })
     ).pipe(
       Effect.andThen(Effect.sleep(delay)),
