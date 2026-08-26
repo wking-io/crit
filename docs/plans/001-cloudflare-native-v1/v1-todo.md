@@ -8,7 +8,7 @@ This file is the current inventory. Phase docs own the prove. [Decision record](
 
 ## Next
 
-- [ ] Worker, static assets, Access, D1, R2 artifacts. `packages/cloudflare` has the one-Canvas SQLite authority, a workerd Durable Object, and `POST /canvas`. The hosted Worker is still missing.
+- [ ] Hosted review UI served from the Worker.
 
 ## Remaining
 
@@ -27,7 +27,7 @@ Plan: [phase 6](phase-06-cloudflare-platform.md), [phase 7](phase-07-sync-and-sh
 - [x] First share with share/import IDs and a projection digest.
 - [x] Two author replicas edit offline and converge.
 - [x] Recoverable remote conflicts that keep dependent pending work. Local replica policy exists.
-- [ ] Worker, static assets, Access, D1, R2 artifacts. `packages/cloudflare` has the one-Canvas SQLite authority, a workerd Durable Object, and `POST /canvas`. The hosted Worker is still missing.
+- [x] Worker, static assets, Access, D1, R2 artifacts.
 - [ ] Hosted review UI served from the Worker.
 - [ ] Teammate signs in with Access, views Frames and shared previews, and sets review status. No Crit install. The hosted UI iframes the registered preview.
 - [ ] Shared review preview is frameable by the Crit host. `frame-ancestors` names the Crit origin. Access on the preview, if any, has `allow_iframe`. Ordinary production does not name Crit. The Frame Bridge skill performs that setup.
@@ -88,6 +88,7 @@ Local Frames authoring on one machine.
 - First share is idempotent. Stable share and import IDs plus a projection digest bind one remote Canvas. A retry returns that receipt. A changed digest under the same share ID fails.
 - After share, a linked replica rebases onto the remote genesis when its local cursor is unknown, then two author replicas can edit offline and converge in either order. `crit sync` pushes pending work and pulls accepted history.
 - A remote content collision keeps the losing change conflicted and its dependents blocked. Independent pending work still lands. `crit sync` prints those leftover counts.
+- The hosted Worker serves the canvas list at `/`, lists shared canvases from D1 at `GET /canvas`, and stores immutable artifacts in R2. Ledger JSON stays on `/canvas/:id` when the request is not a document.
 
 ## Out of v1
 

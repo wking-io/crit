@@ -145,3 +145,30 @@ export const insertShareReceipt = async (
     title: requested.title
   })
 }
+
+export const CanvasDirectoryEntry = Schema.Struct({
+  canvasId: CanvasId,
+  workspaceId: WorkspaceId,
+  title: CanvasTitle
+})
+export type CanvasDirectoryEntry = typeof CanvasDirectoryEntry.Type
+
+const directorySelectSql = `
+  SELECT
+    canvas_id AS canvasId,
+    workspace_id AS workspaceId,
+    title
+  FROM canvas_shares
+  WHERE rowid IN (
+    SELECT MAX(rowid) FROM canvas_shares GROUP BY canvas_id
+  )
+  ORDER BY rowid DESC
+`
+
+export const listCanvasDirectory = async (
+  env: Cloudflare.Env
+): Promise<ReadonlyArray<CanvasDirectoryEntry>> => {
+  await ensureShareTable(env)
+  const result = await env.CONTROL.prepare(directorySelectSql).all()
+  return result.results.map((row) => Schema.decodeUnknownSync(CanvasDirectoryEntry)(row))
+}

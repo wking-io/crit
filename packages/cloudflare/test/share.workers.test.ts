@@ -175,8 +175,13 @@ describe("Worker Canvas share route", () => {
     expect(await response.text()).toBe("")
   })
 
-  it("allows only POST on the Canvas collection", async() => {
-    const response = await SELF.fetch("https://crit.example/canvas")
+  it("rejects methods other than GET and POST on the Canvas collection", async() => {
+    const response = await SELF.fetch("https://crit.example/canvas", {
+      method: "PUT",
+      headers: {
+        "Cf-Access-Authenticated-User-Email": "ada@acme.com"
+      }
+    })
 
     expect(response.status).toBe(405)
     expect(await response.text()).toBe("")

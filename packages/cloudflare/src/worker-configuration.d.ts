@@ -4,6 +4,8 @@ declare namespace Cloudflare {
       import("./canvas-object.js").CanvasDurableObject
     >
     readonly CONTROL: D1Database
+    readonly ARTIFACTS: R2Bucket
+    readonly ASSETS: Fetcher
     readonly CRIT_DEPLOY_TOKEN: string
   }
 
