@@ -1,11 +1,11 @@
-import { Predicate, Schema } from "effect"
+import { Data, Match, Predicate, Schema } from "effect"
 
 import { CanvasProjection, CanvasTitle } from "./canvas.js"
-import { FrameItemRef, type CanvasItemRef, type Frame } from "./content.js"
+import { FrameItemRef, type AuthoredText, type CanvasItemRef, type Frame, type ReviewStatus } from "./content.js"
 import type { CanvasChange, CanvasCommand, CanvasCommandBatch } from "./command.js"
 import { compareCanonicalId } from "./canonical-order.js"
 import type { Geometry } from "./geometry.js"
-import { CanvasId, ChangeId } from "./ids.js"
+import { CanvasId, ChangeId, type FrameId } from "./ids.js"
 import type { RepresentationRef } from "./representation.js"
 
 const CommandIndex = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))
@@ -90,10 +90,60 @@ const stackEquals = (left: readonly CanvasItemRef[], right: readonly CanvasItemR
   left.length === right.length && left.every((item, index) => right[index] !== undefined && itemKey(item) === itemKey(right[index]!))
 
 type CanvasAggregateCommand = Extract<CanvasCommand, { readonly _tag: "rename-canvas" }>
-type FrameAggregateCommand = Extract<CanvasCommand, {
+type WireFrameCommand = Extract<CanvasCommand, {
   readonly _tag: "add-frame" | "set-frame-title" | "set-frame-representation" | "set-frame-status" | "set-frame-geometry" | "remove-frame"
 }>
 type StackAggregateCommand = Extract<CanvasCommand, { readonly _tag: "place-canvas-item" }>
+
+type FrameAggregateCommand = Data.TaggedEnum<{
+  readonly addFrame: {
+    readonly frameId: FrameId
+    readonly title: AuthoredText
+    readonly representation: RepresentationRef
+    readonly status: ReviewStatus
+    readonly geometry: Geometry
+  }
+  readonly setFrameTitle: {
+    readonly frameId: FrameId
+    readonly expectedChangedByChangeId: ChangeId
+    readonly title: AuthoredText
+  }
+  readonly setFrameRepresentation: {
+    readonly frameId: FrameId
+    readonly expectedChangedByChangeId: ChangeId
+    readonly representation: RepresentationRef
+  }
+  readonly setFrameStatus: {
+    readonly frameId: FrameId
+    readonly expectedChangedByChangeId: ChangeId
+    readonly status: ReviewStatus
+  }
+  readonly setFrameGeometry: {
+    readonly frameId: FrameId
+    readonly expectedChangedByChangeId: ChangeId
+    readonly geometry: Geometry
+  }
+  readonly removeFrame: {
+    readonly frameId: FrameId
+    readonly expectedUpdatedByChangeId: ChangeId
+  }
+}>
+const FrameAggregateCommand = Data.taggedEnum<FrameAggregateCommand>()
+
+const toFrameAggregateCommand = Match.type<WireFrameCommand>().pipe(Match.tagsExhaustive({
+  "add-frame": ({ frameId, title, representation, status, geometry }) =>
+    FrameAggregateCommand.addFrame({ frameId, title, representation, status, geometry }),
+  "set-frame-title": ({ frameId, expectedChangedByChangeId, title }) =>
+    FrameAggregateCommand.setFrameTitle({ frameId, expectedChangedByChangeId, title }),
+  "set-frame-representation": ({ frameId, expectedChangedByChangeId, representation }) =>
+    FrameAggregateCommand.setFrameRepresentation({ frameId, expectedChangedByChangeId, representation }),
+  "set-frame-status": ({ frameId, expectedChangedByChangeId, status }) =>
+    FrameAggregateCommand.setFrameStatus({ frameId, expectedChangedByChangeId, status }),
+  "set-frame-geometry": ({ frameId, expectedChangedByChangeId, geometry }) =>
+    FrameAggregateCommand.setFrameGeometry({ frameId, expectedChangedByChangeId, geometry }),
+  "remove-frame": ({ frameId, expectedUpdatedByChangeId }) =>
+    FrameAggregateCommand.removeFrame({ frameId, expectedUpdatedByChangeId })
+}))
 
 const applyCanvasCommand = (p: CanvasProjection, c: CanvasAggregateCommand, commandIndex: number): CanvasChangeResult => {
   switch (c._tag) {
@@ -111,7 +161,7 @@ const applyCanvasCommand = (p: CanvasProjection, c: CanvasAggregateCommand, comm
 
 const applyAddFrame = (
   p: CanvasProjection,
-  c: Extract<FrameAggregateCommand, { readonly _tag: "add-frame" }>,
+  c: Extract<FrameAggregateCommand, { readonly _tag: "addFrame" }>,
   commandIndex: number,
   changeId: ChangeId
 ): CanvasChangeResult => {
@@ -140,7 +190,7 @@ const applyAddFrame = (
 
 const applySetFrameTitle = (
   p: CanvasProjection,
-  c: Extract<FrameAggregateCommand, { readonly _tag: "set-frame-title" }>,
+  c: Extract<FrameAggregateCommand, { readonly _tag: "setFrameTitle" }>,
   commandIndex: number,
   changeId: ChangeId
 ): CanvasChangeResult => {
@@ -156,7 +206,7 @@ const applySetFrameTitle = (
 
 const applySetFrameRepresentation = (
   p: CanvasProjection,
-  c: Extract<FrameAggregateCommand, { readonly _tag: "set-frame-representation" }>,
+  c: Extract<FrameAggregateCommand, { readonly _tag: "setFrameRepresentation" }>,
   commandIndex: number,
   changeId: ChangeId
 ): CanvasChangeResult => {
@@ -182,7 +232,7 @@ const applySetFrameRepresentation = (
 
 const applySetFrameStatus = (
   p: CanvasProjection,
-  c: Extract<FrameAggregateCommand, { readonly _tag: "set-frame-status" }>,
+  c: Extract<FrameAggregateCommand, { readonly _tag: "setFrameStatus" }>,
   commandIndex: number,
   changeId: ChangeId
 ): CanvasChangeResult => {
@@ -198,7 +248,7 @@ const applySetFrameStatus = (
 
 const applySetFrameGeometry = (
   p: CanvasProjection,
-  c: Extract<FrameAggregateCommand, { readonly _tag: "set-frame-geometry" }>,
+  c: Extract<FrameAggregateCommand, { readonly _tag: "setFrameGeometry" }>,
   commandIndex: number,
   changeId: ChangeId
 ): CanvasChangeResult => {
@@ -214,7 +264,7 @@ const applySetFrameGeometry = (
 
 const applyRemoveFrame = (
   p: CanvasProjection,
-  c: Extract<FrameAggregateCommand, { readonly _tag: "remove-frame" }>,
+  c: Extract<FrameAggregateCommand, { readonly _tag: "removeFrame" }>,
   commandIndex: number,
   changeId: ChangeId
 ): CanvasChangeResult => {
@@ -236,22 +286,15 @@ const applyFrameCommand = (
   c: FrameAggregateCommand,
   commandIndex: number,
   changeId: ChangeId
-): CanvasChangeResult => {
-  switch (c._tag) {
-    case "add-frame":
-      return applyAddFrame(p, c, commandIndex, changeId)
-    case "set-frame-title":
-      return applySetFrameTitle(p, c, commandIndex, changeId)
-    case "set-frame-representation":
-      return applySetFrameRepresentation(p, c, commandIndex, changeId)
-    case "set-frame-status":
-      return applySetFrameStatus(p, c, commandIndex, changeId)
-    case "set-frame-geometry":
-      return applySetFrameGeometry(p, c, commandIndex, changeId)
-    case "remove-frame":
-      return applyRemoveFrame(p, c, commandIndex, changeId)
-  }
-}
+): CanvasChangeResult =>
+  Match.value(c).pipe(Match.tagsExhaustive({
+    addFrame: (command) => applyAddFrame(p, command, commandIndex, changeId),
+    setFrameTitle: (command) => applySetFrameTitle(p, command, commandIndex, changeId),
+    setFrameRepresentation: (command) => applySetFrameRepresentation(p, command, commandIndex, changeId),
+    setFrameStatus: (command) => applySetFrameStatus(p, command, commandIndex, changeId),
+    setFrameGeometry: (command) => applySetFrameGeometry(p, command, commandIndex, changeId),
+    removeFrame: (command) => applyRemoveFrame(p, command, commandIndex, changeId)
+  }))
 
 const applyStackCommand = (
   p: CanvasProjection,
@@ -298,7 +341,7 @@ const applyCommand = (
     case "set-frame-status":
     case "set-frame-geometry":
     case "remove-frame":
-      return applyFrameCommand(p, c, commandIndex, changeId)
+      return applyFrameCommand(p, toFrameAggregateCommand(c), commandIndex, changeId)
     case "place-canvas-item":
       return applyStackCommand(p, c, commandIndex, changeId)
   }
