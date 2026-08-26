@@ -14,6 +14,7 @@
     "@crit/react": "*",
     "@effect/atom-react": "4.0.0-rc.109",
     "@tanstack/react-query": "^5.102.1",
+    "@tanstack/react-router": "^1.170.32",
     "effect": "4.0.0-rc.109",
     "react": "19.2.8",
     "react-dom": "19.2.8",

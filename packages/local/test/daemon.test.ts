@@ -316,6 +316,32 @@ describe("LocalDaemon", () => {
       expect(body).not.toContain(secret)
     }))))
 
+  it("lists existing canvases and does not create on open", () => {
+    const token = "list-canvases-token-with-at-least-32-characters"
+    return Effect.runPromise(Effect.scoped(Effect.gen(function*() {
+      const databasePath = yield* tempDatabasePath
+      const { client } = yield* clientFor({ databasePath, token })
+      expect(yield* client.list()).toEqual([])
+      yield* client.create(AuthorityModel.createCanvas({
+        canvasId: Id.canvas("canvas_zeta"),
+        title: "Zeta"
+      }))
+      yield* client.create(AuthorityModel.createCanvas({
+        canvasId: Id.canvas("canvas_alpha"),
+        title: "Alpha"
+      }))
+      expect(yield* client.list()).toEqual([
+        { canvasId: Id.canvas("canvas_zeta"), title: "Zeta" },
+        { canvasId: Id.canvas("canvas_alpha"), title: "Alpha" }
+      ])
+      const missing = yield* client.open(Id.canvas("canvas_daemon_missing")).pipe(Effect.flip)
+      expect(missing).toEqual(AuthorityFailure.canvasNotFound({
+        canvasId: Id.canvas("canvas_daemon_missing")
+      }))
+      expect(yield* client.list()).toHaveLength(2)
+    })))
+  })
+
   it("propagates Effect HTTP context into domain and SQL spans", () => {
     const spans: Array<Tracer.NativeSpan> = []
     const tracer = Tracer.make({

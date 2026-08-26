@@ -31,8 +31,9 @@ import {
   type ProposedCanvasChange,
   type ProtocolFailure
 } from "@crit/protocol"
+import { CanvasListing } from "@crit/replica/http"
 import * as SqliteClient from "@effect/sql-sqlite-node/SqliteClient"
-import { Data, Effect, Layer, Result, Schema } from "effect"
+import { Context, Data, Effect, Layer, Result, Schema } from "effect"
 import type { SqlError } from "effect/unstable/sql/SqlError"
 
 import { LocalDatabaseOpenFailure, localDatabaseLayer, retryTransaction } from "./database.js"
@@ -76,6 +77,15 @@ const RetryRow = Schema.Struct({
 const CursorRow = Schema.Struct({ cursor: Schema.String })
 const FoundRow = Schema.Struct({ found: Schema.Number })
 const SequenceRow = Schema.Struct({ sequence: Schema.Number })
+const CatalogRow = Schema.Struct({
+  canvas_id: CanvasId,
+  created_at: IsoTimestamp,
+  projection_json: JsonText
+})
+
+export class LocalCanvasCatalog extends Context.Service<LocalCanvasCatalog, {
+  readonly list: () => Effect.Effect<ReadonlyArray<CanvasListing>>
+}>()("@crit/local/LocalCanvasCatalog") {}
 
 const json = (value: Schema.Json): string => JSON.stringify(value)
 const parseJson = (value: string): Schema.Json => Schema.decodeUnknownSync(Schema.Json)(JSON.parse(value))
@@ -317,7 +327,30 @@ const make = () => Effect.gen(function*() {
   return { create, open, submit, changesAfter }
 })
 
+const makeCatalog = () => Effect.gen(function*() {
+  const sql = yield* SqliteClient.SqliteClient
+  const list: LocalCanvasCatalog["Service"]["list"] = () => Effect.gen(function*() {
+    const rows = yield* sql<typeof CatalogRow.Encoded>`
+      SELECT canvas_id, created_at, projection_json FROM canvases
+      ORDER BY created_at ASC, canvas_id ASC`
+    return rows.map((encoded) => {
+      const row = Schema.decodeUnknownSync(CatalogRow, { onExcessProperty: "error" })(encoded)
+      const projection = decodeStored(CanvasProjection, row.projection_json)
+      if (projection.canvasId !== row.canvas_id) {
+        throw new Error("stored Canvas catalog facts disagree")
+      }
+      return CanvasListing.make({ canvasId: row.canvas_id, title: projection.title })
+    })
+  }).pipe(Effect.catchTag("SqlError", Effect.die))
+  return LocalCanvasCatalog.of({ list })
+})
+
 export const SqliteCanvasAuthority = {
-  layer: (options: SqliteCanvasAuthorityOptions) =>
-    Layer.effect(CanvasAuthority, make()).pipe(Layer.provide(localDatabaseLayer(options)))
+  layer: (options: SqliteCanvasAuthorityOptions) => {
+    const database = localDatabaseLayer(options)
+    return Layer.merge(
+      Layer.effect(CanvasAuthority, make()),
+      Layer.effect(LocalCanvasCatalog, makeCatalog())
+    ).pipe(Layer.provide(database))
+  }
 }

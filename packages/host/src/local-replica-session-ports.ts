@@ -1,4 +1,4 @@
-import type { LocalCanvasClientService, OpenFailure, SubscriptionFailure } from "@crit/client"
+import type { LocalCanvasClientService, OpenFailure, StatusFailure, SubscriptionFailure } from "@crit/client"
 import {
   ReplicaChangeRejected,
   ReplicaSubscriptionEvent,
@@ -8,15 +8,19 @@ import {
 import { Cause, Effect, Fiber, Match, Result, Stream } from "effect"
 import * as Socket from "effect/unstable/socket/Socket"
 
-const openFailureReason = (failure: OpenFailure): string =>
+export const localTransportFailureReason = (failure: StatusFailure): string =>
   Match.value(failure).pipe(Match.tagsExhaustive({
-    "canvasNotFound": () => "The canvas does not exist on the local daemon.",
     HttpClientError: () => "The local daemon is unreachable.",
     LocalApiOriginRejected: () => "The local daemon rejected this origin.",
     LocalApiUnauthorized: () => "The browser session is no longer authorized.",
     LocalApiVersionUnsupported: () => "The local daemon speaks an unsupported API version.",
     SchemaError: () => "The local daemon sent an unexpected response."
   }))
+
+const openFailureReason = (failure: OpenFailure): string =>
+  failure._tag === "canvasNotFound"
+    ? "The canvas does not exist on the local daemon."
+    : localTransportFailureReason(failure)
 
 const subscriptionLostReason = (failure: SubscriptionFailure): string =>
   Match.value(failure).pipe(

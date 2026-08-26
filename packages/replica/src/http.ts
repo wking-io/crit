@@ -8,6 +8,7 @@ import {
 import {
   AgentSnapshot,
   CanvasId,
+  CanvasTitle,
   ExecutionId,
   InstallationId,
   PersonSnapshot,
@@ -68,6 +69,12 @@ export const LocalDaemonStatus = Schema.Struct({
 })
 export type LocalDaemonStatus = typeof LocalDaemonStatus.Type
 
+export const CanvasListing = Schema.Struct({
+  canvasId: CanvasId,
+  title: CanvasTitle
+})
+export type CanvasListing = typeof CanvasListing.Type
+
 const SecretToken = Schema.String.check(
   Schema.isMinLength(32),
   Schema.isMaxLength(256)
@@ -118,6 +125,9 @@ export class LocalCanvasApiGroup extends HttpApiGroup.make("canvas", { topLevel:
   .add(
     HttpApiEndpoint.get("status", "/status", {
       success: LocalDaemonStatus
+    }),
+    HttpApiEndpoint.get("list", "/canvases", {
+      success: Schema.Array(CanvasListing)
     }),
     HttpApiEndpoint.post("create", "/create", {
       payload: CreateCanvas,

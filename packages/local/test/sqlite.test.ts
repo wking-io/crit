@@ -15,7 +15,7 @@ import { CanvasEngine, DomainValue, Id, IsoTimestamp, decodeCanvasCommandBatch, 
 import { Context, Deferred, Effect, Exit, Fiber, Layer, Schema } from "effect"
 import { describe, expect, it } from "vitest"
 
-import { SqliteCanvasAuthority } from "../src/index.js"
+import { LocalCanvasCatalog, SqliteCanvasAuthority } from "../src/index.js"
 
 const person = Schema.decodeUnknownSync(PersonInvocation)({
   _tag: "person",
@@ -52,6 +52,18 @@ const buildSqliteAuthority = (options: {
   const scope = yield* Effect.scope
   const context = yield* Layer.buildWithScope(sqliteLayer(options.path, options.now), scope)
   return Context.get(context, CanvasAuthority)
+})
+
+const buildSqliteCatalog = (options: {
+  readonly path: string
+  readonly now?: Parameters<typeof authorityClockLayer>[0]
+}) => Effect.gen(function*() {
+  const scope = yield* Effect.scope
+  const context = yield* Layer.buildWithScope(sqliteLayer(options.path, options.now), scope)
+  return {
+    authority: Context.get(context, CanvasAuthority),
+    catalog: Context.get(context, LocalCanvasCatalog)
+  }
 })
 
 describe("SQLite CanvasAuthority", () => {
@@ -332,6 +344,42 @@ describe("SQLite CanvasAuthority", () => {
       yield* authority.open(Id.canvas("canvas_corrupt"))
     })))
     expect(Exit.isFailure(exit)).toBe(true)
+    })))
+  })
+
+  it("lists canvases by created time then id and shows the current title", async () => {
+    await Effect.runPromise(Effect.scoped(Effect.gen(function*() {
+      let current = "2026-08-01T00:00:00.000Z"
+      const path = yield* tempDatabasePath
+      const { authority, catalog } = yield* buildSqliteCatalog({
+        path,
+        now: Effect.sync(() => Schema.decodeUnknownSync(IsoTimestamp)(current))
+      })
+      expect(yield* catalog.list()).toEqual([])
+      yield* authority.create(create("canvas_zeta"), person)
+      current = "2026-08-01T00:00:01.000Z"
+      yield* authority.create(create("canvas_shop"), person)
+      yield* authority.create(create("canvas_alpha"), person)
+      expect(yield* catalog.list()).toEqual([
+        { canvasId: Id.canvas("canvas_zeta"), title: "Authority" },
+        { canvasId: Id.canvas("canvas_alpha"), title: "Authority" },
+        { canvasId: Id.canvas("canvas_shop"), title: "Authority" }
+      ])
+      yield* authority.submit({
+        canvasId: Id.canvas("canvas_zeta"),
+        changeId: Id.change("change_catalog_rename"),
+        observedCursor: null,
+        commands: decodeCanvasCommandBatch([{
+          _tag: "renameCanvas",
+          expectedTitle: "Authority",
+          title: "Review"
+        }])
+      }, person)
+      expect(yield* catalog.list()).toEqual([
+        { canvasId: Id.canvas("canvas_zeta"), title: "Review" },
+        { canvasId: Id.canvas("canvas_alpha"), title: "Authority" },
+        { canvasId: Id.canvas("canvas_shop"), title: "Authority" }
+      ])
     })))
   })
 })

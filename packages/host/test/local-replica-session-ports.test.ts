@@ -70,10 +70,12 @@ const unusedClient = (
   change: LocalCanvasClientService["change"]
 ): LocalCanvasClientService => ({
   status: () => Effect.die("unused"),
+  list: () => Effect.die("unused"),
   create: () => Effect.die("unused"),
   open: () => Effect.die("unused"),
   change,
   sync: () => Effect.die("unused"),
+  agentBegin: () => Effect.die("unused"),
   subscribe: () => Effect.die("unused")
 })
 
@@ -82,10 +84,12 @@ const subscriptionClient = (args: {
   readonly subscribe: LocalCanvasClientService["subscribe"]
 }): LocalCanvasClientService => ({
   status: () => Effect.die("unused"),
+  list: () => Effect.die("unused"),
   create: () => Effect.die("unused"),
   open: args.open,
   change: () => Effect.die("unused"),
   sync: () => Effect.die("unused"),
+  agentBegin: () => Effect.die("unused"),
   subscribe: args.subscribe
 })
 
