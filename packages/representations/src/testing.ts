@@ -86,7 +86,7 @@ export const runArtifactStoreConformance = <E, R>(
 
 const unboundApplicationId = Id.application("application_conformance_unbound")
 const inertLiveContent = Layer.succeed(LiveContent, LiveContent.of({
-  get: () => Effect.die("Representation resolve and inspect must not read live content")
+  get: () => Effect.die("Representation resolve must not read live content")
 }))
 const inertCrypto = Layer.succeed(Crypto.Crypto, Crypto.make({
   randomBytes: (size) => new Uint8Array(size),
@@ -150,38 +150,6 @@ export const representationRuntimeConformanceScenarios = (
     yield* requireRuntimeFact(
       JSON.stringify(plan.representation) === encoded,
       "application iframe retained caller-owned state"
-    )
-  })
-}, {
-  name: "inspects bound application routes without changing their state or query",
-  run: Effect.gen(function*() {
-    const runtime = yield* RepresentationRuntime
-    const state = { selection: { artifact: "artifact_1" } }
-    const representation = ApplicationRouteRepresentation.make({
-      applicationId: expected.applicationId,
-      route: Schema.decodeUnknownSync(RootedRoute)("/products/%E2%9C%93?view=grid"),
-      state
-    })
-    const encoded = JSON.stringify(representation)
-    const inspection = yield* runtime.inspect(representation)
-    yield* requireRuntimeFact(
-      inspection._tag === "application-route" && inspection.binding._tag === "bound",
-      "a bound application route did not report its binding"
-    )
-    if (inspection._tag !== "application-route" || inspection.binding._tag !== "bound") return
-    yield* requireRuntimeFact(
-      inspection.binding.url === expected.renderedUrl,
-      "application route inspection changed the rooted route"
-    )
-    yield* requireRuntimeFact(
-      inspection.representation !== representation &&
-        JSON.stringify(inspection.representation) === encoded,
-      "application route inspection did not detach an equal representation"
-    )
-    state.selection.artifact = "artifact_changed"
-    yield* requireRuntimeFact(
-      JSON.stringify(inspection.representation) === encoded,
-      "application route inspection retained caller-owned state"
     )
   })
 }, {

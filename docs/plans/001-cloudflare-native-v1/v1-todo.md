@@ -80,12 +80,12 @@ Local Frames authoring on one machine.
 - Local review pending resolves. The daemon reconciles after open and change.
 - Mid-session daemon loss keeps the last projection and shows a connection alert.
 - Enqueue rejection is a submit notice. Conflict repair stays later.
-- `RepresentationRuntime.inspect` reports binding and artifact integrity without bytes.
 
 ## Out of v1
 
 Do not pick these up.
 
+- `RepresentationRuntime.inspect`. Parked until a caller needs a canvas health walk without artifact bytes. That is a handoff check across Frames, plus `actualDigest` when an artifact is corrupt. `resolve` already answers renderability. Not Frame Bridge authorized inspection.
 - Notes and Comments
 - Undo and redo
 - Fit-page display mode

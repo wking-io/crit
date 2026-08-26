@@ -23,7 +23,7 @@ packages/
 ├── protocol/         accepted changes, cursors, sync, bridge, and errors
 ├── authority/        CanvasAuthority and its conformance suite
 ├── replica/          CanvasReplica, pending work, rebase, and conflicts
-├── representations/  RepresentationRuntime, RenderPlan, and inspection
+├── representations/  RepresentationRuntime and RenderPlan
 ├── client/           HTTP and WebSocket clients
 ├── react/            primary review UI
 ├── host/             browser composition root (depends on react + client)
