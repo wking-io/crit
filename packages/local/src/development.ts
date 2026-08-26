@@ -296,7 +296,8 @@ export class LocalDevelopment extends Context.Service<
         invocation,
         port: installation.port,
         instance,
-        installationId: installation.installationId
+        installationId: installation.installationId,
+        dataRoot: options.dataRoot
       }
       const daemonLayer = Option.match(browser, {
         onNone: () => LocalDaemon.layer(daemonOptions),

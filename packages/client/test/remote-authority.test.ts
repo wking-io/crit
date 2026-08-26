@@ -29,7 +29,8 @@ import { describe, expect, it } from "vitest"
 import {
   overlayRemoteLedger,
   RemoteAuthorityOptions,
-  RemoteCanvasAuthority
+  RemoteCanvasAuthority,
+  routeSharedCanvases
 } from "../src/remote-authority.js"
 
 const TcpAddress = Schema.Struct({
@@ -259,6 +260,38 @@ describe("RemoteCanvasAuthority", () => {
       expect(synced.view.pending).toEqual([])
       expect(synced.view.projection.title).toBe("Review")
       expect(synced.pulled + synced.acknowledged).toBeGreaterThan(0)
+    }).pipe(Effect.provide(memoryAuthority))))
+  )
+
+  it("keeps unshared canvases on the local ledger", () =>
+    Effect.runPromise(Effect.scoped(Effect.gen(function*() {
+      const local = yield* CanvasAuthority
+      const served = yield* serveAuthority(local)
+      const remote = yield* remoteFrom(served.origin)
+      const canvasId = Id.canvas("canvas_route_local")
+      const routed = routeSharedCanvases(local, remote, () => Effect.succeed(false))
+      yield* routed.create(
+        AuthorityModel.createCanvas({ canvasId, title: "Local" }),
+        person
+      )
+      const opened = yield* routed.open(canvasId)
+      expect(opened.projection.title).toBe("Local")
+    }).pipe(Effect.provide(memoryAuthority))))
+  )
+
+  it("opens a shared canvas on the remote ledger", () =>
+    Effect.runPromise(Effect.scoped(Effect.gen(function*() {
+      const memory = yield* CanvasAuthority
+      const served = yield* serveAuthority(memory)
+      const remote = yield* remoteFrom(served.origin)
+      const canvasId = Id.canvas("canvas_route_shared")
+      yield* memory.create(
+        AuthorityModel.createCanvas({ canvasId, title: "Remote" }),
+        person
+      )
+      const routed = routeSharedCanvases(memory, remote, (id) => Effect.succeed(id === canvasId))
+      const opened = yield* routed.open(canvasId)
+      expect(opened.projection.title).toBe("Remote")
     }).pipe(Effect.provide(memoryAuthority))))
   )
 })

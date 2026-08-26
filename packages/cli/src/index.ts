@@ -49,7 +49,7 @@ import {
   type ProjectManifestFailure,
   type LocalDaemonInspection
 } from "@crit/local"
-import { ReplicaModel, ReplicaView } from "@crit/replica"
+import { ReplicaModel, ReplicaView, SyncResult } from "@crit/replica"
 import { LocalApiUnauthorized, LocalApiVersionUnsupported } from "@crit/replica/http"
 import { ApplicationBaseUrl } from "@crit/representations"
 import { Console, Context, Crypto, Effect, FileSystem, Layer, Match, Option, Path, Redacted, Result, Schema, type Effect as EffectType } from "effect"
@@ -526,6 +526,26 @@ const open = Command.make("open", {
   yield* printView(view, asJson)
 })).pipe(Command.withDescription("Open a Canvas through the local daemon"))
 
+const sync = Command.make("sync", {
+  dataRoot,
+  json,
+  canvasId: Argument.string("canvas-id")
+}, ({ canvasId, dataRoot: root, json: asJson }) => Effect.gen(function*() {
+  const id = yield* decode(CanvasId, canvasId, "canvas ID")
+  const result = yield* connected(root, ({ client }) => client.sync(id).pipe(
+    Effect.mapError((failure) => Match.value(failure).pipe(
+      Match.when({ _tag: "canvasNotFound" }, ({ canvasId }) => new CliOperationalFailure({
+        message: `Canvas not found: ${canvasId}`
+      })),
+      Match.orElse(() => new CliOperationalFailure({ message: "Unable to sync Canvas" }))
+    ))
+  ))
+  if (asJson) {
+    return yield* Console.log(JSON.stringify(Schema.encodeSync(SyncResult)(result)))
+  }
+  yield* printView(result.view, asJson)
+})).pipe(Command.withDescription("Push pending changes and pull accepted remote history"))
+
 const share = Command.make("share", {
   dataRoot,
   json,
@@ -888,6 +908,7 @@ export const command = crit.pipe(Command.withSubcommands([
   create,
   open,
   share,
+  sync,
   addFrame,
   layout,
   agent

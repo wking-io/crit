@@ -61,9 +61,11 @@ export {
 } from "./browser-connection.js"
 export { LocalClientOptions, ReplicaChange }
 export {
+  makeRemoteCanvasAuthority,
   overlayRemoteLedger,
   RemoteAuthorityOptions,
-  RemoteCanvasAuthority
+  RemoteCanvasAuthority,
+  routeSharedCanvases
 } from "./remote-authority.js"
 export type { RemoteCanvasAuthorityService } from "./remote-authority.js"
 

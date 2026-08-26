@@ -6,7 +6,7 @@ import {
   ChangeRejected,
   CursorNotFound
 } from "@crit/authority"
-import { EmailAddress } from "@crit/domain"
+import { EmailAddress, type CanvasId } from "@crit/domain"
 import {
   ChangeProtocol,
   encodeChangesAfterSearch,
@@ -90,6 +90,96 @@ export const overlayRemoteLedger = (
   changesAfter: remote.changesAfter
 })
 
+export const routeSharedCanvases = (
+  local: CanvasAuthority["Service"],
+  remote: RemoteCanvasAuthorityService,
+  sharedCanvas: (canvasId: CanvasId) => Effect.Effect<boolean>
+): CanvasAuthority["Service"] => ({
+  create: local.create,
+  open: (canvasId) => sharedCanvas(canvasId).pipe(
+    Effect.flatMap((shared) => shared ? remote.open(canvasId) : local.open(canvasId))
+  ),
+  submit: (proposal, invocation) => sharedCanvas(proposal.canvasId).pipe(
+    Effect.flatMap((shared) => shared
+      ? remote.submit(proposal, invocation)
+      : local.submit(proposal, invocation))
+  ),
+  changesAfter: (query) => sharedCanvas(query.canvasId).pipe(
+    Effect.flatMap((shared) => shared
+      ? remote.changesAfter(query)
+      : local.changesAfter(query))
+  )
+})
+
+export const makeRemoteCanvasAuthority = (
+  http: HttpClient.HttpClient,
+  options: RemoteAuthorityOptions
+): RemoteCanvasAuthorityService => {
+  const baseUrl = rootUrl(options.baseUrl)
+  const execute = (request: HttpClientRequest.HttpClientRequest) =>
+    http.execute(withAccess(request, options.accessEmail)).pipe(Effect.orDie)
+
+  const open: RemoteCanvasAuthorityService["open"] = (canvasId) =>
+    execute(HttpClientRequest.get(`${baseUrl}${remoteCanvasPath(canvasId)}`)).pipe(
+      Effect.flatMap((response) => Effect.gen(function*() {
+        const body = yield* readJson(response)
+        if (response.status === 200) {
+          return Schema.decodeUnknownSync(AuthorityView)(body)
+        }
+        if (response.status === 404) {
+          return yield* failEncoded(
+            Schema.decodeUnknownOption(OpenError)(body)
+          )
+        }
+        return yield* Effect.die(body)
+      }))
+    )
+
+  const submit: RemoteCanvasAuthorityService["submit"] = (proposal, invocation) =>
+    execute(HttpClientRequest.bodyJsonUnsafe(
+      HttpClientRequest.post(`${baseUrl}${remoteCanvasChangesPath(proposal.canvasId)}`).pipe(
+        HttpClientRequest.setHeader("content-type", "application/json")
+      ),
+      encodeSubmitCanvasChangeWire({ invocation, proposal })
+    )).pipe(
+      Effect.flatMap((response) => Effect.gen(function*() {
+        const body = yield* readJson(response)
+        if (response.status === 200) {
+          return yield* decodeOrDie(ChangeProtocol.receipt.decode(body))
+        }
+        if (response.status === 404 || response.status === 409) {
+          return yield* failEncoded(
+            Schema.decodeUnknownOption(SubmitError)(body)
+          )
+        }
+        return yield* Effect.die(body)
+      }))
+    )
+
+  const changesAfter: RemoteCanvasAuthorityService["changesAfter"] = (query) =>
+    execute(HttpClientRequest.get(
+      `${baseUrl}${remoteCanvasChangesPath(query.canvasId)}?${encodeChangesAfterSearch({
+        after: query.after,
+        limit: query.limit
+      })}`
+    )).pipe(
+      Effect.flatMap((response) => Effect.gen(function*() {
+        const body = yield* readJson(response)
+        if (response.status === 200) {
+          return yield* decodeOrDie(ChangeProtocol.page.decode(body))
+        }
+        if (response.status === 404) {
+          return yield* failEncoded(
+            Schema.decodeUnknownOption(PullError)(body)
+          )
+        }
+        return yield* Effect.die(body)
+      }))
+    )
+
+  return { open, submit, changesAfter }
+}
+
 export class RemoteCanvasAuthority extends Context.Service<
   RemoteCanvasAuthority,
   RemoteCanvasAuthorityService
@@ -98,69 +188,7 @@ export class RemoteCanvasAuthority extends Context.Service<
     RemoteCanvasAuthority,
     Effect.gen(function*() {
       const http = yield* HttpClient.HttpClient
-      const baseUrl = rootUrl(options.baseUrl)
-      const execute = (request: HttpClientRequest.HttpClientRequest) =>
-        http.execute(withAccess(request, options.accessEmail)).pipe(Effect.orDie)
-
-      const open: RemoteCanvasAuthorityService["open"] = (canvasId) =>
-        execute(HttpClientRequest.get(`${baseUrl}${remoteCanvasPath(canvasId)}`)).pipe(
-          Effect.flatMap((response) => Effect.gen(function*() {
-            const body = yield* readJson(response)
-            if (response.status === 200) {
-              return Schema.decodeUnknownSync(AuthorityView)(body)
-            }
-            if (response.status === 404) {
-              return yield* failEncoded(
-                Schema.decodeUnknownOption(OpenError)(body)
-              )
-            }
-            return yield* Effect.die(body)
-          }))
-        )
-
-      const submit: RemoteCanvasAuthorityService["submit"] = (proposal, invocation) =>
-        execute(HttpClientRequest.bodyJsonUnsafe(
-          HttpClientRequest.post(`${baseUrl}${remoteCanvasChangesPath(proposal.canvasId)}`).pipe(
-            HttpClientRequest.setHeader("content-type", "application/json")
-          ),
-          encodeSubmitCanvasChangeWire({ invocation, proposal })
-        )).pipe(
-          Effect.flatMap((response) => Effect.gen(function*() {
-            const body = yield* readJson(response)
-            if (response.status === 200) {
-              return yield* decodeOrDie(ChangeProtocol.receipt.decode(body))
-            }
-            if (response.status === 404 || response.status === 409) {
-              return yield* failEncoded(
-                Schema.decodeUnknownOption(SubmitError)(body)
-              )
-            }
-            return yield* Effect.die(body)
-          }))
-        )
-
-      const changesAfter: RemoteCanvasAuthorityService["changesAfter"] = (query) =>
-        execute(HttpClientRequest.get(
-          `${baseUrl}${remoteCanvasChangesPath(query.canvasId)}?${encodeChangesAfterSearch({
-            after: query.after,
-            limit: query.limit
-          })}`
-        )).pipe(
-          Effect.flatMap((response) => Effect.gen(function*() {
-            const body = yield* readJson(response)
-            if (response.status === 200) {
-              return yield* decodeOrDie(ChangeProtocol.page.decode(body))
-            }
-            if (response.status === 404) {
-              return yield* failEncoded(
-                Schema.decodeUnknownOption(PullError)(body)
-              )
-            }
-            return yield* Effect.die(body)
-          }))
-        )
-
-      return RemoteCanvasAuthority.of({ open, submit, changesAfter })
+      return RemoteCanvasAuthority.of(makeRemoteCanvasAuthority(http, options))
     })
   ).pipe(Layer.provide(FetchHttpClient.layer))
 }

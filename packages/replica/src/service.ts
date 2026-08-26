@@ -29,6 +29,7 @@ export interface CanvasReplicaService {
   readonly current: (canvasId: CanvasId) => Effect.Effect<ReplicaView, ReplicaNotOpen | ReplicaInvariantFailure>
   readonly change: (input: ReplicaChange, invocation: VerifiedInvocation) => Effect.Effect<ReplicaChangeReceipt, ReplicaChangeFailure>
   readonly sync: (canvasId: CanvasId) => Effect.Effect<SyncResult, ReplicaSyncFailure>
+  readonly relink: (canvasId: CanvasId) => Effect.Effect<ReplicaView, ReplicaOpenFailure>
   readonly subscribe: (canvasId: CanvasId) => Effect.Effect<Stream.Stream<ReplicaChanged>, ReplicaNotOpen, Scope.Scope>
 }
 
@@ -93,6 +94,15 @@ const makeCanvasReplica = Effect.gen(function*() {
     })
     return yield* render(state)
   }).pipe(Effect.withSpan("crit.replica.open", { attributes: { "crit.canvas.id": canvasId } }))
+  const relink: CanvasReplicaService["relink"] = (canvasId) => Effect.gen(function*() {
+    const authorityView = yield* authority.open(canvasId).pipe(
+      Effect.mapError(() => new ReplicaCanvasNotFound({ canvasId }))
+    )
+    const initialized = ReplicaPolicy.initialize(authorityView)
+    const state = yield* modify<ReplicaState, never>(canvasId, () =>
+      Result.succeed([initialized, initialized] as const))
+    return yield* render(state)
+  }).pipe(Effect.withSpan("crit.replica.relink", { attributes: { "crit.canvas.id": canvasId } }))
   const change: CanvasReplicaService["change"] = (input, invocation) => Effect.suspend(() => {
     const ownedInput = DomainValue.detach(input)
     const ownedInvocation = DomainValue.detach(invocation)
@@ -200,7 +210,7 @@ const makeCanvasReplica = Effect.gen(function*() {
     Effect.flatMap(PubSub.subscribe),
     Effect.map((subscription) => Stream.fromEffectRepeat(PubSub.take(subscription)))
   )
-  return { open, current, change, sync, subscribe }
+  return { open, current, change, sync, relink, subscribe }
 })
 
 export class CanvasReplica extends Context.Service<CanvasReplica, CanvasReplicaService>()(

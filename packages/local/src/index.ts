@@ -63,6 +63,8 @@ export {
   CanvasShareSuccess,
   importIdForCanvas,
   LocalShares,
+  readLocalInstallation,
+  readLocalShares,
   shareCanvas,
   shareIdForCanvas,
   SharedCanvas,
@@ -74,6 +76,7 @@ export {
   ShareResponseRejected
 } from "./share.js"
 export type { ShareCanvasOptions } from "./share.js"
+export { LinkedCanvasAuthority, rebaseIfRemoteCursorUnknown } from "./linked-authority.js"
 export { projectionDigest } from "./projection-digest.js"
 export {
   DeploymentRegistrationRequestFailed,
