@@ -7,6 +7,14 @@ const proofDir = fileURLToPath(new URL("../proof", import.meta.url))
 const ua = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36"
 
 const header = (response, name) => response.headers.get(name) ?? ""
+const shortUrl = (url) => {
+  try {
+    const parsed = new URL(url)
+    return parsed.origin + parsed.pathname
+  } catch {
+    return url
+  }
+}
 
 const checkout = await fetch(app + "/checkout", {
   redirect: "manual",
@@ -42,7 +50,7 @@ await page.waitForFunction(
 mkdirSync(proofDir, { recursive: true })
 await page.screenshot({ path: proofDir + "/access-live-iframe-first.png" })
 const iframeFirst = await page.evaluate(() => document.body.dataset.proof)
-const childFrames = page.frames().filter((frame) => frame !== page.mainFrame()).map((frame) => frame.url())
+const childFrames = page.frames().filter((frame) => frame !== page.mainFrame()).map((frame) => shortUrl(frame.url()))
 let signIn = null
 const accessFrame = page.frames().find((frame) => frame.url().includes("cloudflareaccess.com"))
 if (accessFrame) {
@@ -59,7 +67,7 @@ if (accessFrame) {
       clicked,
       frames: page.frames().filter((frame) => frame !== page.mainFrame()).map((frame) => {
         try {
-          return { url: frame.url(), title: frame.url() }
+          return { url: shortUrl(frame.url()) }
         } catch {
           return { url: "unreadable" }
         }
@@ -70,6 +78,12 @@ if (accessFrame) {
     signIn = { error: String(error) }
   }
 }
+const top = await browser.newPage()
+await top.setViewport({ width: 1440, height: 900 })
+await top.goto(app + "/checkout", { waitUntil: "networkidle0", timeout: 30000 })
+await top.screenshot({ path: proofDir + "/access-live-toplevel.png" })
+const topLevel = { url: shortUrl(top.url()), title: await top.title() }
+await top.close()
 await browser.close()
 
 const report = {
@@ -87,6 +101,7 @@ const report = {
   iframeFirst,
   childFrames,
   signIn,
+  topLevel,
   allowIframe: Boolean(login && !header(login, "x-frame-options") && !(header(login, "content-security-policy").includes("frame-ancestors 'none'")))
 }
 writeFileSync(proofDir + "/access-live-report.json", JSON.stringify(report, null, 2))

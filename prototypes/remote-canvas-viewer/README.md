@@ -64,6 +64,8 @@ Live Workers on the logged-in account, no Turnstile:
 
 Wrangler OAuth can deploy those. It cannot create or edit Access apps. An Account API token with Access: Apps and Policies Edit can. After `allow_iframe` and CORS for the canvas origin, the Access login page drops `X-Frame-Options` and `frame-ancestors 'none'`. The login renders inside the canvas Frame. The canvas marks that `gate` on iframe load. Real Access does not send the mock `proto-access` postMessage.
 
+Sign in with Cloudflare leaves that page for `dash.cloudflare.com/oauth2/auth`. That host sends `X-Frame-Options: SAMEORIGIN`, so the Frame becomes `chrome-error://chromewebdata/`. The Access login can sit in the Frame. The Cloudflare account IdP cannot. First sign-in for that IdP has to happen top-level. `CF_Authorization` is SameSite None after that, so the Frame can reuse the cookie.
+
 ```
 export CLOUDFLARE_API_TOKEN=...
 export CLOUDFLARE_ACCOUNT_ID=...
