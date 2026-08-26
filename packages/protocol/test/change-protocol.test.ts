@@ -171,14 +171,14 @@ describe("ChangeProtocol", () => {
     const item = { _tag: "frame", frameId: "frame_a" }
     const representation = { _tag: "application-route", applicationId: "application_a", route: "/review" }
     const commands = [
-      { _tag: "rename-canvas", expectedTitle: "Old", title: "New" },
-      { _tag: "add-frame", frameId: "frame_a", title: "Frame", representation, status: "in-progress", geometry: g },
-      { _tag: "set-frame-title", frameId: "frame_a", expectedChangedByChangeId: "change_a", title: "Title" },
-      { _tag: "set-frame-representation", frameId: "frame_a", expectedChangedByChangeId: "change_a", representation },
-      { _tag: "set-frame-status", frameId: "frame_a", expectedChangedByChangeId: "change_a", status: "ready-for-review" },
-      { _tag: "set-frame-geometry", frameId: "frame_a", expectedChangedByChangeId: "change_a", geometry: g },
-      { _tag: "remove-frame", frameId: "frame_a", expectedUpdatedByChangeId: "change_a" },
-      { _tag: "place-canvas-item", item, after: null, expectedStackChangeId: "change_a" }
+      { _tag: "renameCanvas", expectedTitle: "Old", title: "New" },
+      { _tag: "addFrame", frameId: "frame_a", title: "Frame", representation, status: "in-progress", geometry: g },
+      { _tag: "setFrameTitle", frameId: "frame_a", expectedChangedByChangeId: "change_a", title: "Title" },
+      { _tag: "setFrameRepresentation", frameId: "frame_a", expectedChangedByChangeId: "change_a", representation },
+      { _tag: "setFrameStatus", frameId: "frame_a", expectedChangedByChangeId: "change_a", status: "ready-for-review" },
+      { _tag: "setFrameGeometry", frameId: "frame_a", expectedChangedByChangeId: "change_a", geometry: g },
+      { _tag: "removeFrame", frameId: "frame_a", expectedUpdatedByChangeId: "change_a" },
+      { _tag: "placeCanvasItem", item, after: null, expectedStackChangeId: "change_a" }
     ]
     const wire = { kind: "proposed-canvas-change", schemaVersion: 2, changeId: "change_commands", canvasId: "canvas_a", observedCursor: null, commands }
     const result = ChangeProtocol.proposed.decode(wire)
@@ -199,7 +199,7 @@ describe("ChangeProtocol", () => {
   it("does not treat application state data as authority-owned protocol fields", () => {
     const input = fixture("proposed")
     input.commands = [{
-      _tag: "add-frame", frameId: "frame_a", title: "Frame", status: "in-progress",
+      _tag: "addFrame", frameId: "frame_a", title: "Frame", status: "in-progress",
       geometry: { x: 0, y: 0, width: 100, height: 80 },
       representation: {
         _tag: "application-route", applicationId: "application_a", route: "/review",

@@ -159,7 +159,7 @@ describe("ReviewChrome", () => {
     await act(async() => button("Snapshot").click())
     await act(async() => vi.waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1)))
     expect(onSubmit).toHaveBeenLastCalledWith([{
-      _tag: "add-frame",
+      _tag: "addFrame",
       frameId: expect.stringMatching(/^frame_[0-9a-f]{32}$/),
       title: "Checkout",
       representation: capturedArtifact,
@@ -170,7 +170,7 @@ describe("ReviewChrome", () => {
     await act(async() => press("S"))
     await act(async() => vi.waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(2)))
     expect(onSubmit).toHaveBeenLastCalledWith([{
-      _tag: "add-frame",
+      _tag: "addFrame",
       frameId: expect.stringMatching(/^frame_[0-9a-f]{32}$/),
       title: "Checkout",
       representation: capturedArtifact,
@@ -252,7 +252,7 @@ describe("ReviewChrome", () => {
 
     await act(async() => button("Set status to approved").click())
     expect(onSubmit).toHaveBeenLastCalledWith([{
-      _tag: "set-frame-status",
+      _tag: "setFrameStatus",
       frameId: "frame_checkout",
       expectedChangedByChangeId: "change_1",
       status: "approved"
@@ -260,7 +260,7 @@ describe("ReviewChrome", () => {
 
     await act(async() => button("Bring to front").click())
     expect(onSubmit).toHaveBeenLastCalledWith([{
-      _tag: "place-canvas-item",
+      _tag: "placeCanvasItem",
       item: { _tag: "frame", frameId: "frame_checkout" },
       after: null,
       expectedStackChangeId: "change_1"
@@ -268,7 +268,7 @@ describe("ReviewChrome", () => {
 
     await act(async() => button("Remove").click())
     expect(onSubmit).toHaveBeenLastCalledWith([{
-      _tag: "remove-frame",
+      _tag: "removeFrame",
       frameId: "frame_checkout",
       expectedUpdatedByChangeId: "change_1"
     }])
@@ -341,7 +341,7 @@ describe("ReviewChrome", () => {
 
     await act(async() => press("Delete"))
     expect(onSubmit).toHaveBeenLastCalledWith([{
-      _tag: "remove-frame",
+      _tag: "removeFrame",
       frameId: "frame_checkout",
       expectedUpdatedByChangeId: "change_1"
     }])
@@ -349,7 +349,7 @@ describe("ReviewChrome", () => {
     await act(async() => press("Backspace"))
     expect(onSubmit).toHaveBeenCalledTimes(2)
     expect(onSubmit).toHaveBeenLastCalledWith([{
-      _tag: "remove-frame",
+      _tag: "removeFrame",
       frameId: "frame_checkout",
       expectedUpdatedByChangeId: "change_1"
     }])
@@ -433,7 +433,7 @@ describe("ReviewChrome", () => {
     await act(async() => form.requestSubmit())
 
     expect(onSubmit).toHaveBeenCalledWith([{
-      _tag: "rename-canvas",
+      _tag: "renameCanvas",
       expectedTitle: "Review",
       title: "Updated review"
     }])

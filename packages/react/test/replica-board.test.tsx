@@ -111,13 +111,13 @@ const pendingChange = (
 })
 
 const rename = decodeCanvasCommandBatch([{
-  _tag: "rename-canvas",
+  _tag: "renameCanvas",
   expectedTitle: "Review",
   title: "Review"
 }])
 
 const addMissingFrame = decodeCanvasCommandBatch([{
-  _tag: "add-frame",
+  _tag: "addFrame",
   frameId: "frame_missing",
   title: "Missing",
   representation: { _tag: "web-url", url: "https://example.com/missing" },

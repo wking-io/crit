@@ -73,7 +73,7 @@ const viewTwo = makeView({ canvasId: canvasA, cursor: "cursor_two" })
 const viewOther = makeView({ canvasId: canvasB, cursor: "cursor_other" })
 
 const addFrame = decodeCanvasCommandBatch([{
-  _tag: "add-frame",
+  _tag: "addFrame",
   frameId: "frame_added",
   title: "Added",
   representation: { _tag: "web-url", url: "https://example.com/added" },

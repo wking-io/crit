@@ -29,7 +29,7 @@ const person = Schema.decodeUnknownSync(PersonInvocation)({
   }
 })
 const addFrame = (frameId: string, title: string) => decodeCanvasCommandBatch([{
-  _tag: "add-frame", frameId, title,
+  _tag: "addFrame", frameId, title,
   representation: { _tag: "application-route", applicationId: "application_replica", route: "/", state: {} },
   status: "in-progress",
   geometry: { x: 0, y: 0, width: 800, height: 600 }
@@ -45,11 +45,11 @@ export const ReplicaConformance = {
     yield* requireFact(opened.pending.length === 0 && opened.projection.title === "Original", "open did not initialize authority checkpoint")
     const first = yield* replica.change(ReplicaModel.change({
       canvasId,
-      commands: decodeCanvasCommandBatch([{ _tag: "rename-canvas", expectedTitle: "Original", title: "First" }])
+      commands: decodeCanvasCommandBatch([{ _tag: "renameCanvas", expectedTitle: "Original", title: "First" }])
     }), person)
     const second = yield* replica.change(ReplicaModel.change({
       canvasId,
-      commands: decodeCanvasCommandBatch([{ _tag: "rename-canvas", expectedTitle: "First", title: "Second" }])
+      commands: decodeCanvasCommandBatch([{ _tag: "renameCanvas", expectedTitle: "First", title: "Second" }])
     }), person)
     yield* requireFact(first.changeId !== second.changeId, "change IDs were not stable and distinct")
     yield* requireFact(second.view.pending[1]?.dependencies[0] === first.changeId, "optimistic-only change did not depend on active prefix")
@@ -68,13 +68,13 @@ export const ReplicaConformance = {
     const child = yield* replica.change(ReplicaModel.change({
       canvasId,
       commands: decodeCanvasCommandBatch([{
-        _tag: "set-frame-title", frameId: "frame_conformance_shared",
+        _tag: "setFrameTitle", frameId: "frame_conformance_shared",
         expectedChangedByChangeId: parent.changeId, title: "Child"
       }])
     }), person)
     const independent = yield* replica.change(ReplicaModel.change({
       canvasId,
-      commands: decodeCanvasCommandBatch([{ _tag: "rename-canvas", expectedTitle: "Original", title: "Independent" }])
+      commands: decodeCanvasCommandBatch([{ _tag: "renameCanvas", expectedTitle: "Original", title: "Independent" }])
     }), person)
     yield* requireFact(independent.view.pending[2]?.dependencies.length === 0, "independent work gained dependencies")
     yield* authority.submit({
@@ -93,7 +93,7 @@ export const ReplicaConformance = {
     const canvasId = Id.canvas("canvas_replica_conformance_reconcile")
     const genesisCursor = ProtocolValue.cursor("cursor_replica_conformance_genesis")
     const acceptedCursor = ProtocolValue.cursor("cursor_replica_conformance_accepted")
-    const commands = decodeCanvasCommandBatch([{ _tag: "rename-canvas", expectedTitle: "Original", title: "Accepted" }])
+    const commands = decodeCanvasCommandBatch([{ _tag: "renameCanvas", expectedTitle: "Original", title: "Accepted" }])
     const changeId = Id.change("change_replica_conformance_reconcile")
     const state = ReplicaPolicy.initialize(AuthorityView.make({
       canvasId,

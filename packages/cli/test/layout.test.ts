@@ -26,7 +26,7 @@ const populated = () => {
       changeId: "change_layout",
       commands: [
         {
-          _tag: "add-frame",
+          _tag: "addFrame",
           frameId: "frame_checkout",
           title: "Checkout",
           representation: {

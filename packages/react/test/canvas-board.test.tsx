@@ -242,7 +242,7 @@ describe("CanvasBoard", () => {
       }))
     })
     expect(onSubmit).toHaveBeenCalledWith([{
-      _tag: "remove-frame",
+      _tag: "removeFrame",
       frameId: "frame_checkout",
       expectedUpdatedByChangeId: "change_1"
     }])
@@ -278,7 +278,7 @@ describe("CanvasBoard", () => {
     })
 
     expect(onSubmit).toHaveBeenCalledWith([{
-      _tag: "set-frame-geometry",
+      _tag: "setFrameGeometry",
       frameId: "frame_checkout",
       expectedChangedByChangeId: "change_1",
       geometry: { x: 60, y: 110, width: 320, height: 200 }
@@ -319,7 +319,7 @@ describe("CanvasBoard", () => {
     })
 
     expect(onSubmit).toHaveBeenCalledWith([{
-      _tag: "set-frame-geometry",
+      _tag: "setFrameGeometry",
       frameId: "frame_checkout",
       expectedChangedByChangeId: "change_1",
       geometry: { x: 60, y: 110, width: 320, height: 200 }

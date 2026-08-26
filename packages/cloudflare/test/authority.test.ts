@@ -91,7 +91,7 @@ describe("Cloudflare CanvasAuthority", () => {
           changeId: Id.change("change_restart_accepted"),
           observedCursor: null,
           commands: decodeCanvasCommandBatch([{
-            _tag: "rename-canvas",
+            _tag: "renameCanvas",
             expectedTitle: "Authority",
             title: "Review"
           }])
@@ -101,7 +101,7 @@ describe("Cloudflare CanvasAuthority", () => {
           changeId: Id.change("change_restart_rejected"),
           observedCursor: null,
           commands: decodeCanvasCommandBatch([{
-            _tag: "rename-canvas",
+            _tag: "renameCanvas",
             expectedTitle: "Wrong",
             title: "Rejected"
           }])
@@ -117,7 +117,7 @@ describe("Cloudflare CanvasAuthority", () => {
           changeId: Id.change("change_restart_accepted"),
           observedCursor: null,
           commands: decodeCanvasCommandBatch([{
-            _tag: "rename-canvas",
+            _tag: "renameCanvas",
             expectedTitle: "Authority",
             title: "Review"
           }])
@@ -131,7 +131,7 @@ describe("Cloudflare CanvasAuthority", () => {
           changeId: Id.change("change_restart_rejected"),
           observedCursor: null,
           commands: decodeCanvasCommandBatch([{
-            _tag: "rename-canvas",
+            _tag: "renameCanvas",
             expectedTitle: "Wrong",
             title: "Rejected"
           }])
@@ -144,7 +144,7 @@ describe("Cloudflare CanvasAuthority", () => {
         const changedRetry = yield* Effect.result(authority.submit({
           ...rejectedProposal,
           commands: decodeCanvasCommandBatch([{
-            _tag: "rename-canvas",
+            _tag: "renameCanvas",
             expectedTitle: "Review",
             title: "Other"
           }])
@@ -158,7 +158,7 @@ describe("Cloudflare CanvasAuthority", () => {
           changeId: Id.change("change_restart_next"),
           observedCursor: null,
           commands: decodeCanvasCommandBatch([{
-            _tag: "rename-canvas",
+            _tag: "renameCanvas",
             expectedTitle: "Review",
             title: "Final"
           }])
@@ -198,12 +198,12 @@ describe("Cloudflare CanvasAuthority", () => {
         observedCursor: null,
         commands: decodeCanvasCommandBatch([
           {
-            _tag: "rename-canvas",
+            _tag: "renameCanvas",
             expectedTitle: "Authority",
             title: "Changed"
           },
           {
-            _tag: "add-frame",
+            _tag: "addFrame",
             frameId: "frame_oversized",
             title: "Oversized",
             representation: {

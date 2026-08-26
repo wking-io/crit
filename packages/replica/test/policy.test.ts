@@ -34,7 +34,7 @@ const agent = Schema.decodeUnknownSync(AgentInvocation)({
   },
   executionId: "execution_replica_policy"
 })
-const commands = decodeCanvasCommandBatch([{ _tag: "rename-canvas", expectedTitle: "Original", title: "Accepted" }])
+const commands = decodeCanvasCommandBatch([{ _tag: "renameCanvas", expectedTitle: "Original", title: "Accepted" }])
 const changeId = Id.change("change_replica_policy")
 const initial = () => ReplicaPolicy.initialize(AuthorityView.make({
   canvasId,

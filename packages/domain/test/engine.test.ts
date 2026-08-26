@@ -70,8 +70,8 @@ describe("CanvasEngine.apply", () => {
       canvasId: "canvas_checkout",
       changeId: "change_stale",
       commands: [
-        { _tag: "rename-canvas", expectedTitle: "Checkout", title: "Review" },
-        { _tag: "rename-canvas", expectedTitle: "Checkout", title: "Final" }
+        { _tag: "renameCanvas", expectedTitle: "Checkout", title: "Review" },
+        { _tag: "renameCanvas", expectedTitle: "Checkout", title: "Final" }
       ]
     })
     const before = DomainValue.detach(initial)
@@ -94,7 +94,7 @@ describe("CanvasEngine.apply", () => {
       canvasId: "canvas_checkout",
       changeId: "change_noop",
       commands: [
-        { _tag: "rename-canvas", expectedTitle: "Checkout", title: "Checkout" }
+        { _tag: "renameCanvas", expectedTitle: "Checkout", title: "Checkout" }
       ]
     })
     const result = CanvasEngine.apply(initial, change)
@@ -109,7 +109,7 @@ describe("CanvasEngine.apply", () => {
       ...changes[0],
       canvasId: "canvas_other",
       commands: [
-        { _tag: "rename-canvas", expectedTitle: "Wrong", title: "Still wrong" }
+        { _tag: "renameCanvas", expectedTitle: "Wrong", title: "Still wrong" }
       ]
     })
 

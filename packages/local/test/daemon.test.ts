@@ -435,7 +435,7 @@ describe("LocalDaemon", () => {
               _tag: "replica-change",
               canvasId,
               commands: [{
-                _tag: "rename-canvas",
+                _tag: "renameCanvas",
                 expectedTitle: "Wrong",
                 title: "Rejected"
               }]
@@ -445,7 +445,7 @@ describe("LocalDaemon", () => {
           const changed = yield* client.change(ReplicaModel.change({
             canvasId,
             commands: decodeCanvasCommandBatch([{
-              _tag: "rename-canvas",
+              _tag: "renameCanvas",
               expectedTitle: "Original",
               title: "Changed"
             }])
@@ -494,7 +494,7 @@ describe("LocalDaemon", () => {
       const receipt = yield* client.change(ReplicaModel.change({
         canvasId,
         commands: decodeCanvasCommandBatch([{
-          _tag: "rename-canvas",
+          _tag: "renameCanvas",
           expectedTitle: "Original",
           title: "Changed"
         }])
@@ -640,7 +640,7 @@ describe("LocalDaemon", () => {
       const changed = yield* client.change(ReplicaModel.change({
         canvasId,
         commands: decodeCanvasCommandBatch([{
-          _tag: "rename-canvas",
+          _tag: "renameCanvas",
           expectedTitle: "Person stamp",
           title: "Person changed"
         }])
@@ -678,7 +678,7 @@ describe("LocalDaemon", () => {
       const changed = yield* agentClient.change(ReplicaModel.change({
         canvasId,
         commands: decodeCanvasCommandBatch([{
-          _tag: "rename-canvas",
+          _tag: "renameCanvas",
           expectedTitle: "Agent stamp",
           title: "Agent changed"
         }])
@@ -747,7 +747,7 @@ describe("LocalDaemon", () => {
           _tag: "replica-change",
           canvasId,
           commands: [{
-            _tag: "rename-canvas",
+            _tag: "renameCanvas",
             expectedTitle: "Trusted change",
             title: "Still person"
           }],

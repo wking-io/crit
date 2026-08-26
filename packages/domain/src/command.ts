@@ -6,14 +6,14 @@ import { Geometry } from "./geometry.js"
 import { CanvasId, ChangeId, FrameId } from "./ids.js"
 import { RepresentationRef } from "./representation.js"
 
-export const RenameCanvasCommand = Schema.TaggedStruct("rename-canvas", { expectedTitle: CanvasTitle, title: CanvasTitle })
-export const AddFrameCommand = Schema.TaggedStruct("add-frame", { frameId: FrameId, title: AuthoredText, representation: RepresentationRef, status: ReviewStatus, geometry: Geometry })
-export const SetFrameTitleCommand = Schema.TaggedStruct("set-frame-title", { frameId: FrameId, expectedChangedByChangeId: ChangeId, title: AuthoredText })
-export const SetFrameRepresentationCommand = Schema.TaggedStruct("set-frame-representation", { frameId: FrameId, expectedChangedByChangeId: ChangeId, representation: RepresentationRef })
-export const SetFrameStatusCommand = Schema.TaggedStruct("set-frame-status", { frameId: FrameId, expectedChangedByChangeId: ChangeId, status: ReviewStatus })
-export const SetFrameGeometryCommand = Schema.TaggedStruct("set-frame-geometry", { frameId: FrameId, expectedChangedByChangeId: ChangeId, geometry: Geometry })
-export const RemoveFrameCommand = Schema.TaggedStruct("remove-frame", { frameId: FrameId, expectedUpdatedByChangeId: ChangeId })
-export const PlaceCanvasItemCommand = Schema.TaggedStruct("place-canvas-item", { item: CanvasItemRef, after: Schema.NullOr(CanvasItemRef), expectedStackChangeId: Schema.NullOr(ChangeId) })
+export const RenameCanvasCommand = Schema.TaggedStruct("renameCanvas", { expectedTitle: CanvasTitle, title: CanvasTitle })
+export const AddFrameCommand = Schema.TaggedStruct("addFrame", { frameId: FrameId, title: AuthoredText, representation: RepresentationRef, status: ReviewStatus, geometry: Geometry })
+export const SetFrameTitleCommand = Schema.TaggedStruct("setFrameTitle", { frameId: FrameId, expectedChangedByChangeId: ChangeId, title: AuthoredText })
+export const SetFrameRepresentationCommand = Schema.TaggedStruct("setFrameRepresentation", { frameId: FrameId, expectedChangedByChangeId: ChangeId, representation: RepresentationRef })
+export const SetFrameStatusCommand = Schema.TaggedStruct("setFrameStatus", { frameId: FrameId, expectedChangedByChangeId: ChangeId, status: ReviewStatus })
+export const SetFrameGeometryCommand = Schema.TaggedStruct("setFrameGeometry", { frameId: FrameId, expectedChangedByChangeId: ChangeId, geometry: Geometry })
+export const RemoveFrameCommand = Schema.TaggedStruct("removeFrame", { frameId: FrameId, expectedUpdatedByChangeId: ChangeId })
+export const PlaceCanvasItemCommand = Schema.TaggedStruct("placeCanvasItem", { item: CanvasItemRef, after: Schema.NullOr(CanvasItemRef), expectedStackChangeId: Schema.NullOr(ChangeId) })
 
 export const CanvasCommand = Schema.Union([
   RenameCanvasCommand, AddFrameCommand, SetFrameTitleCommand,
