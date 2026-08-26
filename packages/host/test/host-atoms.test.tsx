@@ -13,16 +13,23 @@ const instance = Schema.decodeUnknownSync(LocalDaemonInstanceNonce)(
 
 const shopCanvasId = Id.canvas("canvas_shop")
 const reviewCanvasId = Id.canvas("canvas_review")
+const localOrigin = "http://127.0.0.1:5173"
 
 describe("hostScreenAtom", () => {
   it("is invalid for a bad fragment and can be read after the registry is replaced", () => {
-    const atom = hostScreenAtom("#crit=")(shopCanvasId)
+    const atom = hostScreenAtom("#crit=")(localOrigin)(shopCanvasId)
     const first = AtomRegistry.make()
-    expect(first.get(atom)).toEqual({ _tag: "invalid" })
+    expect(first.get(atom)).toEqual({
+      _tag: "invalid",
+      reason: "Unable to connect to Crit."
+    })
     first.dispose()
     expect(() => first.get(atom)).toThrow(/disposed/)
     const second = AtomRegistry.make()
-    expect(second.get(atom)).toEqual({ _tag: "invalid" })
+    expect(second.get(atom)).toEqual({
+      _tag: "invalid",
+      reason: "Unable to connect to Crit."
+    })
     second.dispose()
   })
 
@@ -32,8 +39,8 @@ describe("hostScreenAtom", () => {
       instance
     })
     const fragment = LocalBrowserConnection.encode(descriptor)
-    expect(hostScreenAtom(fragment)(shopCanvasId))
-      .toBe(hostScreenAtom(fragment)(shopCanvasId))
+    expect(hostScreenAtom(fragment)(localOrigin)(shopCanvasId))
+      .toBe(hostScreenAtom(fragment)(localOrigin)(shopCanvasId))
   })
 
   it("is ready for a valid fragment without creating a canvas", () => {
@@ -42,7 +49,11 @@ describe("hostScreenAtom", () => {
       instance
     })
     const registry = AtomRegistry.make()
-    const screen = registry.get(hostScreenAtom(LocalBrowserConnection.encode(descriptor))(shopCanvasId))
+    const screen = registry.get(
+      hostScreenAtom(LocalBrowserConnection.encode(descriptor))(localOrigin)(
+        shopCanvasId
+      )
+    )
     expect(screen._tag).toBe("ready")
     if (screen._tag === "ready") {
       expect(screen.props.canvasId).toBe(shopCanvasId)
@@ -56,8 +67,8 @@ describe("hostScreenAtom", () => {
       instance
     })
     const fragment = LocalBrowserConnection.encode(descriptor)
-    const shop = hostScreenAtom(fragment)(shopCanvasId)
-    const review = hostScreenAtom(fragment)(reviewCanvasId)
+    const shop = hostScreenAtom(fragment)(localOrigin)(shopCanvasId)
+    const review = hostScreenAtom(fragment)(localOrigin)(reviewCanvasId)
     expect(review).not.toBe(shop)
     const registry = AtomRegistry.make()
     const shopScreen = registry.get(shop)
@@ -77,7 +88,19 @@ describe("hostScreenAtom", () => {
 describe("hostIndexAtom", () => {
   it("is invalid for a bad fragment", () => {
     const registry = AtomRegistry.make()
-    expect(registry.get(hostIndexAtom("#crit="))).toEqual({ _tag: "invalid" })
+    expect(registry.get(hostIndexAtom("#crit=")(localOrigin))).toEqual({
+      _tag: "invalid",
+      reason: "Unable to connect to Crit."
+    })
+    registry.dispose()
+  })
+
+  it("is invalid for a fragment-free loopback origin", () => {
+    const registry = AtomRegistry.make()
+    expect(registry.get(hostIndexAtom("")(localOrigin))).toEqual({
+      _tag: "invalid",
+      reason: "Hosted mode requires a non-loopback HTTPS origin."
+    })
     registry.dispose()
   })
 
@@ -87,7 +110,9 @@ describe("hostIndexAtom", () => {
       instance
     })
     const registry = AtomRegistry.make()
-    expect(registry.get(hostIndexAtom(LocalBrowserConnection.encode(descriptor)))._tag)
+    expect(registry.get(
+      hostIndexAtom(LocalBrowserConnection.encode(descriptor))(localOrigin)
+    )._tag)
       .toBe("connecting")
     registry.dispose()
   })

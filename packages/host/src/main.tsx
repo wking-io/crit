@@ -7,7 +7,10 @@ const container = document.getElementById("root")
 if (container !== null) {
   createRoot(container).render(
     <StrictMode>
-      <HostRoot fragment={window.location.hash} />
+      <HostRoot
+        fragment={window.location.hash}
+        origin={window.location.origin}
+      />
     </StrictMode>
   )
 }

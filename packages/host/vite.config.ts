@@ -3,6 +3,10 @@ import { fileURLToPath } from "node:url"
 import { defineConfig } from "vite"
 
 export default defineConfig({
+  build: {
+    outDir: "dist-web",
+    emptyOutDir: true
+  },
   resolve: {
     alias: {
       "@crit/authority": fileURLToPath(new URL("../authority/src/index.ts", import.meta.url)),

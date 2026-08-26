@@ -8,6 +8,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { HostRoot } from "../src/index.js"
 
+const fetchMock = vi.hoisted(() => {
+  const mock = vi.fn<typeof globalThis.fetch>()
+  vi.stubGlobal("fetch", mock)
+  return mock
+})
+
 Object.defineProperty(globalThis, "IS_REACT_ACT_ENVIRONMENT", { value: true })
 
 const instance = Schema.decodeUnknownSync(LocalDaemonInstanceNonce)(
@@ -19,10 +25,19 @@ let root: Root
 
 const render = (element: ReactElement) => root.render(<StrictMode>{element}</StrictMode>)
 
-const hostAt = (path: string, fragment: string) => (
+const fetched = (url: string): boolean => fetchMock.mock.calls.some(
+  ([input, init]) => String(input) === url && init?.method === "GET"
+)
+
+const hostAt = (
+  path: string,
+  fragment: string,
+  origin = "http://127.0.0.1:5173"
+) => (
   <HostRoot
     fragment={fragment}
     history={createMemoryHistory({ initialEntries: [path] })}
+    origin={origin}
   />
 )
 
@@ -36,6 +51,7 @@ afterEach(async() => {
   await act(async() => root.unmount())
   container.remove()
   vi.restoreAllMocks()
+  fetchMock.mockReset()
 })
 
 describe("HostRoot", () => {
@@ -111,4 +127,58 @@ describe("HostRoot", () => {
       { timeout: 10_000 }
     ))
   }, 15_000)
+
+  it("lists hosted canvases from the same-origin directory", async() => {
+    fetchMock.mockImplementation(async() => new Response(JSON.stringify({
+      kind: "canvas-directory",
+      schemaVersion: 1,
+      canvases: [{
+        canvasId: "canvas_hosted",
+        workspaceId: "workspace_default",
+        title: "Hosted review"
+      }]
+    }), {
+      status: 200,
+      headers: { "content-type": "application/json" }
+    }))
+    await act(async() => render(hostAt("/", "", "https://crit.example")))
+
+    await act(async() => vi.waitFor(() => {
+      expect(container.querySelector("a")?.textContent).toBe("Hosted review")
+    }))
+    expect(fetched("http://localhost:3000/canvas")).toBe(true)
+  })
+
+  it("builds hosted canvas ports without a local capability", async() => {
+    fetchMock.mockImplementation(async(input: RequestInfo | URL) => {
+      const url = new URL(String(input))
+      if (url.pathname === "/identity") {
+        return new Response(JSON.stringify({
+          kind: "access-authenticated-person",
+          schemaVersion: 1,
+          address: "ada@acme.com"
+        }), {
+          status: 200,
+          headers: { "content-type": "application/json" }
+        })
+      }
+      return new Response(JSON.stringify({
+        _tag: "canvasNotFound",
+        canvasId: "canvas_shop"
+      }), {
+        status: 404,
+        headers: { "content-type": "application/json" }
+      })
+    })
+    await act(async() => render(hostAt(
+      "/canvas/canvas_shop",
+      "",
+      "https://crit.example"
+    )))
+
+    await act(async() => vi.waitFor(() => {
+      expect(fetched("http://localhost:3000/identity")).toBe(true)
+      expect(fetched("http://localhost:3000/canvas/canvas_shop")).toBe(true)
+    }, { timeout: 10_000 }))
+  })
 })

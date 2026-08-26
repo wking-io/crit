@@ -8,18 +8,24 @@
     "jsx": "react-jsx",
     "baseUrl": ".",
     "paths": {
+      "@crit/authority": ["../authority/src/index.ts"],
       "@crit/client": ["../client/src/index.ts"],
       "@crit/domain": ["../domain/src/index.ts"],
+      "@crit/protocol": ["../protocol/src/index.ts"],
       "@crit/react": ["../react/src/index.ts"],
       "@crit/replica": ["../replica/src/index.ts"],
-      "@crit/replica/http": ["../replica/src/http.ts"]
+      "@crit/replica/http": ["../replica/src/http.ts"],
+      "@crit/representations": ["../representations/src/index.ts"]
     }
   },
   "include": ["src"],
   "references": [
+    { "path": "../authority" },
     { "path": "../client" },
     { "path": "../domain" },
+    { "path": "../protocol" },
     { "path": "../react" },
-    { "path": "../replica" }
+    { "path": "../replica" },
+    { "path": "../representations" }
   ]
 }

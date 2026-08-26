@@ -55,6 +55,16 @@ import * as Socket from "effect/unstable/socket/Socket"
 import { LocalClientOptions } from "./local-client-options.js"
 
 export {
+  HostedAccessDenied,
+  HostedReviewClient,
+  HostedReviewUnreachable
+} from "./hosted-review.js"
+export type {
+  HostedReviewClientService,
+  HostedReviewFailure
+} from "./hosted-review.js"
+export { HttpArtifactStore } from "./http-artifact-store.js"
+export {
   LocalBrowserConnection,
   LocalBrowserConnectionDescriptor,
   LocalBrowserConnectionInvalid

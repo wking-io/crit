@@ -5,13 +5,18 @@
   "type": "module",
   "sideEffects": false,
   "scripts": {
+    "build": "vite build",
     "dev": "vite",
     "test": "vitest run --config vitest.config.ts"
   },
   "dependencies": {
+    "@crit/authority": "*",
     "@crit/client": "*",
     "@crit/domain": "*",
+    "@crit/protocol": "*",
     "@crit/react": "*",
+    "@crit/replica": "*",
+    "@crit/representations": "*",
     "@effect/atom-react": "4.0.0-rc.109",
     "@tanstack/react-query": "^5.102.1",
     "@tanstack/react-router": "^1.170.32",
@@ -21,7 +26,6 @@
     "scheduler": "0.27.0"
   },
   "devDependencies": {
-    "@crit/replica": "*",
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
     "jsdom": "^26.1.0",
