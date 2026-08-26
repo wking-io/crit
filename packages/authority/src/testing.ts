@@ -85,7 +85,7 @@ const create = (authority: CanvasAuthority["Service"], canvasId = canvasA) => au
 }, person)
 
 const rename = (expectedTitle: string, title: string) => decodeCanvasCommandBatch([{
-  _tag: "rename-canvas",
+  _tag: "renameCanvas",
   expectedTitle,
   title
 }])
@@ -108,7 +108,7 @@ const requireScenario = (scenario: string, condition: boolean, message: string):
 
 const renamedTitle = (proposalValue: ProposedCanvasChange): string | undefined => {
   const first = proposalValue.commands[0]
-  return first?._tag === "rename-canvas" ? first.title : undefined
+  return first?._tag === "renameCanvas" ? first.title : undefined
 }
 
 const failureTag = <A, E extends { readonly _tag: string }>(effect: Effect.Effect<A, E>) =>
@@ -266,7 +266,7 @@ const ledgerScenario = (factory: AuthorityConformanceFactory): AuthorityConforma
       const submissions = Array.from({ length: 6 }, (_, index) => authority.submit(proposal(
         `change_conformance_frame_${index}`,
         decodeCanvasCommandBatch([{
-          _tag: "add-frame",
+          _tag: "addFrame",
           frameId: `frame_conformance_${index}`,
           title: `Frame ${index}`,
           representation: { _tag: "web-url", url: `https://example.com/${index}` },
@@ -413,8 +413,8 @@ const atomicConflictScenario = (factory: AuthorityConformanceFactory): Authority
           canvasId: canvasA,
           observedCursor: null,
           commands: decodeCanvasCommandBatch([
-            { _tag: "rename-canvas", expectedTitle: "Authority", title: "Review" },
-            { _tag: "rename-canvas", expectedTitle: "Authority", title: "Final" }
+            { _tag: "renameCanvas", expectedTitle: "Authority", title: "Review" },
+            { _tag: "renameCanvas", expectedTitle: "Authority", title: "Final" }
           ])
         }
         requireScenario(name, (yield* failureTag(authority.submit(conflict, person))) === "change-rejected", "atomic conflict was accepted")

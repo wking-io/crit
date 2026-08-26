@@ -135,7 +135,7 @@ describe("SQLite ReplicaStore", () => {
       yield* replica.open(canvasId)
       yield* replica.change(ReplicaModel.change({
         canvasId,
-        commands: decodeCanvasCommandBatch([{ _tag: "rename-canvas", expectedTitle: "Before", title: "After" }])
+        commands: decodeCanvasCommandBatch([{ _tag: "renameCanvas", expectedTitle: "Before", title: "After" }])
       }), invocation)
       expect(Exit.isFailure(yield* Effect.exit(replica.sync(canvasId)))).toBe(true)
     }))
@@ -173,7 +173,7 @@ describe("SQLite ReplicaStore", () => {
       yield* replica.open(canvasId)
       yield* replica.change(ReplicaModel.change({
         canvasId,
-        commands: decodeCanvasCommandBatch([{ _tag: "rename-canvas", expectedTitle: "Before", title: "Offline" }])
+        commands: decodeCanvasCommandBatch([{ _tag: "renameCanvas", expectedTitle: "Before", title: "Offline" }])
       }), invocation)
     }))
     yield* Effect.scoped(Effect.gen(function*() {
@@ -296,13 +296,13 @@ describe("SQLite ReplicaStore", () => {
       canvasId,
       changeId: Id.change("change_sqlite_legacy_accepted"),
       observedCursor: null,
-      commands: decodeCanvasCommandBatch([{ _tag: "rename-canvas", expectedTitle: "Before", title: "After" }])
+      commands: decodeCanvasCommandBatch([{ _tag: "renameCanvas", expectedTitle: "Before", title: "After" }])
     }
     const rejectedProposal = {
       canvasId,
       changeId: Id.change("change_sqlite_legacy_rejected"),
       observedCursor: null,
-      commands: decodeCanvasCommandBatch([{ _tag: "rename-canvas", expectedTitle: "Wrong", title: "Rejected" }])
+      commands: decodeCanvasCommandBatch([{ _tag: "renameCanvas", expectedTitle: "Wrong", title: "Rejected" }])
     }
     yield* Effect.scoped(Effect.gen(function*() {
       const authority = yield* buildAuthority(path)

@@ -45,7 +45,7 @@ const person = Schema.decodeUnknownSync(PersonInvocation)({
 })
 
 const addFrame = (frameId: string, title = "Frame") => decodeCanvasCommandBatch([{
-  _tag: "add-frame",
+  _tag: "addFrame",
   frameId,
   title,
   representation: { _tag: "application-route", applicationId: "application_replica", route: "/", state: {} },
@@ -95,11 +95,11 @@ describe("MemoryCanvasReplica", () => {
       const pullB = yield* Stream.toPull(notificationsB)
       yield* replica.change(ReplicaModel.change({
         canvasId: canvasA,
-        commands: decodeCanvasCommandBatch([{ _tag: "rename-canvas", expectedTitle: "A", title: "A1" }])
+        commands: decodeCanvasCommandBatch([{ _tag: "renameCanvas", expectedTitle: "A", title: "A1" }])
       }), person)
       yield* replica.change(ReplicaModel.change({
         canvasId: canvasA,
-        commands: decodeCanvasCommandBatch([{ _tag: "rename-canvas", expectedTitle: "A1", title: "A2" }])
+        commands: decodeCanvasCommandBatch([{ _tag: "renameCanvas", expectedTitle: "A1", title: "A2" }])
       }), person)
       expect(yield* pullA).toEqual([{ kind: "replica-changed", schemaVersion: 1, canvasId: canvasA }])
       expect(Option.isNone(yield* pullB.pipe(Effect.timeoutOption("10 millis")))).toBe(true)
@@ -108,7 +108,7 @@ describe("MemoryCanvasReplica", () => {
       const rejectedPull = yield* Stream.toPull(rejectedNotifications)
       yield* replica.change(ReplicaModel.change({
         canvasId: canvasB,
-        commands: decodeCanvasCommandBatch([{ _tag: "rename-canvas", expectedTitle: "wrong", title: "B2" }])
+        commands: decodeCanvasCommandBatch([{ _tag: "renameCanvas", expectedTitle: "wrong", title: "B2" }])
       }), person).pipe(Effect.result)
       expect(Option.isNone(yield* rejectedPull.pipe(Effect.timeoutOption("10 millis")))).toBe(true)
     }).pipe(Effect.provide(makeLayer()))
@@ -134,7 +134,7 @@ describe("MemoryCanvasReplica", () => {
         yield* replica.open(canvasId)
         const input = ReplicaModel.change({
           canvasId,
-          commands: decodeCanvasCommandBatch([{ _tag: "rename-canvas", expectedTitle: "Original", title: "Owned" }])
+          commands: decodeCanvasCommandBatch([{ _tag: "renameCanvas", expectedTitle: "Original", title: "Owned" }])
         })
         const incoming = DomainValue.detach(person)
         const fiber = yield* Effect.forkChild(replica.change(input, incoming))
@@ -184,7 +184,7 @@ describe("MemoryCanvasReplica", () => {
       yield* replica.open(canvasId)
       yield* replica.change(ReplicaModel.change({
         canvasId,
-        commands: decodeCanvasCommandBatch([{ _tag: "rename-canvas", expectedTitle: "Original", title: "Synced" }])
+        commands: decodeCanvasCommandBatch([{ _tag: "renameCanvas", expectedTitle: "Original", title: "Synced" }])
       }), person)
       yield* replica.sync(canvasId)
       expect(events).toEqual(["pull", "submit", "pull", "pull"])
@@ -207,7 +207,7 @@ describe("MemoryCanvasReplica", () => {
         canvasId,
         changeId: Id.change("change_replica_partial_sync_remote"),
         observedCursor: genesis.cursor,
-        commands: decodeCanvasCommandBatch([{ _tag: "rename-canvas", expectedTitle: "Original", title: "Remote" }])
+        commands: decodeCanvasCommandBatch([{ _tag: "renameCanvas", expectedTitle: "Original", title: "Remote" }])
       }, person)
       const notifications = yield* replica.subscribe(canvasId)
       const pull = yield* Stream.toPull(notifications)
@@ -257,13 +257,13 @@ describe("MemoryCanvasReplica", () => {
       yield* replica.open(canvasId)
       const local = yield* replica.change(ReplicaModel.change({
         canvasId,
-        commands: decodeCanvasCommandBatch([{ _tag: "rename-canvas", expectedTitle: "Original", title: "Local" }])
+        commands: decodeCanvasCommandBatch([{ _tag: "renameCanvas", expectedTitle: "Original", title: "Local" }])
       }), person)
       yield* authority.submit({
         canvasId,
         changeId: Id.change("change_remote_conflict"),
         observedCursor: genesis.cursor,
-        commands: decodeCanvasCommandBatch([{ _tag: "rename-canvas", expectedTitle: "Original", title: "Remote" }])
+        commands: decodeCanvasCommandBatch([{ _tag: "renameCanvas", expectedTitle: "Original", title: "Remote" }])
       }, person)
       const synced = yield* replica.sync(canvasId)
       expect(synced.view.projection.title).toBe("Remote")

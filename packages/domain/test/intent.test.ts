@@ -37,7 +37,7 @@ describe("intent", () => {
   it("places a Frame at the front or back of the current stack", () => {
     const created = apply(empty(), "change_create", [
       {
-        _tag: "add-frame",
+        _tag: "addFrame",
         frameId: "frame_a",
         title: "First",
         representation: { _tag: "web-url", url: "https://example.com" },
@@ -45,7 +45,7 @@ describe("intent", () => {
         geometry: { x: 0, y: 0, width: 100, height: 80 }
       },
       {
-        _tag: "add-frame",
+        _tag: "addFrame",
         frameId: "frame_b",
         title: "Second",
         representation: { _tag: "web-url", url: "https://example.org" },
@@ -56,7 +56,7 @@ describe("intent", () => {
     const first = created.frames.find((frame) => frame.frameId === "frame_a")
     if (first === undefined) throw new Error("Frame missing")
     expect(proposeSendToBack(created, first)).toMatchObject({
-      _tag: "place-canvas-item",
+      _tag: "placeCanvasItem",
       item: { _tag: "frame", frameId: "frame_a" },
       after: null,
       expectedStackChangeId: "change_create"
@@ -80,7 +80,7 @@ describe("intent", () => {
     if (frame === undefined) throw new Error("Frame missing")
 
     expect(proposeRenameCanvas(created, "Renamed")).toEqual({
-      _tag: "rename-canvas",
+      _tag: "renameCanvas",
       expectedTitle: "Review",
       title: "Renamed"
     })
@@ -88,16 +88,16 @@ describe("intent", () => {
       _tag: "web-url",
       url: "https://example.org"
     })).toMatchObject({
-      _tag: "set-frame-representation",
+      _tag: "setFrameRepresentation",
       frameId: "frame_a",
       expectedChangedByChangeId: "change_create"
     })
     expect(proposeSetFrameTitle(frame, "Updated")).toMatchObject({
-      _tag: "set-frame-title",
+      _tag: "setFrameTitle",
       expectedChangedByChangeId: "change_create"
     })
     expect(proposeSetFrameStatus(frame, "approved")).toMatchObject({
-      _tag: "set-frame-status",
+      _tag: "setFrameStatus",
       expectedChangedByChangeId: "change_create"
     })
     expect(proposeSetFrameGeometry(frame, {
@@ -106,11 +106,11 @@ describe("intent", () => {
       width: 120,
       height: 90
     })).toMatchObject({
-      _tag: "set-frame-geometry",
+      _tag: "setFrameGeometry",
       expectedChangedByChangeId: "change_create"
     })
     expect(proposeRemoveFrame(frame)).toMatchObject({
-      _tag: "remove-frame",
+      _tag: "removeFrame",
       expectedUpdatedByChangeId: "change_create"
     })
   })

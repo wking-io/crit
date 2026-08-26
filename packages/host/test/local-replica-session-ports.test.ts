@@ -51,7 +51,7 @@ const view = Schema.decodeUnknownSync(ReplicaView)({
 })
 
 const commands = decodeCanvasCommandBatch([{
-  _tag: "add-frame",
+  _tag: "addFrame",
   frameId: "frame_added",
   title: "Added",
   representation: { _tag: "web-url", url: "https://example.com/added" },

@@ -108,7 +108,7 @@ describe("CanvasDurableObject", () => {
         changeId: Id.change("change_workerd_restart_accepted"),
         observedCursor: null,
         commands: decodeCanvasCommandBatch([{
-          _tag: "rename-canvas",
+          _tag: "renameCanvas",
           expectedTitle: "Authority",
           title: "Review"
         }])
@@ -119,7 +119,7 @@ describe("CanvasDurableObject", () => {
         changeId: Id.change("change_workerd_restart_rejected"),
         observedCursor: null,
         commands: decodeCanvasCommandBatch([{
-          _tag: "rename-canvas",
+          _tag: "renameCanvas",
           expectedTitle: "Wrong",
           title: "Rejected"
         }])
@@ -143,7 +143,7 @@ describe("CanvasDurableObject", () => {
       const changedRetry = yield* Effect.result(authority.submit({
         ...rejectedProposal,
         commands: decodeCanvasCommandBatch([{
-          _tag: "rename-canvas",
+          _tag: "renameCanvas",
           expectedTitle: "Review",
           title: "Other"
         }])
@@ -157,7 +157,7 @@ describe("CanvasDurableObject", () => {
         changeId: Id.change("change_workerd_restart_next"),
         observedCursor: null,
         commands: decodeCanvasCommandBatch([{
-          _tag: "rename-canvas",
+          _tag: "renameCanvas",
           expectedTitle: "Review",
           title: "Final"
         }])
@@ -194,12 +194,12 @@ describe("CanvasDurableObject", () => {
         observedCursor: null,
         commands: decodeCanvasCommandBatch([
           {
-            _tag: "rename-canvas",
+            _tag: "renameCanvas",
             expectedTitle: "Authority",
             title: "Changed"
           },
           {
-            _tag: "add-frame",
+            _tag: "addFrame",
             frameId: "frame_workerd_oversized",
             title: "Oversized",
             representation: {

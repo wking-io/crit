@@ -111,7 +111,7 @@ describe("review actions", () => {
     ]))
 
     expect(commandsFor("set-frame-status-approved", frame)).toEqual([{
-      _tag: "set-frame-status",
+      _tag: "setFrameStatus",
       frameId: "frame_a",
       expectedChangedByChangeId: "change_1",
       status: "approved"
@@ -120,18 +120,18 @@ describe("review actions", () => {
       ...frame,
       input: { _tag: "text", text: "Updated" }
     })).toEqual([{
-      _tag: "set-frame-title",
+      _tag: "setFrameTitle",
       frameId: "frame_a",
       expectedChangedByChangeId: "change_1",
       title: "Updated"
     }])
     expect(commandsFor("remove", frame)).toEqual([{
-      _tag: "remove-frame",
+      _tag: "removeFrame",
       frameId: "frame_a",
       expectedUpdatedByChangeId: "change_1"
     }])
     expect(commandsFor("bring-to-front", frame)).toEqual([{
-      _tag: "place-canvas-item",
+      _tag: "placeCanvasItem",
       item: { _tag: "frame", frameId: "frame_a" },
       after: { _tag: "frame", frameId: "frame_b" },
       expectedStackChangeId: "change_1"
@@ -207,13 +207,13 @@ describe("review actions", () => {
     ]))
     expect(commandsFor("align-left", frames)).toEqual([
       {
-        _tag: "set-frame-geometry",
+        _tag: "setFrameGeometry",
         frameId: "frame_a",
         expectedChangedByChangeId: "change_1",
         geometry: { x: 10, y: 20, width: 100, height: 80 }
       },
       {
-        _tag: "set-frame-geometry",
+        _tag: "setFrameGeometry",
         frameId: "frame_b",
         expectedChangedByChangeId: "change_1",
         geometry: { x: 10, y: 100, width: 120, height: 90 }
@@ -224,7 +224,7 @@ describe("review actions", () => {
       { _tag: "frame", frameId: "frame_a" }
     ]))
     expect(commandsFor("resize-frame-mobile", frame)).toEqual([{
-      _tag: "set-frame-geometry",
+      _tag: "setFrameGeometry",
       frameId: "frame_a",
       expectedChangedByChangeId: "change_1",
       geometry: { x: 10, y: 20, width: 402, height: 874 }
@@ -251,7 +251,7 @@ describe("review actions", () => {
       { _tag: "frame", frameId: "frame_b" }
     ]))
     expect(commandsFor("set-frame-status-approved", frames)).toEqual([{
-      _tag: "set-frame-status",
+      _tag: "setFrameStatus",
       frameId: "frame_a",
       expectedChangedByChangeId: "change_1",
       status: "approved"

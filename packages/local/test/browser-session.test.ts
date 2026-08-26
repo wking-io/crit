@@ -219,7 +219,7 @@ describe("browser session HTTP protocol", () => {
         const changed = yield* browserClient.change(ReplicaModel.change({
           canvasId,
           commands: decodeCanvasCommandBatch([{
-            _tag: "rename-canvas",
+            _tag: "renameCanvas",
             expectedTitle: "Browser session",
             title: "Browser changed"
           }])

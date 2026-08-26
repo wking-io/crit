@@ -14,7 +14,7 @@
       "changeId": "change_review",
       "commands": [
         {
-          "_tag": "rename-canvas",
+          "_tag": "renameCanvas",
           "expectedTitle": "Checkout",
           "title": "Checkout review"
         }
@@ -25,12 +25,12 @@
       "changeId": "change_critique",
       "commands": [
         {
-          "_tag": "rename-canvas",
+          "_tag": "renameCanvas",
           "expectedTitle": "Checkout review",
           "title": "Checkout final"
         },
         {
-          "_tag": "rename-canvas",
+          "_tag": "renameCanvas",
           "expectedTitle": "Checkout final",
           "title": "Checkout critique"
         }

@@ -28,7 +28,7 @@ const apply = (
 describe("Canvas content", () => {
   it("composes Frame mutations with change provenance and stable ordering", () => {
     const first = apply(empty(), "change_create", [
-      { _tag: "add-frame", frameId: "frame_b", title: "Checkout", representation, status: "in-progress", geometry: geometry(10, 20) }
+      { _tag: "addFrame", frameId: "frame_b", title: "Checkout", representation, status: "in-progress", geometry: geometry(10, 20) }
     ])
     expect(first).toMatchObject({
       stackChangedByChangeId: "change_create",
@@ -37,9 +37,9 @@ describe("Canvas content", () => {
     })
 
     const second = apply(first, "change_edit", [
-      { _tag: "set-frame-title", frameId: "frame_b", expectedChangedByChangeId: "change_create", title: "Payment" },
-      { _tag: "set-frame-status", frameId: "frame_b", expectedChangedByChangeId: "change_create", status: "ready-for-review" },
-      { _tag: "set-frame-geometry", frameId: "frame_b", expectedChangedByChangeId: "change_create", geometry: geometry(20, 30) }
+      { _tag: "setFrameTitle", frameId: "frame_b", expectedChangedByChangeId: "change_create", title: "Payment" },
+      { _tag: "setFrameStatus", frameId: "frame_b", expectedChangedByChangeId: "change_create", status: "ready-for-review" },
+      { _tag: "setFrameGeometry", frameId: "frame_b", expectedChangedByChangeId: "change_create", geometry: geometry(20, 30) }
     ])
     expect(second.frames[0]).toMatchObject({
       title: "Payment",
@@ -52,11 +52,11 @@ describe("Canvas content", () => {
 
   it("rejects stale Frame edits atomically", () => {
     const initial = apply(empty(), "change_create", [
-      { _tag: "add-frame", frameId: "frame_a", title: "Old", representation, status: "in-progress", geometry: geometry() }
+      { _tag: "addFrame", frameId: "frame_a", title: "Old", representation, status: "in-progress", geometry: geometry() }
     ])
     const result = CanvasEngine.apply(initial, change("change_stale", [
-      { _tag: "set-frame-title", frameId: "frame_a", expectedChangedByChangeId: "change_create", title: "New" },
-      { _tag: "set-frame-title", frameId: "frame_a", expectedChangedByChangeId: "change_create", title: "Lost" }
+      { _tag: "setFrameTitle", frameId: "frame_a", expectedChangedByChangeId: "change_create", title: "New" },
+      { _tag: "setFrameTitle", frameId: "frame_a", expectedChangedByChangeId: "change_create", title: "Lost" }
     ]))
     expect(result).toMatchObject({
       _tag: "rejected",
@@ -67,17 +67,17 @@ describe("Canvas content", () => {
 
   it("preserves stamps for no-ops and lifetime IDs after deletion", () => {
     const created = apply(empty(), "change_create", [
-      { _tag: "add-frame", frameId: "frame_a", title: "Same", representation, status: "in-progress", geometry: geometry() }
+      { _tag: "addFrame", frameId: "frame_a", title: "Same", representation, status: "in-progress", geometry: geometry() }
     ])
     const noop = apply(created, "change_noop", [
-      { _tag: "set-frame-title", frameId: "frame_a", expectedChangedByChangeId: "change_create", title: "Same" }
+      { _tag: "setFrameTitle", frameId: "frame_a", expectedChangedByChangeId: "change_create", title: "Same" }
     ])
     expect(noop).toBe(created)
     const removed = apply(created, "change_remove", [
-      { _tag: "remove-frame", frameId: "frame_a", expectedUpdatedByChangeId: "change_create" }
+      { _tag: "removeFrame", frameId: "frame_a", expectedUpdatedByChangeId: "change_create" }
     ])
     expect(CanvasEngine.apply(removed, change("change_reuse", [
-      { _tag: "add-frame", frameId: "frame_a", title: "Again", representation, status: "in-progress", geometry: geometry() }
+      { _tag: "addFrame", frameId: "frame_a", title: "Again", representation, status: "in-progress", geometry: geometry() }
     ]))).toMatchObject({ _tag: "rejected", failure: { _tag: "id-already-issued" } })
     expect(() => decodeCanvasProjection(JSON.parse(JSON.stringify(removed)))).not.toThrow()
   })
@@ -95,7 +95,7 @@ describe("Canvas content", () => {
       { x: 0, y: 0, width: 1, height: Number.POSITIVE_INFINITY }
     ]) {
       expect(() => change("change_bad", [{
-        _tag: "add-frame",
+        _tag: "addFrame",
         frameId: "frame_a",
         title: "Bad",
         representation,
@@ -104,7 +104,7 @@ describe("Canvas content", () => {
       }])).toThrow()
     }
     const projection = JSON.parse(JSON.stringify(apply(empty(), "change_create", [{
-      _tag: "add-frame",
+      _tag: "addFrame",
       frameId: "frame_a",
       title: "Good",
       representation,
@@ -117,10 +117,10 @@ describe("Canvas content", () => {
 
   it("deletes a Frame while retaining every issued identity", () => {
     const created = apply(empty(), "change_create", [
-      { _tag: "add-frame", frameId: "frame_a", title: "Frame", representation, status: "in-progress", geometry: geometry() }
+      { _tag: "addFrame", frameId: "frame_a", title: "Frame", representation, status: "in-progress", geometry: geometry() }
     ])
     const removed = apply(created, "change_remove", [
-      { _tag: "remove-frame", frameId: "frame_a", expectedUpdatedByChangeId: "change_create" }
+      { _tag: "removeFrame", frameId: "frame_a", expectedUpdatedByChangeId: "change_create" }
     ])
     expect(removed).toMatchObject({
       frames: [],
@@ -131,23 +131,23 @@ describe("Canvas content", () => {
 
   it("rejects duplicate and reused Frame IDs", () => {
     const created = apply(empty(), "change_create", [
-      { _tag: "add-frame", frameId: "frame_a", title: "Frame", representation, status: "in-progress", geometry: geometry() }
+      { _tag: "addFrame", frameId: "frame_a", title: "Frame", representation, status: "in-progress", geometry: geometry() }
     ])
     expect(CanvasEngine.apply(created, change("change_duplicate", [
-      { _tag: "add-frame", frameId: "frame_a", title: "Again", representation, status: "in-progress", geometry: geometry() }
+      { _tag: "addFrame", frameId: "frame_a", title: "Again", representation, status: "in-progress", geometry: geometry() }
     ]))).toMatchObject({ _tag: "rejected", failure: { _tag: "id-already-issued" } })
 
     const removed = apply(created, "change_remove", [
-      { _tag: "remove-frame", frameId: "frame_a", expectedUpdatedByChangeId: "change_create" }
+      { _tag: "removeFrame", frameId: "frame_a", expectedUpdatedByChangeId: "change_create" }
     ])
     expect(CanvasEngine.apply(removed, change("change_reuse", [
-      { _tag: "add-frame", frameId: "frame_a", title: "Again", representation, status: "in-progress", geometry: geometry() }
+      { _tag: "addFrame", frameId: "frame_a", title: "Again", representation, status: "in-progress", geometry: geometry() }
     ]))).toMatchObject({ _tag: "rejected", failure: { _tag: "id-already-issued" } })
   })
 
   it("rejects duplicate stack entries at projection decode", () => {
     const valid = apply(empty(), "change_create", [
-      { _tag: "add-frame", frameId: "frame_a", title: "Frame", representation, status: "in-progress", geometry: geometry() }
+      { _tag: "addFrame", frameId: "frame_a", title: "Frame", representation, status: "in-progress", geometry: geometry() }
     ])
     const item = valid.stack[0]
     if (item === undefined) throw new Error("Fixture content is missing")
@@ -157,10 +157,10 @@ describe("Canvas content", () => {
   it("replays Frame edits deterministically", () => {
     const changes = [
       change("change_create", [
-        { _tag: "add-frame", frameId: "frame_a", title: "Frame", representation, status: "in-progress", geometry: geometry() }
+        { _tag: "addFrame", frameId: "frame_a", title: "Frame", representation, status: "in-progress", geometry: geometry() }
       ]),
       change("change_edit", [
-        { _tag: "set-frame-title", frameId: "frame_a", expectedChangedByChangeId: "change_create", title: "Edited" }
+        { _tag: "setFrameTitle", frameId: "frame_a", expectedChangedByChangeId: "change_create", title: "Edited" }
       ])
     ]
     const first = CanvasEngine.replay(empty(), changes)
@@ -171,8 +171,8 @@ describe("Canvas content", () => {
 
   it("uses one canonical code-point order for active and issued IDs", () => {
     const projection = apply(empty(), "change_order", [
-      { _tag: "add-frame", frameId: "frame_a_b", title: "Underscore", representation, status: "in-progress", geometry: geometry() },
-      { _tag: "add-frame", frameId: "frame_a-b", title: "Hyphen", representation, status: "in-progress", geometry: geometry() }
+      { _tag: "addFrame", frameId: "frame_a_b", title: "Underscore", representation, status: "in-progress", geometry: geometry() },
+      { _tag: "addFrame", frameId: "frame_a-b", title: "Hyphen", representation, status: "in-progress", geometry: geometry() }
     ])
     expect(projection.frames.map(({ frameId }) => frameId)).toEqual(["frame_a-b", "frame_a_b"])
     expect(projection.issuedIds.frameIds).toEqual(["frame_a-b", "frame_a_b"])
@@ -183,7 +183,7 @@ describe("Canvas content", () => {
     const initialRepresentation = { ...representation, state: { actor: "npc", source: "checkout" } }
     const equivalentRepresentation = { ...representation, state: { source: "checkout", actor: "npc" } }
     const created = apply(empty(), "change_create", [{
-      _tag: "add-frame",
+      _tag: "addFrame",
       frameId: "frame_a",
       title: "Frame",
       representation: initialRepresentation,
@@ -191,7 +191,7 @@ describe("Canvas content", () => {
       geometry: geometry()
     }])
     const result = CanvasEngine.apply(created, change("change_noop", [{
-      _tag: "set-frame-representation",
+      _tag: "setFrameRepresentation",
       frameId: "frame_a",
       expectedChangedByChangeId: "change_create",
       representation: equivalentRepresentation

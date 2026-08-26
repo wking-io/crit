@@ -70,11 +70,11 @@ describe("SQLite CanvasAuthority", () => {
       yield* authority.create(create(canvasId), person)
       const accepted = yield* authority.submit({
         canvasId, changeId: Id.change("change_restart_accepted"), observedCursor: null,
-        commands: decodeCanvasCommandBatch([{ _tag: "rename-canvas", expectedTitle: "Authority", title: "Review" }])
+        commands: decodeCanvasCommandBatch([{ _tag: "renameCanvas", expectedTitle: "Authority", title: "Review" }])
       }, person)
       const rejected = yield* Effect.result(authority.submit({
         canvasId, changeId: Id.change("change_restart_rejected"), observedCursor: null,
-        commands: decodeCanvasCommandBatch([{ _tag: "rename-canvas", expectedTitle: "Wrong", title: "Rejected" }])
+        commands: decodeCanvasCommandBatch([{ _tag: "renameCanvas", expectedTitle: "Wrong", title: "Rejected" }])
       }, person))
       return { accepted, rejected }
       }))
@@ -83,25 +83,25 @@ describe("SQLite CanvasAuthority", () => {
       const canvasId = Id.canvas("canvas_restart")
       const acceptedProposal = {
         canvasId, changeId: Id.change("change_restart_accepted"), observedCursor: null,
-        commands: decodeCanvasCommandBatch([{ _tag: "rename-canvas", expectedTitle: "Authority", title: "Review" }])
+        commands: decodeCanvasCommandBatch([{ _tag: "renameCanvas", expectedTitle: "Authority", title: "Review" }])
       }
       const acceptedRetry = yield* authority.submit(acceptedProposal, person)
       expect(acceptedRetry.disposition).toBe("identical-retry")
       expect(acceptedRetry.change).toEqual(original.accepted.change)
       const rejectedProposal = {
         canvasId, changeId: Id.change("change_restart_rejected"), observedCursor: null,
-        commands: decodeCanvasCommandBatch([{ _tag: "rename-canvas", expectedTitle: "Wrong", title: "Rejected" }])
+        commands: decodeCanvasCommandBatch([{ _tag: "renameCanvas", expectedTitle: "Wrong", title: "Rejected" }])
       }
       const rejectedRetry = yield* Effect.result(authority.submit(rejectedProposal, person))
       expect(rejectedRetry).toEqual(original.rejected)
       const changedRetry = yield* Effect.result(authority.submit({
         ...rejectedProposal,
-        commands: decodeCanvasCommandBatch([{ _tag: "rename-canvas", expectedTitle: "Review", title: "Other" }])
+        commands: decodeCanvasCommandBatch([{ _tag: "renameCanvas", expectedTitle: "Review", title: "Other" }])
       }, person))
       expect(changedRetry._tag === "Failure" && changedRetry.failure._tag).toBe("change-id-reused")
       const next = yield* authority.submit({
         canvasId, changeId: Id.change("change_restart_next"), observedCursor: null,
-        commands: decodeCanvasCommandBatch([{ _tag: "rename-canvas", expectedTitle: "Review", title: "Final" }])
+        commands: decodeCanvasCommandBatch([{ _tag: "renameCanvas", expectedTitle: "Review", title: "Final" }])
       }, person)
       expect(next.change.sequence).toBe(2)
       const page = yield* authority.changesAfter({
@@ -127,7 +127,7 @@ describe("SQLite CanvasAuthority", () => {
         changeId: Id.change("change_semantic"),
         observedCursor: null,
         commands: decodeCanvasCommandBatch([{
-          _tag: "add-frame",
+          _tag: "addFrame",
           frameId: "frame_semantic",
           title: "Frame",
           representation: { _tag: "application-route", applicationId: "application_semantic", route: "/", state: { a: 1, b: 2 } },
@@ -139,7 +139,7 @@ describe("SQLite CanvasAuthority", () => {
       const retry = yield* authority.submit({
         ...base,
         commands: decodeCanvasCommandBatch([{
-          _tag: "add-frame",
+          _tag: "addFrame",
           frameId: "frame_semantic",
           title: "Frame",
           representation: { _tag: "application-route", applicationId: "application_semantic", route: "/", state: { b: 2, a: 1 } },
@@ -173,7 +173,7 @@ describe("SQLite CanvasAuthority", () => {
         changeId: Id.change("change_owned"),
         observedCursor: null,
         commands: decodeCanvasCommandBatch([{
-          _tag: "rename-canvas", expectedTitle: "Authority", title: "Review"
+          _tag: "renameCanvas", expectedTitle: "Authority", title: "Review"
         }])
       }
       const fiber = yield* Effect.forkChild(authority.submit(incoming, incomingPerson))
@@ -201,7 +201,7 @@ describe("SQLite CanvasAuthority", () => {
         changeId: Id.change(`change_handle_${index}`),
         observedCursor: null,
         commands: decodeCanvasCommandBatch([{
-          _tag: "add-frame",
+          _tag: "addFrame",
           frameId: `frame_handle_${index}`,
           title: `Frame ${index}`,
           representation: { _tag: "web-url", url: `https://example.com/${index}` },
@@ -235,7 +235,7 @@ describe("SQLite CanvasAuthority", () => {
         changeId: Id.change("change_lock"),
         observedCursor: null,
         commands: decodeCanvasCommandBatch([{
-          _tag: "rename-canvas", expectedTitle: "Authority", title: "Review"
+          _tag: "renameCanvas", expectedTitle: "Authority", title: "Review"
         }])
       }, person)
       const [receipt] = yield* Effect.all([submitted, release], { concurrency: "unbounded" })
@@ -258,7 +258,7 @@ describe("SQLite CanvasAuthority", () => {
         changeId: Id.change("change_rollback"),
         observedCursor: null,
         commands: decodeCanvasCommandBatch([{
-          _tag: "rename-canvas", expectedTitle: "Authority", title: "Review"
+          _tag: "renameCanvas", expectedTitle: "Authority", title: "Review"
         }])
       }
       const failed = yield* Effect.exit(authority.submit(proposal, person))
@@ -297,7 +297,7 @@ describe("SQLite CanvasAuthority", () => {
       yield* authority.create(create(canvasId), person)
       yield* Effect.result(authority.submit({
         canvasId, changeId: Id.change("change_integrity"), observedCursor: null,
-        commands: decodeCanvasCommandBatch([{ _tag: "rename-canvas", expectedTitle: "Wrong", title: "Rejected" }])
+        commands: decodeCanvasCommandBatch([{ _tag: "renameCanvas", expectedTitle: "Wrong", title: "Rejected" }])
       }, person))
     const database = new DatabaseSync(path)
     database.exec("PRAGMA foreign_keys = ON")
@@ -321,7 +321,7 @@ describe("SQLite CanvasAuthority", () => {
       yield* authority.create(create(canvasId), person)
       yield* authority.submit({
         canvasId, changeId: Id.change("change_corrupt"), observedCursor: null,
-        commands: decodeCanvasCommandBatch([{ _tag: "rename-canvas", expectedTitle: "Authority", title: "Review" }])
+        commands: decodeCanvasCommandBatch([{ _tag: "renameCanvas", expectedTitle: "Authority", title: "Review" }])
       }, person)
     }))
     const database = new DatabaseSync(path)
