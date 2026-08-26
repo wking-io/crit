@@ -77,7 +77,9 @@ Project pages are application-route Frames. Localhost is not a web-url.
 
 ## Live pages
 
-Input inside an application Frame needs the Frame Bridge in the app. Turn it on for local development. Leave ordinary production builds off. Use the official adapter. Production HTML must not contain \`data-crit-frame-input-bridge\`.
+Unselected Frames are not interactive. Crit covers them. The selected Frame is the live page.
+
+The Frame Bridge reports the page route to Crit. Turn it on for local development. Leave ordinary production builds off. Use the official adapter. Production HTML must not contain Frame Bridge markers.
 
 ## Shared work
 

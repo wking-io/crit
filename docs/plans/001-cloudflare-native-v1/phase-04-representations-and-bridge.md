@@ -9,7 +9,7 @@ Render the same logical Frame locally and in a review deployment without rewriti
 - Implement `application-route`, `web-url`, and digest-bound `artifact` references.
 - Implement local and shared `RepresentationRuntime` adapters returning `RenderPlan`.
 - Separate checked-in Application identity from machine bindings and shared Deployment bindings.
-- Publish a framework-neutral, versioned Frame Bridge with explicit origins, capability negotiation, route and revision reporting, anchor health, input relay, and inspection.
+- Publish a framework-neutral, versioned Frame Bridge. The host assigns iframe src. The page reports route. Unselected Frames use a capture overlay. Origins are explicit.
 - Encode the closed activation matrix in build adapters and the installation skill.
 
 ## Prove
@@ -18,4 +18,4 @@ Render the same logical Frame locally and in a review deployment without rewriti
 - Missing bindings render a useful unavailable state.
 - Artifact digest mismatch fails closed.
 - Ordinary production build and preview contain no bridge marker.
-- Explicit shared review preview contains the bridge and rejects hostile origins or protocol versions.
+- Explicit shared review preview contains the route script and rejects hostile origins or protocol versions.

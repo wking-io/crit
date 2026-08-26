@@ -136,7 +136,7 @@ The rewrite intentionally ports these alpha behaviors:
 - Narrow content preconditions and explicit recoverable conflicts.
 - Frame geometry, stacking, deletion, and review status.
 - Immutable capture artifacts with cleanup after rejected commits.
-- Infinite Canvas camera, iframe lifecycle, and input relay.
+- Infinite Canvas camera, iframe lifecycle, and a capture overlay on unselected Frames.
 - Review status and visible Person, Agent, and presence information.
 - Align and distribute, breakpoint presets, contextual help, pause-offscreen Frames, fullscreen, open in new tab, and developer copy-node-id. Not undo or redo, and not a fit-page display command.
 

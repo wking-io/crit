@@ -18,6 +18,8 @@ This file records the product decisions supplied in the active architecture conv
 - Contextual help and keyboard shortcuts use TanStack Hotkeys.
 - Frames refer to logical live-page Representations. Local and shared environments may resolve the same Frame differently.
 - The Frame Bridge has an installation skill and stays off by default in production environments.
+- Unselected Frames are not interactive. A capture overlay sits on top so canvas pan, zoom, and select hit Crit. The sole selected Frame is native-interactive.
+- The host sets a live Frame URL by assigning iframe src. The page reports route changes. Frame Bridge has no session, highlight, inspect, or capability set.
 - The shared runtime is Cloudflare-native.
 - Agent changes identify the Agent as author. Provenance also records the local Person who ran the Agent and useful harness, model, session, and execution metadata when available.
 - Stable v1 is a full rewrite. Preserving alpha APIs, storage formats, and runtime compatibility is not a goal.
