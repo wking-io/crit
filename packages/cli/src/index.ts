@@ -55,6 +55,10 @@ import { Console, Context, Crypto, Effect, FileSystem, Layer, Match, Option, Pat
 import { Argument, Command, Flag } from "effect/unstable/cli"
 
 import { frameCommand, frameSourceLabel, resolveFrameGeometry } from "./add-frame.js"
+import {
+  FRAME_BRIDGE_SKILL_RELATIVE_PATH,
+  frameBridgeSkillSource
+} from "./frame-bridge-skill.js"
 import { HOST_ORIGIN, resolveHostRoot, startHostApp } from "./host-app.js"
 import { CanvasLayout, canvasLayout, formatCanvasLayout } from "./layout.js"
 import { PROJECT_SKILL_RELATIVE_PATH, projectSkillSource } from "./project-skill.js"
@@ -169,6 +173,10 @@ const init = Command.make(
         source: projectSkillSource
       },
       {
+        relativePath: FRAME_BRIDGE_SKILL_RELATIVE_PATH,
+        source: frameBridgeSkillSource
+      },
+      {
         relativePath: REGISTER_DEPLOYMENT_SKILL_RELATIVE_PATH,
         source: registerDeploymentSkillSource
       }
@@ -196,6 +204,9 @@ const init = Command.make(
     yield* Console.log(`${result._tag}  ${result.path}`)
     yield* Console.log(`Application  ${result.manifest.applicationId}`)
     yield* Console.log(`Skill  ${skillPath}`)
+    yield* Console.log(
+      `Skill  ${pathService.join(root, FRAME_BRIDGE_SKILL_RELATIVE_PATH)}`
+    )
     yield* Console.log(
       `Skill  ${pathService.join(root, REGISTER_DEPLOYMENT_SKILL_RELATIVE_PATH)}`
     )

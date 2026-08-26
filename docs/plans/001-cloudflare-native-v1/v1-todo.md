@@ -8,22 +8,18 @@ This file is the current inventory. Phase docs own the prove. [Decision record](
 
 ## Next
 
-- [ ] Bridge off in ordinary production. Opt-in only on shared review previews.
+- [ ] Host UI that can open a Canvas other than `canvas_local`. CLI already can.
 
 ## Remaining
 
 ### Local review
 
 Plan: [phase 5](phase-05-review-ui.md), [phase 3](phase-03-local-daemon-and-cli.md), [phase 4](phase-04-representations-and-bridge.md).
-- [ ] Bridge off in ordinary production. Opt-in only on shared review previews. Official rewrite adapter plus install skill. Local development on. Ordinary production build and preview unmarked.
+- [ ] Host UI that can open a Canvas other than `canvas_local`. CLI already can.
 - [ ] Frame Bridge capability negotiation.
 - [ ] Frame Bridge route and revision reporting.
 - [ ] Frame Bridge highlighting.
 - [ ] Frame Bridge authorized inspection.
-
-- [x] Same Frame resolves to localhost for the author and a registered preview for a teammate.
-- [x] Shared Deployment bindings.
-- [ ] Host UI that can open a Canvas other than `canvas_local`. CLI already can.
 
 ### Share and hosted review
 
@@ -86,6 +82,7 @@ Local Frames authoring on one machine.
 - Local review pending resolves. The daemon reconciles after open and change.
 - Mid-session daemon loss keeps the last projection and shows a connection alert.
 - Enqueue rejection is a submit notice. Conflict repair stays later.
+- Official `@crit/frame-bridge` HTML renderer and optional Vite adapter. Ordinary production stays unmarked. Local development and an explicit review-preview mode may inject the input script.
 
 ## Out of v1
 
