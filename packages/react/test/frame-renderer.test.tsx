@@ -4,6 +4,7 @@ import {
   Id,
   WebUrlRepresentation
 } from "@crit/domain"
+import { FRAME_INPUT_BRIDGE_HTML_MARKER } from "@crit/frame-bridge"
 import {
   FRAME_INPUT_BRIDGE_SCHEMA_VERSION,
   FRAME_INPUT_BRIDGE_SOURCE
@@ -129,7 +130,7 @@ describe("FrameRenderer", () => {
     iframe.dispatchEvent(new Event("load"))
 
     const scripts = frameDocument.querySelectorAll(
-      "script[data-crit-input-bridge]"
+      `script[${FRAME_INPUT_BRIDGE_HTML_MARKER}]`
     )
     expect(scripts).toHaveLength(1)
     expect(scripts[0]?.textContent).toContain(FRAME_INPUT_BRIDGE_SOURCE)
@@ -174,7 +175,7 @@ describe("FrameRenderer", () => {
     iframe.dispatchEvent(new Event("load"))
 
     expect(
-      frameDocument.querySelector("script[data-crit-input-bridge]")
+      frameDocument.querySelector(`script[${FRAME_INPUT_BRIDGE_HTML_MARKER}]`)
     ).toBeNull()
   })
 

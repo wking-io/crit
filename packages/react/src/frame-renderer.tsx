@@ -3,6 +3,7 @@ import {
   type RepresentationRef
 } from "@crit/domain"
 import {
+  FRAME_INPUT_BRIDGE_HTML_MARKER,
   connectBridgedFrameInput,
   critFrameInputBridgeScript,
   frameBridgeOriginFromHref
@@ -166,10 +167,12 @@ function LiveFrame({
         const frameDocument = iframe.contentDocument
         if (
           frameDocument === null ||
-          frameDocument.querySelector("script[data-crit-input-bridge]") !== null
+          frameDocument.querySelector(
+            `script[${FRAME_INPUT_BRIDGE_HTML_MARKER}]`
+          ) !== null
         ) return
         const script = frameDocument.createElement("script")
-        script.dataset.critInputBridge = ""
+        script.setAttribute(FRAME_INPUT_BRIDGE_HTML_MARKER, "")
         script.textContent = critFrameInputBridgeScript({ parentOrigin })
         frameDocument.documentElement.append(script)
       } catch {

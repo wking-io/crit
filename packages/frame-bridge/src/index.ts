@@ -30,6 +30,9 @@ export type {
   FrameInputIntent
 } from "@crit/protocol"
 
+export const FRAME_INPUT_BRIDGE_HTML_MARKER =
+  "data-crit-frame-input-bridge"
+
 export const connectBridgedFrameInput = (input: {
   readonly target: Window
   readonly frameElement: HTMLIFrameElement
