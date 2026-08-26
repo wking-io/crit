@@ -6,7 +6,7 @@ Ship a repeatable customer-hosted installation and a coherent local-to-team work
 
 ## Build
 
-- Provide Wrangler configuration, D1 migrations, Durable Object migrations, R2 setup, Access instructions, hostname layout, and deployment verification.
+- Provide Wrangler configuration, D1 migrations, Durable Object migrations, R2 setup, Access instructions for the Crit Installation hostname, hostname layout, and deployment verification. Preview Access and `frame-ancestors` live in the Frame Bridge skill.
 - Add backup, export, restore, retention, key rotation, upgrade, and incident runbooks.
 - Add platform OTLP adapters, operational metrics, exporter retention guidance, and incident correlation. Document the metadata each platform exports and how operators control sampling and retention.
 - Add protocol negotiation and reject unsupported clients with actionable errors.

@@ -153,6 +153,7 @@ It does not preserve alpha JSON, IndexedDB state, filesystem Canvas documents, U
 - D1 is the control plane. R2 owns immutable artifacts.
 - WebSockets notify. Cursor reads establish truth.
 - The Frame Bridge is off in ordinary production builds and previews. Shared review previews require exact opt-in.
+- Hosted review iframes the registered preview. Crit does not proxy it. The preview sends `frame-ancestors` for the Crit host. Ordinary production does not name Crit.
 - Teammates review in the hosted UI. They do not install Crit.
 - Agents author only through local tools. After share, review is human-led.
 - Crit has no MCP server, Code Mode runtime, or OAuth agent grants.
