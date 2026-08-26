@@ -8,10 +8,14 @@ import { describe, expect, it } from "vitest"
 import {
   FRAME_INPUT_BRIDGE_SCHEMA_VERSION,
   FRAME_INPUT_BRIDGE_SOURCE,
+  FRAME_ROUTE_BRIDGE_SCHEMA_VERSION,
+  FRAME_ROUTE_BRIDGE_SOURCE,
   FrameBridgeOrigin,
   FrameInputBridgeMessageSchema,
   FrameInputIntentSchema,
+  FrameRouteBridgeMessageSchema,
   decodeFrameInputBridgeMessage,
+  decodeFrameRouteBridgeMessage,
   type FrameInputIntent
 } from "../src/index.js"
 
@@ -108,6 +112,49 @@ describe("Frame input bridge protocol", () => {
     ["string", "bridge"]
   ])("rejects %s", (_label, input) => {
     expect(Option.isNone(decodeFrameInputBridgeMessage(input))).toBe(true)
+  })
+})
+
+describe("Frame route bridge protocol", () => {
+  it.each([
+    "/checkout",
+    "/checkout?x=1",
+    "/checkout/"
+  ])("round-trips %s", (route) => {
+    const input = {
+      source: FRAME_ROUTE_BRIDGE_SOURCE,
+      schemaVersion: FRAME_ROUTE_BRIDGE_SCHEMA_VERSION,
+      route
+    }
+    const decoded = Schema.decodeUnknownSync(FrameRouteBridgeMessageSchema)(input)
+    expect(Schema.encodeSync(FrameRouteBridgeMessageSchema)(decoded)).toEqual(input)
+    expect(decodeFrameRouteBridgeMessage(input)).toEqual(Option.some(decoded))
+  })
+
+  it.each([
+    ["version 2", {
+      source: FRAME_ROUTE_BRIDGE_SOURCE,
+      schemaVersion: 2,
+      route: "/checkout"
+    }],
+    ["a fragment", {
+      source: FRAME_ROUTE_BRIDGE_SOURCE,
+      schemaVersion: FRAME_ROUTE_BRIDGE_SCHEMA_VERSION,
+      route: "/checkout#payment"
+    }],
+    ["a URL", {
+      source: FRAME_ROUTE_BRIDGE_SOURCE,
+      schemaVersion: FRAME_ROUTE_BRIDGE_SCHEMA_VERSION,
+      route: "https://shop.example/checkout"
+    }],
+    ["an excess property", {
+      source: FRAME_ROUTE_BRIDGE_SOURCE,
+      schemaVersion: FRAME_ROUTE_BRIDGE_SCHEMA_VERSION,
+      route: "/checkout",
+      extra: true
+    }]
+  ])("rejects %s", (_label, input) => {
+    expect(Option.isNone(decodeFrameRouteBridgeMessage(input))).toBe(true)
   })
 })
 

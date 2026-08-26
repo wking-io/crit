@@ -24,6 +24,36 @@ export const FrameBridgeOrigin = Schema.String.check(
 ).pipe(Schema.brand("FrameBridgeOrigin"))
 export type FrameBridgeOrigin = typeof FrameBridgeOrigin.Type
 
+const frameRouteFailure = (route: string) => {
+  if (!route.startsWith("/") || route.startsWith("//")) {
+    return "Expected a rooted Frame route"
+  }
+  return route.includes("#")
+    ? "A Frame route cannot contain a fragment"
+    : undefined
+}
+
+export const FrameRoute = Schema.String.check(
+  Schema.makeFilter<string>(frameRouteFailure)
+).pipe(Schema.brand("FrameRoute"))
+export type FrameRoute = typeof FrameRoute.Type
+
+export const FRAME_ROUTE_BRIDGE_SOURCE = "@crit/frame-bridge/route"
+export const FRAME_ROUTE_BRIDGE_SCHEMA_VERSION = 1 as const
+
+export const FrameRouteBridgeMessageSchema = Schema.Struct({
+  source: Schema.Literal(FRAME_ROUTE_BRIDGE_SOURCE),
+  schemaVersion: Schema.Literal(FRAME_ROUTE_BRIDGE_SCHEMA_VERSION),
+  route: FrameRoute
+})
+export type FrameRouteBridgeMessage =
+  typeof FrameRouteBridgeMessageSchema.Type
+
+export const decodeFrameRouteBridgeMessage = Schema.decodeUnknownOption(
+  FrameRouteBridgeMessageSchema,
+  { onExcessProperty: "error" }
+)
+
 export const FRAME_INPUT_BRIDGE_SOURCE = "@crit/frame-bridge/input"
 export const FRAME_INPUT_BRIDGE_SCHEMA_VERSION = 1 as const
 

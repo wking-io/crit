@@ -52,12 +52,18 @@ export type { DecodeResult, ProtocolFailure } from "./failure.js"
 export {
   FRAME_INPUT_BRIDGE_SCHEMA_VERSION,
   FRAME_INPUT_BRIDGE_SOURCE,
+  FRAME_ROUTE_BRIDGE_SCHEMA_VERSION,
+  FRAME_ROUTE_BRIDGE_SOURCE,
   FrameBridgeOrigin,
   FrameInputBridgeMessageSchema,
   FrameInputIntentSchema,
-  decodeFrameInputBridgeMessage
+  FrameRoute,
+  FrameRouteBridgeMessageSchema,
+  decodeFrameInputBridgeMessage,
+  decodeFrameRouteBridgeMessage
 } from "./bridge.js"
 export type {
   FrameInputBridgeMessage,
-  FrameInputIntent
+  FrameInputIntent,
+  FrameRouteBridgeMessage
 } from "./bridge.js"
