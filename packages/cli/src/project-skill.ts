@@ -16,7 +16,7 @@ crit init
 crit dev
 \`\`\`
 
-\`dev\` prints a bootstrap URL. Give that URL to the person. The default page lists existing canvases. After \`crit create\`, give them that URL with \`?canvas=<id>\`. Keep the \`#crit=\` hash.
+\`dev\` prints a bootstrap URL. Give that URL to the person. The default page lists existing canvases. After \`crit create\`, give them \`/canvas/<id>\` on that origin. Keep the \`#crit=\` hash.
 
 Before writing as an agent, begin a session so your work is stamped:
 

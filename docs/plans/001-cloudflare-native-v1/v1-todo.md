@@ -15,7 +15,7 @@ This file is the current inventory. Phase docs own the prove. [Decision record](
 ### Local review
 
 Plan: [phase 5](phase-05-review-ui.md), [phase 3](phase-03-local-daemon-and-cli.md), [phase 4](phase-04-representations-and-bridge.md).
-- [x] Host UI lists existing canvases on the default URL. `?canvas=` opens one. Opening never creates.
+- [x] Host UI lists existing canvases at `/`. `/canvas/<id>` opens one. Opening never creates.
 - [x] Same Frame resolves to localhost for the author and a registered preview for a teammate.
 - [x] Shared Deployment bindings.
 
