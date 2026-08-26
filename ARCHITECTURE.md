@@ -126,7 +126,7 @@ Local bindings belong to project and machine configuration. Shared Applications 
 
 ## Frame Bridge
 
-The framework-neutral Frame Bridge provides a versioned browser protocol for input relay, element anchors, route and revision reporting, anchor health, highlighting, and authorized inspection.
+The framework-neutral Frame Bridge provides a versioned browser protocol for input relay. Element anchors, route and revision reporting, highlighting, and authorized inspection are not shipped.
 
 The bridge activation matrix is closed:
 
