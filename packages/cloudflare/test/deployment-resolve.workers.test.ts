@@ -37,11 +37,11 @@ const resolve = (
   representation: ApplicationRouteRepresentation,
   access = true
 ) => {
-  const headers: Record<string, string> = {
+  const headers = new Headers({
     "content-type": "application/json"
-  }
+  })
   if (access) {
-    headers["Cf-Access-Authenticated-User-Email"] = "ada@acme.com"
+    headers.set("Cf-Access-Authenticated-User-Email", "ada@acme.com")
   }
   return SELF.fetch(`https://crit.example${hostedApplicationResolvePath}`, {
     method: "POST",
