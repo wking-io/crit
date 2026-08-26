@@ -59,7 +59,7 @@ import {
   type BrowserSessionService
 } from "./browser-session.js"
 import { SqliteCanvasReplica } from "./sqlite-replica.js"
-import { SqliteCanvasAuthority } from "./sqlite.js"
+import { LocalCanvasCatalog, SqliteCanvasAuthority } from "./sqlite.js"
 
 export interface LocalDaemonOptions {
   readonly databasePath: string
@@ -90,6 +90,7 @@ const handlers = (options: LocalDaemonOptions) => HttpApiBuilder.group(
   Effect.fn(function*(group) {
     const authority = yield* CanvasAuthority
     const replica = yield* CanvasReplica
+    const catalog = yield* LocalCanvasCatalog
     return group.handleAll({
       status: () => Effect.succeed(LocalDaemonStatus.make({
         version: 1,
@@ -97,6 +98,7 @@ const handlers = (options: LocalDaemonOptions) => HttpApiBuilder.group(
         installationId: options.installationId,
         apiVersion: localApiVersion
       })),
+      list: () => catalog.list(),
       create: Effect.fn("crit.authority.create")(function*({ payload }) {
         const invocation = yield* AuthenticatedInvocation
         yield* authority.create(payload, invocation)

@@ -45,7 +45,8 @@ import {
   LocalReplicaSocketServerFrame,
   localApiVersion,
   localApiVersionHeader,
-  localReplicaSocketCloseCode
+  localReplicaSocketCloseCode,
+  type CanvasListing
 } from "@crit/replica/http"
 import { Context, Data, Deferred, Effect, Exit, flow, Layer, Queue, Redacted, Ref, Schema, Scope, Stream, type Take } from "effect"
 import { FetchHttpClient, HttpClient, HttpClientError, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
@@ -100,6 +101,7 @@ export type CreateCanvasInput = Omit<CreateCanvas, "_tag">
 
 export interface LocalCanvasClientService {
   readonly status: () => Effect.Effect<LocalDaemonStatus, StatusFailure>
+  readonly list: () => Effect.Effect<ReadonlyArray<CanvasListing>, StatusFailure>
   readonly create: (input: CreateCanvasInput) => Effect.Effect<ReplicaView, CreateFailure>
   readonly open: (canvasId: CanvasId) => Effect.Effect<ReplicaView, OpenFailure>
   readonly change: (input: ReplicaChange) => Effect.Effect<ReplicaChangeReceipt, ChangeFailure>
@@ -359,6 +361,7 @@ export class LocalCanvasClient extends Context.Service<
       const agent = yield* HttpApiClient.make(LocalAgentApi, { transformClient })
       return LocalCanvasClient.of({
         status: () => withBrowserCredentials(options, http.status()),
+        list: () => withBrowserCredentials(options, http.list()),
         create: (input) => withBrowserCredentials(options, http.create({ payload: CreateCanvas.make(input) })),
         open: (canvasId) => withBrowserCredentials(options, http.open({ params: { canvasId } })),
         change: (input) => withBrowserCredentials(options, http.change({ payload: input })),
