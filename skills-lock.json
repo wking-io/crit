@@ -325,6 +325,12 @@
       "skillPath": "pstack/skills/setup-pstack/SKILL.md",
       "computedHash": "85f233d431a9e2e671b87c3b4d10d42582bc0f05ea7e4939bec9eaf51af3f327"
     },
+    "show-me": {
+      "source": "humanlayer/skills",
+      "sourceType": "github",
+      "skillPath": "plugins/show-me/skills/show-me/SKILL.md",
+      "computedHash": "de32a72f802801f08a84641b467f2c6306d35a58ce5e59ea607ac3a993a18c91"
+    },
     "show-me-your-work": {
       "source": "cursor/plugins",
       "sourceType": "github",
