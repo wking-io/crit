@@ -59,8 +59,9 @@ describe("remote authority protocol", () => {
       _tag: "changes",
       canvasId
     })
-    expect(parseRemoteAuthorityPath("/canvases")).toBeUndefined()
-    expect(parseRemoteAuthorityPath("/canvases/not-a-canvas/changes")).toBeUndefined()
+    expect(parseRemoteAuthorityPath("/canvas")).toBeUndefined()
+    expect(parseRemoteAuthorityPath("/canvases/canvas_checkout")).toBeUndefined()
+    expect(parseRemoteAuthorityPath("/canvas/not-a-canvas/changes")).toBeUndefined()
     expect(parseRemoteAuthorityPath("/identity")).toBeUndefined()
   })
 

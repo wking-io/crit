@@ -13,6 +13,7 @@ import type { ProtocolFailure } from "./failure.js"
 import { CursorSchema } from "./value.js"
 
 export const remoteChangesPageLimit = 1_000
+export const remoteCanvasCollectionPath = "/canvas"
 
 export const PersonSubmitInvocation = Schema.TaggedStruct("person", {
   principal: PersonPrincipal
@@ -84,7 +85,7 @@ const canvasIdFromPath = (raw: string): CanvasId | undefined => {
 export const parseRemoteAuthorityPath = (
   pathname: string
 ): RemoteAuthorityRoute | undefined => {
-  const match = /^\/canvases\/([^/]+)(?:\/(changes))?$/.exec(pathname)
+  const match = /^\/canvas\/([^/]+)(?:\/(changes))?$/.exec(pathname)
   if (match === null) return undefined
   const canvasId = canvasIdFromPath(match[1] ?? "")
   if (canvasId === undefined) return undefined
@@ -94,7 +95,7 @@ export const parseRemoteAuthorityPath = (
 }
 
 export const remoteCanvasPath = (canvasId: CanvasId): string =>
-  `/canvases/${encodeURIComponent(canvasId)}`
+  `${remoteCanvasCollectionPath}/${encodeURIComponent(canvasId)}`
 
 export const remoteCanvasChangesPath = (canvasId: CanvasId): string =>
   `${remoteCanvasPath(canvasId)}/changes`

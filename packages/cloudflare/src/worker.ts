@@ -15,6 +15,7 @@ import {
   encodeAccessAuthenticatedPersonWire,
   encodeCanvasSharedWire,
   parseRemoteAuthorityPath,
+  remoteCanvasCollectionPath,
   type RegisterDeploymentWire
 } from "@crit/protocol"
 import { Effect, Exit, Option, Schema } from "effect"
@@ -229,7 +230,7 @@ const worker: ExportedHandler<Cloudflare.Env> = {
     const url = new URL(request.url)
     if (url.pathname === "/deployments") return registerDeployment(request, env)
     if (url.pathname === "/identity") return readIdentity(request)
-    if (url.pathname === "/canvases") {
+    if (url.pathname === remoteCanvasCollectionPath) {
       return request.method === "POST"
         ? shareCanvas(request, env)
         : emptyResponse(405)

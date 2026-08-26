@@ -61,7 +61,7 @@ const accessHeaders = {
   "Cf-Access-Authenticated-User-Email": accessEmail
 }
 
-const share = (canvasId: string) => SELF.fetch("https://crit.example/canvases", {
+const share = (canvasId: string) => SELF.fetch("https://crit.example/canvas", {
   method: "POST",
   headers: accessHeaders,
   body: shareBody(canvasId)

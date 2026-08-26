@@ -125,7 +125,8 @@ describe("ChangeProtocol", () => {
       "encodeDeploymentRegisteredWire", "encodeRegisterDeploymentWire",
       "encodeShareCanvasWire", "encodeSubmitCanvasChangeWire",
       "parseChangesAfterSearch", "parseRemoteAuthorityPath",
-      "remoteCanvasChangesPath", "remoteCanvasPath", "remoteChangesPageLimit"
+      "remoteCanvasChangesPath", "remoteCanvasCollectionPath",
+      "remoteCanvasPath", "remoteChangesPageLimit"
     ])
   })
 

@@ -55,6 +55,7 @@ export {
   parseChangesAfterSearch,
   parseRemoteAuthorityPath,
   remoteCanvasChangesPath,
+  remoteCanvasCollectionPath,
   remoteCanvasPath,
   remoteChangesPageLimit,
   RemoteAuthorityRoute,
