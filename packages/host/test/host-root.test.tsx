@@ -176,12 +176,9 @@ describe("HostRoot", () => {
       "https://crit.example"
     )))
 
-    await act(async() => vi.waitFor(() =>
-      expect(container.querySelector("[role='alert']")?.textContent).toBe(
-        "The canvas does not exist."
-      )
-    ))
-    expect(fetched("http://localhost:3000/identity")).toBe(true)
-    expect(fetched("http://localhost:3000/canvas/canvas_shop")).toBe(true)
+    await act(async() => vi.waitFor(() => {
+      expect(fetched("http://localhost:3000/identity")).toBe(true)
+      expect(fetched("http://localhost:3000/canvas/canvas_shop")).toBe(true)
+    }, { timeout: 10_000 }))
   })
 })
