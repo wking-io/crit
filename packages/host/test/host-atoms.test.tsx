@@ -95,6 +95,15 @@ describe("hostIndexAtom", () => {
     registry.dispose()
   })
 
+  it("is invalid for a fragment-free loopback origin", () => {
+    const registry = AtomRegistry.make()
+    expect(registry.get(hostIndexAtom("")(localOrigin))).toEqual({
+      _tag: "invalid",
+      reason: "Hosted mode requires a non-loopback HTTPS origin."
+    })
+    registry.dispose()
+  })
+
   it("starts connecting for a valid fragment", () => {
     const descriptor = LocalBrowserConnection.make({
       baseUrl: "http://127.0.0.1:49152",

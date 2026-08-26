@@ -8,7 +8,7 @@ This file is the current inventory. Phase docs own the prove. [Decision record](
 
 ## Next
 
-- [ ] Hosted review UI served from the Worker.
+- [ ] Teammate signs in with Access, views Frames and shared previews, and sets review status. No Crit install. The hosted UI iframes the registered preview.
 
 ## Remaining
 
@@ -28,7 +28,7 @@ Plan: [phase 6](phase-06-cloudflare-platform.md), [phase 7](phase-07-sync-and-sh
 - [x] Two author replicas edit offline and converge.
 - [x] Recoverable remote conflicts that keep dependent pending work. Local replica policy exists.
 - [x] Worker, static assets, Access, D1, R2 artifacts.
-- [ ] Hosted review UI served from the Worker.
+- [x] Hosted review UI served from the Worker.
 - [ ] Teammate signs in with Access, views Frames and shared previews, and sets review status. No Crit install. The hosted UI iframes the registered preview.
 - [ ] Shared review preview is frameable by the Crit host. `frame-ancestors` names the Crit origin. Access on the preview, if any, has `allow_iframe`. Ordinary production does not name Crit. The Frame Bridge skill performs that setup.
 - [ ] Presence of Access-authenticated people viewing a shared Canvas. Local review does not attend.
@@ -89,6 +89,7 @@ Local Frames authoring on one machine.
 - After share, a linked replica rebases onto the remote genesis when its local cursor is unknown, then two author replicas can edit offline and converge in either order. `crit sync` pushes pending work and pulls accepted history.
 - A remote content collision keeps the losing change conflicted and its dependents blocked. Independent pending work still lands. `crit sync` prints those leftover counts.
 - The hosted Worker serves the canvas list at `/`, lists shared canvases from D1 at `GET /canvas`, and stores immutable artifacts in R2. Ledger JSON stays on `/canvas/:id` when the request is not a document.
+- The Worker serves the host document at `/` and `/canvas/:id`. A public HTTPS origin with no `#crit=` boots hosted ports over directory, ledger, artifacts, and `POST /representations/application-route`. Local `#crit=` still talks to the daemon. Deploy copies `packages/host/dist-web` into Worker assets.
 
 ## Out of v1
 

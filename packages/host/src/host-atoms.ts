@@ -72,6 +72,10 @@ const hostedLayer = () => Layer.mergeAll(
 const connectingScreen = HostScreen.connecting()
 const connectingIndex = HostIndexScreen.connecting()
 const connectionFailureReason = "Unable to connect to Crit."
+const hostedOriginReason = "Hosted mode requires a non-loopback HTTPS origin."
+
+const invalidCopy = (reason: string) =>
+  reason === hostedOriginReason ? reason : connectionFailureReason
 
 const screenFromBoot = <E>(
   boot: AsyncResult.AsyncResult<CritHostProps, E>
@@ -134,8 +138,8 @@ export const hostScreenAtom = Atom.family((fragment: string) =>
     Atom.family((canvasId: CanvasId): Atom.Atom<HostScreen> => {
       const connection = parseHostConnection({ fragment, origin })
       return Match.value(connection).pipe(Match.tagsExhaustive({
-        invalid: () => Atom.make((): HostScreen => HostScreen.invalid({
-          reason: connectionFailureReason
+        invalid: ({ reason }) => Atom.make((): HostScreen => HostScreen.invalid({
+          reason: invalidCopy(reason)
         })),
         local: ({ descriptor }) => {
           const runtime = Atom.runtime(localLayer(descriptor))
@@ -192,8 +196,8 @@ export const hostIndexAtom = Atom.family((fragment: string) =>
   Atom.family((origin: string): Atom.Atom<HostIndexScreen> => {
     const connection = parseHostConnection({ fragment, origin })
     return Match.value(connection).pipe(Match.tagsExhaustive({
-      invalid: () => Atom.make((): HostIndexScreen => HostIndexScreen.invalid({
-        reason: connectionFailureReason
+      invalid: ({ reason }) => Atom.make((): HostIndexScreen => HostIndexScreen.invalid({
+        reason: invalidCopy(reason)
       })),
       local: ({ descriptor }) => {
         const runtime = Atom.runtime(localLayer(descriptor))
