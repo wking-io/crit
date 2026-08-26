@@ -87,7 +87,7 @@ Local Frames authoring on one machine.
 - First share is idempotent. Stable share and import IDs plus a projection digest bind one remote Canvas. A retry returns that receipt. A changed digest under the same share ID fails.
 - After share, a linked replica rebases onto the remote genesis when its local cursor is unknown, then two author replicas can edit offline and converge in either order. `crit sync` pushes pending work and pulls accepted history.
 - A remote content collision keeps the losing change conflicted and its dependents blocked. Independent pending work still lands. `crit sync` prints those leftover counts.
-- The hosted Worker serves the SPA shell for document navigations, keeps `/mcp` missing, lists shared canvases from D1, and stores immutable artifacts in R2. Ledger JSON stays on the same `/canvas/:id` path when the request is not a document.
+- The hosted Worker serves the canvas list at `/`, lists shared canvases from D1 at `GET /canvas`, and stores immutable artifacts in R2. Ledger JSON stays on `/canvas/:id` when the request is not a document.
 
 ## Out of v1
 

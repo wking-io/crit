@@ -49,10 +49,10 @@ const share = (canvasId: string, title: string) => {
 
 describe("Worker canvas directory", () => {
   it("requires Access and lists shared canvases", async () => {
-    const denied = await SELF.fetch("https://crit.example/directory")
+    const denied = await SELF.fetch("https://crit.example/canvas")
     await share("canvas_directory_one", "One")
     await share("canvas_directory_two", "Two")
-    const listed = await SELF.fetch("https://crit.example/directory", {
+    const listed = await SELF.fetch("https://crit.example/canvas", {
       headers: { "Cf-Access-Authenticated-User-Email": "ada@acme.com" }
     })
     const body = decodeCanvasDirectoryWire(await listed.json())

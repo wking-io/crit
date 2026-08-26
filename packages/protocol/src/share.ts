@@ -69,8 +69,6 @@ export const encodeCanvasSharedWire = Schema.encodeSync(
   { onExcessProperty: "error" }
 )
 
-export const canvasDirectoryPath = "/directory"
-
 export const CanvasDirectoryEntryWire = Schema.Struct({
   canvasId: CanvasId,
   workspaceId: WorkspaceId,

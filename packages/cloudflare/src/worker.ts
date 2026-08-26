@@ -8,7 +8,6 @@ import {
   PersonSnapshot
 } from "@crit/domain"
 import {
-  canvasDirectoryPath,
   decodeRegisterDeploymentWire,
   decodeShareCanvasWire,
   encodeAccessAuthenticatedPersonWire,
@@ -31,7 +30,7 @@ import {
 } from "./canvas-object.js"
 import { registerControlDeployment } from "./deployments.js"
 import { handleLedgerRequest } from "./ledger-http.js"
-import { isDocumentRequest, serveShell } from "./shell.js"
+import { isDocumentRequest, isHostDocumentPath, serveShell } from "./shell.js"
 import {
   compareShareReceipt,
   insertShareReceipt,
@@ -304,12 +303,14 @@ const advanceTestClock = async (url: URL): Promise<Response> => {
 
 const worker: ExportedHandler<Cloudflare.Env> = {
   async fetch(request, env) {
-    if (isDocumentRequest(request)) return serveShell(request, env)
     const url = new URL(request.url)
+    if (isDocumentRequest(request) && isHostDocumentPath(url.pathname)) {
+      return serveShell(request, env)
+    }
     if (url.pathname === "/deployments") return registerDeployment(request, env)
     if (url.pathname === "/identity") return readIdentity(request)
-    if (url.pathname === canvasDirectoryPath) return readCanvasDirectory(request, env)
     if (url.pathname === remoteCanvasCollectionPath) {
+      if (request.method === "GET") return readCanvasDirectory(request, env)
       return request.method === "POST"
         ? shareCanvas(request, env)
         : emptyResponse(405)

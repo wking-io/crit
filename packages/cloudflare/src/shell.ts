@@ -1,4 +1,4 @@
-const reservedPathPrefixes = ["/mcp", "/oauth", "/artifacts"] as const
+import { parseRemoteAuthorityPath } from "@crit/protocol"
 
 export const isDocumentRequest = (request: Request): boolean => {
   if (request.method !== "GET" && request.method !== "HEAD") return false
@@ -7,16 +7,19 @@ export const isDocumentRequest = (request: Request): boolean => {
   return accept.toLowerCase().split(",").some((part) => part.trim().startsWith("text/html"))
 }
 
-const isReservedPath = (pathname: string): boolean =>
-  reservedPathPrefixes.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`))
+export const isHostDocumentPath = (pathname: string): boolean => {
+  if (pathname === "/") return true
+  const route = parseRemoteAuthorityPath(pathname)
+  return route !== undefined && route._tag === "canvas"
+}
 
 const emptyResponse = (status: number) => new Response(null, { status })
 
 const placeholderShell = `<!doctype html>
 <html lang="en">
 <meta charset="utf-8">
-<title>Crit</title>
-<body><p>Crit</p></body>
+<title>Canvases</title>
+<body><p>Canvases</p></body>
 </html>`
 
 const shellResponse = () => new Response(placeholderShell, {
@@ -29,12 +32,11 @@ export const serveShell = async (
   env: Cloudflare.Env
 ): Promise<Response> => {
   const pathname = new URL(request.url).pathname
-  if (isReservedPath(pathname)) return emptyResponse(404)
   if (request.method !== "GET" && request.method !== "HEAD") return emptyResponse(404)
   try {
     const asset = await env.ASSETS.fetch(request)
     if (asset.status !== 404) return asset
-    if (isDocumentRequest(request)) {
+    if (isDocumentRequest(request) && isHostDocumentPath(pathname)) {
       const index = new URL(request.url)
       index.pathname = "/"
       const fallback = await env.ASSETS.fetch(new Request(index, request))
@@ -42,7 +44,7 @@ export const serveShell = async (
       return shellResponse()
     }
   } catch {
-    if (isDocumentRequest(request)) return shellResponse()
+    if (isDocumentRequest(request) && isHostDocumentPath(pathname)) return shellResponse()
   }
   return emptyResponse(404)
 }

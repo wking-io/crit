@@ -27,7 +27,6 @@ export {
   encodeAccessAuthenticatedPersonWire
 } from "./identity.js"
 export {
-  canvasDirectoryPath,
   CanvasDirectoryEntryWire,
   CanvasDirectoryWire,
   CanvasSharedWire,

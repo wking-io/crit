@@ -20,13 +20,13 @@ describe("Worker hosted shell", () => {
 
     expect(home.status).toBe(200)
     expect(home.headers.get("content-type")).toContain("text/html")
-    expect(await home.text()).toContain("Crit")
+    expect(await home.text()).toContain("Canvases")
     expect(canvas.status).toBe(200)
-    expect(await canvas.text()).toContain("Crit")
+    expect(await canvas.text()).toContain("Canvases")
     expect(missing.status).toBe(404)
   })
 
-  it("keeps reserved agent paths and unknown API paths missing", async () => {
+  it("leaves unknown paths missing", async () => {
     const mcp = await SELF.fetch("https://crit.example/mcp", {
       headers: documentHeaders
     })
@@ -36,7 +36,6 @@ describe("Worker hosted shell", () => {
     const unrelated = await SELF.fetch("https://crit.example/unrelated")
 
     expect(mcp.status).toBe(404)
-    expect(await mcp.text()).toBe("")
     expect(oauth.status).toBe(404)
     expect(unrelated.status).toBe(404)
   })
