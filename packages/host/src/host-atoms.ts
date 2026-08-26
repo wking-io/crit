@@ -4,7 +4,7 @@ import {
   LocalRepresentationClient,
   type LocalBrowserConnectionDescriptor
 } from "@crit/client"
-import { CanvasTitle, Id } from "@crit/domain"
+import { CanvasTitle, type CanvasId } from "@crit/domain"
 import { layerMemory, layerStorage, type ReplicaSessionRun } from "@crit/react"
 import { Data, Effect, Layer, Result, Schema } from "effect"
 import { FetchHttpClient } from "effect/unstable/http"
@@ -13,10 +13,12 @@ import { Atom, AsyncResult } from "effect/unstable/reactivity"
 
 import type { CritHostProps } from "./crit-host.js"
 import { ensureLocalCanvas } from "./ensure-local-canvas.js"
+import { localCanvasId } from "./host-canvas-id.js"
 import { hostConnectionFromFragment } from "./host-connection.js"
 import { localReplicaSessionPorts } from "./local-replica-session-ports.js"
 
-export const localCanvasId = Id.canvas("canvas_local")
+export { localCanvasId }
+
 const localCanvasTitle = Schema.decodeUnknownSync(CanvasTitle)("Untitled")
 
 export type HostScreen = Data.TaggedEnum<{
@@ -54,30 +56,33 @@ const screenFromBoot = (boot: AsyncResult.AsyncResult<CritHostProps>): HostScree
     onSuccess: ({ value }) => HostScreen.ready({ props: value })
   })
 
-export const hostScreenAtom = Atom.family((fragment: string): Atom.Atom<HostScreen> => {
-  const connection = hostConnectionFromFragment(fragment)
-  if (Result.isFailure(connection)) {
-    return Atom.make((): HostScreen => invalidScreen)
-  }
-  const runtime = Atom.runtime(hostLayer(connection.success))
-  const boot = runtime.atom(Effect.gen(function*() {
-    const client = yield* LocalCanvasClient
-    const representations = yield* LocalRepresentationClient
-    const store = yield* KeyValueStore.KeyValueStore
-    yield* Effect.ignore(ensureLocalCanvas({
-      canvasId: localCanvasId,
-      client,
-      title: localCanvasTitle
-    }))
-    const run: ReplicaSessionRun = (effect) =>
-      Effect.runPromise(Effect.provideService(effect, KeyValueStore.KeyValueStore, store))
-    return {
-      canvasId: localCanvasId,
-      ports: localReplicaSessionPorts(client),
-      resolver: representations,
-      snapshotter: representations,
-      run
+export const hostScreenAtom = Atom.family((fragment: string) =>
+  Atom.family((canvasId: CanvasId): Atom.Atom<HostScreen> => {
+    const connection = hostConnectionFromFragment(fragment)
+    if (Result.isFailure(connection)) {
+      return Atom.make((): HostScreen => invalidScreen)
     }
+    const runtime = Atom.runtime(hostLayer(connection.success))
+    const boot = runtime.atom(Effect.gen(function*() {
+      const client = yield* LocalCanvasClient
+      const representations = yield* LocalRepresentationClient
+      const store = yield* KeyValueStore.KeyValueStore
+      if (canvasId === localCanvasId) {
+        yield* Effect.ignore(ensureLocalCanvas({
+          canvasId,
+          client,
+          title: localCanvasTitle
+        }))
+      }
+      const run: ReplicaSessionRun = (effect) =>
+        Effect.runPromise(Effect.provideService(effect, KeyValueStore.KeyValueStore, store))
+      return {
+        canvasId,
+        ports: localReplicaSessionPorts(client),
+        resolver: representations,
+        snapshotter: representations,
+        run
+      }
+    }))
+    return Atom.map(boot, screenFromBoot)
   }))
-  return Atom.map(boot, screenFromBoot)
-})

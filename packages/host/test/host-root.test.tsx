@@ -32,23 +32,33 @@ afterEach(async() => {
 
 describe("HostRoot", () => {
   it("renders the failure copy for an invalid fragment", async() => {
-    await act(async() => render(<HostRoot fragment="#crit=" />))
+    await act(async() => render(<HostRoot fragment="#crit=" search="" />))
     expect(container.querySelector("[role='alert']")?.textContent).toBe(
       "Unable to connect to Crit."
     )
   })
 
   it("renders the same invalid-fragment copy after a remount", async() => {
-    await act(async() => render(<HostRoot fragment="#crit=" />))
+    await act(async() => render(<HostRoot fragment="#crit=" search="" />))
     await act(async() => root.unmount())
     container.remove()
     container = document.createElement("div")
     document.body.append(container)
     root = createRoot(container)
-    await act(async() => render(<HostRoot fragment="#crit=" />))
+    await act(async() => render(<HostRoot fragment="#crit=" search="" />))
     expect(container.querySelector("[role='alert']")?.textContent).toBe(
       "Unable to connect to Crit."
     )
+  })
+
+  it("renders a distinct alert for an invalid canvas query", async() => {
+    await act(async() => render(
+      <HostRoot fragment="#crit=" search="?canvas=shop" />
+    ))
+    expect(container.querySelector("[role='alert']")?.textContent).toBe(
+      "That is not a Canvas ID."
+    )
+    expect(container.textContent).not.toContain("Unable to connect to Crit.")
   })
 
   it("builds clients from a valid fragment and reports an unreachable daemon", async() => {
@@ -58,7 +68,29 @@ describe("HostRoot", () => {
     })
 
     await act(async() => render(
-      <HostRoot fragment={LocalBrowserConnection.encode(descriptor)} />
+      <HostRoot fragment={LocalBrowserConnection.encode(descriptor)} search="" />
+    ))
+
+    await act(async() => vi.waitFor(
+      () =>
+        expect(container.querySelector("[role='alert']")?.textContent).toBe(
+          "The local daemon is unreachable."
+        ),
+      { timeout: 10_000 }
+    ))
+  }, 15_000)
+
+  it("opens a named canvas from search and still reports an unreachable daemon", async() => {
+    const descriptor = LocalBrowserConnection.make({
+      baseUrl: "http://127.0.0.1:49152",
+      instance
+    })
+
+    await act(async() => render(
+      <HostRoot
+        fragment={LocalBrowserConnection.encode(descriptor)}
+        search="?canvas=canvas_shop"
+      />
     ))
 
     await act(async() => vi.waitFor(
