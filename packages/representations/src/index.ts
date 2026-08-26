@@ -1,4 +1,8 @@
 export {
+  ArtifactContentKind,
+  artifactContentKind
+} from "./artifact-content.js"
+export {
   ArtifactConflict,
   ArtifactCorrupt,
   ArtifactNotFound,
@@ -13,16 +17,22 @@ export {
   ApplicationBaseUrl,
   ApplicationBindingLookupFailure,
   ApplicationBindings,
+  ApplicationRouteBinding,
+  ApplicationRouteInspection,
   ApplicationUnavailableRenderPlan,
   ArtifactBytesRenderPlan,
+  ArtifactInspection,
+  ArtifactIntegrity,
   ArtifactUnavailableRenderPlan,
   CaptureSourceUnavailable,
   IframeRenderPlan,
+  Inspection,
   LiveContent,
   LiveContentUnreachable,
   RenderPlan,
   RepresentationRuntime,
-  RepresentationRuntimeLive
+  RepresentationRuntimeLive,
+  WebUrlInspection
 } from "./runtime.js"
 export type {
   CaptureFailure,

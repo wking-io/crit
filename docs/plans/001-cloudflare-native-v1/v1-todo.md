@@ -8,14 +8,13 @@ This file is the current inventory. Phase docs own the prove. [Decision record](
 
 ## Next
 
-- [ ] Inspect a Representation. `RepresentationRuntime` in the overview still names it. Nothing implements it.
+- [ ] Frame Bridge capability negotiation, route/revision reporting, highlighting, authorized inspection.
 
 ## Remaining
 
 ### Local review
 
 Plan: [phase 5](phase-05-review-ui.md), [phase 3](phase-03-local-daemon-and-cli.md), [phase 4](phase-04-representations-and-bridge.md).
-- [ ] Inspect a Representation. `RepresentationRuntime` in the overview still names it. Nothing implements it.
 - [ ] Frame Bridge capability negotiation, route/revision reporting, highlighting, authorized inspection.
 - [ ] Bridge off in ordinary production. Opt-in only on shared review previews.
 - [ ] Same Frame resolves to localhost for the author and a registered preview for a teammate.
@@ -81,6 +80,7 @@ Local Frames authoring on one machine.
 - Local review pending resolves. The daemon reconciles after open and change.
 - Mid-session daemon loss keeps the last projection and shows a connection alert.
 - Enqueue rejection is a submit notice. Conflict repair stays later.
+- `RepresentationRuntime.inspect` reports binding and artifact integrity without bytes.
 
 ## Out of v1
 

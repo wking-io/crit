@@ -5,12 +5,14 @@ import {
   HttpUrl,
   Id,
   LiveRepresentation,
+  Sha256Digest,
   WebUrlRepresentation,
   type ApplicationId,
   type RepresentationRef
 } from "@crit/domain"
 import { Context, Crypto, Data, Effect, Layer, Match, Option, Result, Schema } from "effect"
 
+import { ArtifactContentKind, artifactContentKind } from "./artifact-content.js"
 import {
   ArtifactStore,
   ArtifactStoreIoFailure
@@ -104,6 +106,57 @@ export const RenderPlan = Schema.Union([
 ])
 export type RenderPlan = typeof RenderPlan.Type
 
+const BoundApplicationRouteBinding = Schema.TaggedStruct("bound", {
+  url: HttpUrl
+})
+const UnboundApplicationRouteBinding = Schema.TaggedStruct("unbound", {})
+
+export const ApplicationRouteBinding = Schema.Union([
+  BoundApplicationRouteBinding,
+  UnboundApplicationRouteBinding
+])
+export type ApplicationRouteBinding = typeof ApplicationRouteBinding.Type
+
+export const ApplicationRouteInspection = Schema.TaggedStruct("application-route", {
+  representation: ApplicationRouteRepresentation,
+  binding: ApplicationRouteBinding
+})
+export type ApplicationRouteInspection = typeof ApplicationRouteInspection.Type
+
+export const WebUrlInspection = Schema.TaggedStruct("web-url", {
+  representation: WebUrlRepresentation
+})
+export type WebUrlInspection = typeof WebUrlInspection.Type
+
+const VerifiedArtifactIntegrity = Schema.TaggedStruct("verified", {
+  sizeBytes: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  contentKind: ArtifactContentKind
+})
+const ArtifactNotFoundIntegrity = Schema.TaggedStruct("not-found", {})
+const CorruptArtifactIntegrity = Schema.TaggedStruct("corrupt", {
+  actualDigest: Sha256Digest
+})
+
+export const ArtifactIntegrity = Schema.Union([
+  VerifiedArtifactIntegrity,
+  ArtifactNotFoundIntegrity,
+  CorruptArtifactIntegrity
+])
+export type ArtifactIntegrity = typeof ArtifactIntegrity.Type
+
+export const ArtifactInspection = Schema.TaggedStruct("artifact", {
+  representation: ArtifactRepresentation,
+  integrity: ArtifactIntegrity
+})
+export type ArtifactInspection = typeof ArtifactInspection.Type
+
+export const Inspection = Schema.Union([
+  ApplicationRouteInspection,
+  WebUrlInspection,
+  ArtifactInspection
+])
+export type Inspection = typeof Inspection.Type
+
 export type RepresentationRuntimeFailure =
   | ApplicationBindingLookupFailure
   | ArtifactStoreIoFailure
@@ -118,6 +171,9 @@ export interface RepresentationRuntimeService {
   readonly capture: (
     representation: LiveRepresentation
   ) => Effect.Effect<ArtifactRepresentation, CaptureFailure>
+  readonly inspect: (
+    representation: RepresentationRef
+  ) => Effect.Effect<Inspection, RepresentationRuntimeFailure>
   readonly resolve: (
     representation: RepresentationRef
   ) => Effect.Effect<RenderPlan, RepresentationRuntimeFailure>
@@ -190,6 +246,59 @@ const makeRuntime = Effect.gen(function*() {
     artifact: resolveArtifact
   }))
 
+  const inspectApplication = (input: ApplicationRouteRepresentation) => {
+    const representation = DomainValue.detach(input)
+    return bindings.get(representation.applicationId).pipe(Effect.map(Option.match({
+      onNone: (): Inspection => ApplicationRouteInspection.make({
+        representation,
+        binding: UnboundApplicationRouteBinding.make({})
+      }),
+      onSome: (baseUrl): Inspection => ApplicationRouteInspection.make({
+        representation,
+        binding: BoundApplicationRouteBinding.make({
+          url: applicationUrl(baseUrl, representation)
+        })
+      })
+    })))
+  }
+
+  const inspectArtifact = (input: ArtifactRepresentation) => {
+    const representation = ArtifactRepresentation.make({
+      artifactId: input.artifactId,
+      digest: input.digest
+    })
+    return artifacts.read(representation).pipe(
+      Effect.map((bytes): Inspection => ArtifactInspection.make({
+        representation,
+        integrity: VerifiedArtifactIntegrity.make({
+          sizeBytes: bytes.byteLength,
+          contentKind: artifactContentKind(bytes)
+        })
+      })),
+      Effect.catchTags({
+        ArtifactNotFound: (): Effect.Effect<Inspection> => Effect.succeed(ArtifactInspection.make({
+          representation,
+          integrity: ArtifactNotFoundIntegrity.make({})
+        })),
+        ArtifactCorrupt: (failure): Effect.Effect<Inspection> => Effect.succeed(ArtifactInspection.make({
+          representation,
+          integrity: CorruptArtifactIntegrity.make({
+            actualDigest: failure.actualDigest
+          })
+        }))
+      })
+    )
+  }
+
+  const inspect = Match.type<RepresentationRef>().pipe(Match.tagsExhaustive({
+    "application-route": inspectApplication,
+    "web-url": (input): Effect.Effect<Inspection> => {
+      const representation = WebUrlRepresentation.make({ url: input.url })
+      return Effect.succeed(WebUrlInspection.make({ representation }))
+    },
+    artifact: inspectArtifact
+  }))
+
   const captureUrl = Match.type<LiveRepresentation>().pipe(Match.tagsExhaustive({
     "application-route": (representation) =>
       bindings.get(representation.applicationId).pipe(
@@ -217,6 +326,7 @@ const makeRuntime = Effect.gen(function*() {
 
   return RepresentationRuntime.of({
     capture,
+    inspect,
     resolve
   })
 })
