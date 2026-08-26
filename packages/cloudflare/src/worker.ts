@@ -32,8 +32,8 @@ import {
   insertShareReceipt,
   lookupShareReceipt,
   ShareReceiptMismatch,
+  ShareReceiptRequest,
   type ComparedShareReceipt,
-  type ShareReceiptRequest,
   type ShareReceiptRow
 } from "./shares.js"
 
@@ -156,14 +156,14 @@ const shareCanvas = async (
     return emptyResponse(401)
   }
 
-  const requested: ShareReceiptRequest = {
+  const requested = ShareReceiptRequest.make({
     shareId: share.shareId,
     importId: share.importId,
     canvasId: share.canvasId,
     personId: share.person.personId,
     projectionDigest: share.projectionDigest,
     title: share.title
-  }
+  })
   const existing = await lookupShareReceipt(env, share.shareId)
   if (existing !== undefined) {
     return comparedShareResponse(compareShareReceipt(existing, requested))

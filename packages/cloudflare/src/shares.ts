@@ -9,7 +9,7 @@ import {
   WorkspaceId
 } from "@crit/domain"
 import { ShareDigestMismatch } from "@crit/protocol"
-import { Schema } from "effect"
+import { Data, Schema } from "effect"
 
 const createShareTableSql = `
 CREATE TABLE IF NOT EXISTS canvas_shares (
@@ -41,25 +41,22 @@ export const ShareReceiptMismatch = Schema.TaggedStruct("shareReceiptMismatch", 
 })
 export type ShareReceiptMismatch = typeof ShareReceiptMismatch.Type
 
-export interface ShareReceiptRequest {
-  readonly shareId: ShareId
-  readonly importId: ImportId
-  readonly canvasId: CanvasId
-  readonly personId: PersonId
-  readonly projectionDigest: Sha256Digest
-  readonly title: CanvasTitle
-}
+export const ShareReceiptRequest = Schema.Struct({
+  shareId: ShareId,
+  importId: ImportId,
+  canvasId: CanvasId,
+  personId: PersonId,
+  projectionDigest: Sha256Digest,
+  title: CanvasTitle
+})
+export type ShareReceiptRequest = typeof ShareReceiptRequest.Type
 
-export type ComparedShareReceipt =
-  | { readonly _tag: "match"; readonly receipt: ShareReceiptRow }
-  | {
-    readonly _tag: "digestMismatch"
-    readonly mismatch: ShareDigestMismatch
-  }
-  | {
-    readonly _tag: "receiptMismatch"
-    readonly mismatch: ShareReceiptMismatch
-  }
+export type ComparedShareReceipt = Data.TaggedEnum<{
+  readonly match: { readonly receipt: ShareReceiptRow }
+  readonly digestMismatch: { readonly mismatch: ShareDigestMismatch }
+  readonly receiptMismatch: { readonly mismatch: ShareReceiptMismatch }
+}>
+export const ComparedShareReceipt = Data.taggedEnum<ComparedShareReceipt>()
 
 const shareSelectSql = `
   SELECT
@@ -94,26 +91,24 @@ export const compareShareReceipt = (
   requested: ShareReceiptRequest
 ): ComparedShareReceipt => {
   if (stored.projectionDigest !== requested.projectionDigest) {
-    return {
-      _tag: "digestMismatch",
+    return ComparedShareReceipt.digestMismatch({
       mismatch: ShareDigestMismatch.make({
         shareId: requested.shareId,
         expectedDigest: stored.projectionDigest,
         receivedDigest: requested.projectionDigest
       })
-    }
+    })
   }
   if (
     stored.importId !== requested.importId ||
     stored.canvasId !== requested.canvasId ||
     stored.personId !== requested.personId
   ) {
-    return {
-      _tag: "receiptMismatch",
+    return ComparedShareReceipt.receiptMismatch({
       mismatch: ShareReceiptMismatch.make({ shareId: requested.shareId })
-    }
+    })
   }
-  return { _tag: "match", receipt: stored }
+  return ComparedShareReceipt.match({ receipt: stored })
 }
 
 export const insertShareReceipt = async (
