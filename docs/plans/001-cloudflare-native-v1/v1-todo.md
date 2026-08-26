@@ -79,6 +79,7 @@ Local Frames authoring on one machine.
 - Snapshot a live Frame into a new artifact Frame (`S`)
 - Deployment record and ApplicationBindings adapter. Same application-route resolves locally and through a registered preview.
 - `crit register-deployment` upserts a D1 Deployment. `crit init` writes the preview-registration skill. Hosted resolve still needs the review UI.
+- D1 Deployments load into `DeploymentApplicationBindings`. Hosted review UI still remaining.
 - Local review pending resolves. The daemon reconciles after open and change.
 - Mid-session daemon loss keeps the last projection and shows a connection alert.
 - Enqueue rejection is a submit notice. Conflict repair stays later.
