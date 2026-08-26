@@ -28,16 +28,16 @@ const start = (name, port, inspectorPort, vars) => {
   return child
 }
 
-start("canvas", 8797, 9240, {
+start("canvas", 8797, 19340, {
   APP_ORIGIN: app,
   ACCESS_ORIGIN: access
 })
-start("app", 8798, 9241, {
+start("app", 8798, 19341, {
   CANVAS_ORIGIN: canvas,
   ACCESS_ORIGIN: access,
   ACCESS_SAMESITE: sameSite
 })
-start("access", 8799, 9242, {
+start("access", 8799, 19342, {
   APP_ORIGIN: app,
   CANVAS_ORIGIN: canvas,
   ACCESS_ALLOW_IFRAME: allowIframe

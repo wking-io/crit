@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process"
+import { execSync, spawn } from "node:child_process"
 import { mkdirSync, writeFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"
 
@@ -37,24 +37,43 @@ const startOne = (name, port, inspectorPort, vars) => {
   })
 }
 
+const ports = [8797, 8798, 8799, 19340, 19341, 19342]
+
+const killPorts = () => {
+  for (const port of ports) {
+    try {
+      const pids = execSync("lsof -t -iTCP:" + port + " -sTCP:LISTEN", {
+        stdio: ["ignore", "pipe", "ignore"]
+      }).toString().trim().split("\n").filter(Boolean)
+      for (const pid of pids) {
+        try { process.kill(Number(pid), "SIGKILL") } catch {}
+      }
+    } catch {}
+  }
+}
+
 const startCluster = async ({ allowIframe, sameSite }) => {
+  killPorts()
+  await new Promise((resolve) => setTimeout(resolve, 1000))
   const kids = [
-    startOne("canvas", 8797, 9240, { APP_ORIGIN: app, ACCESS_ORIGIN: access }),
-    startOne("app", 8798, 9241, {
+    startOne("canvas", 8797, 19340, { APP_ORIGIN: app, ACCESS_ORIGIN: access }),
+    startOne("app", 8798, 19341, {
       CANVAS_ORIGIN: canvas,
       ACCESS_ORIGIN: access,
       ACCESS_SAMESITE: sameSite
     }),
-    startOne("access", 8799, 9242, {
+    startOne("access", 8799, 19342, {
       APP_ORIGIN: app,
       CANVAS_ORIGIN: canvas,
       ACCESS_ALLOW_IFRAME: allowIframe ? "1" : "0"
     })
   ]
+  await new Promise((resolve) => setTimeout(resolve, 500))
   const stop = () => {
     for (const child of kids) {
-      child.kill("SIGTERM")
+      try { child.kill("SIGTERM") } catch {}
     }
+    killPorts()
   }
   try {
     await waitFor(canvas + "/__meta")
@@ -80,8 +99,21 @@ const shot = async (page, name) => {
 
 const proofOf = (page) => page.evaluate(() => document.body.dataset.proof)
 
-const waitProof = (page, wanted, timeout = 8000) =>
-  page.waitForFunction((value) => document.body.dataset.proof === value, { timeout }, wanted)
+const frameDump = (page) => page.evaluate(() => ({
+  proof: document.body.dataset.proof,
+  frames: [...document.querySelectorAll("iframe")].map((frame) => frame.src)
+}))
+
+const waitProof = async (page, wanted, timeout = 10000) => {
+  try {
+    await page.waitForFunction(
+      (values) => values.includes(document.body.dataset.proof),
+      { timeout },
+      wanted
+    )
+  } catch {}
+  return proofOf(page)
+}
 
 const signInInFrame = async (page) => {
   const started = Date.now()
@@ -128,14 +160,15 @@ await run("iframeOff", { allowIframe: false, sameSite: "none" }, async (browser)
   const page = await browser.newPage()
   await page.setViewport({ width: 1440, height: 900 })
   await page.goto(canvas, { waitUntil: "networkidle0" })
-  await page.waitForFunction(() => ["blocked", "gate", "live"].includes(document.body.dataset.proof), { timeout: 8000 })
+  const frame = await waitProof(page, ["blocked", "gate", "live"])
   await shot(page, "access-iframe-off.png")
   return {
     checkoutStatus: checkout.status,
     checkoutLocation: header(checkout, "location"),
     loginXfo: header(login, "x-frame-options"),
     loginCsp: header(login, "content-security-policy"),
-    frame: await proofOf(page)
+    frame,
+    dump: await frameDump(page)
   }
 })
 
@@ -144,9 +177,8 @@ await run("iframeOn", { allowIframe: true, sameSite: "none" }, async (browser) =
   const page = await browser.newPage()
   await page.setViewport({ width: 1440, height: 900 })
   await page.goto(canvas, { waitUntil: "networkidle0" })
-  await waitProof(page, "gate")
+  const gate = await waitProof(page, ["gate", "blocked", "live"])
   await shot(page, "access-iframe-on-gate.png")
-  const gate = await proofOf(page)
   const clicked = await signInInFrame(page)
   let afterSignIn = gate
   if (clicked) {
@@ -174,7 +206,8 @@ await run("iframeOn", { allowIframe: true, sameSite: "none" }, async (browser) =
     iframeFirst: gate,
     iframeSignInClicked: clicked,
     iframeAfterSignIn: afterSignIn,
-    toplevelThenCanvas: await proofOf(canvasPage)
+    toplevelThenCanvas: await proofOf(canvasPage),
+    dump: await frameDump(canvasPage)
   }
 })
 
