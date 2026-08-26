@@ -1,0 +1,333 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PROTOTYPE — Figma iframe preview</title>
+  <style>
+    :root {
+      color: #242321;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body { background: #f5f4f0; margin: 0; }
+    button, input, select, textarea { font: inherit; color: inherit; }
+    button { cursor: pointer; }
+    .page {
+      display: grid;
+      gap: 18px;
+      grid-template-columns: minmax(0, 1fr) 360px;
+      margin: 0 auto;
+      max-width: 1440px;
+      min-height: 100vh;
+      padding: 24px;
+    }
+    .intro { grid-column: 1 / -1; }
+    .eyebrow { color: #9f3e30; font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+    h1 { font-size: 26px; letter-spacing: -.03em; margin: 6px 0; }
+    .intro p { color: #65615a; line-height: 1.5; margin: 0; max-width: 920px; }
+    .panel {
+      background: #fff;
+      border: 1px solid #d8d5cc;
+      border-radius: 10px;
+      box-shadow: 0 8px 28px rgba(36, 35, 33, .06);
+    }
+    .stage { display: grid; grid-template-rows: auto 1fr; min-height: 640px; overflow: hidden; }
+    .stage-header {
+      align-items: baseline;
+      border-bottom: 1px solid #e7e4dc;
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 12px 14px;
+    }
+    .stage-header strong { font-size: 13px; }
+    .stage-header span { color: #77736b; font: 11px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; word-break: break-all; }
+    .frame-wrap { background: #ebe8e0; min-height: 580px; padding: 16px; }
+    iframe {
+      background: #fff;
+      border: 1px solid #cfcbc0;
+      border-radius: 6px;
+      display: block;
+      height: 100%;
+      min-height: 548px;
+      width: 100%;
+    }
+    .side { display: grid; gap: 14px; align-content: start; }
+    .side h2 { font-size: 13px; margin: 0 0 8px; }
+    .side .panel { padding: 14px; }
+    .row { display: grid; gap: 8px; margin-bottom: 10px; }
+    label { color: #65615a; font-size: 12px; font-weight: 600; }
+    textarea, input, select {
+      background: #fbfaf7;
+      border: 1px solid #d8d5cc;
+      border-radius: 8px;
+      padding: 8px 10px;
+      width: 100%;
+    }
+    textarea { min-height: 72px; resize: vertical; }
+    .actions, .walk { display: flex; flex-wrap: wrap; gap: 8px; }
+    .actions button, .walk button {
+      background: #242321;
+      border: 0;
+      border-radius: 8px;
+      color: #fff;
+      padding: 8px 10px;
+    }
+    .actions button.secondary, .walk button.secondary { background: #ece9e1; color: #242321; }
+    .state dt { color: #8b877f; font-size: 11px; margin-top: 8px; }
+    .state dd { font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; margin: 2px 0 0; word-break: break-all; }
+    .note { color: #65615a; font-size: 12px; line-height: 1.45; margin: 0; }
+    .walk p { color: #65615a; font-size: 12px; line-height: 1.45; margin: 0 0 10px; }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header class="intro">
+      <div class="eyebrow">Prototype · throwaway</div>
+      <h1>Can a Figma preview live in a Crit iframe?</h1>
+      <p>
+        This page loads Figma URLs the way a Frame would. Official embed URLs, raw share URLs,
+        Crit's unsandboxed live iframe, and the sandboxed artifact iframe. Paste your own file if
+        the docs example asks you to log in. Serve this file over HTTP, don't open it as <code>file://</code>.
+      </p>
+    </header>
+
+    <section class="panel stage">
+      <div class="stage-header">
+        <strong id="stage-title">No frame loaded</strong>
+        <span id="stage-src">src empty</span>
+      </div>
+      <div class="frame-wrap" id="frame-wrap"></div>
+    </section>
+
+    <aside class="side">
+      <section class="panel">
+        <h2>Current state</h2>
+        <dl class="state" id="state"></dl>
+      </section>
+
+      <section class="panel">
+        <h2>Free play</h2>
+        <div class="row">
+          <label for="url">Figma URL</label>
+          <textarea id="url" spellcheck="false"></textarea>
+        </div>
+        <div class="row">
+          <label for="policy">Iframe policy</label>
+          <select id="policy">
+            <option value="figma">Figma docs iframe</option>
+            <option value="crit">Crit live Frame (no sandbox, no-referrer)</option>
+            <option value="sandbox">Crit artifact iframe (sandbox=allow-scripts)</option>
+          </select>
+        </div>
+        <div class="actions">
+          <button type="button" id="load-raw">Load URL as-is</button>
+          <button type="button" class="secondary" id="load-rewrite">Rewrite to embed.figma.com, then load</button>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Guided cases</h2>
+        <p class="note">Each button resets the frame and loads one case. Watch the iframe, not just the load event. Cross-origin frames fire <code>load</code> even when the document is a Figma login wall or a blocked page.</p>
+        <div class="walk">
+          <button type="button" data-case="embed">Official design embed</button>
+          <button type="button" data-case="proto" class="secondary">Official prototype embed</button>
+          <button type="button" data-case="raw" class="secondary">Raw www.figma.com share URL</button>
+          <button type="button" data-case="rewrite" class="secondary">Raw URL rewritten to embed</button>
+          <button type="button" data-case="crit" class="secondary">Embed URL in Crit live iframe</button>
+          <button type="button" data-case="sandbox" class="secondary">Embed URL in sandboxed iframe</button>
+        </div>
+      </section>
+    </aside>
+  </div>
+
+  <script>
+    const FigmaPreview = (() => {
+      const KINDS = new Set(["design", "proto", "board", "slides", "deck", "file"])
+      const DOCS_FILE = "nrPSsILSYjesyc5UHjYYa4"
+      const HOST = "crit-prototype"
+
+      const parse = (input) => {
+        let url
+        try { url = new URL(input.trim()) } catch {
+          return { ok: false, reason: "Not a URL" }
+        }
+        if (!/figma\.com$/i.test(url.hostname)) {
+          return { ok: false, reason: "Host is not figma.com" }
+        }
+        if (url.pathname === "/embed" || url.pathname.startsWith("/embed/")) {
+          return { ok: true, kind: "kit1", url: url.href, key: null }
+        }
+        const parts = url.pathname.split("/").filter(Boolean)
+        const kind = parts[0]
+        const key = parts[1]
+        if (!KINDS.has(kind) || !key) {
+          return { ok: false, reason: "No design/proto/board/slides/deck/file key in the path" }
+        }
+        return { ok: true, kind: kind === "file" ? "design" : kind, url: url.href, key }
+      }
+
+      const toEmbed = (input, embedHost = HOST) => {
+        const parsed = parse(input)
+        if (!parsed.ok) return parsed
+        if (parsed.kind === "kit1") return { ok: true, href: parsed.url, rewritten: false }
+        const href = new URL(`https://embed.figma.com/${parsed.kind}/${parsed.key}`)
+        href.searchParams.set("embed-host", embedHost)
+        return { ok: true, href: href.href, rewritten: parsed.url !== href.href }
+      }
+
+      return { parse, toEmbed, DOCS_FILE, HOST }
+    })()
+
+    const CASES = {
+      embed: {
+        title: "Official design embed",
+        url: `https://embed.figma.com/design/${FigmaPreview.DOCS_FILE}?embed-host=figma-embed-docs`,
+        policy: "figma",
+        rewrite: false,
+        expect: "Should show the Figma embed chrome, or a cookie/login interstitial. Blank means framing failed."
+      },
+      proto: {
+        title: "Official prototype embed",
+        url: `https://embed.figma.com/proto/${FigmaPreview.DOCS_FILE}?node-id=5-3&starting-point-node-id=5%3A3&embed-host=figma-embed-docs`,
+        policy: "figma",
+        rewrite: false,
+        expect: "Same as the design embed, in presentation flow."
+      },
+      raw: {
+        title: "Raw share URL",
+        url: `https://www.figma.com/design/${FigmaPreview.DOCS_FILE}`,
+        policy: "figma",
+        rewrite: false,
+        expect: "Usually blocked or redirected. This is what a pasted Figma link would do in Crit today."
+      },
+      rewrite: {
+        title: "Rewritten share URL",
+        url: `https://www.figma.com/design/${FigmaPreview.DOCS_FILE}`,
+        policy: "figma",
+        rewrite: true,
+        expect: "www.figma.com/design/... becomes embed.figma.com/design/...?embed-host=crit-prototype"
+      },
+      crit: {
+        title: "Crit live Frame attrs",
+        url: `https://embed.figma.com/design/${FigmaPreview.DOCS_FILE}?embed-host=figma-embed-docs`,
+        policy: "crit",
+        rewrite: false,
+        expect: "Crit's live iframe has no sandbox and sets referrerPolicy=no-referrer. Figma may still load."
+      },
+      sandbox: {
+        title: "Sandboxed artifact iframe",
+        url: `https://embed.figma.com/design/${FigmaPreview.DOCS_FILE}?embed-host=figma-embed-docs`,
+        policy: "sandbox",
+        rewrite: false,
+        expect: "sandbox=allow-scripts is what Crit uses for HTML artifacts. Figma needs more than that and should fail."
+      }
+    }
+
+    const state = {
+      title: "No frame loaded",
+      input: "",
+      src: "",
+      policy: "figma",
+      rewritten: false,
+      event: "idle",
+      expect: "Pick a guided case or paste a URL.",
+      at: null
+    }
+
+    const $ = (id) => document.getElementById(id)
+
+    const renderState = () => {
+      $("state").innerHTML = `
+        <dt>Case</dt><dd>${escapeHtml(state.title)}</dd>
+        <dt>Iframe policy</dt><dd>${escapeHtml(state.policy)}</dd>
+        <dt>Input</dt><dd>${escapeHtml(state.input || "—")}</dd>
+        <dt>iframe src</dt><dd>${escapeHtml(state.src || "—")}</dd>
+        <dt>Rewritten</dt><dd>${state.rewritten ? "yes" : "no"}</dd>
+        <dt>Last iframe event</dt><dd>${escapeHtml(state.event)}${state.at ? ` at ${state.at}` : ""}</dd>
+        <dt>What to watch</dt><dd>${escapeHtml(state.expect)}</dd>
+      `
+      $("stage-title").textContent = state.title
+      $("stage-src").textContent = state.src || "src empty"
+    }
+
+    const escapeHtml = (value) => String(value)
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+
+    const mountFrame = (src, policy) => {
+      const wrap = $("frame-wrap")
+      wrap.replaceChildren()
+      const frame = document.createElement("iframe")
+      frame.title = "Figma preview prototype"
+      frame.allowFullscreen = true
+      if (policy === "crit") frame.referrerPolicy = "no-referrer"
+      if (policy === "sandbox") frame.sandbox = "allow-scripts"
+      frame.addEventListener("load", () => {
+        state.event = "load"
+        state.at = new Date().toLocaleTimeString()
+        renderState()
+      })
+      frame.addEventListener("error", () => {
+        state.event = "error"
+        state.at = new Date().toLocaleTimeString()
+        renderState()
+      })
+      frame.src = src
+      wrap.append(frame)
+    }
+
+    const load = ({ title, url, policy, rewrite, expect }) => {
+      const resolved = rewrite ? FigmaPreview.toEmbed(url) : { ok: true, href: url, rewritten: false }
+      state.title = title
+      state.input = url
+      state.policy = policy
+      state.expect = expect
+      $("url").value = url
+      $("policy").value = policy
+      if (!resolved.ok) {
+        state.src = ""
+        state.rewritten = false
+        state.event = resolved.reason
+        state.at = new Date().toLocaleTimeString()
+        $("frame-wrap").replaceChildren()
+        renderState()
+        return
+      }
+      state.src = resolved.href
+      state.rewritten = Boolean(resolved.rewritten)
+      state.event = "loading"
+      state.at = new Date().toLocaleTimeString()
+      mountFrame(resolved.href, policy)
+      renderState()
+    }
+
+    $("load-raw").addEventListener("click", () => {
+      load({
+        title: "Free play as-is",
+        url: $("url").value,
+        policy: $("policy").value,
+        rewrite: false,
+        expect: "Uses the typed URL with no rewrite."
+      })
+    })
+    $("load-rewrite").addEventListener("click", () => {
+      load({
+        title: "Free play rewritten",
+        url: $("url").value,
+        policy: $("policy").value,
+        rewrite: true,
+        expect: "Converts a Figma share URL to embed.figma.com and sets embed-host=crit-prototype."
+      })
+    })
+    document.querySelectorAll("[data-case]").forEach((button) => {
+      button.addEventListener("click", () => load(CASES[button.dataset.case]))
+    })
+
+    $("url").value = CASES.embed.url
+    renderState()
+  </script>
+</body>
+</html>
