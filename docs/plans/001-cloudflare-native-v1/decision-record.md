@@ -20,6 +20,12 @@ This file records the product decisions supplied in the active architecture conv
 - The Frame Bridge has an installation skill and stays off by default in production environments.
 - Unselected Frames are not interactive. A capture overlay sits on top so canvas pan, zoom, and select hit Crit. The sole selected Frame is native-interactive.
 - The host sets a live Frame URL by assigning iframe src. The page reports route changes. Frame Bridge has no session, highlight, inspect, or capability set.
+- Hosted review iframes the registered preview origin. Crit does not proxy that origin.
+- Shared-review-preview responses send `frame-ancestors` for the Crit host as an HTTP header. Ordinary production does not name the Crit host. Browsers ignore `frame-ancestors` in a meta tag.
+- Access on the Crit Installation authenticates reviewers. Access on a customer preview is optional and independent. If the preview is Access-gated, that Access app needs `allow_iframe` and SameSite None so the login page can sit in the Frame.
+- The Cloudflare account IdP at `dash.cloudflare.com` sends `X-Frame-Options: SAMEORIGIN`. First sign-in for that IdP happens top-level. Then `CF_Authorization` is SameSite None and the Frame reuses it.
+- Wrangler OAuth cannot edit Access apps. Preview Access setup uses an Account API token with Access: Apps and Policies Edit.
+- Turnstile, Bot Fight, Under Attack, or a blocking `X-Frame-Options` on the preview hostname keeps the preview out of the Frame.
 - The shared runtime is Cloudflare-native.
 - Agent changes identify the Agent as author. Provenance also records the local Person who ran the Agent and useful harness, model, session, and execution metadata when available.
 - Stable v1 is a full rewrite. Preserving alpha APIs, storage formats, and runtime compatibility is not a goal.

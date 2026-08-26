@@ -7,7 +7,7 @@ Deploy the shared human collaboration surface entirely in a customer Cloudflare 
 ## Build
 
 - Serve API routes and the UI through one Worker deployment and Workers Static Assets.
-- Use Cloudflare Access for company identity and Crit policy for Workspace authorization.
+- Use Cloudflare Access for company identity on the Crit Installation hostname and Crit policy for Workspace authorization. Access on a customer preview is optional. The Frame Bridge skill configures it when that preview is already gated.
 - Store Installation, default Workspace, memberships, Teams, Applications, Deployments, and Canvas directory entries in D1.
 - Implement one SQLite Durable Object per Canvas using the same `CanvasAuthority` contract.
 - Store immutable artifacts in R2.

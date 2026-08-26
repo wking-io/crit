@@ -79,7 +79,7 @@ Project pages are applicationRoute Frames. Localhost is not a webUrl.
 
 Unselected Frames are not interactive. Crit covers them. The selected Frame is the live page.
 
-The Frame Bridge reports the page route to Crit. Use the \`install-crit-frame-bridge\` skill to install \`@crit/frame-bridge\`. Turn it on for local development. Leave ordinary production builds off. Production HTML must not contain Frame Bridge markers.
+The Frame Bridge reports the page route to Crit. Use the \`install-crit-frame-bridge\` skill to install \`@crit/frame-bridge\`. Turn it on for local development. Leave ordinary production builds off. Production HTML must not contain Frame Bridge markers. A shared review preview sends \`frame-ancestors\` for the Crit host. That skill also turns on Access \`allow_iframe\` when the preview is Access-gated.
 
 ## Shared work
 

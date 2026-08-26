@@ -26,7 +26,7 @@ Keep versioned fixtures for HTTP, WebSocket, manifest, and bridge messages. Deco
 
 ### Security
 
-Prove that the server ignores client-supplied actor and timestamp fields. Prove that Access and Workspace policy cannot cross an unauthorized Workspace. Prove that ordinary production builds and ordinary production previews contain no Frame Bridge markers. Prove that only an explicit shared-review-preview opt-in adds them. Prove that `/mcp` and agent OAuth routes do not exist.
+Prove that the server ignores client-supplied actor and timestamp fields. Prove that Access and Workspace policy cannot cross an unauthorized Workspace. Prove that ordinary production builds and ordinary production previews contain no Frame Bridge markers and do not name the Crit host in `frame-ancestors`. Prove that only an explicit shared-review-preview opt-in adds the marker and the Crit `frame-ancestors` header. Prove that `/mcp` and agent OAuth routes do not exist.
 
 ## Runtime proofs
 
@@ -44,7 +44,7 @@ Resolve one `applicationRoute` Frame to localhost in the developer UI and to a r
 
 ### Hosted review workflow
 
-Open the shared Canvas in a browser with no Crit install. Complete Access sign-in to the default Workspace. View Frames and a shared preview as a Person. Confirm that `/mcp` is not a route.
+Open the shared Canvas in a browser with no Crit install. Complete Access sign-in to the default Workspace. View Frames and a shared preview as a Person. The live Frame is the registered preview origin inside the hosted UI iframe. When that preview is Access-gated, the Access login loads in the Frame. Confirm that `/mcp` is not a route.
 
 ### Installation workflow
 
