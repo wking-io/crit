@@ -1,34 +1,32 @@
 import { Id } from "@crit/domain"
+import { Result } from "effect"
 import { describe, expect, it } from "vitest"
 
-import { HostLocation, parseHostLocation } from "../src/index.js"
+import { canvasHref, parseHostCanvasId, sessionHash } from "../src/index.js"
 
-describe("parseHostLocation", () => {
-  it("is the index when search is empty or has no canvas query", () => {
-    expect(parseHostLocation("")).toEqual(HostLocation.index())
-    expect(parseHostLocation("?foo=bar")).toEqual(HostLocation.index())
-  })
-
-  it("opens a valid CanvasId from the first canvas query", () => {
-    expect(parseHostLocation("?canvas=canvas_shop")).toEqual(
-      HostLocation.canvas({ canvasId: Id.canvas("canvas_shop") })
+describe("parseHostCanvasId", () => {
+  it("accepts a CanvasId path param", () => {
+    expect(parseHostCanvasId("canvas_shop")).toEqual(
+      Result.succeed(Id.canvas("canvas_shop"))
     )
-    expect(parseHostLocation("?canvas=canvas_local")).toEqual(
-      HostLocation.canvas({ canvasId: Id.canvas("canvas_local") })
-    )
-    expect(parseHostLocation("canvas=canvas_shop")).toEqual(
-      HostLocation.canvas({ canvasId: Id.canvas("canvas_shop") })
-    )
-    expect(parseHostLocation("?canvas=canvas_shop&canvas=canvas_other")).toEqual(
-      HostLocation.canvas({ canvasId: Id.canvas("canvas_shop") })
+    expect(parseHostCanvasId("canvas_local")).toEqual(
+      Result.succeed(Id.canvas("canvas_local"))
     )
   })
 
-  it("is invalid when canvas is present and not a CanvasId", () => {
-    expect(parseHostLocation("?canvas=")).toEqual(HostLocation.invalid())
-    expect(parseHostLocation("?canvas")).toEqual(HostLocation.invalid())
-    expect(parseHostLocation("?canvas=shop")).toEqual(HostLocation.invalid())
-    expect(parseHostLocation("?canvas=canvas_")).toEqual(HostLocation.invalid())
-    expect(parseHostLocation("?canvas=Canvas_shop")).toEqual(HostLocation.invalid())
+  it("rejects a value that is not a CanvasId", () => {
+    expect(parseHostCanvasId("")).toEqual(Result.fail("invalid"))
+    expect(parseHostCanvasId("shop")).toEqual(Result.fail("invalid"))
+    expect(parseHostCanvasId("canvas_")).toEqual(Result.fail("invalid"))
+    expect(parseHostCanvasId("Canvas_shop")).toEqual(Result.fail("invalid"))
+  })
+})
+
+describe("canvasHref", () => {
+  it("builds a canvas route that keeps the session hash", () => {
+    expect(canvasHref(Id.canvas("canvas_shop"), "#crit=session")).toBe(
+      "/canvas/canvas_shop#crit=session"
+    )
+    expect(sessionHash("#crit=session")).toBe("crit=session")
   })
 })

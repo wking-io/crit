@@ -1,7 +1,8 @@
 import type { CanvasListing } from "@crit/replica/http"
+import { Link } from "@tanstack/react-router"
 import { type ReactElement } from "react"
 
-import { canvasIndexHref } from "./host-canvas-id.js"
+import { sessionHash } from "./host-canvas-id.js"
 
 export function HostCanvasList({ fragment, listings }: {
   readonly fragment: string
@@ -12,7 +13,13 @@ export function HostCanvasList({ fragment, listings }: {
     <ul>
       {listings.map((listing) => (
         <li key={listing.canvasId}>
-          <a href={canvasIndexHref(listing.canvasId, fragment)}>{listing.title}</a>
+          <Link
+            hash={sessionHash(fragment)}
+            params={{ canvasId: listing.canvasId }}
+            to="/canvas/$canvasId"
+          >
+            {listing.title}
+          </Link>
         </li>
       ))}
     </ul>

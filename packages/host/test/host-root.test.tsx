@@ -1,5 +1,6 @@
 import { LocalBrowserConnection } from "@crit/client"
 import { LocalDaemonInstanceNonce } from "@crit/replica/http"
+import { createMemoryHistory } from "@tanstack/react-router"
 import { Schema } from "effect"
 import { StrictMode, act, type ReactElement } from "react"
 import { createRoot, type Root } from "react-dom/client"
@@ -18,6 +19,13 @@ let root: Root
 
 const render = (element: ReactElement) => root.render(<StrictMode>{element}</StrictMode>)
 
+const hostAt = (path: string, fragment: string) => (
+  <HostRoot
+    fragment={fragment}
+    history={createMemoryHistory({ initialEntries: [path] })}
+  />
+)
+
 beforeEach(() => {
   container = document.createElement("div")
   document.body.append(container)
@@ -32,29 +40,34 @@ afterEach(async() => {
 
 describe("HostRoot", () => {
   it("renders the failure copy for an invalid fragment", async() => {
-    await act(async() => render(<HostRoot fragment="#crit=" search="" />))
+    await act(async() => render(hostAt("/", "#crit=")))
     expect(container.querySelector("[role='alert']")?.textContent).toBe(
       "Unable to connect to Crit."
     )
   })
 
   it("renders the same invalid-fragment copy after a remount", async() => {
-    await act(async() => render(<HostRoot fragment="#crit=" search="" />))
+    await act(async() => render(hostAt("/", "#crit=")))
     await act(async() => root.unmount())
     container.remove()
     container = document.createElement("div")
     document.body.append(container)
     root = createRoot(container)
-    await act(async() => render(<HostRoot fragment="#crit=" search="" />))
+    await act(async() => render(hostAt("/", "#crit=")))
     expect(container.querySelector("[role='alert']")?.textContent).toBe(
       "Unable to connect to Crit."
     )
   })
 
-  it("renders a distinct alert for an invalid canvas query", async() => {
-    await act(async() => render(
-      <HostRoot fragment="#crit=" search="?canvas=shop" />
-    ))
+  it("renders a not-found alert for an unknown path", async() => {
+    await act(async() => render(hostAt("/nope", "#crit=")))
+    expect(container.querySelector("[role='alert']")?.textContent).toBe(
+      "That page does not exist."
+    )
+  })
+
+  it("renders a distinct alert for an invalid canvas route", async() => {
+    await act(async() => render(hostAt("/canvas/shop", "#crit=")))
     expect(container.querySelector("[role='alert']")?.textContent).toBe(
       "That is not a Canvas ID."
     )
@@ -68,7 +81,7 @@ describe("HostRoot", () => {
     })
 
     await act(async() => render(
-      <HostRoot fragment={LocalBrowserConnection.encode(descriptor)} search="" />
+      hostAt("/", LocalBrowserConnection.encode(descriptor))
     ))
 
     await act(async() => vi.waitFor(
@@ -80,17 +93,14 @@ describe("HostRoot", () => {
     ))
   }, 15_000)
 
-  it("opens a named canvas from search and still reports an unreachable daemon", async() => {
+  it("opens a named canvas from its route and still reports an unreachable daemon", async() => {
     const descriptor = LocalBrowserConnection.make({
       baseUrl: "http://127.0.0.1:49152",
       instance
     })
 
     await act(async() => render(
-      <HostRoot
-        fragment={LocalBrowserConnection.encode(descriptor)}
-        search="?canvas=canvas_shop"
-      />
+      hostAt("/canvas/canvas_shop", LocalBrowserConnection.encode(descriptor))
     ))
 
     await act(async() => vi.waitFor(
