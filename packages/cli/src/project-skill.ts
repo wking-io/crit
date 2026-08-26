@@ -16,7 +16,7 @@ crit init
 crit dev
 \`\`\`
 
-\`dev\` prints a bootstrap URL. Give that URL to the person. The browser opens \`canvas_local\` unless the URL names another Canvas.
+\`dev\` prints a bootstrap URL. Give that URL to the person. The default page lists existing canvases. After \`crit create\`, give them that URL with \`?canvas=<id>\`. Keep the \`#crit=\` hash.
 
 Before writing as an agent, begin a session so your work is stamped:
 
@@ -67,7 +67,7 @@ Project pages are applicationRoute Frames. Localhost is not a webUrl.
 
 ## Work
 
-1. Read \`layout\` on the Canvas you will change. Default is \`canvas_local\`.
+1. Read \`layout\` on the Canvas you created.
 2. Place new Frames in empty space. Do not stack them.
 3. Add a Frame as you create each page or prototype.
 4. Batch related edits in one change when the client allows it.
