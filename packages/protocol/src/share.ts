@@ -68,3 +68,28 @@ export const encodeCanvasSharedWire = Schema.encodeSync(
   CanvasSharedWire,
   { onExcessProperty: "error" }
 )
+
+export const canvasDirectoryPath = "/directory"
+
+export const CanvasDirectoryEntryWire = Schema.Struct({
+  canvasId: CanvasId,
+  workspaceId: WorkspaceId,
+  title: CanvasTitle
+})
+export type CanvasDirectoryEntryWire = typeof CanvasDirectoryEntryWire.Type
+
+export const CanvasDirectoryWire = Schema.Struct({
+  kind: Schema.Literal("canvas-directory"),
+  schemaVersion: Schema.Literal(1),
+  canvases: Schema.Array(CanvasDirectoryEntryWire)
+})
+export type CanvasDirectoryWire = typeof CanvasDirectoryWire.Type
+
+export const decodeCanvasDirectoryWire = Schema.decodeUnknownSync(
+  CanvasDirectoryWire,
+  { onExcessProperty: "error" }
+)
+export const encodeCanvasDirectoryWire = Schema.encodeSync(
+  CanvasDirectoryWire,
+  { onExcessProperty: "error" }
+)

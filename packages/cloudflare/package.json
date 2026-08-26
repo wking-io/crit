@@ -18,13 +18,13 @@
     "@crit/authority": "*",
     "@crit/domain": "*",
     "@crit/protocol": "*",
+    "@crit/representations": "*",
     "@effect/sql-sqlite-node": "4.0.0-rc.109",
     "effect": "4.0.0-rc.109"
   },
   "devDependencies": {
     "@cloudflare/vitest-plugin": "1.0.0",
     "@cloudflare/workers-types": "5.20260825.1",
-    "@crit/representations": "*",
     "vitest": "4.1.0"
   }
 }

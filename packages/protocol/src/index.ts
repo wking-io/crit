@@ -27,14 +27,30 @@ export {
   encodeAccessAuthenticatedPersonWire
 } from "./identity.js"
 export {
+  canvasDirectoryPath,
+  CanvasDirectoryEntryWire,
+  CanvasDirectoryWire,
   CanvasSharedWire,
+  decodeCanvasDirectoryWire,
   decodeCanvasSharedWire,
   decodeShareCanvasWire,
+  encodeCanvasDirectoryWire,
   encodeCanvasSharedWire,
   encodeShareCanvasWire,
   ShareCanvasWire,
   ShareDigestMismatch
 } from "./share.js"
+export {
+  artifactCollectionPath,
+  ArtifactContentCorrupt,
+  ArtifactDigestConflict,
+  ArtifactStoredWire,
+  decodeArtifactStoredWire,
+  encodeArtifactStoredWire,
+  parseArtifactDigestSearch,
+  parseArtifactPath,
+  remoteArtifactPath
+} from "./artifact.js"
 export {
   decodeDeploymentRegisteredWire,
   decodeRegisterDeploymentWire,

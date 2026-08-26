@@ -8,10 +8,13 @@ import {
   PersonSnapshot
 } from "@crit/domain"
 import {
+  canvasDirectoryPath,
   decodeRegisterDeploymentWire,
   decodeShareCanvasWire,
   encodeAccessAuthenticatedPersonWire,
+  encodeCanvasDirectoryWire,
   encodeCanvasSharedWire,
+  parseArtifactPath,
   parseRemoteAuthorityPath,
   remoteCanvasCollectionPath,
   ShareDigestMismatch,
@@ -20,6 +23,7 @@ import {
 import { Effect, Exit, Option, Schema } from "effect"
 
 import { readAccessEmail } from "./access.js"
+import { handleArtifactRequest } from "./artifact-http.js"
 import {
   CanvasDurableObject,
   testClockCancelPath,
@@ -27,9 +31,11 @@ import {
 } from "./canvas-object.js"
 import { registerControlDeployment } from "./deployments.js"
 import { handleLedgerRequest } from "./ledger-http.js"
+import { isDocumentRequest, serveShell } from "./shell.js"
 import {
   compareShareReceipt,
   insertShareReceipt,
+  listCanvasDirectory,
   lookupShareReceipt,
   ShareReceiptMismatch,
   ShareReceiptRequest,
@@ -226,6 +232,23 @@ const registerDeployment = async (
   }
 }
 
+const readCanvasDirectory = async (
+  request: Request,
+  env: Cloudflare.Env
+): Promise<Response> => {
+  if (request.method !== "GET") return emptyResponse(405)
+  const address = readAccessEmail(request)
+  if (Option.isNone(address)) return emptyResponse(401)
+  return new Response(JSON.stringify(encodeCanvasDirectoryWire({
+    kind: "canvas-directory",
+    schemaVersion: 1,
+    canvases: await listCanvasDirectory(env)
+  })), {
+    status: 200,
+    headers: { "content-type": "application/json" }
+  })
+}
+
 const readIdentity = (request: Request): Response => {
   if (request.method !== "GET") return emptyResponse(405)
   const address = readAccessEmail(request)
@@ -281,9 +304,11 @@ const advanceTestClock = async (url: URL): Promise<Response> => {
 
 const worker: ExportedHandler<Cloudflare.Env> = {
   async fetch(request, env) {
+    if (isDocumentRequest(request)) return serveShell(request, env)
     const url = new URL(request.url)
     if (url.pathname === "/deployments") return registerDeployment(request, env)
     if (url.pathname === "/identity") return readIdentity(request)
+    if (url.pathname === canvasDirectoryPath) return readCanvasDirectory(request, env)
     if (url.pathname === remoteCanvasCollectionPath) {
       return request.method === "POST"
         ? shareCanvas(request, env)
@@ -291,6 +316,8 @@ const worker: ExportedHandler<Cloudflare.Env> = {
     }
     const ledger = parseRemoteAuthorityPath(url.pathname)
     if (ledger !== undefined) return handleLedgerRequest(request, env, ledger)
+    const artifactId = parseArtifactPath(url.pathname)
+    if (artifactId !== undefined) return handleArtifactRequest(request, env, artifactId)
     if (
       request.method === "DELETE" &&
       url.pathname.startsWith(testClockCancelPath)
@@ -300,7 +327,7 @@ const worker: ExportedHandler<Cloudflare.Env> = {
     if (request.method === "POST" && url.pathname.startsWith(testClockPath)) {
       return advanceTestClock(url)
     }
-    return emptyResponse(404)
+    return serveShell(request, env)
   }
 }
 

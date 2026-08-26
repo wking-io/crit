@@ -25,5 +25,16 @@
       "tag": "v1",
       "new_sqlite_classes": ["CanvasDurableObject"]
     }
-  ]
+  ],
+  "r2_buckets": [
+    {
+      "binding": "ARTIFACTS",
+      "bucket_name": "crit-artifacts"
+    }
+  ],
+  "assets": {
+    "directory": "./assets",
+    "binding": "ASSETS",
+    "run_worker_first": true
+  }
 }
