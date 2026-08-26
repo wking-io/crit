@@ -39,6 +39,7 @@ import {
   ProjectManifestInitialization,
   registerDeployment,
   shareCanvas,
+  ShareDigestMismatch,
   SharePersistenceFailure,
   ShareRequestFailed,
   ShareRequiresLogin,
@@ -330,6 +331,7 @@ type ShareFailure =
   | LocalDaemonStateMalformed
   | LocalDaemonStateMissing
   | LocalDaemonStateUnreadable
+  | ShareDigestMismatch
   | SharePersistenceFailure
   | ShareRequestFailed
   | ShareRequiresLogin
@@ -341,6 +343,8 @@ const formatShareFailure = Match.typeTags<ShareFailure, string>()({
   LocalDaemonStateMalformed: () => "Run crit login",
   LocalDaemonStateMissing: () => "Run crit login",
   LocalDaemonStateUnreadable: () => "Run crit login",
+  ShareDigestMismatch: () =>
+    "Installation already has this Canvas with a different projection",
   SharePersistenceFailure: () => "Unable to record the shared Canvas",
   ShareRequestFailed: () => "Unable to reach the Crit installation",
   ShareRequiresLogin: () => "Run crit login",
@@ -542,8 +546,7 @@ const share = Command.make("share", {
   )
   const result = yield* shareCanvas({
     dataRoot: root,
-    canvasId: id,
-    title: view.projection.title
+    projection: view.projection
   }).pipe(
     Effect.mapError((failure) => new CliOperationalFailure({
       message: formatShareFailure(failure)

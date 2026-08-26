@@ -6,7 +6,7 @@ import type {
   ProposedCanvasChange,
   SubmitChangeReceipt
 } from "./change.js"
-import type { DecodeResult, ProtocolFailure } from "./failure.js"
+import { ProtocolFailure, type DecodeResult } from "./failure.js"
 import {
   AcceptedWire,
   FailureWire,
@@ -34,7 +34,7 @@ const fail = (
   tag: ProtocolFailure["_tag"],
   location: ProtocolFailure["location"],
   message: string
-): DecodeResult<never> => Result.fail({ _tag: tag, location, message })
+): DecodeResult<never> => Result.fail(ProtocolFailure[tag]({ location, message }))
 
 const decoded = <A>(value: A): DecodeResult<A> => Result.succeed(value)
 

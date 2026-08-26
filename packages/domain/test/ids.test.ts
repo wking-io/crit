@@ -13,10 +13,12 @@ import {
   FrameId,
   HttpUrl,
   Id,
+  ImportId,
   InstallationId,
   IsoTimestamp,
   PersonId,
   Sha256Digest,
+  ShareId,
   WorkspaceId
 } from "../src/index.js"
 
@@ -31,7 +33,9 @@ const semanticIds = [
   { name: "DeploymentId", valid: "deployment_review", parse: Id.deployment, roundTrip: () => Schema.encodeSync(DeploymentId)(Id.deployment("deployment_review")) },
   { name: "ArtifactId", valid: "artifact_capture", parse: Id.artifact, roundTrip: () => Schema.encodeSync(ArtifactId)(Id.artifact("artifact_capture")) },
   { name: "ChangeId", valid: "change_01KABC", parse: Id.change, roundTrip: () => Schema.encodeSync(ChangeId)(Id.change("change_01KABC")) },
-  { name: "ExecutionId", valid: "execution_01KABC", parse: Id.execution, roundTrip: () => Schema.encodeSync(ExecutionId)(Id.execution("execution_01KABC")) }
+  { name: "ExecutionId", valid: "execution_01KABC", parse: Id.execution, roundTrip: () => Schema.encodeSync(ExecutionId)(Id.execution("execution_01KABC")) },
+  { name: "ShareId", valid: "share_canvas_checkout", parse: Id.share, roundTrip: () => Schema.encodeSync(ShareId)(Id.share("share_canvas_checkout")) },
+  { name: "ImportId", valid: "import_canvas_checkout", parse: Id.imported, roundTrip: () => Schema.encodeSync(ImportId)(Id.imported("import_canvas_checkout")) }
 ]
 
 describe("semantic IDs", () => {

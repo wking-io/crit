@@ -42,6 +42,12 @@ export type ChangeId = typeof ChangeId.Type
 export const ExecutionId = semanticId("execution_", "ExecutionId")
 export type ExecutionId = typeof ExecutionId.Type
 
+export const ShareId = semanticId("share_", "ShareId")
+export type ShareId = typeof ShareId.Type
+
+export const ImportId = semanticId("import_", "ImportId")
+export type ImportId = typeof ImportId.Type
+
 export const HttpUrl = Schema.String.check(
   Schema.isPattern(/^https?:\/\/[^/?#\s]+(?:[/?#][^\s]*)?$/)
 ).pipe(Schema.brand("HttpUrl"))
@@ -83,5 +89,7 @@ export const Id = {
   deployment: Schema.decodeUnknownSync(DeploymentId),
   artifact: Schema.decodeUnknownSync(ArtifactId),
   change: Schema.decodeUnknownSync(ChangeId),
-  execution: Schema.decodeUnknownSync(ExecutionId)
+  execution: Schema.decodeUnknownSync(ExecutionId),
+  share: Schema.decodeUnknownSync(ShareId),
+  imported: Schema.decodeUnknownSync(ImportId)
 }

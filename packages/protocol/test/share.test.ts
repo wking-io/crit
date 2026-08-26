@@ -13,6 +13,36 @@ const fixtureContents = (name: string) => readFile(
   "utf8"
 )
 
+const accessPerson = {
+  _tag: "person" as const,
+  personId: "person_ada",
+  displayName: "Ada Lovelace",
+  email: { _tag: "access" as const, address: "ada@acme.com" }
+}
+
+const shareFields = {
+  kind: "share-canvas" as const,
+  schemaVersion: 2 as const,
+  canvasId: "canvas_checkout",
+  title: "Checkout",
+  shareId: "share_canvas_checkout",
+  importId: "import_canvas_checkout",
+  projectionDigest: `sha256:${"a".repeat(64)}`,
+  person: accessPerson
+}
+
+const receiptFields = {
+  kind: "canvas-shared" as const,
+  schemaVersion: 2 as const,
+  canvasId: "canvas_checkout",
+  title: "Checkout",
+  shareId: "share_canvas_checkout",
+  importId: "import_canvas_checkout",
+  projectionDigest: `sha256:${"a".repeat(64)}`,
+  workspaceId: "workspace_default",
+  personId: "person_ada"
+}
+
 describe("ShareCanvasWire", () => {
   it("round-trips the versioned fixture", async() => {
     const input: unknown = JSON.parse(await fixtureContents("share-canvas"))
@@ -22,67 +52,17 @@ describe("ShareCanvasWire", () => {
   })
 
   it.each([
-    ["excess property", {
-      kind: "share-canvas",
-      schemaVersion: 1,
-      canvasId: "canvas_checkout",
-      title: "Checkout",
-      person: {
-        _tag: "person",
-        personId: "person_ada",
-        displayName: "Ada Lovelace",
-        email: { _tag: "access", address: "ada@acme.com" }
-      },
-      extra: true
-    }],
-    ["wrong kind", {
-      kind: "canvas-share",
-      schemaVersion: 1,
-      canvasId: "canvas_checkout",
-      title: "Checkout",
-      person: {
-        _tag: "person",
-        personId: "person_ada",
-        displayName: "Ada Lovelace",
-        email: { _tag: "access", address: "ada@acme.com" }
-      }
-    }],
-    ["wrong version", {
-      kind: "share-canvas",
-      schemaVersion: 2,
-      canvasId: "canvas_checkout",
-      title: "Checkout",
-      person: {
-        _tag: "person",
-        personId: "person_ada",
-        displayName: "Ada Lovelace",
-        email: { _tag: "access", address: "ada@acme.com" }
-      }
-    }],
+    ["excess property", { ...shareFields, extra: true }],
+    ["wrong kind", { ...shareFields, kind: "canvas-share" }],
+    ["wrong version", { ...shareFields, schemaVersion: 3 }],
+    ["missing share ID", { ...shareFields, shareId: undefined }],
+    ["missing import ID", { ...shareFields, importId: undefined }],
+    ["missing projection digest", { ...shareFields, projectionDigest: undefined }],
     ["unspecified Person email", {
-      kind: "share-canvas",
-      schemaVersion: 1,
-      canvasId: "canvas_checkout",
-      title: "Checkout",
-      person: {
-        _tag: "person",
-        personId: "person_ada",
-        displayName: "Ada Lovelace",
-        email: { _tag: "unspecified" }
-      }
+      ...shareFields,
+      person: { ...accessPerson, email: { _tag: "unspecified" } }
     }],
-    ["unbranded canvas ID", {
-      kind: "share-canvas",
-      schemaVersion: 1,
-      canvasId: "checkout",
-      title: "Checkout",
-      person: {
-        _tag: "person",
-        personId: "person_ada",
-        displayName: "Ada Lovelace",
-        email: { _tag: "access", address: "ada@acme.com" }
-      }
-    }]
+    ["unbranded canvas ID", { ...shareFields, canvasId: "checkout" }]
   ])("rejects %s", (_label, input) => {
     expect(() => decodeShareCanvasWire(input)).toThrow()
   })
@@ -97,25 +77,11 @@ describe("CanvasSharedWire", () => {
   })
 
   it.each([
-    ["excess property", {
-      kind: "canvas-shared",
-      schemaVersion: 1,
-      canvasId: "canvas_checkout",
-      title: "Checkout",
-      extra: true
-    }],
-    ["wrong kind", {
-      kind: "share-canvas",
-      schemaVersion: 1,
-      canvasId: "canvas_checkout",
-      title: "Checkout"
-    }],
-    ["wrong version", {
-      kind: "canvas-shared",
-      schemaVersion: 2,
-      canvasId: "canvas_checkout",
-      title: "Checkout"
-    }]
+    ["excess property", { ...receiptFields, extra: true }],
+    ["wrong kind", { ...receiptFields, kind: "share-canvas" }],
+    ["wrong version", { ...receiptFields, schemaVersion: 3 }],
+    ["missing share ID", { ...receiptFields, shareId: undefined }],
+    ["missing workspace ID", { ...receiptFields, workspaceId: undefined }]
   ])("rejects %s", (_label, input) => {
     expect(() => decodeCanvasSharedWire(input)).toThrow()
   })

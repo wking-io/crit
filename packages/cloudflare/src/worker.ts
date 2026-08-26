@@ -1,13 +1,11 @@
-import { AuthorityModel, CreateCanvas } from "@crit/authority"
+import { AuthorityModel, CreateCanvas, type PersonInvocation } from "@crit/authority"
 import {
   AccessPersonEmail,
   AuthSubject,
   IsoTimestamp,
   PersonEmail,
   PersonPrincipal,
-  PersonSnapshot,
-  type CanvasId,
-  type CanvasTitle
+  PersonSnapshot
 } from "@crit/domain"
 import {
   decodeRegisterDeploymentWire,
@@ -16,6 +14,7 @@ import {
   encodeCanvasSharedWire,
   parseRemoteAuthorityPath,
   remoteCanvasCollectionPath,
+  ShareDigestMismatch,
   type RegisterDeploymentWire
 } from "@crit/protocol"
 import { Effect, Exit, Option, Schema } from "effect"
@@ -28,6 +27,15 @@ import {
 } from "./canvas-object.js"
 import { registerControlDeployment } from "./deployments.js"
 import { handleLedgerRequest } from "./ledger-http.js"
+import {
+  compareShareReceipt,
+  insertShareReceipt,
+  lookupShareReceipt,
+  ShareReceiptMismatch,
+  ShareReceiptRequest,
+  type ComparedShareReceipt,
+  type ShareReceiptRow
+} from "./shares.js"
 
 const testClocks = new Map<string, Effect.Effect<IsoTimestamp>>()
 const runningClocks = new Map<string, string>()
@@ -46,24 +54,77 @@ interface RegisteredTestClock {
 
 const SharePersonEmailProbe = Schema.Struct({
   kind: Schema.Literal("share-canvas"),
-  schemaVersion: Schema.Literal(1),
   person: Schema.Struct({ email: PersonEmail })
 })
 
 const emptyResponse = (status: number) => new Response(null, { status })
 
-const canvasSharedResponse = (
-  canvasId: CanvasId,
-  title: CanvasTitle
-) => new Response(JSON.stringify(encodeCanvasSharedWire({
-  kind: "canvas-shared",
-  schemaVersion: 1,
-  canvasId,
-  title
-})), {
-  status: 200,
+const encodedJson = <A>(
+  status: number,
+  schema: Schema.Schema<A>,
+  value: A
+) => new Response(JSON.stringify(Schema.encodeSync(schema)(value)), {
+  status,
   headers: { "content-type": "application/json" }
 })
+
+const canvasSharedResponse = (receipt: ShareReceiptRow) => new Response(
+  JSON.stringify(encodeCanvasSharedWire({
+    kind: "canvas-shared",
+    schemaVersion: 2,
+    canvasId: receipt.canvasId,
+    title: receipt.title,
+    shareId: receipt.shareId,
+    importId: receipt.importId,
+    projectionDigest: receipt.projectionDigest,
+    workspaceId: receipt.workspaceId,
+    personId: receipt.personId
+  })),
+  {
+    status: 200,
+    headers: { "content-type": "application/json" }
+  }
+)
+
+const comparedShareResponse = (
+  compared: ComparedShareReceipt
+) => {
+  if (compared._tag === "match") return canvasSharedResponse(compared.receipt)
+  if (compared._tag === "digestMismatch") {
+    return encodedJson(409, ShareDigestMismatch, compared.mismatch)
+  }
+  return encodedJson(409, ShareReceiptMismatch, compared.mismatch)
+}
+
+const openOrCreateRemoteCanvas = async (
+  env: Cloudflare.Env,
+  requested: ShareReceiptRequest,
+  invocation: PersonInvocation
+): Promise<Response> => {
+  const stub = env.CANVASES.get(env.CANVASES.idFromName(requested.canvasId))
+  const created = await stub.create(CreateCanvas.make({
+    canvasId: requested.canvasId,
+    title: requested.title
+  }), invocation)
+  if (
+    created._tag === "failure" &&
+    created.error._tag !== "canvasAlreadyExists"
+  ) {
+    return emptyResponse(500)
+  }
+  if (created._tag !== "success") {
+    const opened = await stub.open()
+    if (opened._tag !== "success") return emptyResponse(500)
+  }
+  try {
+    return canvasSharedResponse(await insertShareReceipt(env, requested))
+  } catch {
+    const raced = await lookupShareReceipt(env, requested.shareId)
+    return raced === undefined
+      ? emptyResponse(500)
+      : comparedShareResponse(compareShareReceipt(raced, requested))
+  }
+}
 
 const shareCanvas = async (
   request: Request,
@@ -95,6 +156,19 @@ const shareCanvas = async (
     return emptyResponse(401)
   }
 
+  const requested = ShareReceiptRequest.make({
+    shareId: share.shareId,
+    importId: share.importId,
+    canvasId: share.canvasId,
+    personId: share.person.personId,
+    projectionDigest: share.projectionDigest,
+    title: share.title
+  })
+  const existing = await lookupShareReceipt(env, share.shareId)
+  if (existing !== undefined) {
+    return comparedShareResponse(compareShareReceipt(existing, requested))
+  }
+
   const person = PersonSnapshot.make({
     personId: share.person.personId,
     displayName: share.person.displayName,
@@ -106,31 +180,11 @@ const shareCanvas = async (
     subject: Schema.decodeUnknownSync(AuthSubject)(`access|${address.value}`),
     person
   })
-  const invocation = AuthorityModel.personInvocation({ principal })
-  const stub = env.CANVASES.get(env.CANVASES.idFromName(share.canvasId))
-  const created = await stub.create(CreateCanvas.make({
-    canvasId: share.canvasId,
-    title: share.title
-  }), invocation)
-  if (created._tag === "success") {
-    return canvasSharedResponse(
-      created.value.projection.canvasId,
-      created.value.projection.title
-    )
-  }
-  if (
-    created._tag !== "failure" ||
-    created.error._tag !== "canvasAlreadyExists"
-  ) {
-    return emptyResponse(500)
-  }
-  const opened = await stub.open()
-  return opened._tag === "success"
-    ? canvasSharedResponse(
-      opened.value.projection.canvasId,
-      opened.value.projection.title
-    )
-    : emptyResponse(500)
+  return openOrCreateRemoteCanvas(
+    env,
+    requested,
+    AuthorityModel.personInvocation({ principal })
+  )
 }
 
 export const registerTestClock = (

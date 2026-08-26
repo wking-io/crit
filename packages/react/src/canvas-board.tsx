@@ -37,7 +37,7 @@ import {
 import type { FrameSnapshotter } from "./frame-snapshot.js"
 import { framesById } from "./projection-index.js"
 import { ReviewChrome } from "./review-chrome.js"
-import type { ReviewClientEffect } from "./review-actions.js"
+import { ReviewSelection, type ReviewClientEffect } from "./review-actions.js"
 import { useReviewEffects } from "./review-effects.js"
 
 interface CanvasBoardBaseProps {
@@ -287,7 +287,7 @@ export function CanvasBoard({
             onEffect={reviewEffects.handle}
             onSubmit={onSubmit}
             projection={projection}
-            selection={{ _tag: "items", items: selection }}
+            selection={ReviewSelection.items({ items: selection })}
             snapshotter={snapshotter}
           />
         )}

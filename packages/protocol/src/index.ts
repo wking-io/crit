@@ -32,7 +32,8 @@ export {
   decodeShareCanvasWire,
   encodeCanvasSharedWire,
   encodeShareCanvasWire,
-  ShareCanvasWire
+  ShareCanvasWire,
+  ShareDigestMismatch
 } from "./share.js"
 export {
   decodeDeploymentRegisteredWire,

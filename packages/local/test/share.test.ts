@@ -13,28 +13,38 @@ import {
   AccessPersonEmail,
   CanvasTitle,
   EmailAddress,
-  Id
+  emptyCanvasProjection,
+  Id,
+  Sha256Digest
 } from "@crit/domain"
 import {
   decodeShareCanvasWire,
   encodeAccessAuthenticatedPersonWire,
-  encodeCanvasSharedWire
+  encodeCanvasSharedWire,
+  ShareDigestMismatch as ShareDigestMismatchWire
 } from "@crit/protocol"
 import { Effect, Layer, Schema } from "effect"
 import { describe, expect, it } from "vitest"
 
 import {
   bindAccessPerson,
+  importIdForCanvas,
   LocalDevelopment,
   LocalShares,
   loginToInstallation,
-  shareCanvas
+  projectionDigest,
+  shareCanvas,
+  shareIdForCanvas
 } from "../src/index.js"
 import { decodeStored } from "../src/stored-json.js"
 
 const TcpAddress = Schema.Struct({ port: Schema.Number })
 const canvasId = Id.canvas("canvas_checkout")
 const title = Schema.decodeUnknownSync(CanvasTitle)("Checkout")
+const projection = emptyCanvasProjection(canvasId, title)
+const digest = projectionDigest(projection)
+const shareId = shareIdForCanvas(canvasId)
+const importId = importIdForCanvas(canvasId)
 
 const temporaryRoot = Effect.acquireRelease(
   Effect.sync(() => mkdtempSync(join(tmpdir(), "crit-share-"))),
@@ -85,6 +95,18 @@ const installationServer = (
         response.writeHead(404).end()
         return
       }
+      if (shareStatus === 409) {
+        response.writeHead(409, { "content-type": "application/json" }).end(JSON.stringify(
+          Schema.encodeSync(ShareDigestMismatchWire)(ShareDigestMismatchWire.make({
+            shareId,
+            expectedDigest: digest,
+            receivedDigest: Schema.decodeUnknownSync(Sha256Digest)(
+              `sha256:${"b".repeat(64)}`
+            )
+          }))
+        ))
+        return
+      }
       if (shareStatus !== 200) {
         response.writeHead(shareStatus).end()
         return
@@ -100,9 +122,14 @@ const installationServer = (
         response.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify(
           encodeCanvasSharedWire({
             kind: "canvas-shared",
-            schemaVersion: 1,
+            schemaVersion: 2,
             canvasId: share.canvasId,
-            title: share.title
+            title: share.title,
+            shareId: share.shareId,
+            importId: share.importId,
+            projectionDigest: share.projectionDigest,
+            workspaceId: Id.workspace("workspace_default"),
+            personId: share.person.personId
           })
         ))
       })
@@ -128,7 +155,7 @@ describe("shareCanvas", () => {
       const dataRoot = join(directory, ".crit", "v1")
       yield* mintInstallation(dataRoot)
 
-      const failure = yield* shareCanvas({ dataRoot, canvasId, title }).pipe(Effect.flip)
+      const failure = yield* shareCanvas({ dataRoot, projection }).pipe(Effect.flip)
 
       expect(failure._tag).toBe("ShareRequiresLogin")
       expect(existsSync(join(dataRoot, "shares.json"))).toBe(false)
@@ -144,13 +171,13 @@ describe("shareCanvas", () => {
         email: accessEmail("ada@acme.com")
       })
 
-      const failure = yield* shareCanvas({ dataRoot, canvasId, title }).pipe(Effect.flip)
+      const failure = yield* shareCanvas({ dataRoot, projection }).pipe(Effect.flip)
 
       expect(failure._tag).toBe("ShareRequiresLogin")
       expect(existsSync(join(dataRoot, "shares.json"))).toBe(false)
     })).pipe(Effect.provide(NodeServices.layer))))
 
-  it("posts the stored Access Person and records the shared Canvas", () =>
+  it("posts share IDs and the projection digest, then records the receipt", () =>
     Effect.runPromise(Effect.scoped(Effect.gen(function*() {
       const directory = yield* temporaryRoot
       const dataRoot = join(directory, ".crit", "v1")
@@ -161,19 +188,29 @@ describe("shareCanvas", () => {
         installationUrl: installation.origin
       })
 
-      const result = yield* shareCanvas({ dataRoot, canvasId, title })
+      const result = yield* shareCanvas({ dataRoot, projection })
 
       expect(result).toEqual({
         _tag: "canvasShared",
         canvasId,
         title,
         installationOrigin: installation.origin,
-        personId: binding.personId
+        personId: binding.personId,
+        shareId,
+        importId,
+        projectionDigest: digest,
+        workspaceId: "workspace_default"
       })
       expect(installation.requests).toHaveLength(1)
-      expect(installation.requests[0]?.person).toMatchObject({
-        personId: binding.personId,
-        email: { _tag: "access", address: "ada@acme.com" }
+      expect(installation.requests[0]).toMatchObject({
+        schemaVersion: 2,
+        shareId,
+        importId,
+        projectionDigest: digest,
+        person: {
+          personId: binding.personId,
+          email: { _tag: "access", address: "ada@acme.com" }
+        }
       })
       expect(sharesFrom(dataRoot)).toEqual({
         version: 1,
@@ -181,12 +218,16 @@ describe("shareCanvas", () => {
           _tag: "sharedCanvas",
           canvasId,
           installationOrigin: installation.origin,
-          personId: binding.personId
+          personId: binding.personId,
+          shareId,
+          importId,
+          projectionDigest: digest,
+          workspaceId: "workspace_default"
         }]
       })
     })).pipe(Effect.provide(NodeServices.layer))))
 
-  it("keeps one local row when the same Canvas is shared twice", () =>
+  it("keeps one local row and resends the same IDs when the Canvas is shared twice", () =>
     Effect.runPromise(Effect.scoped(Effect.gen(function*() {
       const directory = yield* temporaryRoot
       const dataRoot = join(directory, ".crit", "v1")
@@ -197,11 +238,38 @@ describe("shareCanvas", () => {
         installationUrl: installation.origin
       })
 
-      yield* shareCanvas({ dataRoot, canvasId, title })
-      yield* shareCanvas({ dataRoot, canvasId, title })
+      yield* shareCanvas({ dataRoot, projection })
+      yield* shareCanvas({ dataRoot, projection })
 
       expect(installation.requests).toHaveLength(2)
+      expect(installation.requests[0]?.shareId).toBe(shareId)
+      expect(installation.requests[1]?.shareId).toBe(shareId)
+      expect(installation.requests[0]?.importId).toBe(importId)
+      expect(installation.requests[1]?.importId).toBe(importId)
+      expect(installation.requests[0]?.projectionDigest).toBe(digest)
+      expect(installation.requests[1]?.projectionDigest).toBe(digest)
       expect(sharesFrom(dataRoot).canvases).toHaveLength(1)
+    })).pipe(Effect.provide(NodeServices.layer))))
+
+  it("surfaces a digest mismatch without writing local state", () =>
+    Effect.runPromise(Effect.scoped(Effect.gen(function*() {
+      const directory = yield* temporaryRoot
+      const dataRoot = join(directory, ".crit", "v1")
+      yield* mintInstallation(dataRoot)
+      const installation = yield* installationServer(409)
+      yield* loginToInstallation({
+        dataRoot,
+        installationUrl: installation.origin
+      })
+
+      const failure = yield* shareCanvas({ dataRoot, projection }).pipe(Effect.flip)
+
+      expect(failure._tag).toBe("ShareDigestMismatch")
+      expect(failure).toMatchObject({
+        shareId,
+        expectedDigest: digest
+      })
+      expect(existsSync(join(dataRoot, "shares.json"))).toBe(false)
     })).pipe(Effect.provide(NodeServices.layer))))
 
   it("does not write local state when Access rejects the share", () =>
@@ -215,7 +283,7 @@ describe("shareCanvas", () => {
         installationUrl: installation.origin
       })
 
-      const failure = yield* shareCanvas({ dataRoot, canvasId, title }).pipe(Effect.flip)
+      const failure = yield* shareCanvas({ dataRoot, projection }).pipe(Effect.flip)
 
       expect(failure._tag).toBe("AccessPersonUnauthenticated")
       expect(existsSync(join(dataRoot, "shares.json"))).toBe(false)

@@ -83,11 +83,12 @@ const pullChanges = async (
   const query = parseChangesAfterSearch(new URL(request.url).search)
   if (query === undefined) return emptyResponse(400)
   const stub = env.CANVASES.get(env.CANVASES.idFromName(canvasId))
-  const page = await stub.changesAfter({
-    _tag: "changesAfter",
+  const { canvasId: _canvasId, ...oneCanvasQuery } = AuthorityModel.changesAfter({
+    canvasId,
     after: query.after,
     limit: AuthorityModel.pageLimit(query.limit)
   })
+  const page = await stub.changesAfter(oneCanvasQuery)
   if (page._tag === "success") {
     return jsonResponse(200, JSON.stringify(ChangeProtocol.page.encode(page.value)))
   }

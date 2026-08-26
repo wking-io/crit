@@ -12,8 +12,8 @@ import { CanvasSelection } from "../src/canvas-selection.js"
 import type { FrameSnapshotter } from "../src/frame-snapshot.js"
 import { ReviewChrome } from "../src/review-chrome.js"
 import {
-  reviewActionPolicies,
-  type ReviewSelection
+  ReviewSelection,
+  reviewActionPolicies
 } from "../src/review-actions.js"
 
 Object.defineProperty(globalThis, "IS_REACT_ACT_ENVIRONMENT", { value: true })
@@ -46,8 +46,7 @@ const projection = decodeCanvasProjection({
 
 const selection = (
   items: Parameters<typeof CanvasSelection.make>[0]
-): ReviewSelection => ({
-  _tag: "items",
+) => ReviewSelection.items({
   items: CanvasSelection.make(items)
 })
 

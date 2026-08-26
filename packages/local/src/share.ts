@@ -1,12 +1,19 @@
 import {
   CanvasId,
+  CanvasProjection,
   CanvasTitle,
-  PersonId
+  Id,
+  ImportId,
+  PersonId,
+  Sha256Digest,
+  ShareId,
+  WorkspaceId
 } from "@crit/domain"
 import {
   decodeCanvasSharedWire,
   encodeShareCanvasWire,
-  remoteCanvasCollectionPath
+  remoteCanvasCollectionPath,
+  ShareDigestMismatch as ShareDigestMismatchWire
 } from "@crit/protocol"
 import { Effect, FileSystem, Path, Schema } from "effect"
 import {
@@ -25,12 +32,23 @@ import {
   LocalDaemonStateUnreadable
 } from "./discovery.js"
 import { AccessPersonUnauthenticated } from "./login.js"
+import { projectionDigest } from "./projection-digest.js"
 import { decodeStored, encodeStored } from "./stored-json.js"
+
+export const shareIdForCanvas = (canvasId: CanvasId) =>
+  Id.share(`share_${canvasId}`)
+
+export const importIdForCanvas = (canvasId: CanvasId) =>
+  Id.imported(`import_${canvasId}`)
 
 export const SharedCanvas = Schema.TaggedStruct("sharedCanvas", {
   canvasId: CanvasId,
   installationOrigin: InstallationOrigin,
-  personId: PersonId
+  personId: PersonId,
+  shareId: ShareId,
+  importId: ImportId,
+  projectionDigest: Sha256Digest,
+  workspaceId: WorkspaceId
 })
 export type SharedCanvas = typeof SharedCanvas.Type
 
@@ -44,7 +62,11 @@ export const CanvasShareSuccess = Schema.TaggedStruct("canvasShared", {
   canvasId: CanvasId,
   title: CanvasTitle,
   installationOrigin: InstallationOrigin,
-  personId: PersonId
+  personId: PersonId,
+  shareId: ShareId,
+  importId: ImportId,
+  projectionDigest: Sha256Digest,
+  workspaceId: WorkspaceId
 })
 export type CanvasShareSuccess = typeof CanvasShareSuccess.Type
 
@@ -76,10 +98,18 @@ export class SharePersistenceFailure extends Schema.TaggedError<SharePersistence
   }
 ) {}
 
+export class ShareDigestMismatch extends Schema.TaggedError<ShareDigestMismatch>()(
+  "ShareDigestMismatch",
+  {
+    shareId: ShareId,
+    expectedDigest: Sha256Digest,
+    receivedDigest: Sha256Digest
+  }
+) {}
+
 export interface ShareCanvasOptions {
   readonly dataRoot: string
-  readonly canvasId: typeof CanvasId.Type
-  readonly title: typeof CanvasTitle.Type
+  readonly projection: CanvasProjection
 }
 
 const readInstallation = (dataRoot: string) => Effect.gen(function*() {
@@ -113,6 +143,15 @@ const readInstallation = (dataRoot: string) => Effect.gen(function*() {
   })
 })
 
+const sameShare = (left: SharedCanvas, right: SharedCanvas) =>
+  left.canvasId === right.canvasId &&
+  left.installationOrigin === right.installationOrigin &&
+  left.personId === right.personId &&
+  left.shareId === right.shareId &&
+  left.importId === right.importId &&
+  left.projectionDigest === right.projectionDigest &&
+  left.workspaceId === right.workspaceId
+
 const writeShare = (
   dataRoot: string,
   shared: SharedCanvas
@@ -138,11 +177,7 @@ const writeShare = (
   const matching = stored.canvases.filter(
     (candidate) => candidate.canvasId === shared.canvasId
   )
-  if (
-    matching.length === 1 &&
-    matching[0]?.installationOrigin === shared.installationOrigin &&
-    matching[0].personId === shared.personId
-  ) {
+  if (matching.length === 1 && matching[0] !== undefined && sameShare(matching[0], shared)) {
     return
   }
   const updated = LocalShares.make({
@@ -172,6 +207,22 @@ const writeShare = (
   )
 })
 
+const rejectedShare = (status: number, body: string) => {
+  if (status !== 409) return new ShareResponseRejected({ status })
+  try {
+    const mismatch = Schema.decodeUnknownSync(ShareDigestMismatchWire)(
+      JSON.parse(body)
+    )
+    return new ShareDigestMismatch({
+      shareId: mismatch.shareId,
+      expectedDigest: mismatch.expectedDigest,
+      receivedDigest: mismatch.receivedDigest
+    })
+  } catch {
+    return new ShareResponseRejected({ status })
+  }
+}
+
 export const shareCanvas = (
   options: ShareCanvasOptions
 ) => Effect.gen(function*() {
@@ -182,11 +233,17 @@ export const shareCanvas = (
     return yield* new ShareRequiresLogin({})
   }
 
+  const shareId = shareIdForCanvas(options.projection.canvasId)
+  const importId = importIdForCanvas(options.projection.canvasId)
+  const digest = projectionDigest(options.projection)
   const request = encodeShareCanvasWire({
     kind: "share-canvas",
-    schemaVersion: 1,
-    canvasId: options.canvasId,
-    title: options.title,
+    schemaVersion: 2,
+    canvasId: options.projection.canvasId,
+    title: options.projection.title,
+    shareId,
+    importId,
+    projectionDigest: digest,
     person: {
       ...installation.principal.person,
       email
@@ -202,12 +259,12 @@ export const shareCanvas = (
   if (response.status === 401) {
     return yield* new AccessPersonUnauthenticated({})
   }
-  if (response.status !== 200) {
-    return yield* new ShareResponseRejected({ status: response.status })
-  }
   const contents = yield* response.text.pipe(
     Effect.mapError(() => new ShareResponseInvalid({}))
   )
+  if (response.status !== 200) {
+    return yield* rejectedShare(response.status, contents)
+  }
   const receipt = yield* Effect.try({
     try: () => decodeCanvasSharedWire(JSON.parse(contents)),
     catch: () => new ShareResponseInvalid({})
@@ -216,13 +273,21 @@ export const shareCanvas = (
   const shared = SharedCanvas.make({
     canvasId: receipt.canvasId,
     installationOrigin,
-    personId: installation.principal.person.personId
+    personId: receipt.personId,
+    shareId: receipt.shareId,
+    importId: receipt.importId,
+    projectionDigest: receipt.projectionDigest,
+    workspaceId: receipt.workspaceId
   })
   yield* writeShare(options.dataRoot, shared)
   return CanvasShareSuccess.make({
     canvasId: receipt.canvasId,
     title: receipt.title,
     installationOrigin,
-    personId: shared.personId
+    personId: shared.personId,
+    shareId: receipt.shareId,
+    importId: receipt.importId,
+    projectionDigest: receipt.projectionDigest,
+    workspaceId: receipt.workspaceId
   })
 }).pipe(Effect.provide(FetchHttpClient.layer))

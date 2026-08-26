@@ -28,4 +28,11 @@ export const ProtocolFailureSchema = Schema.Union([
 ])
 export type ProtocolFailure = typeof ProtocolFailureSchema.Type
 
+export const ProtocolFailure = {
+  malformedMessage: MalformedMessage.make,
+  messageKindMismatch: MessageKindMismatch.make,
+  unsupportedVersion: UnsupportedVersion.make,
+  trustedField: TrustedField.make
+}
+
 export type DecodeResult<A> = Result.Result<A, ProtocolFailure>

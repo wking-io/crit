@@ -4,12 +4,12 @@ import { describe, expect, it } from "vitest"
 import { CanvasSelection } from "../src/canvas-selection.js"
 import {
   ReviewActionInput,
+  ReviewSelection,
   availableReviewActions,
   resolveReviewAction,
   reviewActionPolicies,
   type ReviewActionContext,
-  type ReviewActionId,
-  type ReviewSelection
+  type ReviewActionId
 } from "../src/review-actions.js"
 
 const policyById = (id: ReviewActionId) => {
@@ -66,7 +66,7 @@ const projection = decodeCanvasProjection({
 
 const itemSelection = (
   items: Parameters<typeof CanvasSelection.make>[0]
-): ReviewSelection => ({ _tag: "items", items: CanvasSelection.make(items) })
+): ReviewSelection => ReviewSelection.items({ items: CanvasSelection.make(items) })
 
 const context = (
   selection: ReviewSelection,

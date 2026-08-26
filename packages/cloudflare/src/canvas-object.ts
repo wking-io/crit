@@ -25,7 +25,7 @@ import type {
   SubmitChangeReceipt
 } from "@crit/protocol"
 import { DurableObject } from "cloudflare:workers"
-import { Cause, Effect, Exit, Result, Schema } from "effect"
+import { Cause, Data, Effect, Exit, Result, Schema } from "effect"
 
 import { DurableSqliteStorage } from "./durable-sqlite.js"
 import {
@@ -38,16 +38,38 @@ import { DurableSqlRowLimitExceeded } from "./stored-json.js"
 type OneCanvasProposal = Omit<ProposedCanvasChange, "canvasId">
 type OneCanvasChangesAfter = Omit<ChangesAfter, "canvasId">
 
-export type DurableObjectResult<A, E> =
-  | { readonly _tag: "success"; readonly value: A }
-  | { readonly _tag: "failure"; readonly error: E }
-  | { readonly _tag: "defect"; readonly message: string }
-  | { readonly _tag: "interrupted" }
-  | {
-    readonly _tag: "durableSqlRowLimitExceeded"
+export type DurableObjectResult<A, E> = Data.TaggedEnum<{
+  readonly success: { readonly value: A }
+  readonly failure: { readonly error: E }
+  readonly defect: { readonly message: string }
+  readonly interrupted: {}
+  readonly durableSqlRowLimitExceeded: {
     readonly bytes: number
     readonly limit: number
   }
+}>
+
+const durableObjectResult = Data.taggedEnum<DurableObjectResult<unknown, unknown>>()
+
+export const DurableObjectResult = {
+  success: <A, E = never>(value: A): DurableObjectResult<A, E> => {
+    // SAFETY: TaggedEnum constructors are invariant in the payload type parameters.
+    return durableObjectResult.success({ value }) as DurableObjectResult<A, E>
+  },
+  failure: <A = never, E = never>(error: E): DurableObjectResult<A, E> => {
+    // SAFETY: TaggedEnum constructors are invariant in the payload type parameters.
+    return durableObjectResult.failure({ error }) as DurableObjectResult<A, E>
+  },
+  defect: (message: string): DurableObjectResult<never, never> =>
+    durableObjectResult.defect({ message }),
+  interrupted: (): DurableObjectResult<never, never> =>
+    durableObjectResult.interrupted(),
+  durableSqlRowLimitExceeded: (
+    bytes: number,
+    limit: number
+  ): DurableObjectResult<never, never> =>
+    durableObjectResult.durableSqlRowLimitExceeded({ bytes, limit })
+}
 
 export const testClockPath = "/__crit_test_clock/"
 export const testClockCancelPath = "/__crit_test_clock_cancel/"
@@ -57,22 +79,21 @@ const runResult = async <A, E>(
 ): Promise<DurableObjectResult<A, E>> => {
   const exit = await Effect.runPromise(Effect.exit(effect))
   if (Exit.isSuccess(exit)) {
-    return { _tag: "success", value: DomainValue.detach(exit.value) }
+    return DurableObjectResult.success(DomainValue.detach(exit.value))
   }
-  if (Cause.hasInterrupts(exit.cause)) return { _tag: "interrupted" }
+  if (Cause.hasInterrupts(exit.cause)) return DurableObjectResult.interrupted()
   const failure = Cause.findError(exit.cause)
   if (Result.isSuccess(failure)) {
-    return { _tag: "failure", error: DomainValue.detach(failure.success) }
+    return DurableObjectResult.failure(DomainValue.detach(failure.success))
   }
   const defect = Cause.findDefect(exit.cause)
   if (Result.isSuccess(defect) && defect.success instanceof DurableSqlRowLimitExceeded) {
-    return {
-      _tag: "durableSqlRowLimitExceeded",
-      bytes: defect.success.bytes,
-      limit: defect.success.limit
-    }
+    return DurableObjectResult.durableSqlRowLimitExceeded(
+      defect.success.bytes,
+      defect.success.limit
+    )
   }
-  return { _tag: "defect", message: Cause.pretty(exit.cause) }
+  return DurableObjectResult.defect(Cause.pretty(exit.cause))
 }
 
 const callbackClock = (

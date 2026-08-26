@@ -4,6 +4,7 @@ import {
   EmailAddress,
   Id,
   PersonSnapshot,
+  Sha256Digest,
   decodeCanvasCommandBatch
 } from "@crit/domain"
 import {
@@ -46,9 +47,14 @@ const shareBody = (canvasId: string) => {
   })
   return JSON.stringify(encodeShareCanvasWire({
     kind: "share-canvas",
-    schemaVersion: 1,
+    schemaVersion: 2,
     canvasId: Id.canvas(canvasId),
     title: Schema.decodeUnknownSync(CanvasTitle)("Checkout"),
+    shareId: Id.share(`share_${canvasId}`),
+    importId: Id.imported(`import_${canvasId}`),
+    projectionDigest: Schema.decodeUnknownSync(Sha256Digest)(
+      `sha256:${"a".repeat(64)}`
+    ),
     person: {
       ...snapshot,
       email

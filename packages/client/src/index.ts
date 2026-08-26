@@ -11,13 +11,13 @@ import {
   type RepresentationRef
 } from "@crit/domain"
 import type { ReplicaChanged } from "@crit/protocol"
-import type {
+import {
   ReplicaChange,
-  ReplicaChangeReceipt,
-  ReplicaView,
-  SyncResult
+  ReplicaNotOpen,
+  type ReplicaChangeReceipt,
+  type ReplicaView,
+  type SyncResult
 } from "@crit/replica"
-import { ReplicaNotOpen } from "@crit/replica"
 import {
   ArtifactBytesRenderPlan,
   LocalRepresentationCaptureFailure,
@@ -37,7 +37,6 @@ import {
   type AgentSessionGrant,
   type LocalDaemonStatus,
   LocalApiOriginRejected,
-  type LocalApiToken,
   LocalApiUnauthorized,
   LocalApiVersionUnsupported,
   LocalCanvasApi,
@@ -48,35 +47,25 @@ import {
   localReplicaSocketCloseCode,
   type CanvasListing
 } from "@crit/replica/http"
-import { Context, Data, Deferred, Effect, Exit, flow, Layer, Queue, Redacted, Ref, Schema, Scope, Stream, type Take } from "effect"
+import { Context, Deferred, Effect, Exit, flow, Layer, Queue, Redacted, Ref, Schema, Scope, Stream, type Take } from "effect"
 import { FetchHttpClient, HttpClient, HttpClientError, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { HttpApiClient, HttpApiMiddleware } from "effect/unstable/httpapi"
 import * as Socket from "effect/unstable/socket/Socket"
+
+import { LocalClientOptions } from "./local-client-options.js"
 
 export {
   LocalBrowserConnection,
   LocalBrowserConnectionDescriptor,
   LocalBrowserConnectionInvalid
 } from "./browser-connection.js"
+export { LocalClientOptions, ReplicaChange }
 export {
   overlayRemoteLedger,
   RemoteAuthorityOptions,
   RemoteCanvasAuthority
 } from "./remote-authority.js"
 export type { RemoteCanvasAuthorityService } from "./remote-authority.js"
-
-export type LocalClientOptions = Data.TaggedEnum<{
-  readonly bearer: {
-    readonly baseUrl: string
-    readonly token: LocalApiToken
-    readonly origin?: string
-  }
-  readonly browserSession: {
-    readonly baseUrl: string
-    readonly browserPath: `/${string}/`
-  }
-}>
-export const LocalClientOptions = Data.taggedEnum<LocalClientOptions>()
 
 type TransportFailure =
   | LocalApiUnauthorized
@@ -180,7 +169,6 @@ const representationResolveRequest = (
 ) => HttpClientRequest.bodyJsonUnsafe(
   representationRequest(options, localRepresentationResolvePath),
   LocalRepresentationResolveRequest.make({
-    _tag: "resolveRepresentation",
     schemaVersion: 1,
     representation
   })
@@ -192,7 +180,6 @@ const representationCaptureRequest = (
 ) => HttpClientRequest.bodyJsonUnsafe(
   representationRequest(options, localRepresentationCapturePath),
   LocalRepresentationCaptureRequest.make({
-    _tag: "captureRepresentation",
     schemaVersion: 1,
     representation
   })
