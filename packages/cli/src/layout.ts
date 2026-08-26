@@ -12,7 +12,7 @@ export const CanvasLayoutFrame = Schema.TaggedStruct("frame", {
   frameId: FrameId,
   title: AuthoredText,
   geometry: Geometry,
-  representation: Schema.Literals(["application-route", "web-url", "artifact"])
+  representation: Schema.Literals(["applicationRoute", "webUrl", "artifact"])
 })
 
 export const CanvasLayoutItem = CanvasLayoutFrame

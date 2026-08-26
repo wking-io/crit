@@ -30,7 +30,7 @@ const agent = {
 }
 
 const reportedRuntime = {
-  _tag: "reported-runtime",
+  _tag: "reportedRuntime",
   source: "client-reported",
   harness: { name: "Codex Desktop", version: "1.42.0" },
   model: { provider: "openai", name: "gpt-5.6" },
@@ -134,7 +134,7 @@ describe("ReportedRuntime", () => {
 
   it("rejects missing harness, blank names, and extra fields", () => {
     expect(() => decodeReportedRuntime({
-      _tag: "reported-runtime",
+      _tag: "reportedRuntime",
       source: "client-reported"
     })).toThrow()
     expect(() => decodeReportedRuntime({

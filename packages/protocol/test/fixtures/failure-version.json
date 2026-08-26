@@ -1,1 +1,1 @@
-{"kind":"protocol-failure","schemaVersion":1,"failure":{"_tag":"unsupported-version","location":"message","message":"Wrong version"}}
+{"kind":"protocol-failure","schemaVersion":1,"failure":{"_tag":"unsupportedVersion","location":"message","message":"Wrong version"}}

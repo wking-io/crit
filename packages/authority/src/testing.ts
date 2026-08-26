@@ -71,7 +71,7 @@ const agent = Schema.decodeUnknownSync(AgentInvocation)({
   },
   executionId: "execution_conformance",
   reportedRuntime: {
-    _tag: "reported-runtime",
+    _tag: "reportedRuntime",
     source: "client-reported",
     harness: { name: "Conformance Harness" },
     model: { provider: "test", name: "reference" }
@@ -79,7 +79,7 @@ const agent = Schema.decodeUnknownSync(AgentInvocation)({
 })
 
 const create = (authority: CanvasAuthority["Service"], canvasId = canvasA) => authority.create({
-  _tag: "create-canvas",
+  _tag: "createCanvas",
   canvasId,
   title: "Authority"
 }, person)
@@ -122,11 +122,11 @@ const isolationScenario = (factory: AuthorityConformanceFactory): AuthorityConfo
       const authority = yield* CanvasAuthority
       const incomingInvocation = DomainValue.detach(person)
       const created = yield* authority.create({
-        _tag: "create-canvas", canvasId: canvasA, title: "Authority"
+        _tag: "createCanvas", canvasId: canvasA, title: "Authority"
       }, incomingInvocation)
       const incoming = proposal("change_conformance_mutation", rename("Authority", "Review"))
       const receipt = yield* authority.submit(incoming, incomingInvocation)
-      const page = yield* authority.changesAfter({ _tag: "changes-after", canvasId: canvasA, after: null, limit })
+      const page = yield* authority.changesAfter({ _tag: "changesAfter", canvasId: canvasA, after: null, limit })
       Reflect.set(incoming.commands[0], "title", "mutated input")
       Reflect.set(incomingInvocation.principal.person, "displayName", "mutated invocation")
       Reflect.set(created.projection, "title", "mutated view")
@@ -138,7 +138,7 @@ const isolationScenario = (factory: AuthorityConformanceFactory): AuthorityConfo
         proposal("change_conformance_mutation", rename("Authority", "Review")),
         person
       )
-      const stored = yield* authority.changesAfter({ _tag: "changes-after", canvasId: canvasA, after: null, limit })
+      const stored = yield* authority.changesAfter({ _tag: "changesAfter", canvasId: canvasA, after: null, limit })
       const view = yield* authority.open(canvasA)
       requireScenario(name, renamedTitle(retry.change) === "Review", "retry identity was mutated")
       requireScenario(name, stored.changes[0] !== undefined && renamedTitle(stored.changes[0]) === "Review", "ledger was mutated")
@@ -170,7 +170,7 @@ const scopedIdentityScenario = (factory: AuthorityConformanceFactory): Authority
         canvasA,
         ProtocolValue.cursor("cursor_foreign")
       ), person))
-      requireScenario(name, foreign === "cursor-not-found", "unknown cursor was accepted")
+      requireScenario(name, foreign === "cursorNotFound", "unknown cursor was accepted")
       const accepted = yield* authority.submit(proposal(
         "change_conformance_cursor", rename("Review", "Final"), canvasA, left.cursor
       ), person)
@@ -189,12 +189,12 @@ const rejectedRetryScenario = (factory: AuthorityConformanceFactory): AuthorityC
       const rejected = proposal("change_conformance_rejected", rename("Wrong", "Review"))
       const first = yield* Effect.result(authority.submit(rejected, person))
       const retry = yield* Effect.result(authority.submit(rejected, person))
-      requireScenario(name, Result.isFailure(first) && first.failure._tag === "change-rejected", "engine rejection was not typed")
-      requireScenario(name, Result.isFailure(retry) && retry.failure._tag === "change-rejected", "exact rejection retry changed")
+      requireScenario(name, Result.isFailure(first) && first.failure._tag === "changeRejected", "engine rejection was not typed")
+      requireScenario(name, Result.isFailure(retry) && retry.failure._tag === "changeRejected", "exact rejection retry changed")
       const changed = yield* failureTag(authority.submit(
         proposal("change_conformance_rejected", rename("Authority", "Review")), person
       ))
-      requireScenario(name, changed === "change-id-reused", "rejected retry identity was not reserved")
+      requireScenario(name, changed === "changeIdReused", "rejected retry identity was not reserved")
     }))
   }
 }
@@ -269,17 +269,17 @@ const ledgerScenario = (factory: AuthorityConformanceFactory): AuthorityConforma
           _tag: "addFrame",
           frameId: `frame_conformance_${index}`,
           title: `Frame ${index}`,
-          representation: { _tag: "web-url", url: `https://example.com/${index}` },
+          representation: { _tag: "webUrl", url: `https://example.com/${index}` },
           status: "in-progress",
           geometry: { x: index, y: 0, width: 10, height: 10 }
         }])
       ), index === 0 ? agent : person))
       yield* Effect.all(submissions, { concurrency: "unbounded" })
       const first = yield* authority.changesAfter({
-        _tag: "changes-after", canvasId: canvasA, after: null, limit: AuthorityModel.pageLimit(2)
+        _tag: "changesAfter", canvasId: canvasA, after: null, limit: AuthorityModel.pageLimit(2)
       })
       const second = yield* authority.changesAfter({
-        _tag: "changes-after", canvasId: canvasA, after: first.cursor, limit: AuthorityModel.pageLimit(4)
+        _tag: "changesAfter", canvasId: canvasA, after: first.cursor, limit: AuthorityModel.pageLimit(4)
       })
       const history = [...first.changes, ...second.changes]
       requireScenario(name, history.every((change, index) => change.sequence === index + 1), "sequence was not gap-free")
@@ -306,19 +306,19 @@ const lifecycleScenario = (factory: AuthorityConformanceFactory): AuthorityConfo
     run: provideAuthority(factory, undefined, Effect.gen(function*() {
       const authority = yield* CanvasAuthority
       const missingProposal = proposal("change_conformance_missing", rename("Authority", "Review"))
-      requireScenario(name, (yield* failureTag(authority.open(canvasA))) === "canvas-not-found", "open did not report missing Canvas")
-      requireScenario(name, (yield* failureTag(authority.submit(missingProposal, person))) === "canvas-not-found", "submit did not report missing Canvas")
+      requireScenario(name, (yield* failureTag(authority.open(canvasA))) === "canvasNotFound", "open did not report missing Canvas")
+      requireScenario(name, (yield* failureTag(authority.submit(missingProposal, person))) === "canvasNotFound", "submit did not report missing Canvas")
       requireScenario(name, (yield* failureTag(authority.changesAfter({
-        _tag: "changes-after", canvasId: canvasA, after: null, limit
-      }))) === "canvas-not-found", "page did not report missing Canvas")
+        _tag: "changesAfter", canvasId: canvasA, after: null, limit
+      }))) === "canvasNotFound", "page did not report missing Canvas")
       const original = yield* create(authority)
       const duplicate = yield* failureTag(authority.create({
-        _tag: "create-canvas", canvasId: canvasA, title: "Replacement"
+        _tag: "createCanvas", canvasId: canvasA, title: "Replacement"
       }, agent))
-      requireScenario(name, duplicate === "canvas-already-exists", "duplicate creation was accepted")
+      requireScenario(name, duplicate === "canvasAlreadyExists", "duplicate creation was accepted")
       const opened = yield* authority.open(canvasA)
       requireScenario(name, opened.createdBy._tag === "person" && opened.projection.title === "Authority", "duplicate creation replaced provenance")
-      const empty = yield* authority.changesAfter({ _tag: "changes-after", canvasId: canvasA, after: null, limit })
+      const empty = yield* authority.changesAfter({ _tag: "changesAfter", canvasId: canvasA, after: null, limit })
       requireScenario(name, empty.changes.length === 0 && empty.cursor === original.cursor, "creation synthesized ledger history")
     }))
   }
@@ -352,7 +352,7 @@ const acceptedRetryScenario = (factory: AuthorityConformanceFactory): AuthorityC
       ] as const) {
         requireScenario(
           name,
-          (yield* failureTag(authority.submit(changedProposal, changedInvocation))) === "change-id-reused",
+          (yield* failureTag(authority.submit(changedProposal, changedInvocation))) === "changeIdReused",
           "changed retry fact was accepted"
         )
       }
@@ -380,14 +380,14 @@ const cursorPagingScenario = (factory: AuthorityConformanceFactory): AuthorityCo
       const second = yield* authority.submit(proposal("change_conformance_old_b", rename("Review", "Final"), canvasA, genesis.cursor), person)
       requireScenario(name, second.change.sequence === 2, "old known cursor was rejected")
       requireScenario(name, (yield* failureTag(authority.changesAfter({
-        _tag: "changes-after", canvasId: canvasA, after: other.cursor, limit
-      }))) === "cursor-not-found", "foreign cursor was accepted")
+        _tag: "changesAfter", canvasId: canvasA, after: other.cursor, limit
+      }))) === "cursorNotFound", "foreign cursor was accepted")
       const page = yield* authority.changesAfter({
-        _tag: "changes-after", canvasId: canvasA, after: first.change.cursor, limit
+        _tag: "changesAfter", canvasId: canvasA, after: first.change.cursor, limit
       })
       requireScenario(name, page.changes.length === 1 && page.cursor === second.change.cursor, "continuation page was incorrect")
       const empty = yield* authority.changesAfter({
-        _tag: "changes-after", canvasId: canvasA, after: page.cursor, limit
+        _tag: "changesAfter", canvasId: canvasA, after: page.cursor, limit
       })
       requireScenario(name, empty.changes.length === 0 && empty.cursor === page.cursor && !empty.hasMore, "empty continuation cursor changed")
     }))
@@ -417,8 +417,8 @@ const atomicConflictScenario = (factory: AuthorityConformanceFactory): Authority
             { _tag: "renameCanvas", expectedTitle: "Authority", title: "Final" }
           ])
         }
-        requireScenario(name, (yield* failureTag(authority.submit(conflict, person))) === "change-rejected", "atomic conflict was accepted")
-        requireScenario(name, (yield* failureTag(authority.submit(conflict, person))) === "change-rejected", "rejected retry changed")
+        requireScenario(name, (yield* failureTag(authority.submit(conflict, person))) === "changeRejected", "atomic conflict was accepted")
+        requireScenario(name, (yield* failureTag(authority.submit(conflict, person))) === "changeRejected", "rejected retry changed")
         const accepted = yield* authority.submit(proposal("change_conformance_after_reject", rename("Authority", "Review")), person)
         const view = yield* authority.open(canvasA)
         requireScenario(name, reads === 2 && accepted.change.sequence === 1, "rejection or retry consumed clock or sequence")

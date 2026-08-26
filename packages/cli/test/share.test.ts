@@ -19,7 +19,7 @@ const ShareRequest = Schema.Struct({
 })
 const StoredShares = Schema.Struct({
   version: Schema.Literal(1),
-  canvases: Schema.Array(Schema.TaggedStruct("shared-canvas", {
+  canvases: Schema.Array(Schema.TaggedStruct("sharedCanvas", {
     canvasId: Schema.String,
     installationOrigin: Schema.String,
     personId: Schema.String
@@ -211,7 +211,7 @@ describe("built crit share", () => {
     expect(first.code, first.stderr).toBe(0)
     expect(second.code, second.stderr).toBe(0)
     expect(JSON.parse(second.stdout)).toMatchObject({
-      _tag: "canvas-shared",
+      _tag: "canvasShared",
       canvasId: "canvas_share_cli",
       title: "Shared",
       installationOrigin: installation.origin

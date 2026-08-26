@@ -497,7 +497,7 @@ const create = Command.make("create", {
     canvasId: id,
     title: decodedTitle
   }).pipe(Effect.mapError((failure) => Match.value(failure).pipe(
-    Match.when({ _tag: "canvas-already-exists" }, ({ canvasId }) => new CliOperationalFailure({
+    Match.when({ _tag: "canvasAlreadyExists" }, ({ canvasId }) => new CliOperationalFailure({
       message: `Canvas already exists: ${canvasId}`
     })),
     Match.orElse(() => new CliOperationalFailure({ message: "Unable to create Canvas" }))
@@ -513,7 +513,7 @@ const open = Command.make("open", {
   const id = yield* decode(CanvasId, canvasId, "canvas ID")
   const view = yield* connected(root, ({ client }) => client.open(id).pipe(
     Effect.mapError((failure) => Match.value(failure).pipe(
-      Match.when({ _tag: "canvas-not-found" }, ({ canvasId }) => new CliOperationalFailure({
+      Match.when({ _tag: "canvasNotFound" }, ({ canvasId }) => new CliOperationalFailure({
         message: `Canvas not found: ${canvasId}`
       })),
       Match.orElse(() => new CliOperationalFailure({ message: "Unable to open Canvas" }))
@@ -530,7 +530,7 @@ const share = Command.make("share", {
   const id = yield* decode(CanvasId, canvasId, "canvas ID")
   const view = yield* connected(root, ({ client }) => client.open(id).pipe(
     Effect.mapError((failure) => Match.value(failure).pipe(
-      Match.when({ _tag: "canvas-not-found" }, ({ canvasId }) => new CliOperationalFailure({
+      Match.when({ _tag: "canvasNotFound" }, ({ canvasId }) => new CliOperationalFailure({
         message: `Canvas not found: ${canvasId}`
       })),
       Match.orElse(() => new CliOperationalFailure({ message: "Unable to open Canvas" }))
@@ -573,7 +573,7 @@ const addFrame = Command.make("add-frame", {
   dataRoot,
   json,
   canvasId: Argument.string("canvas-id"),
-  type: Flag.choice("type", ["application-route", "web-url", "artifact"]).pipe(
+  type: Flag.choice("type", ["applicationRoute", "webUrl", "artifact"]).pipe(
     Flag.withDescription("Frame representation type")
   ),
   route: Flag.string("route").pipe(
@@ -622,11 +622,11 @@ const addFrame = Command.make("add-frame", {
 }) => Effect.gen(function*() {
   const id = yield* decode(CanvasId, canvasId, "canvas ID")
   const representation = yield* Match.value(type).pipe(
-    Match.when("application-route", () => Effect.gen(function*() {
-      yield* unusedFlag(url, "--url is not used with --type application-route")
-      yield* unusedFlag(artifactId, "--artifact-id is not used with --type application-route")
-      yield* unusedFlag(digest, "--digest is not used with --type application-route")
-      const routeValue = yield* requiredFlag(route, "Missing --route for --type application-route")
+    Match.when("applicationRoute", () => Effect.gen(function*() {
+      yield* unusedFlag(url, "--url is not used with --type applicationRoute")
+      yield* unusedFlag(artifactId, "--artifact-id is not used with --type applicationRoute")
+      yield* unusedFlag(digest, "--digest is not used with --type applicationRoute")
+      const routeValue = yield* requiredFlag(route, "Missing --route for --type applicationRoute")
       const decodedRoute = yield* decode(RootedRoute, routeValue, "route")
       const manifest = yield* readProjectManifest(projectRoot)
       return ApplicationRouteRepresentation.make({
@@ -634,13 +634,13 @@ const addFrame = Command.make("add-frame", {
         route: decodedRoute
       })
     })),
-    Match.when("web-url", () => Effect.gen(function*() {
-      yield* unusedFlag(route, "--route is not used with --type web-url")
-      yield* unusedFlag(artifactId, "--artifact-id is not used with --type web-url")
-      yield* unusedFlag(digest, "--digest is not used with --type web-url")
-      const urlValue = yield* requiredFlag(url, "Missing --url for --type web-url")
+    Match.when("webUrl", () => Effect.gen(function*() {
+      yield* unusedFlag(route, "--route is not used with --type webUrl")
+      yield* unusedFlag(artifactId, "--artifact-id is not used with --type webUrl")
+      yield* unusedFlag(digest, "--digest is not used with --type webUrl")
+      const urlValue = yield* requiredFlag(url, "Missing --url for --type webUrl")
       return yield* Effect.try({
-        try: () => Schema.decodeUnknownSync(WebUrlRepresentation)({ _tag: "web-url", url: urlValue }),
+        try: () => Schema.decodeUnknownSync(WebUrlRepresentation)({ _tag: "webUrl", url: urlValue }),
         catch: () => new CliOperationalFailure({ message: `Invalid url: ${urlValue}` })
       })
     })),
@@ -671,7 +671,7 @@ const addFrame = Command.make("add-frame", {
   const added = yield* connected(root, ({ client }) => Effect.gen(function*() {
     yield* client.open(id).pipe(
       Effect.mapError((failure) => Match.value(failure).pipe(
-        Match.when({ _tag: "canvas-not-found" }, ({ canvasId }) => new CliOperationalFailure({
+        Match.when({ _tag: "canvasNotFound" }, ({ canvasId }) => new CliOperationalFailure({
           message: `Canvas not found: ${canvasId}`
         })),
         Match.orElse(() => new CliOperationalFailure({ message: "Unable to add Frame" }))
@@ -688,10 +688,10 @@ const addFrame = Command.make("add-frame", {
       commands: [command]
     })).pipe(
       Effect.mapError((failure) => Match.value(failure).pipe(
-        Match.when({ _tag: "canvas-not-found" }, ({ canvasId }) => new CliOperationalFailure({
+        Match.when({ _tag: "canvasNotFound" }, ({ canvasId }) => new CliOperationalFailure({
           message: `Canvas not found: ${canvasId}`
         })),
-        Match.when({ _tag: "change-rejected" }, () => new CliOperationalFailure({
+        Match.when({ _tag: "changeRejected" }, () => new CliOperationalFailure({
           message: "Unable to add Frame"
         })),
         Match.orElse(() => new CliOperationalFailure({ message: "Unable to add Frame" }))
@@ -713,7 +713,7 @@ const layout = Command.make("layout", {
   const id = yield* decode(CanvasId, canvasId, "canvas ID")
   const view = yield* connected(root, ({ client }) => client.open(id).pipe(
     Effect.mapError((failure) => Match.value(failure).pipe(
-      Match.when({ _tag: "canvas-not-found" }, ({ canvasId }) => new CliOperationalFailure({
+      Match.when({ _tag: "canvasNotFound" }, ({ canvasId }) => new CliOperationalFailure({
         message: `Canvas not found: ${canvasId}`
       })),
       Match.orElse(() => new CliOperationalFailure({ message: "Unable to read Canvas layout" }))

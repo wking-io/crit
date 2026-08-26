@@ -54,7 +54,7 @@ const foldResult = <
       return Effect.die(new Error(result.message))
     case "interrupted":
       return Effect.interrupt
-    case "durable-sql-row-limit-exceeded":
+    case "durableSqlRowLimitExceeded":
       return Effect.die(new DurableSqlRowLimitExceeded({
         bytes: result.bytes,
         limit: result.limit

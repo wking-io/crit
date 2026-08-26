@@ -40,7 +40,7 @@ describe("intent", () => {
         _tag: "addFrame",
         frameId: "frame_a",
         title: "First",
-        representation: { _tag: "web-url", url: "https://example.com" },
+        representation: { _tag: "webUrl", url: "https://example.com" },
         status: "in-progress",
         geometry: { x: 0, y: 0, width: 100, height: 80 }
       },
@@ -48,7 +48,7 @@ describe("intent", () => {
         _tag: "addFrame",
         frameId: "frame_b",
         title: "Second",
-        representation: { _tag: "web-url", url: "https://example.org" },
+        representation: { _tag: "webUrl", url: "https://example.org" },
         status: "in-progress",
         geometry: { x: 10, y: 10, width: 80, height: 60 }
       }
@@ -71,7 +71,7 @@ describe("intent", () => {
     const add = proposeAddFrame({
       frameId: "frame_a",
       title: "Frame",
-      representation: { _tag: "web-url", url: "https://example.com" },
+      representation: { _tag: "webUrl", url: "https://example.com" },
       status: "in-progress",
       geometry: { x: 0, y: 0, width: 100, height: 80 }
     })
@@ -85,7 +85,7 @@ describe("intent", () => {
       title: "Renamed"
     })
     expect(proposeSetFrameRepresentation(frame, {
-      _tag: "web-url",
+      _tag: "webUrl",
       url: "https://example.org"
     })).toMatchObject({
       _tag: "setFrameRepresentation",

@@ -44,13 +44,13 @@ const preflight = (
 ): DecodeResult<Schema.Json> => {
   const header = readHeader(input)
   if (Option.isNone(header)) {
-    return fail("malformed-message", "message", "Message header is malformed")
+    return fail("malformedMessage", "message", "Message header is malformed")
   }
   if (header.value.kind !== expectedKind) {
-    return fail("message-kind-mismatch", "message", "Message kind does not match this codec")
+    return fail("messageKindMismatch", "message", "Message kind does not match this codec")
   }
   if (header.value.schemaVersion !== (expectedKind === "protocol-failure" ? 1 : 2)) {
-    return fail("unsupported-version", "message", "Message schema version is unsupported")
+    return fail("unsupportedVersion", "message", "Message schema version is unsupported")
   }
   return decoded(input)
 }
@@ -124,13 +124,13 @@ const decodeProposed = (input: Schema.Json): DecodeResult<ProposedCanvasChange> 
   if (Result.isFailure(header)) return Result.fail(header.failure)
   const injection = injectedField(input)
   if (injection !== undefined) {
-    return fail("trusted-field", injection, "Client proposal contains an authority-owned field")
+    return fail("trustedField", injection, "Client proposal contains an authority-owned field")
   }
   if (hasUnknownCommandKind(input)) {
-    return fail("message-kind-mismatch", "command", "Command kind is not supported")
+    return fail("messageKindMismatch", "command", "Command kind is not supported")
   }
   const wire = readProposedWire(input)
-  if (Option.isNone(wire)) return fail("malformed-message", "change", "Proposed change is malformed")
+  if (Option.isNone(wire)) return fail("malformedMessage", "change", "Proposed change is malformed")
   const { kind: _kind, schemaVersion: _schemaVersion, ...change } = wire.value
   return decoded(change)
 }
@@ -140,7 +140,7 @@ const decodeAccepted = (input: Schema.Json): DecodeResult<AcceptedCanvasChange> 
   if (Result.isFailure(header)) return Result.fail(header.failure)
   const wire = readAcceptedWire(input)
   return Option.isNone(wire)
-    ? fail("malformed-message", "change", "Accepted change is malformed")
+    ? fail("malformedMessage", "change", "Accepted change is malformed")
     : decoded(stripAccepted(wire.value))
 }
 
@@ -158,7 +158,7 @@ const decodePage = (input: Schema.Json): DecodeResult<ChangePage> => {
     }
   }
   const wire = readPageWire(input)
-  if (Option.isNone(wire)) return fail("malformed-message", "message", "Change page is malformed")
+  if (Option.isNone(wire)) return fail("malformedMessage", "message", "Change page is malformed")
   const { kind: _kind, schemaVersion: _schemaVersion, changes, ...page } = wire.value
   return decoded({ ...page, changes: changes.map(stripAccepted) })
 }
@@ -172,7 +172,7 @@ const decodeReceipt = (input: Schema.Json): DecodeResult<SubmitChangeReceipt> =>
     if (Result.isFailure(nested)) return Result.fail(nested.failure)
   }
   const wire = readReceiptWire(input)
-  if (Option.isNone(wire)) return fail("malformed-message", "message", "Submit receipt is malformed")
+  if (Option.isNone(wire)) return fail("malformedMessage", "message", "Submit receipt is malformed")
   const { kind: _kind, schemaVersion: _schemaVersion, disposition, change } = wire.value
   return decoded({ disposition, change: stripAccepted(change) })
 }
@@ -182,7 +182,7 @@ const decodeFailure = (input: Schema.Json): DecodeResult<ProtocolFailure> => {
   if (Result.isFailure(header)) return Result.fail(header.failure)
   const wire = readFailureWire(input)
   return Option.isNone(wire)
-    ? fail("malformed-message", "message", "Protocol failure is malformed")
+    ? fail("malformedMessage", "message", "Protocol failure is malformed")
     : decoded(wire.value.failure)
 }
 

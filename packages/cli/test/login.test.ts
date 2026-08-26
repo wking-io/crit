@@ -195,7 +195,7 @@ describe("built crit login", () => {
 
     expect(second.code, second.stderr).toBe(0)
     expect(JSON.parse(second.stdout)).toEqual({
-      _tag: "access-person-bound",
+      _tag: "accessPersonBound",
       personId: before.principal.person.personId,
       email: { _tag: "access", address: "ada@acme.com" }
     })

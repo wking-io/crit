@@ -96,7 +96,7 @@ describe("SQLite ReplicaStore", () => {
     expect(restored?.genesisProjection.title).toBe("Restart")
   }))))
 
-  it("recovers an accepted-unconfirmed change after restart", () => Effect.runPromise(Effect.scoped(Effect.gen(function*() {
+  it("recovers an acceptedUnconfirmed change after restart", () => Effect.runPromise(Effect.scoped(Effect.gen(function*() {
     const path = yield* tempDatabasePath
     const scope = yield* Effect.scope
     const authorityContext = yield* Layer.buildWithScope(
@@ -145,7 +145,7 @@ describe("SQLite ReplicaStore", () => {
     yield* Effect.scoped(Effect.gen(function*() {
       const replicaContext = yield* Layer.buildWithScope(secondLayer, yield* Effect.scope)
       const replica = Context.get(replicaContext, CanvasReplica)
-      expect((yield* replica.current(canvasId)).pending[0]?.state._tag).toBe("accepted-unconfirmed")
+      expect((yield* replica.current(canvasId)).pending[0]?.state._tag).toBe("acceptedUnconfirmed")
       const synced = yield* replica.sync(canvasId)
       expect(synced.view.pending).toEqual([])
       expect(synced.view.projection.title).toBe("After")

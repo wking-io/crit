@@ -3,7 +3,7 @@ import { Schema } from "effect"
 import { PersonSnapshot } from "./identity.js"
 import { CanvasId } from "./ids.js"
 
-export const ConnectedPerson = Schema.TaggedStruct("connected-person", {
+export const ConnectedPerson = Schema.TaggedStruct("connectedPerson", {
   person: PersonSnapshot
 })
 export type ConnectedPerson = typeof ConnectedPerson.Type
@@ -16,7 +16,7 @@ export type PresenceKey = typeof PresenceKey.Type
 export const presenceKey = ({ person }: ConnectedPerson): PresenceKey =>
   Schema.decodeUnknownSync(PresenceKey)(`person:${person.personId}`)
 
-const PresenceRosterFields = Schema.TaggedStruct("presence-roster", {
+const PresenceRosterFields = Schema.TaggedStruct("presenceRoster", {
   canvasId: CanvasId,
   people: Schema.Array(ConnectedPerson)
 })

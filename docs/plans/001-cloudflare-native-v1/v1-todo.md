@@ -63,8 +63,8 @@ Local Frames authoring on one machine.
 - Atomic command batches with recoverable local conflicts
 - Camera, pan, zoom, saved camera and selection
 - Align, distribute, arrange grid, breakpoint presets
-- Offscreen Frames pause themselves, fullscreen, open `web-url` in a new tab, copy Frame ID
-- `application-route`, `web-url`, and digest-bound `artifact` in domain, CLI, and local resolve
+- Offscreen Frames pause themselves, fullscreen, open `webUrl` in a new tab, copy Frame ID
+- `applicationRoute`, `webUrl`, and digest-bound `artifact` in domain, CLI, and local resolve
 - Local Application binding from the manifest and `--application-origin`
 - Unavailable render for unbound app or missing/corrupt artifact
 - Frame Bridge input relay
@@ -76,7 +76,7 @@ Local Frames authoring on one machine.
 - Review UI no longer adds Frames
 - Contextual help and keyboard shortcuts from the review action table
 - Snapshot a live Frame into a new artifact Frame (`S`)
-- Deployment record and ApplicationBindings adapter. Same application-route resolves locally and through a registered preview.
+- Deployment record and ApplicationBindings adapter. Same applicationRoute resolves locally and through a registered preview.
 - `crit register-deployment` upserts a D1 Deployment. `crit init` writes the preview-registration skill. Hosted resolve still needs the review UI.
 - D1 Deployments load into `DeploymentApplicationBindings`. Hosted review UI still remaining.
 - Local review pending resolves. The daemon reconciles after open and change.

@@ -30,8 +30,8 @@ export const resolveFrameGeometry = (input: {
 
 export const frameSourceLabel = (representation: RepresentationRef): string =>
   Match.value(representation).pipe(
-    Match.when({ _tag: "application-route" }, ({ route }) => route),
-    Match.when({ _tag: "web-url" }, ({ url }) => url),
+    Match.when({ _tag: "applicationRoute" }, ({ route }) => route),
+    Match.when({ _tag: "webUrl" }, ({ url }) => url),
     Match.when({ _tag: "artifact" }, ({ artifactId }) => artifactId),
     Match.exhaustive
   )

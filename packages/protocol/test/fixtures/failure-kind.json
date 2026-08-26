@@ -1,1 +1,1 @@
-{"kind":"protocol-failure","schemaVersion":1,"failure":{"_tag":"message-kind-mismatch","location":"message","message":"Wrong kind"}}
+{"kind":"protocol-failure","schemaVersion":1,"failure":{"_tag":"messageKindMismatch","location":"message","message":"Wrong kind"}}

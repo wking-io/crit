@@ -25,7 +25,7 @@ export const PageLimit = Schema.Int.check(
 ).pipe(Schema.brand("PageLimit"))
 export type PageLimit = typeof PageLimit.Type
 
-export const CreateCanvas = Schema.TaggedStruct("create-canvas", {
+export const CreateCanvas = Schema.TaggedStruct("createCanvas", {
   canvasId: CanvasId,
   title: CanvasTitle
 })
@@ -49,7 +49,7 @@ export const VerifiedInvocation = Schema.Union([
 ])
 export type VerifiedInvocation = typeof VerifiedInvocation.Type
 
-export const AuthorityView = Schema.TaggedStruct("authority-view", {
+export const AuthorityView = Schema.TaggedStruct("authorityView", {
   canvasId: CanvasId,
   createdAt: IsoTimestamp,
   createdBy: AcceptedAttribution,
@@ -58,36 +58,36 @@ export const AuthorityView = Schema.TaggedStruct("authority-view", {
 })
 export type AuthorityView = typeof AuthorityView.Type
 
-export const ChangesAfter = Schema.TaggedStruct("changes-after", {
+export const ChangesAfter = Schema.TaggedStruct("changesAfter", {
   canvasId: CanvasId,
   after: Schema.NullOr(CursorSchema),
   limit: PageLimit
 })
 export type ChangesAfter = typeof ChangesAfter.Type
 
-export const CanvasNotFound = Schema.TaggedStruct("canvas-not-found", {
+export const CanvasNotFound = Schema.TaggedStruct("canvasNotFound", {
   canvasId: CanvasId
 })
 export type CanvasNotFound = typeof CanvasNotFound.Type
 
-export const CanvasAlreadyExists = Schema.TaggedStruct("canvas-already-exists", {
+export const CanvasAlreadyExists = Schema.TaggedStruct("canvasAlreadyExists", {
   canvasId: CanvasId
 })
 export type CanvasAlreadyExists = typeof CanvasAlreadyExists.Type
 
-export const CursorNotFound = Schema.TaggedStruct("cursor-not-found", {
+export const CursorNotFound = Schema.TaggedStruct("cursorNotFound", {
   canvasId: CanvasId,
   cursor: CursorSchema
 })
 export type CursorNotFound = typeof CursorNotFound.Type
 
-export const ChangeIdReused = Schema.TaggedStruct("change-id-reused", {
+export const ChangeIdReused = Schema.TaggedStruct("changeIdReused", {
   canvasId: CanvasId,
   changeId: ChangeId
 })
 export type ChangeIdReused = typeof ChangeIdReused.Type
 
-export const ChangeRejected = Schema.TaggedStruct("change-rejected", {
+export const ChangeRejected = Schema.TaggedStruct("changeRejected", {
   canvasId: CanvasId,
   changeId: ChangeId,
   failure: CanvasChangeFailureSchema

@@ -81,7 +81,7 @@ export const IframeRenderPlan = Schema.TaggedStruct("iframe", {
   url: HttpUrl
 })
 
-export const ArtifactBytesRenderPlan = Schema.TaggedStruct("artifact-bytes", {
+export const ArtifactBytesRenderPlan = Schema.TaggedStruct("artifactBytes", {
   representation: ArtifactRepresentation,
   bytes: Schema.Uint8Array
 })
@@ -185,8 +185,8 @@ const makeRuntime = Effect.gen(function*() {
   }
 
   const resolve = Match.type<RepresentationRef>().pipe(Match.tagsExhaustive({
-    "application-route": resolveApplication,
-    "web-url": (input): Effect.Effect<RenderPlan> => {
+    "applicationRoute": resolveApplication,
+    "webUrl": (input): Effect.Effect<RenderPlan> => {
       const representation = WebUrlRepresentation.make({ url: input.url })
       return Effect.succeed(IframeRenderPlan.make({
         representation,
@@ -197,7 +197,7 @@ const makeRuntime = Effect.gen(function*() {
   }))
 
   const captureUrl = Match.type<LiveRepresentation>().pipe(Match.tagsExhaustive({
-    "application-route": (representation) =>
+    "applicationRoute": (representation) =>
       bindings.get(representation.applicationId).pipe(
         Effect.flatMap(Option.match({
           onNone: () => Effect.fail(new CaptureSourceUnavailable({
@@ -206,7 +206,7 @@ const makeRuntime = Effect.gen(function*() {
           onSome: (baseUrl) => Effect.succeed(applicationUrl(baseUrl, representation))
         }))
       ),
-    "web-url": (representation) => Effect.succeed(representation.url)
+    "webUrl": (representation) => Effect.succeed(representation.url)
   }))
 
   const capture = (representation: LiveRepresentation) => Effect.gen(function*() {

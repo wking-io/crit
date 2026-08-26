@@ -179,8 +179,8 @@ export const representationRuntimeConformanceScenarios = (
       bytes: bytes(2, 7, 1)
     })
     const plan = yield* runtime.resolve(artifact)
-    yield* requireRuntimeFact(plan._tag === "artifact-bytes", "a stored artifact did not produce bytes")
-    if (plan._tag !== "artifact-bytes") return
+    yield* requireRuntimeFact(plan._tag === "artifactBytes", "a stored artifact did not produce bytes")
+    if (plan._tag !== "artifactBytes") return
     yield* requireRuntimeFact(
       plan.representation !== artifact &&
         JSON.stringify(plan.representation) === JSON.stringify(artifact),

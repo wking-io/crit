@@ -44,7 +44,7 @@ export type DurableObjectResult<A, E> =
   | { readonly _tag: "defect"; readonly message: string }
   | { readonly _tag: "interrupted" }
   | {
-    readonly _tag: "durable-sql-row-limit-exceeded"
+    readonly _tag: "durableSqlRowLimitExceeded"
     readonly bytes: number
     readonly limit: number
   }
@@ -67,7 +67,7 @@ const runResult = async <A, E>(
   const defect = Cause.findDefect(exit.cause)
   if (Result.isSuccess(defect) && defect.success instanceof DurableSqlRowLimitExceeded) {
     return {
-      _tag: "durable-sql-row-limit-exceeded",
+      _tag: "durableSqlRowLimitExceeded",
       bytes: defect.success.bytes,
       limit: defect.success.limit
     }

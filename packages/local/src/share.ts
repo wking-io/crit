@@ -26,7 +26,7 @@ import {
 import { AccessPersonUnauthenticated } from "./login.js"
 import { decodeStored, encodeStored } from "./stored-json.js"
 
-export const SharedCanvas = Schema.TaggedStruct("shared-canvas", {
+export const SharedCanvas = Schema.TaggedStruct("sharedCanvas", {
   canvasId: CanvasId,
   installationOrigin: InstallationOrigin,
   personId: PersonId
@@ -39,7 +39,7 @@ export const LocalShares = Schema.Struct({
 })
 export type LocalShares = typeof LocalShares.Type
 
-export const CanvasShareSuccess = Schema.TaggedStruct("canvas-shared", {
+export const CanvasShareSuccess = Schema.TaggedStruct("canvasShared", {
   canvasId: CanvasId,
   title: CanvasTitle,
   installationOrigin: InstallationOrigin,

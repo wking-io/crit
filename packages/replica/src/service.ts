@@ -120,7 +120,7 @@ const makeCanvasReplica = Effect.gen(function*() {
         canvasId,
         after: state.acknowledgedCursor,
         limit: pageLimit
-      })).pipe(Effect.mapError((failure) => failure._tag === "canvas-not-found"
+      })).pipe(Effect.mapError((failure) => failure._tag === "canvasNotFound"
         ? new ReplicaCanvasNotFound({ canvasId })
         : new ReplicaDiverged({ canvasId, reason: `authority rejected acknowledged cursor: ${failure.cursor}` })))
       if (page.hasMore && page.cursor === state.acknowledgedCursor) {
@@ -157,7 +157,7 @@ const makeCanvasReplica = Effect.gen(function*() {
       const submitted = yield* authority.submit(eligible.proposal, eligible.invocation).pipe(Effect.result)
       if (submitted._tag === "Failure") {
         const failure = submitted.failure
-        if (failure._tag === "change-rejected") {
+        if (failure._tag === "changeRejected") {
           yield* modify<undefined, ReplicaSyncFailure>(canvasId, (current): Result.Result<readonly [undefined, ReplicaState], ReplicaSyncFailure> => {
             if (current === undefined) return Result.fail(new ReplicaNotOpen({ canvasId }))
             const next = ReplicaPolicy.rejection(current, failure)
@@ -167,7 +167,7 @@ const makeCanvasReplica = Effect.gen(function*() {
           })
           continue
         }
-        if (failure._tag === "canvas-not-found") return yield* Effect.fail(new ReplicaCanvasNotFound({ canvasId }))
+        if (failure._tag === "canvasNotFound") return yield* Effect.fail(new ReplicaCanvasNotFound({ canvasId }))
         return yield* Effect.fail(new ReplicaDiverged({ canvasId, reason: `authority rejected pending identity: ${failure._tag}` }))
       }
       yield* modify<undefined, ReplicaSyncFailure>(canvasId, (current): Result.Result<readonly [undefined, ReplicaState], ReplicaSyncFailure> => {

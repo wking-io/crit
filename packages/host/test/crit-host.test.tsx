@@ -29,7 +29,7 @@ notifyManager.setScheduler(queueMicrotask)
 const canvasId = Id.canvas("canvas_review")
 
 const view = Schema.decodeUnknownSync(ReplicaView)({
-  _tag: "replica-view",
+  _tag: "replicaView",
   canvasId,
   acknowledgedCursor: "cursor_one",
   projection: decodeCanvasProjection({
@@ -39,7 +39,7 @@ const view = Schema.decodeUnknownSync(ReplicaView)({
     frames: [{
       frameId: "frame_checkout",
       title: "Checkout",
-      representation: { _tag: "web-url", url: "https://example.com/checkout" },
+      representation: { _tag: "webUrl", url: "https://example.com/checkout" },
       status: "in-progress",
       geometry: { x: 40, y: 80, width: 320, height: 200 },
       createdByChangeId: "change_1",
@@ -158,7 +158,7 @@ describe("CritHost", () => {
 
   it("passes submit notices and connection loss to the board", async() => {
     const failure = Schema.decodeUnknownSync(CanvasChangeFailureSchema)({
-      _tag: "entity-not-found",
+      _tag: "entityNotFound",
       commandIndex: 0,
       entity: "frame",
       id: "frame_missing"

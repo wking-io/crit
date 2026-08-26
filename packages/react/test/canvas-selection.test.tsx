@@ -39,7 +39,7 @@ const projection = decodeCanvasProjection({
   frames: [{
     frameId: "frame_checkout",
     title: "Checkout",
-    representation: { _tag: "web-url", url },
+    representation: { _tag: "webUrl", url },
     status: "in-progress",
     geometry: { x: 40, y: 80, width: 320, height: 200 },
     createdByChangeId: "change_1",
@@ -51,7 +51,7 @@ const projection = decodeCanvasProjection({
   }, {
     frameId: "frame_pricing",
     title: "Pricing",
-    representation: { _tag: "web-url", url: "https://example.com/pricing" },
+    representation: { _tag: "webUrl", url: "https://example.com/pricing" },
     status: "in-progress",
     geometry: { x: 400, y: 80, width: 320, height: 200 },
     createdByChangeId: "change_1",
@@ -72,7 +72,7 @@ const projection = decodeCanvasProjection({
 })
 
 const view = Schema.decodeUnknownSync(ReplicaView)({
-  _tag: "replica-view",
+  _tag: "replicaView",
   canvasId: projection.canvasId,
   acknowledgedCursor: "cursor_ack",
   projection,

@@ -10,7 +10,7 @@ import * as Socket from "effect/unstable/socket/Socket"
 
 const openFailureReason = (failure: OpenFailure): string =>
   Match.value(failure).pipe(Match.tagsExhaustive({
-    "canvas-not-found": () => "The canvas does not exist on the local daemon.",
+    "canvasNotFound": () => "The canvas does not exist on the local daemon.",
     HttpClientError: () => "The local daemon is unreachable.",
     LocalApiOriginRejected: () => "The local daemon rejected this origin.",
     LocalApiUnauthorized: () => "The browser session is no longer authorized.",
@@ -79,10 +79,10 @@ export const localReplicaSessionPorts = (
     }
   },
   change: ({ canvasId, commands }) =>
-    client.change({ _tag: "replica-change", canvasId, commands }).pipe(
+    client.change({ _tag: "replicaChange", canvasId, commands }).pipe(
       Effect.map((receipt) => receipt.view),
       Effect.mapError((failure) => {
-        if (failure._tag === "change-rejected") {
+        if (failure._tag === "changeRejected") {
           return new ReplicaChangeRejected({ canvasId, failure: failure.failure })
         }
         return new ReplicaSessionUnavailable({

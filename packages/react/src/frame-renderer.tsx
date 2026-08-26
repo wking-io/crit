@@ -84,7 +84,7 @@ function ArtifactContent({
   title
 }: {
   readonly className: string | undefined
-  readonly plan: Extract<RenderPlan, { readonly _tag: "artifact-bytes" }>
+  readonly plan: Extract<RenderPlan, { readonly _tag: "artifactBytes" }>
   readonly title: Frame["title"]
 }) {
   const artifactKey = `${plan.representation.artifactId}:${plan.representation.digest}`
@@ -262,7 +262,7 @@ const ResolvedFrame = ({
       title={title}
     />
   ),
-  "artifact-bytes": (artifact) => <ArtifactContent
+  "artifactBytes": (artifact) => <ArtifactContent
     className={className}
     plan={artifact}
     title={title}

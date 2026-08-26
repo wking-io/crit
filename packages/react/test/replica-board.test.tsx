@@ -50,7 +50,7 @@ const projection = decodeCanvasProjection({
   frames: [{
     frameId: "frame_checkout",
     title: "Checkout",
-    representation: { _tag: "web-url", url },
+    representation: { _tag: "webUrl", url },
     status: "in-progress",
     geometry: { x: 40, y: 80, width: 320, height: 200 },
     createdByChangeId: "change_1",
@@ -120,13 +120,13 @@ const addMissingFrame = decodeCanvasCommandBatch([{
   _tag: "addFrame",
   frameId: "frame_missing",
   title: "Missing",
-  representation: { _tag: "web-url", url: "https://example.com/missing" },
+  representation: { _tag: "webUrl", url: "https://example.com/missing" },
   status: "in-progress",
   geometry: { x: 0, y: 0, width: 100, height: 100 }
 }])
 
 const synchronized = decodeView({
-  _tag: "replica-view",
+  _tag: "replicaView",
   canvasId: projection.canvasId,
   acknowledgedCursor: "cursor_ack",
   projection,
@@ -134,7 +134,7 @@ const synchronized = decodeView({
 })
 
 const emptySynchronized = decodeView({
-  _tag: "replica-view",
+  _tag: "replicaView",
   canvasId: empty.canvasId,
   acknowledgedCursor: "cursor_ack",
   projection: empty,
@@ -142,10 +142,10 @@ const emptySynchronized = decodeView({
 })
 
 const presence = decodePresenceRoster({
-  _tag: "presence-roster",
+  _tag: "presenceRoster",
   canvasId: projection.canvasId,
   people: [{
-    _tag: "connected-person",
+    _tag: "connectedPerson",
     person: {
       _tag: "person",
       personId: "person_presence",
@@ -156,13 +156,13 @@ const presence = decodePresenceRoster({
 })
 
 const emptyPresence = decodePresenceRoster({
-  _tag: "presence-roster",
+  _tag: "presenceRoster",
   canvasId: projection.canvasId,
   people: []
 })
 
 const mixed = decodeView({
-  _tag: "replica-view",
+  _tag: "replicaView",
   canvasId: projection.canvasId,
   acknowledgedCursor: "cursor_ack",
   projection,
@@ -171,7 +171,7 @@ const mixed = decodeView({
     pendingChange("change_unconfirmed", AcceptedUnconfirmed.make({}), rename, personAuthor),
     pendingChange("change_conflicted", Conflicted.make({
       failure: decodeFailure({
-        _tag: "precondition-failed",
+        _tag: "preconditionFailed",
         commandIndex: 0,
         field: "title",
         expected: "Review",
@@ -185,14 +185,14 @@ const mixed = decodeView({
 })
 
 const missingFrame = decodeView({
-  _tag: "replica-view",
+  _tag: "replicaView",
   canvasId: projection.canvasId,
   acknowledgedCursor: "cursor_ack",
   projection,
   pending: [
     pendingChange("change_missing", Conflicted.make({
       failure: decodeFailure({
-        _tag: "entity-not-found",
+        _tag: "entityNotFound",
         commandIndex: 0,
         entity: "frame",
         id: "frame_missing"
@@ -318,7 +318,7 @@ describe("ReplicaBoard", () => {
   it("shows connection and submit alerts and locks mutation while disconnected", async() => {
     const onSubmit = vi.fn()
     const failure = decodeFailure({
-      _tag: "entity-not-found",
+      _tag: "entityNotFound",
       commandIndex: 0,
       entity: "frame",
       id: "frame_missing"
@@ -409,7 +409,7 @@ describe("ReplicaBoard", () => {
 
   it("names an agent proposal with the runner and execution detail", async() => {
     const agentProposed = decodeView({
-      _tag: "replica-view",
+      _tag: "replicaView",
       canvasId: projection.canvasId,
       acknowledgedCursor: "cursor_ack",
       projection,
@@ -435,7 +435,7 @@ describe("ReplicaBoard", () => {
       runBy: "Ada",
       executionId: "execution_9f3abcde",
       reportedRuntime: {
-        _tag: "reported-runtime",
+        _tag: "reportedRuntime",
         source: "client-reported",
         harness: { name: "claude-code" },
         model: { name: "claude-fable-5" },
@@ -443,7 +443,7 @@ describe("ReplicaBoard", () => {
       }
     })
     const agentProposed = decodeView({
-      _tag: "replica-view",
+      _tag: "replicaView",
       canvasId: projection.canvasId,
       acknowledgedCursor: "cursor_ack",
       projection,
@@ -461,7 +461,7 @@ describe("ReplicaBoard", () => {
   it("distinguishes a Person named Codex from an Agent named Codex", async() => {
     const personCodex = decodeAuthor({ _tag: "person", displayName: "Codex" })
     const sameNameAuthors = decodeView({
-      _tag: "replica-view",
+      _tag: "replicaView",
       canvasId: projection.canvasId,
       acknowledgedCursor: "cursor_ack",
       projection,

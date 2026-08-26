@@ -24,7 +24,7 @@ describe("local representation HTTP schemas", () => {
 
   it("round-trips a bounded request", () => {
     const request = LocalRepresentationResolveRequest.make({
-      _tag: "resolve-representation",
+      _tag: "resolveRepresentation",
       schemaVersion: 1,
       representation
     })
@@ -33,7 +33,7 @@ describe("local representation HTTP schemas", () => {
 
   it("round-trips a live capture request", () => {
     const request = LocalRepresentationCaptureRequest.make({
-      _tag: "capture-representation",
+      _tag: "captureRepresentation",
       schemaVersion: 1,
       representation
     })

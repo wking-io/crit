@@ -11,12 +11,12 @@ import type { RepresentationRef } from "./representation.js"
 const CommandIndex = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))
 const EntityKind = Schema.Literal("frame")
 const PreconditionValue = Schema.Union([Schema.String, Schema.Boolean, Schema.Null])
-const CanvasMismatch = Schema.TaggedStruct("canvas-mismatch", { expectedCanvasId: CanvasId, actualCanvasId: CanvasId })
-const CanvasTitleMismatch = Schema.TaggedStruct("canvas-title-mismatch", { commandIndex: CommandIndex, expectedTitle: CanvasTitle, actualTitle: CanvasTitle })
-const EntityNotFound = Schema.TaggedStruct("entity-not-found", { commandIndex: CommandIndex, entity: EntityKind, id: Schema.String })
-const IdAlreadyIssued = Schema.TaggedStruct("id-already-issued", { commandIndex: CommandIndex, entity: EntityKind, id: Schema.String })
-const PreconditionFailed = Schema.TaggedStruct("precondition-failed", { commandIndex: CommandIndex, field: Schema.String, expected: PreconditionValue, actual: PreconditionValue })
-const InvalidReference = Schema.TaggedStruct("invalid-reference", { commandIndex: CommandIndex, field: Schema.String, id: Schema.String })
+const CanvasMismatch = Schema.TaggedStruct("canvasMismatch", { expectedCanvasId: CanvasId, actualCanvasId: CanvasId })
+const CanvasTitleMismatch = Schema.TaggedStruct("canvasTitleMismatch", { commandIndex: CommandIndex, expectedTitle: CanvasTitle, actualTitle: CanvasTitle })
+const EntityNotFound = Schema.TaggedStruct("entityNotFound", { commandIndex: CommandIndex, entity: EntityKind, id: Schema.String })
+const IdAlreadyIssued = Schema.TaggedStruct("idAlreadyIssued", { commandIndex: CommandIndex, entity: EntityKind, id: Schema.String })
+const PreconditionFailed = Schema.TaggedStruct("preconditionFailed", { commandIndex: CommandIndex, field: Schema.String, expected: PreconditionValue, actual: PreconditionValue })
+const InvalidReference = Schema.TaggedStruct("invalidReference", { commandIndex: CommandIndex, field: Schema.String, id: Schema.String })
 export const CanvasChangeFailureSchema = Schema.Union([
   CanvasMismatch,
   CanvasTitleMismatch,
@@ -33,13 +33,13 @@ const Rejected = Schema.TaggedStruct("rejected", { failure: CanvasChangeFailureS
 const CanvasChangeResultSchema = Schema.Union([Applied, Rejected])
 export type CanvasChangeResult = typeof CanvasChangeResultSchema.Type
 
-const DuplicateChange = Schema.TaggedStruct("duplicate-change", { changeId: ChangeId, firstIndex: CommandIndex, currentIndex: CommandIndex })
-const ChangeRejected = Schema.TaggedStruct("change-rejected", { changeIndex: CommandIndex, changeId: ChangeId, failure: CanvasChangeFailureSchema })
+const DuplicateChange = Schema.TaggedStruct("duplicateChange", { changeId: ChangeId, firstIndex: CommandIndex, currentIndex: CommandIndex })
+const ChangeRejected = Schema.TaggedStruct("changeRejected", { changeIndex: CommandIndex, changeId: ChangeId, failure: CanvasChangeFailureSchema })
 const CanvasReplayFailureSchema = Schema.Union([DuplicateChange, ChangeRejected])
 export type CanvasReplayFailure = typeof CanvasReplayFailureSchema.Type
 
 const Replayed = Schema.TaggedStruct("replayed", { projection: CanvasProjectionValue })
-const ReplayFailed = Schema.TaggedStruct("replay-failed", { failure: CanvasReplayFailureSchema })
+const ReplayFailed = Schema.TaggedStruct("replayFailed", { failure: CanvasReplayFailureSchema })
 const CanvasReplayResultSchema = Schema.Union([Replayed, ReplayFailed])
 export type CanvasReplayResult = typeof CanvasReplayResultSchema.Type
 
@@ -75,13 +75,13 @@ const jsonEquals = (left: Schema.Json | undefined, right: Schema.Json | undefine
 const representationEquals = (left: RepresentationRef, right: RepresentationRef): boolean => {
   if (left._tag !== right._tag) return false
   switch (left._tag) {
-    case "application-route":
-      return right._tag === "application-route" &&
+    case "applicationRoute":
+      return right._tag === "applicationRoute" &&
         left.applicationId === right.applicationId &&
         left.route === right.route &&
         jsonEquals(left.state, right.state)
-    case "web-url":
-      return right._tag === "web-url" && left.url === right.url
+    case "webUrl":
+      return right._tag === "webUrl" && left.url === right.url
     case "artifact":
       return right._tag === "artifact" && left.artifactId === right.artifactId && left.digest === right.digest
   }

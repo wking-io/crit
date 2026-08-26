@@ -126,7 +126,7 @@ const logicalHttpUrlFilter = Schema.makeFilter<HttpUrl>((url) =>
 const LogicalHttpUrl = HttpUrl.check(logicalHttpUrlFilter)
 
 export const ApplicationRouteRepresentation = Schema.TaggedStruct(
-  "application-route",
+  "applicationRoute",
   {
     applicationId: ApplicationId,
     route: RootedRoute,
@@ -136,7 +136,7 @@ export const ApplicationRouteRepresentation = Schema.TaggedStruct(
 export type ApplicationRouteRepresentation =
   typeof ApplicationRouteRepresentation.Type
 
-export const WebUrlRepresentation = Schema.TaggedStruct("web-url", {
+export const WebUrlRepresentation = Schema.TaggedStruct("webUrl", {
   url: LogicalHttpUrl
 })
 export type WebUrlRepresentation = typeof WebUrlRepresentation.Type

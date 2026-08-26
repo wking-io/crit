@@ -29,8 +29,8 @@ describe("project skill", () => {
 
     expect(projectSkillSource).toContain("crit --help")
     expect(projectSkillSource).toContain("canvas_local")
-    expect(projectSkillSource).toContain("application-route")
-    expect(projectSkillSource).toContain("web-url")
+    expect(projectSkillSource).toContain("applicationRoute")
+    expect(projectSkillSource).toContain("webUrl")
     expect(projectSkillSource).toContain("artifact")
     expect(projectSkillSource).toContain("crit add-frame")
     expect(projectSkillSource).toContain("crit agent begin")

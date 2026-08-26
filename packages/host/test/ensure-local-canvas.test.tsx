@@ -12,7 +12,7 @@ const title = Schema.decodeUnknownSync(CanvasTitle)("Untitled")
 
 const makeView = (cursor: string): ReplicaView =>
   Schema.decodeUnknownSync(ReplicaView)({
-    _tag: "replica-view",
+    _tag: "replicaView",
     canvasId,
     acknowledgedCursor: cursor,
     projection: decodeCanvasProjection({
@@ -49,7 +49,7 @@ describe("ensureLocalCanvas", () => {
     const opened = makeView("cursor_opened")
     const openedWith: string[] = []
     const client: EnsureLocalCanvasClient = {
-      create: () => Effect.fail({ _tag: "canvas-already-exists", canvasId }),
+      create: () => Effect.fail({ _tag: "canvasAlreadyExists", canvasId }),
       open: (requested) => {
         openedWith.push(requested)
         return Effect.succeed(opened)
@@ -62,7 +62,7 @@ describe("ensureLocalCanvas", () => {
     expect(openedWith).toEqual([canvasId])
   })
 
-  it("propagates create failures other than canvas-already-exists", async() => {
+  it("propagates create failures other than canvasAlreadyExists", async() => {
     const failure = new LocalApiUnauthorized({ message: "Missing or invalid bearer token" })
     const client: EnsureLocalCanvasClient = {
       create: () => Effect.fail(failure),

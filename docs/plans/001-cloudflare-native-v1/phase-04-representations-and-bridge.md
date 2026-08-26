@@ -6,7 +6,7 @@ Render the same logical Frame locally and in a review deployment without rewriti
 
 ## Build
 
-- Implement `application-route`, `web-url`, and digest-bound `artifact` references.
+- Implement `applicationRoute`, `webUrl`, and digest-bound `artifact` references.
 - Implement local and shared `RepresentationRuntime` adapters returning `RenderPlan`.
 - Separate checked-in Application identity from machine bindings and shared Deployment bindings.
 - Publish a framework-neutral, versioned Frame Bridge. The host assigns iframe src. The page reports route. Unselected Frames use a capture overlay. Origins are explicit.

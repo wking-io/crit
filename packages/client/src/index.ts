@@ -172,7 +172,7 @@ const representationResolveRequest = (
 ) => HttpClientRequest.bodyJsonUnsafe(
   representationRequest(options, localRepresentationResolvePath),
   LocalRepresentationResolveRequest.make({
-    _tag: "resolve-representation",
+    _tag: "resolveRepresentation",
     schemaVersion: 1,
     representation
   })
@@ -184,7 +184,7 @@ const representationCaptureRequest = (
 ) => HttpClientRequest.bodyJsonUnsafe(
   representationRequest(options, localRepresentationCapturePath),
   LocalRepresentationCaptureRequest.make({
-    _tag: "capture-representation",
+    _tag: "captureRepresentation",
     schemaVersion: 1,
     representation
   })

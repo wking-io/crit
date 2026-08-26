@@ -30,7 +30,7 @@ const person = Schema.decodeUnknownSync(PersonInvocation)({
 })
 const addFrame = (frameId: string, title: string) => decodeCanvasCommandBatch([{
   _tag: "addFrame", frameId, title,
-  representation: { _tag: "application-route", applicationId: "application_replica", route: "/", state: {} },
+  representation: { _tag: "applicationRoute", applicationId: "application_replica", route: "/", state: {} },
   status: "in-progress",
   geometry: { x: 0, y: 0, width: 800, height: 600 }
 }])
@@ -120,7 +120,7 @@ export const ReplicaConformance = {
     if (duplicateReceiptResult._tag === "Failure") throw duplicateReceiptResult.failure
     const duplicateReceipt = duplicateReceiptResult.success
     yield* requireFact(duplicateReceipt.acknowledgedCursor === genesisCursor, "receipt advanced acknowledged cursor")
-    yield* requireFact(duplicateReceipt.pending[0]?.state._tag === "accepted-unconfirmed", "receipt was not retained unconfirmed")
+    yield* requireFact(duplicateReceipt.pending[0]?.state._tag === "acceptedUnconfirmed", "receipt was not retained unconfirmed")
     const page: ChangePage = { canvasId, after: genesisCursor, changes: [accepted], cursor: acceptedCursor, hasMore: false }
     const pulledResult = ReplicaPolicy.incorporatePage(duplicateReceipt, page)
     if (pulledResult._tag === "Failure") throw pulledResult.failure

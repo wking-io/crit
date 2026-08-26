@@ -114,13 +114,13 @@ Workspace remains in the data model as the authorization boundary inside an Inst
 
 A Frame points to a logical `RepresentationRef`:
 
-- `application-route` identifies an Application, route, and optional serializable page state.
-- `web-url` identifies an explicit external URL.
+- `applicationRoute` identifies an Application, route, and optional serializable page state.
+- `webUrl` identifies an explicit external URL.
 - `artifact` identifies immutable content by artifact ID and digest.
 
 `RepresentationRuntime` resolves a reference for the current viewer. It returns an iframe plan, an artifact plan, or an unavailable state.
 
-An `application-route` can resolve to localhost for an author and a registered preview Deployment for a teammate. Canvas state never stores machine bindings, deployment URLs, credentials, or iframe policy.
+An `applicationRoute` can resolve to localhost for an author and a registered preview Deployment for a teammate. Canvas state never stores machine bindings, deployment URLs, credentials, or iframe policy.
 
 Local bindings belong to project and machine configuration. Shared Applications and Deployments belong to the Cloudflare control plane. Artifact bytes live in the local filesystem or R2.
 

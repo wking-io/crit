@@ -189,8 +189,8 @@ describe("LocalDaemon", () => {
         digest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
       })
       const rendered = yield* representations.resolve(artifact)
-      expect(rendered).toMatchObject({ _tag: "artifact-bytes", representation: artifact })
-      if (rendered._tag === "artifact-bytes") expect(rendered.bytes).toEqual(artifactBytes)
+      expect(rendered).toMatchObject({ _tag: "artifactBytes", representation: artifact })
+      if (rendered._tag === "artifactBytes") expect(rendered.bytes).toEqual(artifactBytes)
     })))
   })
 
@@ -206,19 +206,19 @@ describe("LocalDaemon", () => {
     }))
     expect((yield* request("not-json")).status).toBe(400)
     expect((yield* request(JSON.stringify({
-      _tag: "resolve-representation",
+      _tag: "resolveRepresentation",
       schemaVersion: 1,
       representation: {
-        _tag: "web-url",
+        _tag: "webUrl",
         url: "https://example.com/",
         excess: true
       }
     }))).status).toBe(400)
     expect((yield* request(JSON.stringify({
-      _tag: "resolve-representation",
+      _tag: "resolveRepresentation",
       schemaVersion: 1,
       representation: {
-        _tag: "web-url",
+        _tag: "webUrl",
         url: `https://example.com/${"x".repeat(17_000)}`
       }
     }))).status).toBe(413)
@@ -232,9 +232,9 @@ describe("LocalDaemon", () => {
       })
       outgoing.once("error", reject)
       outgoing.write(JSON.stringify({
-        _tag: "resolve-representation",
+        _tag: "resolveRepresentation",
         schemaVersion: 1,
-        representation: { _tag: "web-url", url: "https://example.com/" }
+        representation: { _tag: "webUrl", url: "https://example.com/" }
       }))
       outgoing.end()
     }))
@@ -296,10 +296,10 @@ describe("LocalDaemon", () => {
           method: "POST",
           headers: rawHeaders(token),
           body: JSON.stringify({
-            _tag: "resolve-representation",
+            _tag: "resolveRepresentation",
             schemaVersion: 1,
             representation: {
-              _tag: "application-route",
+              _tag: "applicationRoute",
               applicationId,
               route: "/"
             }
@@ -425,14 +425,14 @@ describe("LocalDaemon", () => {
           const duplicate = yield* Effect.promise(() => fetch(`${baseUrl}/api/v1/create`, {
             method: "POST",
             headers: rawHeaders(token),
-            body: JSON.stringify({ _tag: "create-canvas", canvasId, title: "Original" })
+            body: JSON.stringify({ _tag: "createCanvas", canvasId, title: "Original" })
           }))
           expect(duplicate.status).toBe(409)
           const rejectedChange = yield* Effect.promise(() => fetch(`${baseUrl}/api/v1/change`, {
             method: "POST",
             headers: rawHeaders(token),
             body: JSON.stringify({
-              _tag: "replica-change",
+              _tag: "replicaChange",
               canvasId,
               commands: [{
                 _tag: "renameCanvas",
@@ -592,7 +592,7 @@ describe("LocalDaemon", () => {
         method: "POST",
         headers: rawHeaders(token),
         body: JSON.stringify({
-          _tag: "create-canvas",
+          _tag: "createCanvas",
           canvasId,
           title: "Trusted boundary",
           actor: { _tag: "person", personId: "person_attacker", displayName: "Attacker" },
@@ -744,7 +744,7 @@ describe("LocalDaemon", () => {
         method: "POST",
         headers: rawHeaders(token),
         body: JSON.stringify({
-          _tag: "replica-change",
+          _tag: "replicaChange",
           canvasId,
           commands: [{
             _tag: "renameCanvas",

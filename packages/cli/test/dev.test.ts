@@ -236,9 +236,9 @@ describe("built crit-target dev", () => {
         "x-crit-api-version": "1"
       },
       body: JSON.stringify({
-        _tag: "resolve-representation",
+        _tag: "resolveRepresentation",
         schemaVersion: 1,
-        representation: { _tag: "application-route", applicationId, route: "/products" }
+        representation: { _tag: "applicationRoute", applicationId, route: "/products" }
       })
     })
     expect(response.status).toBe(200)

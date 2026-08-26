@@ -164,7 +164,7 @@ describe("shareCanvas", () => {
       const result = yield* shareCanvas({ dataRoot, canvasId, title })
 
       expect(result).toEqual({
-        _tag: "canvas-shared",
+        _tag: "canvasShared",
         canvasId,
         title,
         installationOrigin: installation.origin,
@@ -178,7 +178,7 @@ describe("shareCanvas", () => {
       expect(sharesFrom(dataRoot)).toEqual({
         version: 1,
         canvases: [{
-          _tag: "shared-canvas",
+          _tag: "sharedCanvas",
           canvasId,
           installationOrigin: installation.origin,
           personId: binding.personId

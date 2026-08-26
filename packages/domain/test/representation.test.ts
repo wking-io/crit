@@ -13,7 +13,7 @@ const digest = `sha256:${"a".repeat(64)}`
 
 const representations = [
   {
-    _tag: "application-route",
+    _tag: "applicationRoute",
     applicationId: "application_storefront",
     route: "/checkout?variant=b&variant=a",
     state: {
@@ -29,7 +29,7 @@ const representations = [
     }
   },
   {
-    _tag: "web-url",
+    _tag: "webUrl",
     url: "https://example.com/review?build=42"
   },
   {
@@ -50,24 +50,24 @@ describe("RepresentationRef", () => {
 
   it("constructs typed logical references from validated values", () => {
     const representation: RepresentationRef = {
-      _tag: "application-route",
+      _tag: "applicationRoute",
       applicationId: Id.application("application_storefront"),
       route: Schema.decodeUnknownSync(RootedRoute)("/checkout")
     }
-    expect(representation._tag).toBe("application-route")
+    expect(representation._tag).toBe("applicationRoute")
   })
 
   it("accepts live representations and rejects artifacts", () => {
     const decodeLive = Schema.decodeUnknownSync(LiveRepresentation)
     expect(decodeLive({
-      _tag: "web-url",
+      _tag: "webUrl",
       url: "https://example.com/review"
-    })._tag).toBe("web-url")
+    })._tag).toBe("webUrl")
     expect(decodeLive({
-      _tag: "application-route",
+      _tag: "applicationRoute",
       applicationId: "application_storefront",
       route: "/checkout"
-    })._tag).toBe("application-route")
+    })._tag).toBe("applicationRoute")
     expect(() => decodeLive({
       _tag: "artifact",
       artifactId: "artifact_checkout",
@@ -77,12 +77,12 @@ describe("RepresentationRef", () => {
 
   it("preserves query order and duplicate keys as logical identity", () => {
     const first = decodeRepresentationRef({
-      _tag: "application-route",
+      _tag: "applicationRoute",
       applicationId: "application_storefront",
       route: "/search?tag=b&tag=a"
     })
     const second = decodeRepresentationRef({
-      _tag: "application-route",
+      _tag: "applicationRoute",
       applicationId: "application_storefront",
       route: "/search?tag=a&tag=b"
     })
@@ -122,7 +122,7 @@ describe("RepresentationRef", () => {
     "/search?q=%C3%a9"
   ])("rejects non-canonical route %j", (route) => {
     expect(() => decodeRepresentationRef({
-      _tag: "application-route",
+      _tag: "applicationRoute",
       applicationId: "application_storefront",
       route
     })).toThrow()
@@ -142,12 +142,12 @@ describe("RepresentationRef", () => {
     escaped
   ) => {
     expect(decodeRepresentationRef({
-      _tag: "application-route",
+      _tag: "applicationRoute",
       applicationId: "application_storefront",
       route: literal
     }).route).toBe(literal)
     expect(() => decodeRepresentationRef({
-      _tag: "application-route",
+      _tag: "applicationRoute",
       applicationId: "application_storefront",
       route: escaped
     })).toThrow()
@@ -173,12 +173,12 @@ describe("RepresentationRef", () => {
     escaped
   ) => {
     expect(decodeRepresentationRef({
-      _tag: "application-route",
+      _tag: "applicationRoute",
       applicationId: "application_storefront",
       route: literal
     }).route).toBe(literal)
     expect(() => decodeRepresentationRef({
-      _tag: "application-route",
+      _tag: "applicationRoute",
       applicationId: "application_storefront",
       route: escaped
     })).toThrow()
@@ -190,7 +190,7 @@ describe("RepresentationRef", () => {
     "/search?q=caf%C3%A9"
   ])("accepts canonical uppercase percent route %s", (route) => {
     expect(decodeRepresentationRef({
-      _tag: "application-route",
+      _tag: "applicationRoute",
       applicationId: "application_storefront",
       route
     }).route).toBe(route)
@@ -211,7 +211,7 @@ describe("RepresentationRef", () => {
     "/search?q=%E2%82"
   ])("rejects malformed UTF-8 route %s", (route) => {
     expect(() => decodeRepresentationRef({
-      _tag: "application-route",
+      _tag: "applicationRoute",
       applicationId: "application_storefront",
       route
     })).toThrow()
@@ -244,7 +244,7 @@ describe("RepresentationRef", () => {
     "https://example.com:65536/checkout",
     "https://user:secret@example.com/checkout"
   ])("rejects non-canonical or non-DNS web URL %j", (url) => {
-    expect(() => decodeRepresentationRef({ _tag: "web-url", url })).toThrow()
+    expect(() => decodeRepresentationRef({ _tag: "webUrl", url })).toThrow()
   })
 
   it.each([
@@ -252,7 +252,7 @@ describe("RepresentationRef", () => {
     "https://review.example.com:8443/path?q=1#section",
     "https://xn--bcher-kva.example/review"
   ])("accepts canonical public DNS web URL %j", (url) => {
-    expect(decodeRepresentationRef({ _tag: "web-url", url }).url).toBe(url)
+    expect(decodeRepresentationRef({ _tag: "webUrl", url }).url).toBe(url)
   })
 
   it.each([
@@ -264,9 +264,9 @@ describe("RepresentationRef", () => {
     { renderPlan: { kind: "iframe" } },
     { snapshot: { artifactId: "artifact_checkout" } },
     { url: "https://alpha.example.com" }
-  ])("rejects forbidden application-route field %#", (extra) => {
+  ])("rejects forbidden applicationRoute field %#", (extra) => {
     expect(() => decodeRepresentationRef({
-      _tag: "application-route",
+      _tag: "applicationRoute",
       applicationId: "application_storefront",
       route: "/checkout",
       ...extra
@@ -275,7 +275,7 @@ describe("RepresentationRef", () => {
 
   it("rejects excess fields on every variant", () => {
     expect(() => decodeRepresentationRef({
-      _tag: "web-url",
+      _tag: "webUrl",
       url: "https://example.com",
       iframePolicy: "allow-scripts"
     })).toThrow()
@@ -297,7 +297,7 @@ describe("RepresentationRef", () => {
     () => "state"
   ])("rejects non-JSON page state %#", (state) => {
     expect(() => decodeRepresentationRef({
-      _tag: "application-route",
+      _tag: "applicationRoute",
       applicationId: "application_storefront",
       route: "/checkout",
       state
@@ -306,7 +306,7 @@ describe("RepresentationRef", () => {
 
   it("rejects malformed IDs and artifact digests", () => {
     expect(() => decodeRepresentationRef({
-      _tag: "application-route",
+      _tag: "applicationRoute",
       applicationId: "storefront",
       route: "/checkout"
     })).toThrow()

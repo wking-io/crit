@@ -119,7 +119,7 @@ const shareCanvas = async (
   }
   if (
     created._tag !== "failure" ||
-    created.error._tag !== "canvas-already-exists"
+    created.error._tag !== "canvasAlreadyExists"
   ) {
     return emptyResponse(500)
   }

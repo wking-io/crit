@@ -90,7 +90,7 @@ describe("ReplicaPolicy reconciliation", () => {
 
   it("copies optional reported runtime onto the agent pending author", () => {
     const runtime = {
-      _tag: "reported-runtime" as const,
+      _tag: "reportedRuntime" as const,
       source: "client-reported" as const,
       harness: { name: "claude-code" },
       model: { name: "claude-fable-5" }
@@ -123,7 +123,7 @@ describe("ReplicaPolicy reconciliation", () => {
     const receipt = { disposition: "first-acceptance" as const, change: accepted }
     const unconfirmed = Result.getOrThrow(ReplicaPolicy.receipt(enqueued(), receipt))
     expect(unconfirmed.acknowledgedCursor).toBe(genesisCursor)
-    expect(unconfirmed.pending[0]?.state._tag).toBe("accepted-unconfirmed")
+    expect(unconfirmed.pending[0]?.state._tag).toBe("acceptedUnconfirmed")
     const duplicate = Result.getOrThrow(ReplicaPolicy.receipt(unconfirmed, receipt))
     expect(duplicate.pending).toHaveLength(1)
     const pulled = Result.getOrThrow(ReplicaPolicy.incorporatePage(duplicate, page))
