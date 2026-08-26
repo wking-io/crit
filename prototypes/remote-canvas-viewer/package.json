@@ -4,7 +4,9 @@
   "type": "module",
   "scripts": {
     "start": "node scripts/dev.mjs",
-    "prove": "node scripts/prove.mjs"
+    "access": "node scripts/access-dev.mjs",
+    "prove": "node scripts/prove.mjs",
+    "prove:access": "node scripts/prove-access.mjs"
   },
   "devDependencies": {
     "puppeteer-core": "^24.17.0"

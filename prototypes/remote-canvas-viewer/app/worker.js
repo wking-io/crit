@@ -112,18 +112,73 @@ const html = ({ origin, route, page }) => `<!doctype html>
 </body>
 </html>`
 
+const sameOriginRedirect = (origin, candidate, fallback) => {
+  try {
+    const url = new URL(candidate)
+    if (url.origin === origin) return url.href
+  } catch {}
+  return fallback
+}
+
+const cookieMap = (header) => {
+  const out = {}
+  for (const part of (header ?? "").split(";")) {
+    const trimmed = part.trim()
+    if (!trimmed) continue
+    const eq = trimmed.indexOf("=")
+    if (eq < 0) continue
+    out[trimmed.slice(0, eq)] = trimmed.slice(eq + 1)
+  }
+  return out
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url)
     const route = pages[url.pathname] ? url.pathname : "/"
     const page = pages[route]
     const locked = route === "/locked"
+    const accessOrigin = env.ACCESS_ORIGIN || ""
+    const sameSite = (env.ACCESS_SAMESITE || "none").toLowerCase()
+    const authorized = cookieMap(request.headers.get("cookie")).CF_Authorization === "proto-access"
     if (url.pathname === "/__meta") {
       return Response.json({
         role: "app",
         origin: url.origin,
         canvasOrigin: env.CANVAS_ORIGIN,
+        accessOrigin: accessOrigin || null,
+        sameSite,
+        authorized,
         route
+      })
+    }
+    if (accessOrigin && url.pathname === "/cdn-cgi/access/callback") {
+      const next = sameOriginRedirect(url.origin, url.searchParams.get("redirect_url") ?? url.origin + "/checkout", url.origin + "/checkout")
+      if (url.searchParams.get("token") !== "proto-access") {
+        return new Response("bad token", { status: 400 })
+      }
+      const cookie = [
+        "CF_Authorization=proto-access",
+        "Path=/",
+        "HttpOnly",
+        "Max-Age=86400",
+        "SameSite=" + (sameSite === "lax" ? "Lax" : "None"),
+        "Secure"
+      ].join("; ")
+      return new Response(null, {
+        status: 302,
+        headers: {
+          location: next,
+          "set-cookie": cookie
+        }
+      })
+    }
+    if (accessOrigin && !authorized) {
+      const login = new URL("/cdn-cgi/access/login", accessOrigin)
+      login.searchParams.set("redirect_url", url.href)
+      return new Response(null, {
+        status: 302,
+        headers: { location: login.href }
       })
     }
     const headers = {

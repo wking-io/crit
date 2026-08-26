@@ -1,0 +1,8 @@
+name = "proto-remote-access"
+main = "worker.js"
+compatibility_date = "2026-08-26"
+
+[vars]
+APP_ORIGIN = "http://localhost:8798"
+CANVAS_ORIGIN = "http://127.0.0.1:8797"
+ACCESS_ALLOW_IFRAME = "1"

@@ -4,7 +4,7 @@ const routes = {
   locked: "/locked"
 }
 
-const html = ({ appOrigin, canvasOrigin }) => `<!doctype html>
+const html = ({ appOrigin, canvasOrigin, accessOrigin }) => `<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -60,6 +60,16 @@ const html = ({ appOrigin, canvasOrigin }) => `<!doctype html>
       cursor: pointer;
     }
     button[aria-pressed="true"] { border-color: #6f8f6a; background: #243022; }
+    a#toplevel {
+      display: inline-flex;
+      align-items: center;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 6px 10px;
+      color: var(--ink);
+      text-decoration: none;
+    }
+    a#toplevel[hidden] { display: none; }
     pre {
       margin: 0;
       padding: 10px;
@@ -104,7 +114,7 @@ const html = ({ appOrigin, canvasOrigin }) => `<!doctype html>
     .status { font-weight: 600; }
     .status.live { color: var(--live); }
     .status.blocked { color: var(--blocked); }
-    .status.loading { color: var(--wait); }
+    .status.loading, .status.gate { color: var(--wait); }
     iframe {
       flex: 1;
       width: 100%;
@@ -121,11 +131,13 @@ const html = ({ appOrigin, canvasOrigin }) => `<!doctype html>
     <div class="origins">
       <div><b>Canvas host</b><code id="canvas-origin"></code></div>
       <div><b>App preview</b><code id="app-origin"></code></div>
+      <div id="access-box"><b>Access gate</b><code id="access-origin"></code></div>
     </div>
     <div class="switcher">
       <button type="button" data-route="checkout" aria-pressed="true">Checkout</button>
       <button type="button" data-route="account">Account</button>
       <button type="button" data-route="locked">Locked</button>
+      <a id="toplevel" href="#" target="_blank" rel="noreferrer">Open app top-level</a>
     </div>
     <pre id="state"></pre>
   </aside>
@@ -141,17 +153,20 @@ const html = ({ appOrigin, canvasOrigin }) => `<!doctype html>
   <script>
     const appOrigin = ${JSON.stringify(appOrigin)}
     const canvasOrigin = ${JSON.stringify(canvasOrigin)}
+    const accessOrigin = ${JSON.stringify(accessOrigin)}
     const routes = ${JSON.stringify(routes)}
     const iframe = document.getElementById("live")
     const stateEl = document.getElementById("state")
     const statusEl = document.getElementById("frame-status")
     const labelEl = document.getElementById("frame-label")
     const buttons = [...document.querySelectorAll("[data-route]")]
+    const topLevel = document.getElementById("toplevel")
     let wait = 0
     const state = {
       canvasOrigin,
       appOrigin,
-      sameOrigin: canvasOrigin === appOrigin,
+      accessOrigin: accessOrigin || null,
+      embedSite: canvasOrigin === appOrigin ? "same-origin" : new URL(canvasOrigin).hostname === new URL(appOrigin).hostname ? "same-site" : "cross-site",
       route: routes.checkout,
       framing: "allowed",
       status: "loading",
@@ -161,6 +176,10 @@ const html = ({ appOrigin, canvasOrigin }) => `<!doctype html>
     const paint = () => {
       document.getElementById("canvas-origin").textContent = state.canvasOrigin
       document.getElementById("app-origin").textContent = state.appOrigin
+      document.getElementById("access-origin").textContent = state.accessOrigin || "off"
+      document.getElementById("access-box").hidden = !state.accessOrigin
+      topLevel.hidden = !state.accessOrigin
+      topLevel.href = appOrigin + state.route
       labelEl.textContent = "application-route · " + state.route
       statusEl.textContent = state.status
       statusEl.className = "status " + state.status
@@ -181,11 +200,17 @@ const html = ({ appOrigin, canvasOrigin }) => `<!doctype html>
           state.status = "blocked"
           paint()
         }
-      }, 1500)
+      }, 2500)
       paint()
     }
 
     window.addEventListener("message", (event) => {
+      if (accessOrigin && event.origin === accessOrigin && event.data?.source === "proto-access") {
+        state.status = "gate"
+        state.reported = event.data
+        paint()
+        return
+      }
       if (event.origin !== appOrigin) return
       if (event.data?.source !== "proto-remote-app") return
       state.status = "live"
@@ -205,14 +230,16 @@ export default {
     const body = {
       role: "canvas",
       origin: url.origin,
-      appOrigin: env.APP_ORIGIN
+      appOrigin: env.APP_ORIGIN,
+      accessOrigin: env.ACCESS_ORIGIN || null
     }
     if (url.pathname === "/__meta") {
       return Response.json(body)
     }
     return new Response(html({
       appOrigin: env.APP_ORIGIN,
-      canvasOrigin: url.origin
+      canvasOrigin: url.origin,
+      accessOrigin: env.ACCESS_ORIGIN || ""
     }), {
       headers: { "content-type": "text/html; charset=utf-8" }
     })

@@ -38,4 +38,32 @@ npx wrangler deploy --temporary --var CANVAS_ORIGIN:https://<canvas-worker>.work
 
 A temporary `workers.dev` host wraps both origins in Turnstile. The challenge page sends `X-Frame-Options: SAMEORIGIN`, so the app origin cannot pass that check inside a Frame. Use a permanent Cloudflare account for a clean iframe prove.
 
+## Access
+
+Temporary `workers.dev` accounts cannot enable Zero Trust. This folder mocks the documented Access path on three sites so Chrome can answer the Frame question without a real org.
+
+```
+cd prototypes/remote-canvas-viewer
+npm run access
+```
+
+Open `http://127.0.0.1:8797`. The Frame points at `http://localhost:8798/checkout`. Different hostnames, so this is cross-site, not just cross-origin. Unauthenticated preview requests 302 to `http://127.0.0.1:8799`, which stands in for `team.cloudflareaccess.com`.
+
+```
+ACCESS_ALLOW_IFRAME=0 npm run access
+ACCESS_SAMESITE=lax npm run access
+npm run prove:access
+```
+
+`allow_iframe` off sends `X-Frame-Options: SAMEORIGIN` on the login page. On sends `frame-ancestors` for the canvas. After sign-in the preview sets `CF_Authorization` with `HttpOnly`, `Secure`, and `SameSite=None` unless `ACCESS_SAMESITE=lax`. Those are the documented Access defaults.
+
+A real org still needs a permanent token. `scripts/access-setup.mjs` deploys both Workers and attaches an Access app to `proto-remote-app` only.
+
+```
+export CLOUDFLARE_API_TOKEN=...
+export CLOUDFLARE_ACCOUNT_ID=...
+export ACCESS_TEST_EMAIL=you@company.com
+node scripts/access-setup.mjs
+```
+
 Ordinary production stays out of this folder.
