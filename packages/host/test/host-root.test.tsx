@@ -25,6 +25,10 @@ let root: Root
 
 const render = (element: ReactElement) => root.render(<StrictMode>{element}</StrictMode>)
 
+const fetched = (url: string): boolean => fetchMock.mock.calls.some(
+  ([input, init]) => String(input) === url && init?.method === "GET"
+)
+
 const hostAt = (
   path: string,
   fragment: string,
@@ -142,10 +146,7 @@ describe("HostRoot", () => {
     await act(async() => vi.waitFor(() => {
       expect(container.querySelector("a")?.textContent).toBe("Hosted review")
     }))
-    expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:3000/canvas",
-      expect.objectContaining({ method: "GET" })
-    )
+    expect(fetched("http://localhost:3000/canvas")).toBe(true)
   })
 
   it("builds hosted canvas ports without a local capability", async() => {
@@ -180,13 +181,7 @@ describe("HostRoot", () => {
         "The canvas does not exist."
       )
     ))
-    expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:3000/identity",
-      expect.objectContaining({ method: "GET" })
-    )
-    expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:3000/canvas/canvas_shop",
-      expect.objectContaining({ method: "GET" })
-    )
+    expect(fetched("http://localhost:3000/identity")).toBe(true)
+    expect(fetched("http://localhost:3000/canvas/canvas_shop")).toBe(true)
   })
 })
