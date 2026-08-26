@@ -6,10 +6,14 @@ import {
   AuthoredText,
   CanvasId,
   CanvasTitle,
+  DeploymentChannel,
+  DeploymentUrl,
   Id,
+  IsoTimestamp,
   ReportedRuntime,
   RootedRoute,
   Sha256Digest,
+  SourceRevision,
   WebUrlRepresentation
 } from "@crit/domain"
 import {
@@ -33,12 +37,14 @@ import {
   LocalProjectManifest,
   loginToInstallation,
   ProjectManifestInitialization,
+  registerDeployment,
   shareCanvas,
   SharePersistenceFailure,
   ShareRequestFailed,
   ShareRequiresLogin,
   ShareResponseInvalid,
   ShareResponseRejected,
+  type RegisterDeploymentFailure,
   type ProjectManifestFailure,
   type LocalDaemonInspection
 } from "@crit/local"
@@ -52,6 +58,10 @@ import { frameCommand, frameSourceLabel, resolveFrameGeometry } from "./add-fram
 import { HOST_ORIGIN, resolveHostRoot, startHostApp } from "./host-app.js"
 import { CanvasLayout, canvasLayout, formatCanvasLayout } from "./layout.js"
 import { PROJECT_SKILL_RELATIVE_PATH, projectSkillSource } from "./project-skill.js"
+import {
+  REGISTER_DEPLOYMENT_SKILL_RELATIVE_PATH,
+  registerDeploymentSkillSource
+} from "./register-deployment-skill.js"
 
 class CliOperationalFailure extends Schema.TaggedError<CliOperationalFailure>()(
   "CliOperationalFailure",
@@ -153,14 +163,26 @@ const init = Command.make(
     const pathService = yield* Path.Path
     const fs = yield* FileSystem.FileSystem
     const skillPath = pathService.join(root, PROJECT_SKILL_RELATIVE_PATH)
-    const skillExists = yield* fs.exists(skillPath)
-    if (!skillExists) {
-      yield* fs.makeDirectory(pathService.dirname(skillPath), { recursive: true }).pipe(
+    const skills = [
+      {
+        relativePath: PROJECT_SKILL_RELATIVE_PATH,
+        source: projectSkillSource
+      },
+      {
+        relativePath: REGISTER_DEPLOYMENT_SKILL_RELATIVE_PATH,
+        source: registerDeploymentSkillSource
+      }
+    ]
+    for (const skill of skills) {
+      const target = pathService.join(root, skill.relativePath)
+      const skillExists = yield* fs.exists(target)
+      if (skillExists) continue
+      yield* fs.makeDirectory(pathService.dirname(target), { recursive: true }).pipe(
         Effect.mapError((cause) => new CliOperationalFailure({
           message: `Unable to create Crit skill directory (${String(cause)})`
         }))
       )
-      yield* fs.writeFileString(skillPath, projectSkillSource).pipe(
+      yield* fs.writeFileString(target, skill.source).pipe(
         Effect.mapError((cause) => new CliOperationalFailure({
           message: `Unable to write Crit skill (${String(cause)})`
         }))
@@ -174,6 +196,9 @@ const init = Command.make(
     yield* Console.log(`${result._tag}  ${result.path}`)
     yield* Console.log(`Application  ${result.manifest.applicationId}`)
     yield* Console.log(`Skill  ${skillPath}`)
+    yield* Console.log(
+      `Skill  ${pathService.join(root, REGISTER_DEPLOYMENT_SKILL_RELATIVE_PATH)}`
+    )
   })
 ).pipe(Command.withDescription("Initialize Crit project identity and local agent skill"))
 
@@ -312,6 +337,123 @@ const formatShareFailure = Match.typeTags<ShareFailure, string>()({
   ShareResponseRejected: ({ status }) =>
     `Installation returned an unexpected share response (HTTP ${status})`
 })
+
+interface DeploymentDetails {
+  sourceRevision?: SourceRevision
+  expiresAt?: IsoTimestamp
+}
+
+const formatRegisterDeploymentFailure = Match.typeTags<
+  RegisterDeploymentFailure,
+  string
+>()({
+  DeploymentRegistrationRequestFailed: () =>
+    "Unable to reach the Crit installation",
+  DeploymentRegistrationResponseInvalid: () =>
+    "Installation returned an invalid deployment registration response",
+  DeploymentRegistrationResponseRejected: ({ status }) =>
+    `Installation rejected deployment registration (HTTP ${status})`,
+  DeploymentRegistrationUnauthenticated: () =>
+    "Installation rejected deployment credentials",
+  InstallationUrlInvalid: ({ installationUrl }) =>
+    `Invalid installation URL: ${installationUrl}`,
+  ProjectManifestInvalid: ({ path, reason }) =>
+    `Crit project manifest is invalid: ${path} (${reason})`,
+  ProjectManifestIoFailure: ({ operation, path, reason }) =>
+    `Unable to ${operation} Crit project manifest at ${path} (${reason})`
+})
+
+const registerDeploymentCommand = Command.make("register-deployment", {
+  url: Flag.string("url").pipe(
+    Flag.withDescription("Canonical deployed application origin")
+  ),
+  channel: Flag.string("channel").pipe(
+    Flag.withDescription("Deployment channel"),
+    Flag.withDefault("review")
+  ),
+  revision: Flag.string("revision").pipe(
+    Flag.withDescription("Source revision"),
+    Flag.optional
+  ),
+  expiresAt: Flag.string("expires-at").pipe(
+    Flag.withDescription("Deployment expiry as a UTC ISO timestamp"),
+    Flag.optional
+  ),
+  installationUrl: Flag.string("installation-url").pipe(
+    Flag.withDescription("Crit installation URL"),
+    Flag.optional
+  ),
+  root: Flag.directory("root", { mustExist: true }).pipe(
+    Flag.withDescription("Project root containing the Crit manifest"),
+    Flag.withDefault(".")
+  ),
+  json
+}, ({
+  channel,
+  expiresAt,
+  installationUrl,
+  json: asJson,
+  revision,
+  root,
+  url
+}) => Effect.gen(function*() {
+  const deployToken = process.env.CRIT_DEPLOY_TOKEN
+  if (deployToken === undefined || deployToken.trim().length === 0) {
+    return yield* new CliOperationalFailure({
+      message: "CRIT_DEPLOY_TOKEN is required"
+    })
+  }
+  const resolvedInstallationUrl = Option.getOrUndefined(installationUrl)
+    ?? process.env.CRIT_INSTALLATION_URL
+  if (
+    resolvedInstallationUrl === undefined
+    || resolvedInstallationUrl.length === 0
+  ) {
+    return yield* new CliOperationalFailure({
+      message: "Provide --installation-url or CRIT_INSTALLATION_URL"
+    })
+  }
+  const decodedUrl = yield* decode(DeploymentUrl, url, "deployment URL")
+  const decodedChannel = yield* decode(
+    DeploymentChannel,
+    channel,
+    "deployment channel"
+  )
+  const decodedRevision = yield* Option.match(revision, {
+    onNone: () => Effect.succeed(undefined),
+    onSome: (value) => decode(SourceRevision, value, "source revision")
+  })
+  const decodedExpiresAt = yield* Option.match(expiresAt, {
+    onNone: () => Effect.succeed(undefined),
+    onSome: (value) => decode(IsoTimestamp, value, "expiry timestamp")
+  })
+  const details: DeploymentDetails = {}
+  if (decodedRevision !== undefined) {
+    details.sourceRevision = decodedRevision
+  }
+  if (decodedExpiresAt !== undefined) {
+    details.expiresAt = decodedExpiresAt
+  }
+  const receipt = yield* registerDeployment({
+    root,
+    installationUrl: resolvedInstallationUrl,
+    token: Redacted.make(deployToken),
+    url: decodedUrl,
+    channel: decodedChannel,
+    ...details
+  }).pipe(Effect.mapError((failure) => new CliOperationalFailure({
+    message: formatRegisterDeploymentFailure(failure)
+  })))
+  if (asJson) {
+    return yield* Console.log(JSON.stringify(receipt))
+  }
+  yield* Console.log(`Deployment  ${receipt.deploymentId}`)
+  yield* Console.log(`Application  ${receipt.applicationId}`)
+  yield* Console.log(`Channel  ${receipt.channel}`)
+  yield* Console.log(`Origin  ${receipt.url}`)
+})).pipe(Command.withDescription(
+  "Register a deployed application origin with a Crit installation"
+))
 
 const status = Command.make("status", { dataRoot, json }, ({ dataRoot: root, json: asJson }) =>
   Effect.scoped(inspectLocalDaemon({ dataRoot: root }).pipe(
@@ -727,6 +869,7 @@ export const command = crit.pipe(Command.withSubcommands([
   init,
   dev,
   login,
+  registerDeploymentCommand,
   status,
   create,
   open,

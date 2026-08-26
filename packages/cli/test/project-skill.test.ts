@@ -36,6 +36,7 @@ describe("project skill", () => {
     expect(projectSkillSource).toContain("crit agent begin")
     expect(projectSkillSource).toContain("eval \"$(crit agent begin --name <agent-name> --harness <harness>)\"")
     expect(projectSkillSource).toContain("Frame Bridge")
+    expect(projectSkillSource).toContain("crit-register-deployment")
     expect(projectSkillSource).not.toContain("comment thread")
     expect(projectSkillSource).not.toContain("Note")
   })

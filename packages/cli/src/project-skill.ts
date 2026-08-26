@@ -83,6 +83,8 @@ Input inside an application Frame needs the Frame Bridge in the app. Turn it on 
 
 After share, people review in the hosted UI. They do not install Crit. Do not review a shared Canvas as an Agent. Crit has no remote MCP.
 
+Preview CI uses the \`crit-register-deployment\` skill.
+
 ## Done
 
 \`layout\` shows the intended Frames at the intended geometry. The person has the bootstrap URL if they need to review.

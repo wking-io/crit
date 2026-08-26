@@ -78,7 +78,8 @@ Local Frames authoring on one machine.
 - Review UI no longer adds Frames
 - Contextual help and keyboard shortcuts from the review action table
 - Snapshot a live Frame into a new artifact Frame (`S`)
-- In-memory shared Deployment record and ApplicationBindings adapter. D1 persistence and Worker registration remain.
+- Deployment record and ApplicationBindings adapter. Same application-route resolves locally and through a registered preview.
+- `crit register-deployment` upserts a D1 Deployment. `crit init` writes the preview-registration skill. Hosted resolve still needs the review UI.
 - Local review pending resolves. The daemon reconciles after open and change.
 - Mid-session daemon loss keeps the last projection and shows a connection alert.
 - Enqueue rejection is a submit notice. Conflict repair stays later.

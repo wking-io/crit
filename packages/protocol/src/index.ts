@@ -34,6 +34,14 @@ export {
   encodeShareCanvasWire,
   ShareCanvasWire
 } from "./share.js"
+export {
+  decodeDeploymentRegisteredWire,
+  decodeRegisterDeploymentWire,
+  DeploymentRegisteredWire,
+  encodeDeploymentRegisteredWire,
+  encodeRegisterDeploymentWire,
+  RegisterDeploymentWire
+} from "./deployment.js"
 export type {
   AcceptedCanvasChange,
   ChangePage,
