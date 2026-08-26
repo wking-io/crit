@@ -1,0 +1,17 @@
+{
+  "canvas": {
+    "role": "canvas",
+    "origin": "http://127.0.0.1:8787",
+    "appOrigin": "http://127.0.0.1:8788"
+  },
+  "app": {
+    "role": "app",
+    "origin": "http://127.0.0.1:8788",
+    "canvasOrigin": "http://127.0.0.1:8787",
+    "route": "/"
+  },
+  "sameOrigin": false,
+  "checkoutCsp": "frame-ancestors http://127.0.0.1:8787",
+  "lockedCsp": "frame-ancestors 'none'",
+  "iframe": "blocked"
+}
