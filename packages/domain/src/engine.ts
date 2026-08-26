@@ -109,6 +109,128 @@ const applyCanvasCommand = (p: CanvasProjection, c: CanvasAggregateCommand, comm
   }
 }
 
+const applyAddFrame = (
+  p: CanvasProjection,
+  c: Extract<FrameAggregateCommand, { readonly _tag: "add-frame" }>,
+  commandIndex: number,
+  changeId: ChangeId
+): CanvasChangeResult => {
+  if (p.issuedIds.frameIds.includes(c.frameId)) return entityFailure(commandIndex, "frame", c.frameId, true)
+  const frame: Frame = {
+    frameId: c.frameId,
+    title: c.title,
+    representation: c.representation,
+    status: c.status,
+    geometry: c.geometry,
+    createdByChangeId: changeId,
+    updatedByChangeId: changeId,
+    titleChangedByChangeId: changeId,
+    representationChangedByChangeId: changeId,
+    statusChangedByChangeId: changeId,
+    geometryChangedByChangeId: changeId
+  }
+  return applied({
+    ...p,
+    frames: [...p.frames, frame].sort((a, b) => compareCanonicalId(a.frameId, b.frameId)),
+    stack: [...p.stack, FrameItemRef.make({ frameId: c.frameId }, trusted)],
+    stackChangedByChangeId: changeId,
+    issuedIds: { frameIds: insertSorted(p.issuedIds.frameIds, c.frameId) }
+  })
+}
+
+const applySetFrameTitle = (
+  p: CanvasProjection,
+  c: Extract<FrameAggregateCommand, { readonly _tag: "set-frame-title" }>,
+  commandIndex: number,
+  changeId: ChangeId
+): CanvasChangeResult => {
+  const frame = findFrame(p, c.frameId)
+  if (frame === undefined) return entityFailure(commandIndex, "frame", c.frameId, false)
+  if (frame.titleChangedByChangeId !== c.expectedChangedByChangeId) {
+    return precondition(commandIndex, "titleChangedByChangeId", c.expectedChangedByChangeId, frame.titleChangedByChangeId)
+  }
+  if (frame.title === c.title) return applied(p)
+  const next = { ...frame, title: c.title, titleChangedByChangeId: changeId, updatedByChangeId: changeId }
+  return applied({ ...p, frames: replaceById(p.frames, (value) => value.frameId === frame.frameId, next) })
+}
+
+const applySetFrameRepresentation = (
+  p: CanvasProjection,
+  c: Extract<FrameAggregateCommand, { readonly _tag: "set-frame-representation" }>,
+  commandIndex: number,
+  changeId: ChangeId
+): CanvasChangeResult => {
+  const frame = findFrame(p, c.frameId)
+  if (frame === undefined) return entityFailure(commandIndex, "frame", c.frameId, false)
+  if (frame.representationChangedByChangeId !== c.expectedChangedByChangeId) {
+    return precondition(
+      commandIndex,
+      "representationChangedByChangeId",
+      c.expectedChangedByChangeId,
+      frame.representationChangedByChangeId
+    )
+  }
+  if (representationEquals(frame.representation, c.representation)) return applied(p)
+  const next = {
+    ...frame,
+    representation: c.representation,
+    representationChangedByChangeId: changeId,
+    updatedByChangeId: changeId
+  }
+  return applied({ ...p, frames: replaceById(p.frames, (value) => value.frameId === frame.frameId, next) })
+}
+
+const applySetFrameStatus = (
+  p: CanvasProjection,
+  c: Extract<FrameAggregateCommand, { readonly _tag: "set-frame-status" }>,
+  commandIndex: number,
+  changeId: ChangeId
+): CanvasChangeResult => {
+  const frame = findFrame(p, c.frameId)
+  if (frame === undefined) return entityFailure(commandIndex, "frame", c.frameId, false)
+  if (frame.statusChangedByChangeId !== c.expectedChangedByChangeId) {
+    return precondition(commandIndex, "statusChangedByChangeId", c.expectedChangedByChangeId, frame.statusChangedByChangeId)
+  }
+  if (frame.status === c.status) return applied(p)
+  const next = { ...frame, status: c.status, statusChangedByChangeId: changeId, updatedByChangeId: changeId }
+  return applied({ ...p, frames: replaceById(p.frames, (value) => value.frameId === frame.frameId, next) })
+}
+
+const applySetFrameGeometry = (
+  p: CanvasProjection,
+  c: Extract<FrameAggregateCommand, { readonly _tag: "set-frame-geometry" }>,
+  commandIndex: number,
+  changeId: ChangeId
+): CanvasChangeResult => {
+  const frame = findFrame(p, c.frameId)
+  if (frame === undefined) return entityFailure(commandIndex, "frame", c.frameId, false)
+  if (frame.geometryChangedByChangeId !== c.expectedChangedByChangeId) {
+    return precondition(commandIndex, "geometryChangedByChangeId", c.expectedChangedByChangeId, frame.geometryChangedByChangeId)
+  }
+  if (geometryEquals(frame.geometry, c.geometry)) return applied(p)
+  const next = { ...frame, geometry: c.geometry, geometryChangedByChangeId: changeId, updatedByChangeId: changeId }
+  return applied({ ...p, frames: replaceById(p.frames, (value) => value.frameId === frame.frameId, next) })
+}
+
+const applyRemoveFrame = (
+  p: CanvasProjection,
+  c: Extract<FrameAggregateCommand, { readonly _tag: "remove-frame" }>,
+  commandIndex: number,
+  changeId: ChangeId
+): CanvasChangeResult => {
+  const frame = findFrame(p, c.frameId)
+  if (frame === undefined) return entityFailure(commandIndex, "frame", c.frameId, false)
+  if (frame.updatedByChangeId !== c.expectedUpdatedByChangeId) {
+    return precondition(commandIndex, "updatedByChangeId", c.expectedUpdatedByChangeId, frame.updatedByChangeId)
+  }
+  return applied({
+    ...p,
+    frames: p.frames.filter((value) => value.frameId !== c.frameId),
+    stack: p.stack.filter((item) => item.frameId !== c.frameId),
+    stackChangedByChangeId: changeId
+  })
+}
+
 const applyFrameCommand = (
   p: CanvasProjection,
   c: FrameAggregateCommand,
@@ -116,92 +238,18 @@ const applyFrameCommand = (
   changeId: ChangeId
 ): CanvasChangeResult => {
   switch (c._tag) {
-    case "add-frame": {
-      if (p.issuedIds.frameIds.includes(c.frameId)) return entityFailure(commandIndex, "frame", c.frameId, true)
-      const frame: Frame = {
-        frameId: c.frameId,
-        title: c.title,
-        representation: c.representation,
-        status: c.status,
-        geometry: c.geometry,
-        createdByChangeId: changeId,
-        updatedByChangeId: changeId,
-        titleChangedByChangeId: changeId,
-        representationChangedByChangeId: changeId,
-        statusChangedByChangeId: changeId,
-        geometryChangedByChangeId: changeId
-      }
-      return applied({
-        ...p,
-        frames: [...p.frames, frame].sort((a, b) => compareCanonicalId(a.frameId, b.frameId)),
-        stack: [...p.stack, FrameItemRef.make({ frameId: c.frameId }, trusted)],
-        stackChangedByChangeId: changeId,
-        issuedIds: { frameIds: insertSorted(p.issuedIds.frameIds, c.frameId) }
-      })
-    }
-    case "set-frame-title": {
-      const frame = findFrame(p, c.frameId)
-      if (frame === undefined) return entityFailure(commandIndex, "frame", c.frameId, false)
-      if (frame.titleChangedByChangeId !== c.expectedChangedByChangeId) {
-        return precondition(commandIndex, "titleChangedByChangeId", c.expectedChangedByChangeId, frame.titleChangedByChangeId)
-      }
-      if (frame.title === c.title) return applied(p)
-      const next = { ...frame, title: c.title, titleChangedByChangeId: changeId, updatedByChangeId: changeId }
-      return applied({ ...p, frames: replaceById(p.frames, (value) => value.frameId === frame.frameId, next) })
-    }
-    case "set-frame-representation": {
-      const frame = findFrame(p, c.frameId)
-      if (frame === undefined) return entityFailure(commandIndex, "frame", c.frameId, false)
-      if (frame.representationChangedByChangeId !== c.expectedChangedByChangeId) {
-        return precondition(
-          commandIndex,
-          "representationChangedByChangeId",
-          c.expectedChangedByChangeId,
-          frame.representationChangedByChangeId
-        )
-      }
-      if (representationEquals(frame.representation, c.representation)) return applied(p)
-      const next = {
-        ...frame,
-        representation: c.representation,
-        representationChangedByChangeId: changeId,
-        updatedByChangeId: changeId
-      }
-      return applied({ ...p, frames: replaceById(p.frames, (value) => value.frameId === frame.frameId, next) })
-    }
-    case "set-frame-status": {
-      const frame = findFrame(p, c.frameId)
-      if (frame === undefined) return entityFailure(commandIndex, "frame", c.frameId, false)
-      if (frame.statusChangedByChangeId !== c.expectedChangedByChangeId) {
-        return precondition(commandIndex, "statusChangedByChangeId", c.expectedChangedByChangeId, frame.statusChangedByChangeId)
-      }
-      if (frame.status === c.status) return applied(p)
-      const next = { ...frame, status: c.status, statusChangedByChangeId: changeId, updatedByChangeId: changeId }
-      return applied({ ...p, frames: replaceById(p.frames, (value) => value.frameId === frame.frameId, next) })
-    }
-    case "set-frame-geometry": {
-      const frame = findFrame(p, c.frameId)
-      if (frame === undefined) return entityFailure(commandIndex, "frame", c.frameId, false)
-      if (frame.geometryChangedByChangeId !== c.expectedChangedByChangeId) {
-        return precondition(commandIndex, "geometryChangedByChangeId", c.expectedChangedByChangeId, frame.geometryChangedByChangeId)
-      }
-      if (geometryEquals(frame.geometry, c.geometry)) return applied(p)
-      const next = { ...frame, geometry: c.geometry, geometryChangedByChangeId: changeId, updatedByChangeId: changeId }
-      return applied({ ...p, frames: replaceById(p.frames, (value) => value.frameId === frame.frameId, next) })
-    }
-    case "remove-frame": {
-      const frame = findFrame(p, c.frameId)
-      if (frame === undefined) return entityFailure(commandIndex, "frame", c.frameId, false)
-      if (frame.updatedByChangeId !== c.expectedUpdatedByChangeId) {
-        return precondition(commandIndex, "updatedByChangeId", c.expectedUpdatedByChangeId, frame.updatedByChangeId)
-      }
-      return applied({
-        ...p,
-        frames: p.frames.filter((value) => value.frameId !== c.frameId),
-        stack: p.stack.filter((item) => item.frameId !== c.frameId),
-        stackChangedByChangeId: changeId
-      })
-    }
+    case "add-frame":
+      return applyAddFrame(p, c, commandIndex, changeId)
+    case "set-frame-title":
+      return applySetFrameTitle(p, c, commandIndex, changeId)
+    case "set-frame-representation":
+      return applySetFrameRepresentation(p, c, commandIndex, changeId)
+    case "set-frame-status":
+      return applySetFrameStatus(p, c, commandIndex, changeId)
+    case "set-frame-geometry":
+      return applySetFrameGeometry(p, c, commandIndex, changeId)
+    case "remove-frame":
+      return applyRemoveFrame(p, c, commandIndex, changeId)
   }
 }
 

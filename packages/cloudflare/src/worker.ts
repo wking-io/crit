@@ -148,51 +148,89 @@ export const registerTestClock = (
   }
 }
 
+const registerDeployment = async (
+  request: Request,
+  env: Cloudflare.Env
+): Promise<Response> => {
+  if (request.method !== "POST") return emptyResponse(405)
+  if (!isDeploymentAuthorized(request, env)) return emptyResponse(401)
+  let registration: RegisterDeploymentWire
+  try {
+    registration = decodeRegisterDeploymentWire(await request.json())
+  } catch {
+    return emptyResponse(400)
+  }
+  try {
+    const body = await registerControlDeployment(registration, env)
+    return new Response(JSON.stringify(body), {
+      status: 200,
+      headers: { "content-type": "application/json" }
+    })
+  } catch {
+    return emptyResponse(500)
+  }
+}
+
+const readIdentity = (request: Request): Response => {
+  if (request.method !== "GET") return emptyResponse(405)
+  const address = Schema.decodeUnknownOption(EmailAddress)(
+    request.headers.get("Cf-Access-Authenticated-User-Email")
+  )
+  if (Option.isNone(address)) return emptyResponse(401)
+  const body = encodeAccessAuthenticatedPersonWire({
+    kind: "access-authenticated-person",
+    schemaVersion: 1,
+    address: address.value
+  })
+  return new Response(JSON.stringify(body), {
+    headers: { "content-type": "application/json" }
+  })
+}
+
+const cancelTestClock = async (requestId: string): Promise<Response> => {
+  if (runningClocks.has(requestId)) {
+    canceledClocks.add(requestId)
+    while (runningClocks.has(requestId)) {
+      await scheduler.wait(1)
+    }
+  }
+  return emptyResponse(204)
+}
+
+const advanceTestClock = async (url: URL): Promise<Response> => {
+  const [encodedClockId, requestId] = url.pathname
+    .slice(testClockPath.length)
+    .split("/")
+  if (encodedClockId === undefined || requestId === undefined) {
+    return emptyResponse(404)
+  }
+  const testClockId = decodeURIComponent(encodedClockId)
+  const clock = testClocks.get(testClockId)
+  if (clock === undefined) return emptyResponse(404)
+  runningClocks.set(requestId, testClockId)
+  const canceled = Effect.promise(async () => {
+    while (!canceledClocks.has(requestId)) {
+      await scheduler.wait(1)
+    }
+  }).pipe(Effect.andThen(Effect.die("Test clock request canceled")))
+  try {
+    const exit = await Effect.runPromise(Effect.exit(
+      Effect.raceFirst(clock, canceled)
+    ))
+    return Exit.isSuccess(exit)
+      ? new Response(exit.value)
+      : emptyResponse(500)
+  } finally {
+    runningClocks.delete(requestId)
+    canceledClocks.delete(requestId)
+  }
+}
+
 const worker: ExportedHandler<Cloudflare.Env> = {
   async fetch(request, env) {
     const url = new URL(request.url)
-    if (url.pathname === "/deployments") {
-      if (request.method !== "POST") {
-        return new Response(null, { status: 405 })
-      }
-      if (!isDeploymentAuthorized(request, env)) {
-        return new Response(null, { status: 401 })
-      }
-      let registration: RegisterDeploymentWire
-      try {
-        registration = decodeRegisterDeploymentWire(await request.json())
-      } catch {
-        return new Response(null, { status: 400 })
-      }
-      try {
-        const body = await registerControlDeployment(registration, env)
-        return new Response(JSON.stringify(body), {
-          status: 200,
-          headers: { "content-type": "application/json" }
-        })
-      } catch {
-        return new Response(null, { status: 500 })
-      }
-    }
-    if (url.pathname === "/identity") {
-      if (request.method !== "GET") {
-        return new Response(null, { status: 405 })
-      }
-      const address = Schema.decodeUnknownOption(EmailAddress)(
-        request.headers.get("Cf-Access-Authenticated-User-Email")
-      )
-      if (Option.isNone(address)) {
-        return new Response(null, { status: 401 })
-      }
-      const body = encodeAccessAuthenticatedPersonWire({
-        kind: "access-authenticated-person",
-        schemaVersion: 1,
-        address: address.value
-      })
-      return new Response(JSON.stringify(body), {
-        headers: { "content-type": "application/json" }
-      })
-    }
+    if (url.pathname === "/deployments") return registerDeployment(request, env)
+    if (url.pathname === "/identity") return readIdentity(request)
     if (url.pathname === "/canvases") {
       return request.method === "POST"
         ? shareCanvas(request, env)
@@ -202,46 +240,12 @@ const worker: ExportedHandler<Cloudflare.Env> = {
       request.method === "DELETE" &&
       url.pathname.startsWith(testClockCancelPath)
     ) {
-      const requestId = url.pathname.slice(testClockCancelPath.length)
-      if (runningClocks.has(requestId)) {
-        canceledClocks.add(requestId)
-        while (runningClocks.has(requestId)) {
-          await scheduler.wait(1)
-        }
-      }
-      return new Response(null, { status: 204 })
+      return cancelTestClock(url.pathname.slice(testClockCancelPath.length))
     }
-    if (request.method !== "POST" || !url.pathname.startsWith(testClockPath)) {
-      return new Response(null, { status: 404 })
+    if (request.method === "POST" && url.pathname.startsWith(testClockPath)) {
+      return advanceTestClock(url)
     }
-    const [encodedClockId, requestId] = url.pathname
-      .slice(testClockPath.length)
-      .split("/")
-    if (encodedClockId === undefined || requestId === undefined) {
-      return new Response(null, { status: 404 })
-    }
-    const testClockId = decodeURIComponent(encodedClockId)
-    const clock = testClocks.get(testClockId)
-    if (clock === undefined) {
-      return new Response(null, { status: 404 })
-    }
-    runningClocks.set(requestId, testClockId)
-    const canceled = Effect.promise(async () => {
-      while (!canceledClocks.has(requestId)) {
-        await scheduler.wait(1)
-      }
-    }).pipe(Effect.andThen(Effect.die("Test clock request canceled")))
-    try {
-      const exit = await Effect.runPromise(Effect.exit(
-        Effect.raceFirst(clock, canceled)
-      ))
-      return Exit.isSuccess(exit)
-        ? new Response(exit.value)
-        : new Response(null, { status: 500 })
-    } finally {
-      runningClocks.delete(requestId)
-      canceledClocks.delete(requestId)
-    }
+    return emptyResponse(404)
   }
 }
 
