@@ -1,0 +1,6 @@
+name = "proto-remote-app"
+main = "worker.js"
+compatibility_date = "2026-08-26"
+
+[vars]
+CANVAS_ORIGIN = "http://127.0.0.1:8787"

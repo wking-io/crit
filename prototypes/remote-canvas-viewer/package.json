@@ -1,0 +1,12 @@
+{
+  "name": "remote-canvas-viewer-prototype",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node scripts/dev.mjs",
+    "prove": "node scripts/prove.mjs"
+  },
+  "devDependencies": {
+    "puppeteer-core": "^24.17.0"
+  }
+}
