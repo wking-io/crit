@@ -27,12 +27,15 @@ Two Workers. Set each origin on the other after the first deploy.
 
 ```
 cd prototypes/remote-canvas-viewer/app
-wrangler deploy --var CANVAS_ORIGIN:https://proto-remote-canvas.<account>.workers.dev
+npx wrangler deploy --temporary --var CANVAS_ORIGIN:https://example.com
 
 cd ../canvas
-wrangler deploy --var APP_ORIGIN:https://proto-remote-app.<account>.workers.dev
+npx wrangler deploy --temporary --var APP_ORIGIN:https://<app-worker>.workers.dev
+
+cd ../app
+npx wrangler deploy --temporary --var CANVAS_ORIGIN:https://<canvas-worker>.workers.dev
 ```
 
-Then set `CANVAS_ORIGIN` on the app Worker to the real canvas URL.
+A temporary `workers.dev` host wraps both origins in Turnstile. The challenge page sends `X-Frame-Options: SAMEORIGIN`, so the app origin cannot pass that check inside a Frame. Use a permanent Cloudflare account for a clean iframe prove.
 
 Ordinary production stays out of this folder.
