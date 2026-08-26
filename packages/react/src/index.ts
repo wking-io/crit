@@ -69,6 +69,7 @@ export {
   ReviewAction,
   ReviewActionInput,
   ReviewClientEffect,
+  ReviewSelection,
   availableReviewActions,
   resolveReviewAction,
   reviewActionPolicies
@@ -77,7 +78,6 @@ export type {
   ReviewActionContext,
   ReviewActionId,
   ReviewActionPolicy,
-  ReviewSelection,
   SnapshotRequest,
   SnapshotSource
 } from "./review-actions.js"

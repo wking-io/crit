@@ -1,4 +1,10 @@
-import type { LocalCanvasClientService, OpenFailure, StatusFailure, SubscriptionFailure } from "@crit/client"
+import {
+  ReplicaChange,
+  type LocalCanvasClientService,
+  type OpenFailure,
+  type StatusFailure,
+  type SubscriptionFailure
+} from "@crit/client"
 import {
   ReplicaChangeRejected,
   ReplicaSubscriptionEvent,
@@ -83,7 +89,7 @@ export const localReplicaSessionPorts = (
     }
   },
   change: ({ canvasId, commands }) =>
-    client.change({ _tag: "replicaChange", canvasId, commands }).pipe(
+    client.change(ReplicaChange.make({ canvasId, commands })).pipe(
       Effect.map((receipt) => receipt.view),
       Effect.mapError((failure) => {
         if (failure._tag === "changeRejected") {

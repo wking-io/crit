@@ -17,7 +17,10 @@ import {
 import { Data, Effect, Option, Schema } from "effect"
 
 import {
+  Align,
+  ArrangeGrid,
   CanvasArrangement,
+  Distribute,
   type CanvasAlignment,
   type CanvasArrangementOperation
 } from "./canvas-arrangement.js"
@@ -50,10 +53,10 @@ export type ReviewClientEffect = Data.TaggedEnum<{
 }>
 export const ReviewClientEffect = Data.taggedEnum<ReviewClientEffect>()
 
-export type ReviewSelection = {
-  readonly _tag: "items"
-  readonly items: CanvasSelection
-}
+export type ReviewSelection = Data.TaggedEnum<{
+  readonly items: { readonly items: CanvasSelection }
+}>
+export const ReviewSelection = Data.taggedEnum<ReviewSelection>()
 
 export type ReviewActionInput = Data.TaggedEnum<{
   readonly none: {}
@@ -333,7 +336,7 @@ const alignmentPolicy = (alignment: CanvasAlignment) => policy({
   shortcuts: alignmentShortcuts[alignment],
   available: (selection, projection) =>
     selectedFrames(selection, projection).length >= 2,
-  run: (context) => arrangementAction(context, { _tag: "Align", alignment })
+  run: (context) => arrangementAction(context, Align.make({ alignment }))
 })
 
 const distributionPolicy = (axis: "horizontal" | "vertical") => policy({
@@ -343,7 +346,7 @@ const distributionPolicy = (axis: "horizontal" | "vertical") => policy({
   shortcuts: axis === "horizontal" ? ["Control+Alt+H"] : ["Control+Alt+V"],
   available: (selection, projection) =>
     selectedFrames(selection, projection).length >= 3,
-  run: (context) => arrangementAction(context, { _tag: "Distribute", axis })
+  run: (context) => arrangementAction(context, Distribute.make({ axis }))
 })
 
 const arrangeGridPolicy = policy({
@@ -353,7 +356,7 @@ const arrangeGridPolicy = policy({
   shortcuts: ["Alt+G"],
   available: (selection, projection) =>
     selectedFrames(selection, projection).length >= 2,
-  run: (context) => arrangementAction(context, { _tag: "ArrangeGrid" })
+  run: (context) => arrangementAction(context, ArrangeGrid.make({}))
 })
 
 const presetShortcuts = {

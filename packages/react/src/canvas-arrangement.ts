@@ -21,12 +21,15 @@ export const CanvasAlignment = Schema.Literals([
 ])
 export type CanvasAlignment = typeof CanvasAlignment.Type
 
+export const Align = Schema.TaggedStruct("Align", { alignment: CanvasAlignment })
+export const Distribute = Schema.TaggedStruct("Distribute", {
+  axis: Schema.Literals(["horizontal", "vertical"])
+})
+export const ArrangeGrid = Schema.TaggedStruct("ArrangeGrid", {})
 export const CanvasArrangementOperation = Schema.Union([
-  Schema.TaggedStruct("Align", { alignment: CanvasAlignment }),
-  Schema.TaggedStruct("Distribute", {
-    axis: Schema.Literals(["horizontal", "vertical"])
-  }),
-  Schema.TaggedStruct("ArrangeGrid", {})
+  Align,
+  Distribute,
+  ArrangeGrid
 ])
 export type CanvasArrangementOperation = typeof CanvasArrangementOperation.Type
 

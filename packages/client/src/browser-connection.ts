@@ -1,7 +1,7 @@
 import { LocalDaemonInstanceNonce } from "@crit/replica/http"
 import { Encoding, Result, Schema } from "effect"
 
-import type { LocalClientOptions } from "./index.js"
+import { LocalClientOptions } from "./local-client-options.js"
 
 const LocalDaemonBaseUrl = Schema.String.check(Schema.isPattern(
   /^http:\/\/127\.0\.0\.1:(?:[1-9][0-9]{0,3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5])$/
@@ -43,11 +43,14 @@ const make = ({
   readonly baseUrl: string
   readonly instance: LocalDaemonInstanceNonce
 }) =>
-  Schema.decodeUnknownSync(LocalBrowserConnectionDescriptor, { onExcessProperty: "error" })({
-    _tag: "localBrowserConnection",
+  LocalBrowserConnectionDescriptor.make({
     schemaVersion: 1,
-    baseUrl,
-    browserPath: `/browser/${instance}/`
+    baseUrl: Schema.decodeUnknownSync(LocalBrowserConnectionDescriptor.fields.baseUrl)(
+      baseUrl
+    ),
+    browserPath: Schema.decodeUnknownSync(
+      LocalBrowserConnectionDescriptor.fields.browserPath
+    )(`/browser/${instance}/`)
   })
 
 const encode = (descriptor: LocalBrowserConnectionDescriptor) =>
@@ -73,8 +76,7 @@ const decode = (
 
 const options = (
   descriptor: LocalBrowserConnectionDescriptor
-): Extract<LocalClientOptions, { readonly _tag: "browserSession" }> => ({
-  _tag: "browserSession",
+) => LocalClientOptions.browserSession({
   baseUrl: descriptor.baseUrl,
   browserPath: descriptor.browserPath
 })
