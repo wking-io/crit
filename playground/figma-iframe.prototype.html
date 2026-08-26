@@ -137,6 +137,7 @@
           <button type="button" data-case="rewrite" class="secondary">Raw URL rewritten to embed</button>
           <button type="button" data-case="crit" class="secondary">Embed URL in Crit live iframe</button>
           <button type="button" data-case="sandbox" class="secondary">Embed URL in sandboxed iframe</button>
+          <button type="button" data-case="wking" class="secondary">wking.dev file, rewritten</button>
         </div>
       </section>
     </aside>
@@ -165,7 +166,13 @@
         if (!KINDS.has(kind) || !key) {
           return { ok: false, reason: "No design/proto/board/slides/deck/file key in the path" }
         }
-        return { ok: true, kind: kind === "file" ? "design" : kind, url: url.href, key }
+        return {
+          ok: true,
+          kind: kind === "file" ? "design" : kind,
+          url: url.href,
+          key,
+          nodeId: url.searchParams.get("node-id")
+        }
       }
 
       const toEmbed = (input, embedHost = HOST) => {
@@ -174,6 +181,7 @@
         if (parsed.kind === "kit1") return { ok: true, href: parsed.url, rewritten: false }
         const href = new URL(`https://embed.figma.com/${parsed.kind}/${parsed.key}`)
         href.searchParams.set("embed-host", embedHost)
+        if (parsed.nodeId) href.searchParams.set("node-id", parsed.nodeId)
         return { ok: true, href: href.href, rewritten: parsed.url !== href.href }
       }
 
@@ -222,6 +230,13 @@
         policy: "sandbox",
         rewrite: false,
         expect: "sandbox=allow-scripts is what Crit uses for HTML artifacts. Figma needs more than that and should fail."
+      },
+      wking: {
+        title: "wking.dev file, rewritten",
+        url: "https://www.figma.com/design/99kd9aDiTeDn2gmjlGUoiR/wking.dev?node-id=0-1&t=o1EsCdjy4ig2dIDS-1",
+        policy: "crit",
+        rewrite: true,
+        expect: "A real file. Share URL becomes embed.figma.com/design/99kd9aDiTeDn2gmjlGUoiR with node-id=0-1, loaded with Crit live iframe attrs."
       }
     }
 
