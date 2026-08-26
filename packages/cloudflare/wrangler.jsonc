@@ -2,6 +2,16 @@
   "name": "crit-cloudflare",
   "main": "src/worker.ts",
   "compatibility_date": "2026-08-25",
+  "vars": {
+    "CRIT_DEPLOY_TOKEN": "test-deploy-token"
+  },
+  "d1_databases": [
+    {
+      "binding": "CONTROL",
+      "database_name": "crit-control",
+      "database_id": "00000000-0000-0000-0000-000000000001"
+    }
+  ],
   "durable_objects": {
     "bindings": [
       {

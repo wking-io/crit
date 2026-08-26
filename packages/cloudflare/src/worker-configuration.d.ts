@@ -3,6 +3,8 @@ declare namespace Cloudflare {
     readonly CANVASES: DurableObjectNamespace<
       import("./canvas-object.js").CanvasDurableObject
     >
+    readonly CONTROL: D1Database
+    readonly CRIT_DEPLOY_TOKEN: string
   }
 
   interface GlobalProps {
