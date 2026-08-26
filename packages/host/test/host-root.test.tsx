@@ -143,15 +143,15 @@ describe("HostRoot", () => {
       expect(container.querySelector("a")?.textContent).toBe("Hosted review")
     }))
     expect(fetchMock).toHaveBeenCalledWith(
-      "/canvas",
+      "http://localhost:3000/canvas",
       expect.objectContaining({ method: "GET" })
     )
   })
 
   it("builds hosted canvas ports without a local capability", async() => {
     fetchMock.mockImplementation(async(input: RequestInfo | URL) => {
-      const url = String(input)
-      if (url === "/identity") {
+      const url = new URL(String(input))
+      if (url.pathname === "/identity") {
         return new Response(JSON.stringify({
           kind: "access-authenticated-person",
           schemaVersion: 1,
@@ -181,11 +181,11 @@ describe("HostRoot", () => {
       )
     ))
     expect(fetchMock).toHaveBeenCalledWith(
-      "/identity",
+      "http://localhost:3000/identity",
       expect.objectContaining({ method: "GET" })
     )
     expect(fetchMock).toHaveBeenCalledWith(
-      "/canvas/canvas_shop",
+      "http://localhost:3000/canvas/canvas_shop",
       expect.objectContaining({ method: "GET" })
     )
   })
