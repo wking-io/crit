@@ -59,6 +59,51 @@ A Frame stores a logical Representation, not an environment URL. An Application 
 
 The Frame Bridge is on in local development. Ordinary production builds and previews keep it off. An explicit shared review preview can opt in.
 
+## Register previews from CI
+
+`crit init` writes `.agents/skills/crit-register-deployment/SKILL.md`. Ask an agent in the application repo to add Crit preview registration to GitHub Actions. The skill reads `crit.manifest.json` and `crit register-deployment --help`, then edits the deploy workflow.
+
+The Frame stays `{ applicationId, route }`. Each green preview deploy replaces the Installation's review Deployment URL.
+
+Set these repository secrets:
+
+- `CRIT_INSTALLATION_URL` such as `https://crit.acme.internal`
+- `CRIT_DEPLOY_TOKEN` matching the Installation Worker secret `CRIT_DEPLOY_TOKEN`
+
+```yaml
+name: preview
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - uses: cloudflare/wrangler-action@v3
+        id: deploy
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          command: pages deploy dist --project-name my-app
+      - name: Register the preview with Crit
+        env:
+          CRIT_INSTALLATION_URL: ${{ secrets.CRIT_INSTALLATION_URL }}
+          CRIT_DEPLOY_TOKEN: ${{ secrets.CRIT_DEPLOY_TOKEN }}
+          PREVIEW_URL: ${{ steps.deploy.outputs.deployment-url }}
+        run: npx crit register-deployment --url "${PREVIEW_URL%/}/" --revision "${{ github.sha }}"
+```
+
+`--url` must be a public HTTP origin with a trailing slash. `applicationId` comes from `crit.manifest.json`. `--channel` defaults to `review`. The token is an Installation machine secret. It is not an Access user email.
+
 ## Read the design
 
 - [`ARCHITECTURE.md`](ARCHITECTURE.md) defines the target system.

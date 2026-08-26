@@ -32,6 +32,10 @@ Local Agent access comes from the daemon on the user's machine. Crit records the
 
 Do not send credentials, tokens, private reasoning, or storage bindings in Canvas commands.
 
+## Preview CI
+
+Use `skills/crit-register-deployment/SKILL.md` when GitHub Actions should register a preview origin after deploy.
+
 ## Workspaces
 
 Workspace exists in the data model. v1 does not expose it. Do not offer workspace commands or ask the user to switch Workspaces.

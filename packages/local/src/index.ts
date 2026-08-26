@@ -71,3 +71,14 @@ export {
   ShareResponseRejected
 } from "./share.js"
 export type { ShareCanvasOptions } from "./share.js"
+export {
+  DeploymentRegistrationRequestFailed,
+  DeploymentRegistrationResponseInvalid,
+  DeploymentRegistrationResponseRejected,
+  DeploymentRegistrationUnauthenticated,
+  registerDeployment
+} from "./register-deployment.js"
+export type {
+  RegisterDeploymentFailure,
+  RegisterDeploymentOptions
+} from "./register-deployment.js"

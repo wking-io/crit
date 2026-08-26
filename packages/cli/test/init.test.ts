@@ -71,10 +71,25 @@ describe("built crit-target init", () => {
     expect(skill).toContain("name: crit")
     expect(skill).toContain("crit add-frame")
     expect(skill).toContain("crit --help")
+    const registrationSkillPath = path.join(
+      root,
+      ".agents",
+      "skills",
+      "crit-register-deployment",
+      "SKILL.md"
+    )
+    const registrationSkill = readFileSync(registrationSkillPath, "utf8")
+    expect(registrationSkill).toContain("name: crit-register-deployment")
+    expect(registrationSkill).toContain("crit register-deployment --help")
+    expect(registrationSkill).toContain("CRIT_DEPLOY_TOKEN")
     writeFileSync(skillPath, "agent owned\n")
+    writeFileSync(registrationSkillPath, "deployment agent owned\n")
     const again = run()
     expect(again.status, again.stderr).toBe(0)
     expect(readFileSync(skillPath, "utf8")).toBe("agent owned\n")
+    expect(readFileSync(registrationSkillPath, "utf8")).toBe(
+      "deployment agent owned\n"
+    )
   })
 
   it("converges concurrent processes on one project identity", async() => {
