@@ -30,8 +30,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import {
   ReplicaBoard,
+  ReplicaChangeRejected,
   ReplicaConnection,
-  ReplicaSubmitNotice,
+  ReplicaSessionUnavailable,
   type FrameRepresentationResolver,
   type FrameSnapshotter
 } from "../src/index.js"
@@ -327,7 +328,10 @@ describe("ReplicaBoard", () => {
       <ReplicaBoard
         {...requiredBoard}
         connection={ReplicaConnection.lost({ reason: "socket closed." })}
-        notice={ReplicaSubmitNotice.rejected({ failure })}
+        notice={new ReplicaChangeRejected({
+          canvasId: Id.canvas("canvas_review"),
+          failure
+        })}
         onSubmit={onSubmit}
         resolver={checkoutResolver}
         snapshotter={unusedSnapshotter}
@@ -348,7 +352,10 @@ describe("ReplicaBoard", () => {
     await act(async() => render(
       <ReplicaBoard
         {...requiredBoard}
-        notice={ReplicaSubmitNotice.unavailable({ reason: "daemon unavailable." })}
+        notice={new ReplicaSessionUnavailable({
+          canvasId: Id.canvas("canvas_review"),
+          reason: "daemon unavailable."
+        })}
         onSubmit={() => undefined}
         resolver={checkoutResolver}
         snapshotter={unusedSnapshotter}

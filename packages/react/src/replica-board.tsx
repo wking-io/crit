@@ -11,11 +11,15 @@ import { Data, Match } from "effect"
 import type { ReactElement } from "react"
 
 import type { CanvasCamera } from "./canvas-camera.js"
-import { CanvasBoard, type CanvasBoardProps } from "./canvas-board.js"
+import { CanvasBoard } from "./canvas-board.js"
 import type { CanvasSelection } from "./canvas-selection.js"
 import type { FrameRepresentationResolver } from "./frame-renderer.js"
 import type { FrameSnapshotter } from "./frame-snapshot.js"
-import type { ReplicaConnection, ReplicaSubmitNotice } from "./replica-session.js"
+import type {
+  ReplicaChangeRejected,
+  ReplicaConnection,
+  ReplicaSessionUnavailable
+} from "./replica-session.js"
 import type { ReviewClientEffect } from "./review-actions.js"
 
 interface ReplicaBoardBaseProps {
@@ -27,7 +31,7 @@ interface ReplicaBoardBaseProps {
   readonly onSelectionChange: (selection: CanvasSelection) => void
   readonly presence?: PresenceRoster | undefined
   readonly connection?: ReplicaConnection | undefined
-  readonly notice?: ReplicaSubmitNotice | undefined
+  readonly notice?: ReplicaChangeRejected | ReplicaSessionUnavailable | undefined
   readonly onEffect?: (effect: ReviewClientEffect) => void
   readonly className?: string
 }
@@ -168,13 +172,14 @@ const connectionAlert = (
   }))
 
 const noticeAlert = (
-  notice: ReplicaSubmitNotice | undefined
+  notice: ReplicaChangeRejected | ReplicaSessionUnavailable | undefined
 ): string | undefined => notice === undefined
   ? undefined
   : Match.value(notice).pipe(Match.tagsExhaustive({
-    rejected: ({ failure }) =>
+    ReplicaChangeRejected: ({ failure }) =>
       `Your last edit was not applied. ${conflictCopy(failure)}`,
-    unavailable: ({ reason }) => `Your last edit was not applied. ${reason}`
+    ReplicaSessionUnavailable: ({ reason }) =>
+      `Your last edit was not applied. ${reason}`
   }))
 
 const connectionAllowsMutation = (
@@ -204,32 +209,11 @@ export function ReplicaBoard({
   const showPresence = presence !== undefined && presence.people.length > 0
   const connectionCopy = connectionAlert(connection)
   const noticeCopy = noticeAlert(notice)
-  const canvasBoardProps: CanvasBoardProps =
-    !connectionAllowsMutation(connection) ||
-      onSubmit === undefined ||
-      snapshotter === undefined
-      ? {
-        camera,
-        onCameraChange,
-        onEffect,
-        onSelectionChange,
-        onSubmit: undefined,
-        projection: view.projection,
-        resolver,
-        selection,
-        snapshotter: undefined
-      }
-      : {
-        camera,
-        onCameraChange,
-        onEffect,
-        onSelectionChange,
-        onSubmit,
-        projection: view.projection,
-        resolver,
-        selection,
-        snapshotter
-      }
+  const mutation = connectionAllowsMutation(connection) &&
+    onSubmit !== undefined &&
+    snapshotter !== undefined
+    ? { onSubmit, snapshotter }
+    : {}
   return (
     <div className={className}>
       {connectionCopy === undefined ? null : <p role="alert">{connectionCopy}</p>}
@@ -260,7 +244,16 @@ export function ReplicaBoard({
           )
           : null}
       </section>
-      <CanvasBoard {...canvasBoardProps} />
+      <CanvasBoard
+        camera={camera}
+        onCameraChange={onCameraChange}
+        onEffect={onEffect}
+        onSelectionChange={onSelectionChange}
+        projection={view.projection}
+        resolver={resolver}
+        selection={selection}
+        {...mutation}
+      />
     </div>
   )
 }
