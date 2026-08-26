@@ -1,15 +1,23 @@
+import { readFileSync } from "node:fs"
 import { spawnSync } from "node:child_process"
+import { homedir } from "node:os"
 
-const account = process.env.CLOUDFLARE_ACCOUNT_ID
-const token = process.env.CLOUDFLARE_API_TOKEN
+const wranglerConfig = () => {
+  const text = readFileSync(homedir() + "/.config/.wrangler/config/default.toml", "utf8")
+  const token = /oauth_token\s*=\s*"([^"]+)"/.exec(text)?.[1]
+  if (!token) throw new Error("Run wrangler login --device first")
+  return token
+}
+
+const account = process.env.WRANGLER_ACCOUNT_ID ?? "1c83a9fc7665b0f9891ec478df5d6225"
+const token = process.env.CLOUDFLARE_USE_ENV_TOKEN === "1"
+  ? process.env.CLOUDFLARE_API_TOKEN
+  : wranglerConfig()
+if (!token) throw new Error("No Cloudflare token. Run ./scripts/wrangler-login.sh")
 const email = process.env.ACCESS_TEST_EMAIL ?? "contact@wking.dev"
 const allowIframe = process.env.ACCESS_ALLOW_IFRAME !== "0"
 const appName = "proto-remote-app"
 const canvasName = "proto-remote-canvas"
-
-if (!account || !token) {
-  throw new Error("CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN are required")
-}
 
 const api = async (method, path, body) => {
   const response = await fetch("https://api.cloudflare.com/client/v4" + path, {
@@ -32,9 +40,13 @@ const deploy = (name, vars) => {
   for (const [key, value] of Object.entries(vars)) {
     args.push("--var", key + ":" + value)
   }
+  const env = { ...process.env }
+  delete env.CLOUDFLARE_API_TOKEN
+  delete env.CLOUDFLARE_ACCOUNT_ID
   const result = spawnSync("npx", args, {
     cwd: new URL("../" + (name === canvasName ? "canvas" : "app"), import.meta.url),
-    stdio: "inherit"
+    stdio: "inherit",
+    env
   })
   if (result.status) throw new Error("deploy failed for " + name)
 }

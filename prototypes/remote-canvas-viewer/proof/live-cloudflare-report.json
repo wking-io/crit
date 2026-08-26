@@ -1,0 +1,28 @@
+{
+  "canvas": "https://proto-remote-canvas.contact-1c8.workers.dev",
+  "app": "https://proto-remote-app.contact-1c8.workers.dev",
+  "canvasMeta": {
+    "role": "canvas",
+    "origin": "https://proto-remote-canvas.contact-1c8.workers.dev",
+    "appOrigin": "https://proto-remote-app.contact-1c8.workers.dev",
+    "accessOrigin": null
+  },
+  "appMeta": {
+    "role": "app",
+    "origin": "https://proto-remote-app.contact-1c8.workers.dev",
+    "canvasOrigin": "https://proto-remote-canvas.contact-1c8.workers.dev",
+    "accessOrigin": null,
+    "sameSite": "none",
+    "authorized": false,
+    "route": "/"
+  },
+  "checkoutStatus": 200,
+  "checkoutLocation": "",
+  "checkoutCsp": "frame-ancestors https://proto-remote-canvas.contact-1c8.workers.dev",
+  "checkoutXfo": "",
+  "lockedStatus": 200,
+  "lockedCsp": "frame-ancestors 'none'",
+  "lockedXfo": "DENY",
+  "iframeCheckout": "live",
+  "iframeLocked": "blocked"
+}

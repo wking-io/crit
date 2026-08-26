@@ -6,7 +6,8 @@
     "start": "node scripts/dev.mjs",
     "access": "node scripts/access-dev.mjs",
     "prove": "node scripts/prove.mjs",
-    "prove:access": "node scripts/prove-access.mjs"
+    "prove:access": "node scripts/prove-access.mjs",
+    "prove:live": "node scripts/prove-live.mjs"
   },
   "devDependencies": {
     "puppeteer-core": "^24.17.0"

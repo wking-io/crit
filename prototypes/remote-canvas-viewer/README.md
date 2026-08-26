@@ -57,7 +57,12 @@ npm run prove:access
 
 `allow_iframe` off sends `X-Frame-Options: SAMEORIGIN` on the login page. On sends `frame-ancestors` for the canvas. After sign-in the preview sets `CF_Authorization` with `HttpOnly`, `Secure`, and `SameSite=None` unless `ACCESS_SAMESITE=lax`. Those are the documented Access defaults.
 
-A real org still needs a permanent token. `scripts/access-setup.mjs` deploys both Workers and attaches an Access app to `proto-remote-app` only.
+Live Workers on the logged-in account, no Turnstile:
+
+- Canvas `https://proto-remote-canvas.contact-1c8.workers.dev`
+- App `https://proto-remote-app.contact-1c8.workers.dev`
+
+Wrangler OAuth can deploy those. It cannot create Access apps. Protect `proto-remote-app` from the Worker Access tab, allow `contact@wking.dev`, turn on Allow iframe, leave the canvas public. Then `npm run prove:live` should see checkout 302 to Access.
 
 ```
 export CLOUDFLARE_API_TOKEN=...
