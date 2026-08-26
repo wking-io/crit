@@ -49,15 +49,21 @@ export type { FrameSizePreset } from "./frame-breakpoints.js"
 export { ReplicaBoard } from "./replica-board.js"
 export type { ReplicaBoardProps } from "./replica-board.js"
 export {
+  ReplicaConnection,
   ReplicaChangeRejected,
   ReplicaSession,
+  ReplicaSubmitNotice,
+  ReplicaSubscriptionEvent,
   ReplicaSessionUnavailable,
   useReplicaSession
 } from "./replica-session.js"
 export type {
+  ReplicaConnection,
   ReplicaSessionHandle,
   ReplicaSessionPorts,
-  ReplicaSessionRun
+  ReplicaSessionRun,
+  ReplicaSubmitNotice,
+  ReplicaSubscriptionEvent
 } from "./replica-session.js"
 export { ReviewChrome } from "./review-chrome.js"
 export type { ReviewChromeProps } from "./review-chrome.js"

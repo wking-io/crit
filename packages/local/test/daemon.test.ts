@@ -474,6 +474,38 @@ describe("LocalDaemon", () => {
       }))
     }))))
 
+  it("reconciles a successful change without an explicit sync request", () =>
+    Effect.runPromise(Effect.scoped(Effect.gen(function*() {
+      const databasePath = yield* tempDatabasePath
+      const token = "eager-reconcile-token-with-at-least-32-characters"
+      const { client } = yield* clientFor({ databasePath, token })
+      const canvasId = Id.canvas("canvas_eager_reconcile")
+      yield* client.create(AuthorityModel.createCanvas({ canvasId, title: "Original" }))
+      const notifications = yield* client.subscribe(canvasId).pipe(
+        Effect.provide(Socket.layerWebSocketConstructorGlobal)
+      )
+      const drained = yield* notifications.pipe(
+        Stream.mapEffect(() => client.open(canvasId)),
+        Stream.filter((opened) => opened.pending.length === 0),
+        Stream.runHead,
+        Effect.forkChild
+      )
+
+      const receipt = yield* client.change(ReplicaModel.change({
+        canvasId,
+        commands: decodeCanvasCommandBatch([{
+          _tag: "rename-canvas",
+          expectedTitle: "Original",
+          title: "Changed"
+        }])
+      }))
+
+      expect(receipt.view.pending).toHaveLength(1)
+      const synchronized = yield* Fiber.join(drained)
+      expect(synchronized._tag).toBe("Some")
+      if (Option.isSome(synchronized)) expect(synchronized.value.pending).toHaveLength(0)
+    }))))
+
   it("rejects invalid bearer credentials", () => Effect.runPromise(Effect.scoped(Effect.gen(function*() {
     const databasePath = yield* tempDatabasePath
     const { baseUrl, client, representations } = yield* clientFor({

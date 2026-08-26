@@ -47,7 +47,7 @@ interface CanvasBoardBaseProps {
   readonly onCameraChange: (camera: CanvasCamera) => void
   readonly selection: CanvasSelection
   readonly onSelectionChange: (selection: CanvasSelection) => void
-  readonly onEffect?: (effect: ReviewClientEffect) => void
+  readonly onEffect?: ((effect: ReviewClientEffect) => void) | undefined
   readonly className?: string
 }
 

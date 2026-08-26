@@ -9,7 +9,8 @@ import { CanvasId, Id, type InstallationId } from "@crit/domain"
 import {
   CanvasReplica,
   ChangeIdGenerationFailure,
-  ReplicaChangeIds
+  ReplicaChangeIds,
+  type CanvasReplicaService
 } from "@crit/replica"
 import {
   AgentSessionRejected,
@@ -70,6 +71,19 @@ export interface LocalDaemonOptions {
   readonly port?: number
 }
 
+const reconcileEagerly = (replica: CanvasReplicaService) =>
+  (canvasId: CanvasId): Effect.Effect<void> =>
+    replica.sync(canvasId).pipe(
+      Effect.catchTags({
+        ReplicaNotOpen: Effect.ignore,
+        ReplicaCanvasNotFound: Effect.ignore,
+        ReplicaDiverged: Effect.die,
+        ReplicaInvariantFailure: Effect.die
+      }),
+      Effect.forkDetach,
+      Effect.asVoid
+    )
+
 const handlers = (options: LocalDaemonOptions) => HttpApiBuilder.group(
   LocalCanvasApi,
   "canvas",
@@ -92,11 +106,12 @@ const handlers = (options: LocalDaemonOptions) => HttpApiBuilder.group(
         Effect.mapError((failure) => failure._tag === "ReplicaCanvasNotFound"
           ? AuthorityFailure.canvasNotFound({ canvasId: failure.canvasId })
           : failure),
-        Effect.catchTag("ReplicaInvariantFailure", Effect.die)
+        Effect.catchTag("ReplicaInvariantFailure", Effect.die),
+        Effect.tap(() => reconcileEagerly(replica)(params.canvasId))
       ),
       change: Effect.fn(function*({ payload }) {
         const invocation = yield* AuthenticatedInvocation
-        return yield* replica.change(payload, invocation).pipe(
+        const receipt = yield* replica.change(payload, invocation).pipe(
           Effect.mapError((failure) => {
             switch (failure._tag) {
               case "ReplicaNotOpen":
@@ -117,6 +132,8 @@ const handlers = (options: LocalDaemonOptions) => HttpApiBuilder.group(
             ReplicaInvariantFailure: Effect.die
           })
         )
+        yield* reconcileEagerly(replica)(payload.canvasId)
+        return receipt
       }),
       sync: ({ params }) => replica.sync(params.canvasId).pipe(
         Effect.mapError((failure) => failure._tag === "ReplicaNotOpen" || failure._tag === "ReplicaCanvasNotFound"

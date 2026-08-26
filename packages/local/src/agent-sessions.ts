@@ -13,10 +13,11 @@ import {
   AgentSessionToken,
   type AgentSessionDeclaration
 } from "@crit/replica/http"
+import * as SqliteClient from "@effect/sql-sqlite-node/SqliteClient"
 import { NodeCrypto } from "@effect/platform-node"
 import { Context, Crypto, Effect, Encoding, Layer, Option, Ref, Schema } from "effect"
 
-import { makeDatabase, type LocalDatabaseOpenFailure } from "./database.js"
+import { localDatabaseLayer, type LocalDatabaseOpenFailure } from "./database.js"
 
 export const AGENT_SESSION_LIMIT = 256
 
@@ -45,7 +46,7 @@ export class AgentSessions extends Context.Service<AgentSessions, AgentSessionsS
   }) => Layer.Layer<AgentSessions, LocalDatabaseOpenFailure> = (options) => Layer.effect(
     AgentSessions,
     Effect.gen(function*() {
-      const sql = yield* makeDatabase({ path: options.databasePath })
+      const sql = yield* SqliteClient.SqliteClient
       const crypto = yield* Crypto.Crypto
       const live = yield* Ref.make(new Map<string, AgentInvocation>())
       const digestOf = (value: string) => crypto.digest(
@@ -117,5 +118,8 @@ export class AgentSessions extends Context.Service<AgentSessions, AgentSessionsS
         })
       })
     })
-  ).pipe(Layer.provide(NodeCrypto.layer))
+  ).pipe(
+    Layer.provide(localDatabaseLayer({ path: options.databasePath })),
+    Layer.provide(NodeCrypto.layer)
+  )
 }

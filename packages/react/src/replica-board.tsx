@@ -11,10 +11,11 @@ import { Data, Match } from "effect"
 import type { ReactElement } from "react"
 
 import type { CanvasCamera } from "./canvas-camera.js"
-import { CanvasBoard } from "./canvas-board.js"
+import { CanvasBoard, type CanvasBoardProps } from "./canvas-board.js"
 import type { CanvasSelection } from "./canvas-selection.js"
 import type { FrameRepresentationResolver } from "./frame-renderer.js"
 import type { FrameSnapshotter } from "./frame-snapshot.js"
+import type { ReplicaConnection, ReplicaSubmitNotice } from "./replica-session.js"
 import type { ReviewClientEffect } from "./review-actions.js"
 
 interface ReplicaBoardBaseProps {
@@ -25,6 +26,8 @@ interface ReplicaBoardBaseProps {
   readonly selection: CanvasSelection
   readonly onSelectionChange: (selection: CanvasSelection) => void
   readonly presence?: PresenceRoster | undefined
+  readonly connection?: ReplicaConnection | undefined
+  readonly notice?: ReplicaSubmitNotice | undefined
   readonly onEffect?: (effect: ReviewClientEffect) => void
   readonly className?: string
 }
@@ -154,13 +157,43 @@ const statusTone = (status: ReplicaBoardStatus): "status" | "alert" =>
     ? "alert"
     : "status"
 
+const connectionAlert = (
+  connection: ReplicaConnection | undefined
+): string | undefined => connection === undefined
+  ? undefined
+  : Match.value(connection).pipe(Match.tagsExhaustive({
+    live: () => undefined,
+    lost: ({ reason }) =>
+      `Connection lost. ${reason} Showing the last known state.`
+  }))
+
+const noticeAlert = (
+  notice: ReplicaSubmitNotice | undefined
+): string | undefined => notice === undefined
+  ? undefined
+  : Match.value(notice).pipe(Match.tagsExhaustive({
+    rejected: ({ failure }) =>
+      `Your last edit was not applied. ${conflictCopy(failure)}`,
+    unavailable: ({ reason }) => `Your last edit was not applied. ${reason}`
+  }))
+
+const connectionAllowsMutation = (
+  connection: ReplicaConnection | undefined
+): boolean => connection === undefined ||
+  Match.value(connection).pipe(Match.tagsExhaustive({
+    live: () => true,
+    lost: () => false
+  }))
+
 export function ReplicaBoard({
   camera,
   className,
+  connection,
   onCameraChange,
   onEffect,
   onSelectionChange,
   onSubmit,
+  notice,
   presence,
   resolver,
   selection,
@@ -169,8 +202,38 @@ export function ReplicaBoard({
 }: ReplicaBoardProps): ReactElement {
   const status = statusFromPending(view.pending)
   const showPresence = presence !== undefined && presence.people.length > 0
+  const connectionCopy = connectionAlert(connection)
+  const noticeCopy = noticeAlert(notice)
+  const canvasBoardProps: CanvasBoardProps =
+    !connectionAllowsMutation(connection) ||
+      onSubmit === undefined ||
+      snapshotter === undefined
+      ? {
+        camera,
+        onCameraChange,
+        onEffect,
+        onSelectionChange,
+        onSubmit: undefined,
+        projection: view.projection,
+        resolver,
+        selection,
+        snapshotter: undefined
+      }
+      : {
+        camera,
+        onCameraChange,
+        onEffect,
+        onSelectionChange,
+        onSubmit,
+        projection: view.projection,
+        resolver,
+        selection,
+        snapshotter
+      }
   return (
     <div className={className}>
+      {connectionCopy === undefined ? null : <p role="alert">{connectionCopy}</p>}
+      {noticeCopy === undefined ? null : <p role="alert">{noticeCopy}</p>}
       {showPresence
         ? (
           <section
@@ -197,18 +260,7 @@ export function ReplicaBoard({
           )
           : null}
       </section>
-      <CanvasBoard
-        {...(onSubmit === undefined || snapshotter === undefined
-          ? {}
-          : { onSubmit, snapshotter })}
-        camera={camera}
-        onCameraChange={onCameraChange}
-        {...(onEffect === undefined ? {} : { onEffect })}
-        onSelectionChange={onSelectionChange}
-        projection={view.projection}
-        resolver={resolver}
-        selection={selection}
-      />
+      <CanvasBoard {...canvasBoardProps} />
     </div>
   )
 }

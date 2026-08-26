@@ -33,9 +33,11 @@ function CritHostSession({
   })
   return Match.value(session).pipe(Match.tagsExhaustive({
     loading: () => <p role="status">Connecting to Crit…</p>,
-    ready: ({ camera, selection, view }) => (
+    ready: ({ camera, connection, notice, selection, view }) => (
       <ReplicaBoard
         camera={camera}
+        connection={connection}
+        notice={notice}
         onCameraChange={onCameraChange}
         onSelectionChange={onSelectionChange}
         onSubmit={(commands) => {

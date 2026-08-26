@@ -1,6 +1,12 @@
-import { Id, decodeCanvasProjection } from "@crit/domain"
 import {
+  CanvasChangeFailureSchema,
+  Id,
+  decodeCanvasProjection
+} from "@crit/domain"
+import {
+  ReplicaChangeRejected,
   ReplicaSessionUnavailable,
+  ReplicaSubscriptionEvent,
   layerMemory,
   type FrameRepresentationResolver,
   type FrameSnapshotter,
@@ -67,6 +73,14 @@ let root: Root
 
 const render = (element: ReactElement) => root.render(<StrictMode>{element}</StrictMode>)
 const waitFor = (assertion: () => void) => act(async() => vi.waitFor(assertion))
+const setInputValue = (input: HTMLInputElement, value: string) => {
+  const setValue = Object.getOwnPropertyDescriptor(
+    HTMLInputElement.prototype,
+    "value"
+  )?.set
+  setValue?.call(input, value)
+  input.dispatchEvent(new Event("input", { bubbles: true }))
+}
 
 beforeEach(() => {
   vi.stubGlobal("IntersectionObserver", class {
@@ -140,5 +154,57 @@ describe("CritHost", () => {
     await waitFor(() =>
       expect(container.querySelector("[role='alert']")?.textContent).toBe("replica missing")
     )
+  })
+
+  it("passes submit notices and connection loss to the board", async() => {
+    const failure = Schema.decodeUnknownSync(CanvasChangeFailureSchema)({
+      _tag: "entity-not-found",
+      commandIndex: 0,
+      entity: "frame",
+      id: "frame_missing"
+    })
+    const rejected = new ReplicaChangeRejected({ canvasId, failure })
+    let publish: ((event: ReplicaSubscriptionEvent) => void) | undefined
+    const ports: ReplicaSessionPorts = {
+      open: () => Effect.succeed(view),
+      subscribe: (_canvasId, onEvent) => {
+        publish = onEvent
+        return () => undefined
+      },
+      change: () => Effect.fail(rejected)
+    }
+
+    await act(async() => render(
+      <CritHost
+        canvasId={canvasId}
+        ports={ports}
+        resolver={representations}
+        run={makeRun()}
+        snapshotter={representations}
+      />
+    ))
+    await waitFor(() =>
+      expect(container.querySelector("[aria-label='Review controls']"))
+        .toBeInstanceOf(HTMLElement)
+    )
+    const input = container.querySelector("[aria-label='Canvas title']")
+    const form = container.querySelector("form[aria-label='Rename canvas']")
+    if (!(input instanceof HTMLInputElement) || !(form instanceof HTMLFormElement)) {
+      throw new Error("Rename canvas form missing")
+    }
+
+    await act(async() => setInputValue(input, "Updated review"))
+    await act(async() => form.requestSubmit())
+
+    await waitFor(() => expect(container.textContent).toContain(
+      "Your last edit was not applied. Rejected because its frame no longer exists."
+    ))
+    if (publish === undefined) throw new Error("Subscription listener missing")
+    await act(async() => publish(ReplicaSubscriptionEvent.lost({ reason: "socket closed." })))
+
+    await waitFor(() => expect(container.textContent).toContain(
+      "Connection lost. socket closed. Showing the last known state."
+    ))
+    expect(container.querySelector("[aria-label='Review controls']")).toBeNull()
   })
 })
