@@ -63,6 +63,7 @@ Install the bundled Oxlint plugin into the current repository and integrate it w
      "anti-slop/no-chained-type-assertions": "error",
      "anti-slop/no-conditional-empty-object-spread": "error",
      "anti-slop/no-kebab-case-keys": "error",
+     "anti-slop/no-kebab-case-tags": "error",
      "anti-slop/no-known-value-widening": "error",
      "anti-slop/no-module-mocking": "error",
      "anti-slop/no-object-parameters": "error",
