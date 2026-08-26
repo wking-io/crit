@@ -40,7 +40,7 @@ const body = (
 const post = (
   canvasId: string,
   address?: string
-) => SELF.fetch("https://crit.example/canvases", {
+) => SELF.fetch("https://crit.example/canvas", {
   method: "POST",
   headers: {
     "content-type": "application/json",
@@ -78,7 +78,7 @@ describe("Worker Canvas share route", () => {
   })
 
   it("rejects a missing Access identity", async() => {
-    const response = await SELF.fetch("https://crit.example/canvases", {
+    const response = await SELF.fetch("https://crit.example/canvas", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: body("canvas_worker_share_missing_access")
@@ -101,7 +101,7 @@ describe("Worker Canvas share route", () => {
   it("rejects a non-Access Person email as unauthenticated", async() => {
     const input = JSON.parse(body("canvas_worker_share_unspecified"))
     input.person.email = { _tag: "unspecified" }
-    const response = await SELF.fetch("https://crit.example/canvases", {
+    const response = await SELF.fetch("https://crit.example/canvas", {
       method: "POST",
       headers: {
         "content-type": "application/json",
@@ -115,7 +115,7 @@ describe("Worker Canvas share route", () => {
   })
 
   it("rejects invalid request bodies", async() => {
-    const response = await SELF.fetch("https://crit.example/canvases", {
+    const response = await SELF.fetch("https://crit.example/canvas", {
       method: "POST",
       headers: {
         "content-type": "application/json",
@@ -129,7 +129,7 @@ describe("Worker Canvas share route", () => {
   })
 
   it("allows only POST on the Canvas collection", async() => {
-    const response = await SELF.fetch("https://crit.example/canvases")
+    const response = await SELF.fetch("https://crit.example/canvas")
 
     expect(response.status).toBe(405)
     expect(await response.text()).toBe("")

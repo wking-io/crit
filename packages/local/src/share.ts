@@ -5,7 +5,8 @@ import {
 } from "@crit/domain"
 import {
   decodeCanvasSharedWire,
-  encodeShareCanvasWire
+  encodeShareCanvasWire,
+  remoteCanvasCollectionPath
 } from "@crit/protocol"
 import { Effect, FileSystem, Path, Schema } from "effect"
 import {
@@ -193,7 +194,7 @@ export const shareCanvas = (
   })
   const http = yield* HttpClient.HttpClient
   const response = yield* http.execute(HttpClientRequest.bodyJsonUnsafe(
-    HttpClientRequest.post(`${installationOrigin}/canvases`),
+    HttpClientRequest.post(`${installationOrigin}${remoteCanvasCollectionPath}`),
     request
   )).pipe(
     Effect.mapError(() => new ShareRequestFailed({}))

@@ -126,7 +126,7 @@ export class LocalCanvasApiGroup extends HttpApiGroup.make("canvas", { topLevel:
     HttpApiEndpoint.get("status", "/status", {
       success: LocalDaemonStatus
     }),
-    HttpApiEndpoint.get("list", "/canvases", {
+    HttpApiEndpoint.get("list", "/canvas", {
       success: Schema.Array(CanvasListing)
     }),
     HttpApiEndpoint.post("create", "/create", {

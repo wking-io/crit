@@ -1,0 +1,34 @@
+{
+  "kind": "submit-canvas-change",
+  "schemaVersion": 1,
+  "invocation": {
+    "_tag": "person",
+    "principal": {
+      "_tag": "person",
+      "subject": "access|ada@acme.com",
+      "person": {
+        "_tag": "person",
+        "personId": "person_ada",
+        "displayName": "Ada Lovelace",
+        "email": {
+          "_tag": "access",
+          "address": "ada@acme.com"
+        }
+      }
+    }
+  },
+  "change": {
+    "kind": "proposed-canvas-change",
+    "schemaVersion": 2,
+    "changeId": "change_a",
+    "canvasId": "canvas_a",
+    "observedCursor": null,
+    "commands": [
+      {
+        "_tag": "renameCanvas",
+        "expectedTitle": "Old",
+        "title": "New"
+      }
+    ]
+  }
+}

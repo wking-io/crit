@@ -81,7 +81,7 @@ const installationServer = (
         ))
         return
       }
-      if (request.method !== "POST" || request.url !== "/canvases") {
+      if (request.method !== "POST" || request.url !== "/canvas") {
         response.writeHead(404).end()
         return
       }
