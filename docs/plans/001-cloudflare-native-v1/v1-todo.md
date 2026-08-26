@@ -8,14 +8,14 @@ This file is the current inventory. Phase docs own the prove. [Decision record](
 
 ## Next
 
-- [ ] Frame Bridge capability negotiation, route/revision reporting, highlighting, authorized inspection.
+- [ ] Bridge off in ordinary production. Opt-in only on shared review previews.
 
 ## Remaining
 
 ### Local review
 
 Plan: [phase 5](phase-05-review-ui.md), [phase 3](phase-03-local-daemon-and-cli.md), [phase 4](phase-04-representations-and-bridge.md).
-- [ ] Frame Bridge capability negotiation, route/revision reporting, highlighting, authorized inspection.
+- [ ] Frame Bridge capability negotiation, highlighting, authorized inspection.
 - [ ] Bridge off in ordinary production. Opt-in only on shared review previews.
 - [x] Same Frame resolves to localhost for the author and a registered preview for a teammate.
 - [x] Shared Deployment bindings.
@@ -70,6 +70,7 @@ Local Frames authoring on one machine.
 - Local Application binding from the manifest and `--application-origin`
 - Unavailable render for unbound app or missing/corrupt artifact
 - Frame Bridge input relay
+- Unselected Frames use a capture overlay. The sole selected Frame is native-interactive. The host assigns iframe src and can listen for route messages. No session, highlight, or inspect.
 - Local SQLite authority, replica, restart-safe pending work
 - Person and Agent as domain Actors
 - Pending rows distinguish Person and Agent authorship.
