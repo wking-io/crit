@@ -8,14 +8,14 @@ This file is the current inventory. Phase docs own the prove. [Decision record](
 
 ## Next
 
-- [ ] Host UI that can open a Canvas other than `canvas_local`. CLI already can.
+- [ ] Push/pull by change ID and cursor against a remote authority.
 
 ## Remaining
 
 ### Local review
 
 Plan: [phase 5](phase-05-review-ui.md), [phase 3](phase-03-local-daemon-and-cli.md), [phase 4](phase-04-representations-and-bridge.md).
-- [ ] Host UI that can open a Canvas other than `canvas_local`. CLI already can.
+- [x] Host UI that can open a Canvas other than `canvas_local`. CLI already can.
 - [x] Same Frame resolves to localhost for the author and a registered preview for a teammate.
 - [x] Shared Deployment bindings.
 

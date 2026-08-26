@@ -29,6 +29,7 @@ describe("project skill", () => {
 
     expect(projectSkillSource).toContain("crit --help")
     expect(projectSkillSource).toContain("canvas_local")
+    expect(projectSkillSource).toContain("unless the URL names another Canvas")
     expect(projectSkillSource).toContain("applicationRoute")
     expect(projectSkillSource).toContain("webUrl")
     expect(projectSkillSource).toContain("artifact")

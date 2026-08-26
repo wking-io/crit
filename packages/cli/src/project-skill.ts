@@ -16,7 +16,7 @@ crit init
 crit dev
 \`\`\`
 
-\`dev\` prints a bootstrap URL. Give that URL to the person. The browser opens \`canvas_local\`.
+\`dev\` prints a bootstrap URL. Give that URL to the person. The browser opens \`canvas_local\` unless the URL names another Canvas.
 
 Before writing as an agent, begin a session so your work is stamped:
 
