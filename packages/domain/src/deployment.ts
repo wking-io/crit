@@ -5,6 +5,10 @@ import {
   DeploymentId,
   IsoTimestamp
 } from "./ids.js"
+import {
+  canonicalHttpPortFailure,
+  publicDnsHostnameFailure
+} from "./http-authority.js"
 import { NonBlankString } from "./text.js"
 
 const deploymentUrlFailure = (value: string) => {
@@ -24,43 +28,10 @@ const deploymentUrlFailure = (value: string) => {
   if (hostname === undefined) {
     return "A deployment URL must use a DNS hostname"
   }
-  if (hostname !== hostname.toLowerCase()) {
-    return "A deployment URL hostname must be lowercase"
-  }
-  if (
-    hostname.length > 253 ||
-    hostname.endsWith(".") ||
-    !hostname.includes(".") ||
-    hostname === "localhost" ||
-    hostname.endsWith(".localhost")
-  ) {
-    return "A deployment URL must use a canonical public DNS hostname"
-  }
-
-  const labels = hostname.split(".")
-  if (labels.some((label) =>
-    label.length > 63 ||
-    !/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(label)
-  )) {
-    return "A deployment URL contains an invalid DNS label"
-  }
-  if (labels.every((label) => /^(?:[0-9]+|0x[0-9a-f]+)$/.test(label))) {
-    return "A deployment URL cannot use an IP or alternate numeric host"
-  }
-
-  if (port !== undefined) {
-    const portNumber = Number(port)
-    if (
-      port.startsWith("0") ||
-      !Number.isSafeInteger(portNumber) ||
-      portNumber < 1 ||
-      portNumber > 65_535 ||
-      (scheme === "http" && portNumber === 80) ||
-      (scheme === "https" && portNumber === 443)
-    ) {
-      return "A deployment URL port must use a canonical non-default numeric form"
-    }
-  }
+  const hostnameFailure = publicDnsHostnameFailure(hostname, "A deployment URL")
+  if (hostnameFailure !== undefined) return hostnameFailure
+  const portFailure = canonicalHttpPortFailure(scheme, port, "A deployment URL")
+  if (portFailure !== undefined) return portFailure
 
   const parsed = Schema.decodeUnknownResult(Schema.URLFromString)(value)
   if (Result.isFailure(parsed)) {
