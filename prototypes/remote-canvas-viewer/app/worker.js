@@ -182,7 +182,14 @@ export default {
       })
     }
     const headers = {
-      "content-type": "text/html; charset=utf-8"
+      "content-type": "text/html; charset=utf-8",
+      "access-control-allow-origin": env.CANVAS_ORIGIN,
+      "access-control-allow-credentials": "true",
+      "access-control-allow-methods": "GET, HEAD, OPTIONS",
+      "access-control-allow-headers": "content-type"
+    }
+    if (request.method === "OPTIONS") {
+      return new Response(null, { status: 204, headers })
     }
     if (locked) {
       headers["x-frame-options"] = "DENY"

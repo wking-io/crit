@@ -62,7 +62,9 @@ Live Workers on the logged-in account, no Turnstile:
 - Canvas `https://proto-remote-canvas.contact-1c8.workers.dev`
 - App `https://proto-remote-app.contact-1c8.workers.dev`
 
-Wrangler OAuth can deploy those. It cannot create Access apps. Protect `proto-remote-app` from the Worker Access tab, allow `contact@wking.dev`, turn on Allow iframe, leave the canvas public. Then `npm run prove:live` should see checkout 302 to Access.
+Wrangler OAuth can deploy those. It cannot create or edit Access apps. Access is already on `proto-remote-app`. Checkout 302s to `wking-dev.cloudflareaccess.com`. The login page still sends `X-Frame-Options: DENY`.
+
+Turn on Allow iframe and CORS for `https://proto-remote-canvas.contact-1c8.workers.dev` on that Access app. Then `npm run prove:access-live` should flip `allowIframe` to true and `iframeFirst` off `blocked`.
 
 ```
 export CLOUDFLARE_API_TOKEN=...

@@ -1,0 +1,20 @@
+{
+  "canvas": "https://proto-remote-canvas.contact-1c8.workers.dev",
+  "app": "https://proto-remote-app.contact-1c8.workers.dev",
+  "canvasMeta": {
+    "role": "canvas",
+    "origin": "https://proto-remote-canvas.contact-1c8.workers.dev",
+    "appOrigin": "https://proto-remote-app.contact-1c8.workers.dev",
+    "accessOrigin": "https://wking-dev.cloudflareaccess.com"
+  },
+  "checkoutStatus": 302,
+  "checkoutLocationHost": "wking-dev.cloudflareaccess.com",
+  "loginStatus": 200,
+  "loginXfo": "DENY",
+  "loginCsp": "frame-ancestors 'none'; connect-src 'self' http://127.0.0.1:*; default-src https: 'unsafe-inline'",
+  "preflightStatus": 403,
+  "preflightAcao": "",
+  "preflightXfo": "SAMEORIGIN",
+  "iframeFirst": "blocked",
+  "allowIframe": false
+}

@@ -64,6 +64,13 @@ const payload = {
   type: "self_hosted",
   name: "proto-remote-app Access",
   allow_iframe: allowIframe,
+  same_site_cookie_attribute: "none",
+  cors_headers: {
+    allowed_origins: [canvasOrigin],
+    allowed_methods: ["GET", "HEAD", "OPTIONS"],
+    allow_all_headers: true,
+    allow_credentials: true
+  },
   destinations: [{ type: "worker", worker_id: appName }],
   policies: [{
     name: "email",
