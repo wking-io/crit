@@ -879,14 +879,6 @@ export function ReviewFrame({
       url
     })
 
-  useEffect(() => {
-    const frame = frameElementRef.current
-    if (frame === null) return () => {}
-    const stop = (event: Event) => event.stopPropagation()
-    frame.addEventListener("contextmenu", stop)
-    return () => frame.removeEventListener("contextmenu", stop)
-  }, [frameElementRef])
-
   const bindFrameRef = (element: HTMLDivElement | null) => {
     frameElementRef.current = element
     frameRef(element)

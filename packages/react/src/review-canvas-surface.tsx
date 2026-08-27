@@ -77,6 +77,14 @@ export function ReviewCanvasSurface({
       onOpenChange={(open, details) => {
         if (!open) return
         const event = details.event
+        const target = event.target
+        if (
+          target instanceof Element &&
+          target.closest(".crit-frame") !== null
+        ) {
+          details.cancel()
+          return
+        }
         const root = rootRef.current
         if (root === null || !(event instanceof MouseEvent)) {
           actionPointRef.current = null
