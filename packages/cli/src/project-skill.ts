@@ -16,7 +16,7 @@ crit init
 crit dev
 \`\`\`
 
-\`dev\` prints a bootstrap URL. Give that URL to the person. The default page lists existing canvases. After \`crit create\`, give them \`/canvas/<id>\` on that origin. Keep the \`#crit=\` hash.
+\`dev\` prints where Crit is. Open that origin. The default page lists existing canvases. After \`crit create\`, give them \`/canvas/<id>\` on that origin.
 
 Before writing as an agent, begin a session so your work is stamped:
 
@@ -83,5 +83,5 @@ Preview CI uses the \`crit-register-deployment\` skill.
 
 ## Done
 
-\`layout\` shows the intended Frames at the intended geometry. The person has the bootstrap URL if they need to review.
+\`layout\` shows the intended Frames at the intended geometry. The person has the Crit origin if they need to review.
 `
