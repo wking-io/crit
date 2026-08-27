@@ -36,6 +36,10 @@ Do not send credentials, tokens, private reasoning, or storage bindings in Canva
 
 Use `skills/crit-register-deployment/SKILL.md` when GitHub Actions should register a preview origin after deploy.
 
+## Cloudflare installation
+
+Use `skills/install-crit-cloudflare/SKILL.md` when the user wants to deploy Crit in a Cloudflare account. Access is optional. Without Access, each visitor gets their own anonymous person for hosted work.
+
 ## Workspaces
 
 Workspace exists in the data model. v1 does not expose it. Do not offer workspace commands or ask the user to switch Workspaces.

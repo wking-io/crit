@@ -51,6 +51,19 @@ describe("ShareCanvasWire", () => {
     expect(encodeShareCanvasWire(decoded)).toEqual(input)
   })
 
+  it("round-trips an anonymous Person email", () => {
+    const input = {
+      ...shareFields,
+      person: {
+        ...accessPerson,
+        email: { _tag: "unspecified" as const }
+      }
+    }
+    const decoded = decodeShareCanvasWire(input)
+
+    expect(encodeShareCanvasWire(decoded)).toEqual(input)
+  })
+
   it.each([
     ["excess property", { ...shareFields, extra: true }],
     ["wrong kind", { ...shareFields, kind: "canvas-share" }],
@@ -58,10 +71,6 @@ describe("ShareCanvasWire", () => {
     ["missing share ID", { ...shareFields, shareId: undefined }],
     ["missing import ID", { ...shareFields, importId: undefined }],
     ["missing projection digest", { ...shareFields, projectionDigest: undefined }],
-    ["unspecified Person email", {
-      ...shareFields,
-      person: { ...accessPerson, email: { _tag: "unspecified" } }
-    }],
     ["unbranded canvas ID", { ...shareFields, canvasId: "checkout" }]
   ])("rejects %s", (_label, input) => {
     expect(() => decodeShareCanvasWire(input)).toThrow()

@@ -1,5 +1,4 @@
 import {
-  AccessPersonEmail,
   CanvasId,
   CanvasTitle,
   ImportId,
@@ -11,12 +10,6 @@ import {
 } from "@crit/domain"
 import { Schema } from "effect"
 
-const AccessPersonSnapshot = Schema.TaggedStruct("person", {
-  personId: PersonSnapshot.fields.personId,
-  displayName: PersonSnapshot.fields.displayName,
-  email: AccessPersonEmail
-})
-
 export const ShareCanvasWire = Schema.Struct({
   kind: Schema.Literal("share-canvas"),
   schemaVersion: Schema.Literal(2),
@@ -25,7 +18,7 @@ export const ShareCanvasWire = Schema.Struct({
   shareId: ShareId,
   importId: ImportId,
   projectionDigest: Sha256Digest,
-  person: AccessPersonSnapshot
+  person: PersonSnapshot
 })
 export type ShareCanvasWire = typeof ShareCanvasWire.Type
 

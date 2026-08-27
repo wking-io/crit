@@ -23,12 +23,14 @@ const put = (body: Uint8Array, email?: string) => SELF.fetch(path, {
 })
 
 describe("Worker artifact routes", () => {
-  it("requires Access on put and get", async () => {
+  it("allows anonymous artifact put and get", async () => {
     const written = await put(bytes)
-    const read = await SELF.fetch(`${path}?digest=${"sha256:"}${"0".repeat(64)}`)
+    const stored = decodeArtifactStoredWire(await written.json())
+    const read = await SELF.fetch(`${path}?digest=${stored.digest}`)
 
-    expect(written.status).toBe(401)
-    expect(read.status).toBe(401)
+    expect(written.status).toBe(200)
+    expect(read.status).toBe(200)
+    expect(new Uint8Array(await read.arrayBuffer())).toEqual(bytes)
   })
 
   it("stores bytes and converges on an identical retry", async () => {

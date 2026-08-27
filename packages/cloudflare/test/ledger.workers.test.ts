@@ -255,13 +255,12 @@ describe("Worker canvas ledger routes", () => {
     expect(changedFrame?.statusChangedByChangeId).toBe(teammateChangeId)
   })
 
-  it("rejects a missing Access identity", async() => {
+  it("allows anonymous ledger reads", async() => {
     const canvasId = Id.canvas("canvas_worker_ledger_auth")
     await share(canvasId)
     const response = await SELF.fetch(`https://crit.example${remoteCanvasChangesPath(canvasId)}`)
 
-    expect(response.status).toBe(401)
-    expect(await response.text()).toBe("")
+    expect(response.status).toBe(200)
   })
 
   it("rejects a Person Access email that does not match the request", async() => {

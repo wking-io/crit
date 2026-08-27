@@ -47,17 +47,20 @@ export type {
 export {
   AccessPersonAlreadyBound,
   AccessPersonBinding,
+  AnonymousInstallationBound,
   AccessPersonRequestFailed,
   AccessPersonResponseInvalid,
   AccessPersonResponseRejected,
   AccessPersonUnauthenticated,
   bindAccessPerson,
   InstallationUrlInvalid,
+  LoginResult,
   loginToInstallation
 } from "./login.js"
 export type {
   BindAccessPersonOptions,
-  LoginToInstallationOptions
+  LoginToInstallationOptions,
+  LoginResult
 } from "./login.js"
 export {
   CanvasShareSuccess,

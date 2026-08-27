@@ -14,9 +14,9 @@ import {
   RepresentationRuntime,
   RepresentationRuntimeLive
 } from "@crit/representations"
-import { Crypto, Effect, Layer, Option, Schema } from "effect"
+import { Crypto, Effect, Layer, Schema } from "effect"
 
-import { readAccessEmail } from "./access.js"
+import { resolveCallerIdentity, respondWithCallerCookie } from "./caller.js"
 import { listControlDeployments } from "./deployments.js"
 
 const review = Schema.decodeUnknownSync(DeploymentChannel)("review")
@@ -47,21 +47,23 @@ export const handleHostedApplicationResolve = async (
   request: Request,
   env: Cloudflare.Env
 ): Promise<Response> => {
-  if (Option.isNone(readAccessEmail(request))) return emptyResponse(401)
-  if (request.method !== "POST") return emptyResponse(405)
+  const resolved = resolveCallerIdentity(request)
+  const respond = (response: Response) =>
+    respondWithCallerCookie(response, request, resolved)
+  if (request.method !== "POST") return respond(emptyResponse(405))
 
   let input: unknown
   try {
     input = await request.json()
   } catch {
-    return emptyResponse(400)
+    return respond(emptyResponse(400))
   }
 
   let decoded: ReturnType<typeof decodeHostedApplicationResolveRequest>
   try {
     decoded = decodeHostedApplicationResolveRequest(input)
   } catch {
-    return emptyResponse(400)
+    return respond(emptyResponse(400))
   }
 
   try {
@@ -79,14 +81,14 @@ export const handleHostedApplicationResolve = async (
       return yield* service.resolve(decoded.representation)
     }).pipe(Effect.provide(runtime)))
     const response = decodeHostedApplicationResolveResponse(plan)
-    return new Response(
+    return respond(new Response(
       JSON.stringify(encodeHostedApplicationResolveResponse(response)),
       {
         status: 200,
         headers: { "content-type": "application/json" }
       }
-    )
+    ))
   } catch {
-    return emptyResponse(500)
+    return respond(emptyResponse(500))
   }
 }

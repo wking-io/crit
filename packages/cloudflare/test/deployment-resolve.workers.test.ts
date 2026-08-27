@@ -55,11 +55,14 @@ const resolve = (
 }
 
 describe("Worker hosted application route resolve", () => {
-  it("requires Access", async() => {
+  it("allows anonymous resolve", async() => {
+    const registered = await postDeployment(checkout.applicationId)
     const response = await resolve(checkout, false)
+    const plan = decodeHostedApplicationResolveResponse(await response.json())
 
-    expect(response.status).toBe(401)
-    expect(await response.text()).toBe("")
+    expect(registered.status).toBe(200)
+    expect(response.status).toBe(200)
+    expect(plan._tag).toBe("iframe")
   })
 
   it("resolves a registered review deployment into an iframe URL", async() => {

@@ -23,8 +23,16 @@ export {
 } from "./manifest.js"
 export {
   AccessAuthenticatedPersonWire,
+  AnonymousPersonWire,
+  InstallationPersonWire,
+  critPersonCookieName,
+  critPersonIdHeader,
   decodeAccessAuthenticatedPersonWire,
-  encodeAccessAuthenticatedPersonWire
+  decodeAnonymousPersonWire,
+  decodeInstallationPersonWire,
+  encodeAccessAuthenticatedPersonWire,
+  encodeAnonymousPersonWire,
+  encodeInstallationPersonWire
 } from "./identity.js"
 export {
   CanvasDirectoryEntryWire,

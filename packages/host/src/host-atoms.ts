@@ -62,12 +62,17 @@ const localLayer = (descriptor: LocalBrowserConnectionDescriptor) => {
   return Layer.merge(clients, sessionStore())
 }
 
+const hostedHttpLayer = Layer.mergeAll(
+  FetchHttpClient.layer,
+  Layer.succeed(FetchHttpClient.RequestInit, { credentials: "include" })
+)
+
 const hostedLayer = () => Layer.mergeAll(
   HostedReviewClient.layer({ baseUrl: "" }),
   RemoteCanvasAuthority.layer(RemoteAuthorityOptions.make({ baseUrl: "" })),
   HttpArtifactStore.layer({ baseUrl: "" }),
   sessionStore()
-)
+).pipe(Layer.provide(hostedHttpLayer))
 
 const connectingScreen = HostScreen.connecting()
 const connectingIndex = HostIndexScreen.connecting()

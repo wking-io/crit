@@ -48,8 +48,8 @@ const share = (canvasId: string, title: string) => {
 }
 
 describe("Worker canvas directory", () => {
-  it("requires Access and lists shared canvases", async () => {
-    const denied = await SELF.fetch("https://crit.example/canvas")
+  it("lists shared canvases with or without Access", async () => {
+    const anonymous = await SELF.fetch("https://crit.example/canvas")
     await share("canvas_directory_one", "One")
     await share("canvas_directory_two", "Two")
     const listed = await SELF.fetch("https://crit.example/canvas", {
@@ -57,7 +57,7 @@ describe("Worker canvas directory", () => {
     })
     const body = decodeCanvasDirectoryWire(await listed.json())
 
-    expect(denied.status).toBe(401)
+    expect(anonymous.status).toBe(200)
     expect(listed.status).toBe(200)
     expect(body.canvases.map((row) => row.canvasId).sort()).toEqual([
       "canvas_directory_one",
