@@ -183,48 +183,49 @@ export function ReviewChrome({
   return (
     <aside
       aria-label="Review controls"
-      style={{
-        background: "white",
-        display: "grid",
-        gap: 8,
-        left: 8,
-        maxWidth: 360,
-        padding: 8,
-        position: "absolute",
-        top: 8,
-        zIndex: 10_000
-      }}
+      className="crit-review-chrome"
       onPointerDown={(event) => event.stopPropagation()}
     >
-      <ReviewHelpSurface>
-        <div aria-label="Review actions" role="toolbar">
-          {toolbarActions.map((entry) => (
-            <button
-              aria-label={entry.label}
-              disabled={entry.id === "snapshot" && snapshotCapturing}
+      <ReviewHelpSurface className="crit-overlay-container">
+        <div className="crit-toolbar">
+          <span className="crit-toolbar__title">
+            <span>{projection.title}</span>
+          </span>
+          <span className="crit-toolbar__divider" />
+          <div
+            aria-label="Review actions"
+            className="crit-toolbar__group"
+            role="toolbar"
+          >
+            {toolbarActions.map((entry) => (
+              <button
+                aria-label={entry.label}
+                className="crit-toolbar__action"
+                disabled={entry.id === "snapshot" && snapshotCapturing}
+                key={entry.id}
+                type="button"
+                {...reviewActionHelpTarget(entry)}
+                onClick={() => run(entry.id)}
+              >
+                {entry.label}
+              </button>
+            ))}
+          </div>
+          {visibleForms.map((entry) => (
+            <ReviewActionForm
+              inputLabel={entry.inputLabel}
               key={entry.id}
-              type="button"
-              {...reviewActionHelpTarget(entry)}
-              onClick={() => run(entry.id)}
-            >
-              {entry.label}
-            </button>
+              onRun={run}
+              policy={entry.policy}
+            />
           ))}
+          {snapshotCapturing
+            ? <p role="status">Capturing snapshot.</p>
+            : null}
+          {SnapshotRunState.$is("failed")(snapshot.state)
+            ? <p role="alert">Snapshot failed.</p>
+            : null}
         </div>
-        {visibleForms.map((entry) => (
-          <ReviewActionForm
-            inputLabel={entry.inputLabel}
-            key={entry.id}
-            onRun={run}
-            policy={entry.policy}
-          />
-        ))}
-        {snapshotCapturing
-          ? <p role="status">Capturing snapshot.</p>
-          : null}
-        {SnapshotRunState.$is("failed")(snapshot.state)
-          ? <p role="alert">Snapshot failed.</p>
-          : null}
         <ReviewHelpPanel />
       </ReviewHelpSurface>
     </aside>

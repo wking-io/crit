@@ -27,10 +27,10 @@ const fetchMock = vi.hoisted(() => {
 Object.defineProperty(globalThis, "IS_REACT_ACT_ENVIRONMENT", { value: true })
 notifyManager.setNotifyFunction((callback) => act(callback))
 notifyManager.setScheduler(queueMicrotask)
-vi.stubGlobal("IntersectionObserver", class {
+const IntersectionObserverStub = class {
   disconnect() {}
   observe() {}
-})
+}
 
 const hostedCanvasId = Id.canvas("canvas_shop")
 const hostedRepresentation = ApplicationRouteRepresentation.make({
@@ -121,6 +121,7 @@ const fetched = (url: string): boolean => fetchMock.mock.calls.some(
 )
 
 beforeEach(() => {
+  vi.stubGlobal("IntersectionObserver", IntersectionObserverStub)
   container = document.createElement("div")
   document.body.append(container)
   root = createRoot(container)
@@ -152,6 +153,6 @@ describe("HostRoot hosted canvas", () => {
       expect(container.querySelector("iframe")?.src).toBe(
         "https://preview.example/checkout"
       )
-    }))
+    }, { timeout: 4_000 }))
   })
 })

@@ -130,7 +130,17 @@ describe("CanvasBoard", () => {
     expect(frame.style.height).toBe("200px")
     expect(frame.style.zIndex).toBe("0")
     expect(frame.getAttribute("data-review-status")).toBe("in-progress")
+    expect(frame.className).toBe("crit-frame")
     expect(frame.textContent).toContain("In progress")
+    expect(container.querySelector("[data-crit-styles]")).toBeInstanceOf(
+      HTMLStyleElement
+    )
+    expect(container.querySelector("[data-crit-styles]")?.textContent)
+      .toContain("--crit-paper")
+    expect(container.querySelector(".crit-canvas")).toBe(board)
+    expect(container.querySelector(".crit-canvas__plane")).not.toBeNull()
+    expect(container.querySelector(".crit-frame__chrome")).not.toBeNull()
+    expect(container.querySelector(".crit-frame__viewport")).not.toBeNull()
     expect(container.querySelector("[aria-label='Check the price by Ada']")).toBeNull()
     expect(container.querySelector("iframe")?.getAttribute("src")).toBe(url)
   })

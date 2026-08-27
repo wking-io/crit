@@ -16,6 +16,8 @@ export {
 } from "./canvas-camera-session.js"
 export { CanvasBoard } from "./canvas-board.js"
 export type { CanvasBoardProps } from "./canvas-board.js"
+export { critStyles } from "./crit-styles.js"
+export { frameStatus, frameStatusChrome, reviewStatusLabel } from "./frame-status-chrome.js"
 export {
   CanvasAlignment,
   CanvasArrangement,

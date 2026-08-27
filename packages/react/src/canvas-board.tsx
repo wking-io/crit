@@ -1,9 +1,7 @@
 import {
   type CanvasCommandBatch,
   type CanvasItemRef,
-  type CanvasProjection,
-  type Frame,
-  type ReviewStatus
+  type CanvasProjection
 } from "@crit/domain"
 import {
   connectCanvasInput,
@@ -14,7 +12,6 @@ import {
   useEffect,
   useLayoutEffect,
   useRef,
-  type CSSProperties,
   type PointerEvent as ReactPointerEvent,
   type ReactElement
 } from "react"
@@ -31,6 +28,7 @@ import {
   CanvasSelectionCommand,
   type CanvasSelectionCommand as CanvasSelectionCommandValue
 } from "./canvas-selection.js"
+import { critStyles } from "./crit-styles.js"
 import {
   FrameRenderer,
   type FrameRepresentationResolver
@@ -38,6 +36,7 @@ import {
 import type { FrameSnapshotter } from "./frame-snapshot.js"
 import { framesById } from "./projection-index.js"
 import { ReviewChrome } from "./review-chrome.js"
+import { ReviewFrame, canvasUiScale } from "./review-frame.js"
 import { ReviewSelection, type ReviewClientEffect } from "./review-actions.js"
 import { useReviewEffects } from "./review-effects.js"
 
@@ -70,28 +69,12 @@ const ariaSelected = (
 ): true | undefined =>
   CanvasSelection.has(selection, item) ? true : undefined
 
-const itemStyle = (
-  geometry: Frame["geometry"],
-  zIndex: number
-): CSSProperties => ({
-  height: geometry.height,
-  left: geometry.x,
-  position: "absolute",
-  top: geometry.y,
-  width: geometry.width,
-  zIndex
-})
+const boardClassName = (className: string | undefined): string =>
+  className === undefined ? "crit-canvas" : `crit-canvas ${className}`
 
 const isAdditiveSelection = (
   event: Pick<ReactPointerEvent, "ctrlKey" | "metaKey" | "shiftKey">
 ): boolean => event.ctrlKey || event.metaKey || event.shiftKey
-
-const reviewStatusLabel = {
-  "in-progress": "In progress",
-  "ready-for-review": "Ready for review",
-  approved: "Approved",
-  "changes-requested": "Changes requested"
-} satisfies Record<ReviewStatus, string>
 
 export function CanvasBoard({
   camera,
@@ -192,69 +175,38 @@ export function CanvasBoard({
 
   const items = frameEntries.length === 0
     ? (
-      <p role="status">{`${projection.title} has no Frames.`}</p>
+      <p className="crit-message" role="status">{`${projection.title} has no Frames.`}</p>
     )
     : frameEntries.map(({ frame, item, zIndex }) => {
       const { frameId } = item
       const frameIsInputTarget = CanvasInputTarget.$is("frame")(inputTarget) &&
         inputTarget.frameId === frameId
       return (
-        <div
-          ref={(element) => {
+        <ReviewFrame
+          capture={!frameIsInputTarget}
+          frame={frame}
+          frameRef={(element) => {
             if (element === null) frameElementsRef.current.delete(frameId)
             else frameElementsRef.current.set(frameId, element)
           }}
-          aria-label={frame.title}
-          aria-selected={ariaSelected(selection, item)}
-          data-frame-id={frameId}
-          data-review-status={frame.status}
+          geometry={itemDrag.geometryFor(frame)}
           key={frame.frameId}
-          role="option"
-          style={itemStyle(itemDrag.geometryFor(frame), zIndex)}
-          onPointerDown={(event) => {
-            selectFrame(item, event)
-            itemDrag.begin(frame, "move", event)
-          }}
+          selected={CanvasSelection.has(selection, item)}
+          selectedLabel={ariaSelected(selection, item)}
+          uiScale={canvasUiScale(camera.zoom)}
+          zIndex={zIndex}
+          onMove={(event) => itemDrag.begin(frame, "move", event)}
+          onResize={onSubmit === undefined
+            ? undefined
+            : (event) => itemDrag.begin(frame, "resize", event)}
+          onSelect={(event) => selectFrame(item, event)}
         >
-          {reviewStatusLabel[frame.status]}
           <FrameRenderer
             frame={frame}
             paused={reviewEffects.isFramePaused(frameId)}
             resolver={resolver}
           />
-          {frameIsInputTarget
-            ? null
-            : (
-              <div
-                aria-hidden
-                data-crit-frame-capture=""
-                style={{
-                  inset: 0,
-                  pointerEvents: "auto",
-                  position: "absolute"
-                }}
-              />
-            )}
-          {CanvasSelection.has(selection, item) && onSubmit !== undefined
-            ? (
-              <span
-                aria-label={`Resize ${frame.title}`}
-                style={{
-                  bottom: 0,
-                  cursor: "se-resize",
-                  position: "absolute",
-                  right: 0
-                }}
-                onPointerDown={(event) => {
-                  event.stopPropagation()
-                  itemDrag.begin(frame, "resize", event)
-                }}
-              >
-                Resize
-              </span>
-            )
-            : null}
-        </div>
+        </ReviewFrame>
       )
     })
 
@@ -265,9 +217,15 @@ export function CanvasBoard({
       ref={rootRef}
       aria-label={projection.title}
       aria-multiselectable={hasItems ? true : undefined}
-      className={className}
+      className={boardClassName(className)}
       role={hasItems ? "listbox" : undefined}
-      style={{ position: "relative" }}
+      style={{
+        height: "100%",
+        minHeight: 420,
+        overflow: "clip",
+        position: "relative",
+        width: "100%"
+      }}
       onPointerCancel={itemDrag.cancel}
       onPointerDown={(event) => {
         const target = event.target
@@ -280,6 +238,7 @@ export function CanvasBoard({
       onPointerMove={itemDrag.update}
       onPointerUp={itemDrag.finish}
     >
+      <style data-crit-styles="">{critStyles}</style>
       {onSubmit === undefined
         ? null
         : (
@@ -293,7 +252,11 @@ export function CanvasBoard({
           />
         )}
       {hasItems
-        ? <div style={canvasCameraStyle(camera)}>{items}</div>
+        ? (
+          <div className="crit-canvas__plane" style={canvasCameraStyle(camera)}>
+            {items}
+          </div>
+        )
         : items}
     </section>
   )
