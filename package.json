@@ -23,16 +23,11 @@
   "workspaces": [
     "packages/*"
   ],
-  "bin": {
-    "crit": "dist/cli.js"
-  },
   "files": [
-    "dist",
     "skills",
     "LICENSE",
     "README.md",
-    "ARCHITECTURE.md",
-    "src/react/base-tokens.css"
+    "ARCHITECTURE.md"
   ],
   "exports": {
     ".": {
@@ -76,7 +71,6 @@
     "playground:alpha:agent": "npm run build --silent && cd playground && CRIT_FEATURE_PROFILE=alpha node ../dist/cli.js",
     "playground:release": "CRIT_PLAYGROUND_MODE=release npm run dev",
     "postbuild": "node scripts/mark-executable.mjs",
-    "prepack": "npm run build",
     "prepublishOnly": "npm run verify",
     "generate:glyphs": "node scripts/generate-glyphs.mjs",
     "hosted:deploy": "npm run hosted:stage && npx wrangler deploy --config packages/cloudflare/wrangler.jsonc --env production",
