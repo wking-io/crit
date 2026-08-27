@@ -44,7 +44,7 @@ Local only. Plan: [decision record](decision-record.md), [ADR 0001](../../adr/00
 Plan: [phase 9](phase-09-release.md), [testing](testing.md).
 
 - [x] Documented customer Cloudflare install.
-- [ ] Backup, restore, retention, key rotation, incident runbooks.
+- [x] Backup, restore, retention, key rotation, incident runbooks.
 - [ ] Protocol negotiation with actionable client errors.
 - [ ] Published SDK for domain, client, React, Frame Bridge, and testing.
 - [ ] Alpha removed from the release artifact.
@@ -91,6 +91,7 @@ Local Frames authoring on one machine.
 - The hosted Worker serves the canvas list at `/`, lists shared canvases from D1 at `GET /canvas`, and stores immutable artifacts in R2. Ledger JSON stays on `/canvas/:id` when the request is not a document.
 - The Worker serves the host document at `/` and `/canvas/:id`. A public HTTPS origin with no `#crit=` boots hosted ports over directory, ledger, artifacts, and `POST /representations/application-route`. Local `#crit=` still talks to the daemon. Deploy copies `packages/host/dist-web` into Worker assets.
 - [`docs/install/cloudflare.md`](../../install/cloudflare.md) documents customer Cloudflare install: build the review website, create Cloudflare resources, configure Wrangler and Access, deploy, verify, and connect authors.
+- Installation operations runbooks for backup, restore, retention, key rotation, and incident response live in `docs/runbooks/`.
 
 ## Out of v1
 
