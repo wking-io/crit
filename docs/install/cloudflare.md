@@ -6,6 +6,8 @@ Authors keep working locally with `crit dev`. After they share a Canvas, teammat
 
 This guide covers the Crit installation only. If you need to wire up live app previews inside Frames, use the [`install-crit-frame-bridge`](../../skills/install-crit-frame-bridge/SKILL.md) skill separately.
 
+Agents deploying Crit should use the [`install-crit-cloudflare`](../../skills/install-crit-cloudflare/SKILL.md) skill. Crit v1 requires Cloudflare Access on the installation URL to identify people. A public URL without Access is not a supported team setup.
+
 ## What you are setting up
 
 You deploy one Crit installation in your Cloudflare account. That installation provides:

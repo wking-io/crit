@@ -53,7 +53,7 @@ Crit runs in the customer's Cloudflare account:
 
 One Installation is one tenant. Crit v1 has no Organization model.
 
-To deploy the Installation Worker in your account, follow [`docs/install/cloudflare.md`](docs/install/cloudflare.md).
+To deploy the Installation Worker in your account, follow [`docs/install/cloudflare.md`](docs/install/cloudflare.md). Agents should use the [`install-crit-cloudflare`](skills/install-crit-cloudflare/SKILL.md) skill.
 
 ## Live pages
 

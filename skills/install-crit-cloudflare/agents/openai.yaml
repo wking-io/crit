@@ -1,0 +1,4 @@
+interface:
+  display_name: "Install Crit on Cloudflare"
+  short_description: "Deploy Crit with Access on company hostname or workers.dev"
+  default_prompt: "Use $install-crit-cloudflare to deploy Crit in our Cloudflare account."
