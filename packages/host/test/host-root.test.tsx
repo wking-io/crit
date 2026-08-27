@@ -128,6 +128,43 @@ describe("HostRoot", () => {
     ))
   }, 15_000)
 
+  it("lists local canvases after a successful list", async() => {
+    const descriptor = LocalBrowserConnection.make({
+      baseUrl: "http://127.0.0.1:5173",
+      instance
+    })
+    let release!: (response: Response) => void
+    const listed = new Promise<Response>((resolve) => {
+      release = resolve
+    })
+    fetchMock.mockImplementation(() => listed)
+
+    await act(async() => render(
+      hostAt("/", LocalBrowserConnection.encode(descriptor))
+    ))
+    expect(container.querySelector("[role='status']")?.textContent).toBe(
+      "Connecting to Crit…"
+    )
+
+    await act(async() => {
+      release(new Response(JSON.stringify([{
+        canvasId: "canvas_launch_lab",
+        title: "Launch lab"
+      }]), {
+        status: 200,
+        headers: { "content-type": "application/json" }
+      }))
+    })
+
+    await act(async() => vi.waitFor(() => {
+      expect(container.querySelector("a")?.textContent).toBe("Launch lab")
+    }))
+    expect(container.querySelector("[role='status']")).toBeNull()
+    expect(fetched(
+      `http://127.0.0.1:5173/browser/${instance}/api/v1/canvas`
+    )).toBe(true)
+  })
+
   it("lists hosted canvases from the same-origin directory", async() => {
     fetchMock.mockImplementation(async() => new Response(JSON.stringify({
       kind: "canvas-directory",
