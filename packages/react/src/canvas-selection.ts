@@ -3,6 +3,8 @@ import {
   type CanvasItemRef,
   type FrameId
 } from "@crit/domain"
+
+export type { CanvasItemRef }
 import { Data, Match, Schema } from "effect"
 
 const itemKey = (item: CanvasItemRef): string => `frame:${item.frameId}`
@@ -64,10 +66,20 @@ const applyCanvasSelectionCommand = (
   }))
 }
 
+const selectionsEqual = (
+  left: CanvasSelection,
+  right: CanvasSelection
+): boolean => {
+  if (left === right) return true
+  if (left.length !== right.length) return false
+  return left.every((item, index) => itemKey(item) === itemKey(right[index]!))
+}
+
 export const CanvasSelection = {
   make: makeCanvasSelection,
   schema: CanvasSelectionValue,
   has: hasCanvasItem,
+  equal: selectionsEqual,
   apply: applyCanvasSelectionCommand,
   inputTarget: (selection: CanvasSelection | undefined): CanvasInputTarget => {
     if (selection === undefined || selection.length !== 1) return cameraTarget

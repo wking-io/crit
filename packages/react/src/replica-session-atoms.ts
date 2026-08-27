@@ -13,6 +13,7 @@ import {
   applyOpenedReplicaSession,
   applyRefreshReplicaSession,
   applySubmittedReplicaSession,
+  defaultReplicaChrome,
   liveReplicaConnection,
   loadingReplicaSession,
   openedReplicaSession,
@@ -20,6 +21,7 @@ import {
   ReplicaConnection,
   ReplicaSession,
   ReplicaSessionUnavailable,
+  type ReplicaChrome,
   type ReplicaSessionHandle,
   type ReplicaSessionPorts
 } from "./replica-session.js"
@@ -90,6 +92,7 @@ export const replicaSessionAtoms = Atom.family((canvasId: CanvasId) =>
   Atom.family((ports: ReplicaSessionPorts) => {
     const runtime = Atom.runtime(sessionStoreLayer())
     const state = Atom.make<ReplicaSession>(loadingReplicaSession)
+    const chrome = Atom.make<ReplicaChrome>(defaultReplicaChrome)
     const refresh = runtime.fn((_: void, get) =>
       refreshReplicaView(get.registry, state, canvasId, ports)
     ).pipe(Atom.setIdleTTL(replicaIdleTtl))
@@ -102,10 +105,14 @@ export const replicaSessionAtoms = Atom.family((canvasId: CanvasId) =>
           (close) => Effect.sync(close)
         )
         const opened = yield* openedReplicaSession({ canvasId, ports })
+        get.registry.set(chrome, {
+          camera: opened.camera,
+          selection: opened.selection
+        })
         writeSession(
           get.registry,
           state,
-          applyOpenedReplicaSession(get.registry.get(state), opened.opened, opened)
+          applyOpenedReplicaSession(get.registry.get(state), opened.opened)
         )
         yield* Effect.never
       })
@@ -122,11 +129,6 @@ export const replicaSessionAtoms = Atom.family((canvasId: CanvasId) =>
       Effect.gen(function*() {
         const current = get.registry.get(state)
         if (!ReplicaSession.$is("ready")(current)) return
-        writeSession(
-          get.registry,
-          state,
-          patchReadyReplicaSession(current, { camera })
-        )
         yield* Effect.ignore(setCanvasCameraSession({ camera, canvasId }))
       })
     ).pipe(Atom.setIdleTTL(replicaIdleTtl))
@@ -134,11 +136,6 @@ export const replicaSessionAtoms = Atom.family((canvasId: CanvasId) =>
       Effect.gen(function*() {
         const current = get.registry.get(state)
         if (!ReplicaSession.$is("ready")(current)) return
-        writeSession(
-          get.registry,
-          state,
-          patchReadyReplicaSession(current, { selection })
-        )
         yield* Effect.ignore(setCanvasSelectionSession({ canvasId, selection }))
       })
     ).pipe(Atom.setIdleTTL(replicaIdleTtl))
@@ -160,7 +157,7 @@ export const replicaSessionAtoms = Atom.family((canvasId: CanvasId) =>
         return changed
       })
     ).pipe(Atom.setIdleTTL(replicaIdleTtl))
-    return { session, setCamera, setSelection, submit }
+    return { chrome, session, setCamera, setSelection, submit }
   })
 )
 
@@ -170,8 +167,9 @@ export const useReplicaSession = (args: {
 }): ReplicaSessionHandle => {
   const atoms = replicaSessionAtoms(args.canvasId)(args.ports)
   const session = useAtomValue(atoms.session)
+  const chrome = useAtomValue(atoms.chrome)
   const onCameraChange = useAtomSet(atoms.setCamera)
   const onSelectionChange = useAtomSet(atoms.setSelection)
   const submit = useAtomSet(atoms.submit, { mode: "promise" })
-  return { session, onCameraChange, onSelectionChange, submit }
+  return { session, chrome, onCameraChange, onSelectionChange, submit }
 }

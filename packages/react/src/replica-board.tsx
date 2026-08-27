@@ -213,10 +213,12 @@ export function ReplicaBoard({
   const showPresence = presence !== undefined && presence.people.length > 0
   const connectionCopy = connectionAlert(connection)
   const noticeCopy = noticeAlert(notice)
-  const mutation = connectionAllowsMutation(connection) &&
-    onSubmit !== undefined &&
-    snapshotter !== undefined
-    ? { onSubmit, snapshotter }
+  const mutation = onSubmit !== undefined && snapshotter !== undefined
+    ? {
+      mutable: connectionAllowsMutation(connection),
+      onSubmit,
+      snapshotter
+    }
     : {}
   const alerts = [connectionCopy, noticeCopy].filter(
     (copy): copy is string => copy !== undefined

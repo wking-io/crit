@@ -286,7 +286,7 @@ describe("CanvasBoard camera", () => {
 })
 
 describe("CanvasBoard camera navigation", () => {
-  it("notifies the host of a wheel pan", async() => {
+  it("writes a wheel pan to the plane without a camera snapshot", async() => {
     const onCameraChange = vi.fn()
     await act(async() => render(
       <CanvasBoard
@@ -304,11 +304,13 @@ describe("CanvasBoard camera navigation", () => {
     stubBoardRect(board)
 
     const event = dispatchWheel(window)
+    const world = worldLayer(board)
 
     expect(event.defaultPrevented).toBe(true)
-    expect(onCameraChange).toHaveBeenCalledWith(
-      CanvasCamera.make({ x: 6, y: 12, zoom: 1 })
-    )
+    expect(world).toBeInstanceOf(HTMLElement)
+    if (!(world instanceof HTMLElement)) return
+    expect(world.style.transform).toBe("translate(6px, 12px) scale(1)")
+    expect(onCameraChange).not.toHaveBeenCalled()
   })
 
   it("does not listen for bridged Frame wheel pan messages", async() => {
@@ -422,11 +424,13 @@ describe("CanvasBoard camera navigation", () => {
     stubBoardRect(board)
 
     const event = dispatchWheel(window)
+    const world = worldLayer(board)
 
     expect(event.defaultPrevented).toBe(true)
-    expect(onCameraChange).toHaveBeenCalledWith(
-      CanvasCamera.make({ x: 6, y: 12, zoom: 1 })
-    )
+    expect(world).toBeInstanceOf(HTMLElement)
+    if (!(world instanceof HTMLElement)) return
+    expect(world.style.transform).toBe("translate(6px, 12px) scale(1)")
+    expect(onCameraChange).not.toHaveBeenCalled()
   })
 
 })
@@ -467,10 +471,12 @@ describe("ReplicaBoard camera", () => {
     stubBoardRect(board)
 
     const event = dispatchWheel(window)
+    const world = worldLayer(board)
 
     expect(event.defaultPrevented).toBe(true)
-    expect(onCameraChange).toHaveBeenCalledWith(
-      CanvasCamera.make({ x: 6, y: 12, zoom: 1 })
-    )
+    expect(world).toBeInstanceOf(HTMLElement)
+    if (!(world instanceof HTMLElement)) return
+    expect(world.style.transform).toBe("translate(6px, 12px) scale(1)")
+    expect(onCameraChange).not.toHaveBeenCalled()
   })
 })

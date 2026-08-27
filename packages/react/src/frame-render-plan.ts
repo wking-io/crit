@@ -45,9 +45,7 @@ export const frameRenderPlanFor = (
   )
   const existing = planAtoms.get(cacheKey)
   if (existing !== undefined) return existing
-  const atom = Atom.make(resolver.resolve(frame.representation)).pipe(
-    Atom.setIdleTTL(0)
-  )
+  const atom = Atom.make(resolver.resolve(frame.representation))
   planAtoms.set(cacheKey, atom)
   return atom
 }

@@ -21,6 +21,16 @@ export {
   fitCameraToFrames
 } from "./canvas-camera.js"
 export {
+  applyCanvasPlaneCamera,
+  camerasEqual,
+  canvasCameraSnapshotKind,
+  canvasPlaneTransform
+} from "./canvas-camera-presentation.js"
+export {
+  frameIframeOccupancy,
+  frameIntersectsViewport
+} from "./canvas-frame-occupancy.js"
+export {
   getCanvasCameraSession,
   removeCanvasCameraSession,
   setCanvasCameraSession
@@ -106,6 +116,7 @@ export {
 } from "./replica-session.js"
 export { replicaSessionAtoms, useReplicaSession } from "./replica-session-atoms.js"
 export type {
+  ReplicaChrome,
   ReplicaSessionHandle,
   ReplicaSessionPorts
 } from "./replica-session.js"

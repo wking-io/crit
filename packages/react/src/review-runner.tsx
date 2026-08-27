@@ -2,12 +2,16 @@ import type { CanvasCommandBatch, CanvasProjection } from "@crit/domain"
 import { Effect, Match } from "effect"
 import {
   createContext,
+  useCallback,
   useContext,
+  useMemo,
+  useRef,
   useState,
   type ReactElement,
   type ReactNode
 } from "react"
 
+import { CanvasSelection } from "./canvas-selection.js"
 import { NewFrameDialog } from "./new-frame-dialog.js"
 import {
   SnapshotRunState,
@@ -16,14 +20,19 @@ import {
 } from "./frame-snapshot.js"
 import {
   ReviewActionInput,
+  ReviewSelection,
   resolveReviewAction,
   reviewActionPolicies,
   type ReviewAction,
   type ReviewActionId,
   type ReviewActionInput as ReviewActionInputValue,
   type ReviewClientEffect,
-  type ReviewSelection
+  type ReviewSelection as ReviewSelectionValue
 } from "./review-actions.js"
+
+const emptyReviewSelection = ReviewSelection.items({
+  items: CanvasSelection.make([])
+})
 
 const unavailableSnapshotter = {
   capture: () => Effect.die("Snapshotter unavailable")
@@ -42,8 +51,31 @@ const dispatchReviewAction = (
   snapshot: ({ request }) => beginSnapshot(request)
 }))
 
+const reviewRunnableIds = (
+  selection: ReviewSelectionValue,
+  projection: CanvasProjection,
+  fullscreen: boolean,
+  snapshotter: FrameSnapshotter | undefined,
+  snapshotCapturing: boolean
+): ReadonlySet<string> => {
+  const context = {
+    projection,
+    selection,
+    input: ReviewActionInput.none(),
+    fullscreen
+  }
+  return new Set<string>(reviewActionPolicies.flatMap((entry) => {
+    if (!entry.available(selection, projection)) return []
+    if (entry.id === "snapshot" && (snapshotter === undefined || snapshotCapturing)) {
+      return []
+    }
+    return resolveReviewAction(entry.id, context) === null ? [] : [entry.id]
+  }))
+}
+
 export const useReviewRunner = ({
   fullscreen,
+  getSelection,
   onEffect,
   onSubmit,
   projection,
@@ -51,10 +83,11 @@ export const useReviewRunner = ({
   snapshotter
 }: {
   readonly fullscreen: boolean
+  readonly getSelection?: () => ReviewSelectionValue
   readonly onEffect?: ((effect: ReviewClientEffect) => void) | undefined
   readonly onSubmit: (commands: CanvasCommandBatch) => void
   readonly projection: CanvasProjection
-  readonly selection: ReviewSelection
+  readonly selection?: ReviewSelectionValue
   readonly snapshotter?: FrameSnapshotter | undefined
 }) => {
   const snapshot = useSnapshotRunner({
@@ -63,21 +96,20 @@ export const useReviewRunner = ({
   })
   const snapshotCapturing = SnapshotRunState.$is("capturing")(snapshot.state)
   const snapshotFailed = SnapshotRunState.$is("failed")(snapshot.state)
-  const context = {
-    projection,
-    selection,
-    input: ReviewActionInput.none(),
-    fullscreen
-  }
-  const runnableIds = new Set<string>(reviewActionPolicies.flatMap((entry) => {
-    if (!entry.available(selection, projection)) return []
-    if (entry.id === "snapshot" && (snapshotter === undefined || snapshotCapturing)) {
-      return []
-    }
-    return resolveReviewAction(entry.id, context) === null ? [] : [entry.id]
-  }))
+  const getSelectionRef = useRef(getSelection ?? (() => selection ?? emptyReviewSelection))
+  getSelectionRef.current = getSelection ?? (() => selection ?? emptyReviewSelection)
+  const runnableIds = useMemo(() => {
+    return () => reviewRunnableIds(
+      getSelectionRef.current(),
+      projection,
+      fullscreen,
+      snapshotter,
+      snapshotCapturing
+    )
+  }, [fullscreen, projection, snapshotCapturing, snapshotter])
 
-  const run = (
+  const beginSnapshot = snapshot.begin
+  const run = useCallback((
     id: ReviewActionId,
     input: ReviewActionInputValue = ReviewActionInput.none()
   ): boolean => {
@@ -87,33 +119,53 @@ export const useReviewRunner = ({
     ) return false
     const action = resolveReviewAction(id, {
       projection,
-      selection,
+      selection: getSelectionRef.current(),
       input,
       fullscreen
     })
     if (action === null) return false
-    dispatchReviewAction(action, onSubmit, onEffect, snapshot.begin)
+    dispatchReviewAction(action, onSubmit, onEffect, beginSnapshot)
     return true
-  }
+  }, [
+    beginSnapshot,
+    fullscreen,
+    onEffect,
+    onSubmit,
+    projection,
+    snapshotCapturing,
+    snapshotter
+  ])
 
   const [addFramePlacement, setAddFramePlacement] = useState<{
     readonly x: number
     readonly y: number
   } | null>(null)
+  const requestAddFrame = useCallback((
+    placement: { readonly x: number; readonly y: number }
+  ) => {
+    setAddFramePlacement(placement)
+  }, [])
+  const closeAddFrame = useCallback(() => {
+    setAddFramePlacement(null)
+  }, [])
 
-  return {
+  return useMemo(() => ({
+    addFramePlacement,
+    closeAddFrame,
+    requestAddFrame,
     run,
     runnableIds,
     snapshotCapturing,
-    snapshotFailed,
+    snapshotFailed
+  }), [
     addFramePlacement,
-    requestAddFrame: (placement: { readonly x: number; readonly y: number }) => {
-      setAddFramePlacement(placement)
-    },
-    closeAddFrame: () => {
-      setAddFramePlacement(null)
-    }
-  }
+    closeAddFrame,
+    requestAddFrame,
+    run,
+    runnableIds,
+    snapshotCapturing,
+    snapshotFailed
+  ])
 }
 
 export type ReviewRunner = ReturnType<typeof useReviewRunner>

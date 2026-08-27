@@ -52,16 +52,20 @@ export type ReplicaSession = Data.TaggedEnum<{
   readonly unavailable: { readonly reason: string }
   readonly ready: {
     readonly view: ReplicaView
-    readonly camera: CanvasCamera
-    readonly selection: CanvasSelection
     readonly connection: ReplicaConnection
     readonly notice: ReplicaChangeRejected | ReplicaSessionUnavailable | undefined
   }
 }>
 export const ReplicaSession = Data.taggedEnum<ReplicaSession>()
 
+export type ReplicaChrome = {
+  readonly camera: CanvasCamera
+  readonly selection: CanvasSelection
+}
+
 export interface ReplicaSessionHandle {
   readonly session: ReplicaSession
+  readonly chrome: ReplicaChrome
   readonly onCameraChange: (camera: CanvasCamera) => void
   readonly onSelectionChange: (selection: CanvasSelection) => void
   readonly submit: (
@@ -73,14 +77,16 @@ export const loadingReplicaSession = ReplicaSession.loading()
 
 export const defaultReplicaCamera = CanvasCamera.make({ x: 0, y: 0, zoom: 1 })
 export const defaultReplicaSelection = CanvasSelection.make([])
+export const defaultReplicaChrome: ReplicaChrome = {
+  camera: defaultReplicaCamera,
+  selection: defaultReplicaSelection
+}
 export const liveReplicaConnection = ReplicaConnection.live()
 
 export const patchReadyReplicaSession = (
   previous: ReplicaSession,
   patch: {
     readonly view?: ReplicaView
-    readonly camera?: CanvasCamera
-    readonly selection?: CanvasSelection
     readonly connection?: ReplicaConnection
     readonly notice?: ReplicaChangeRejected | ReplicaSessionUnavailable | undefined
   }
@@ -88,8 +94,6 @@ export const patchReadyReplicaSession = (
   if (!ReplicaSession.$is("ready")(previous)) return previous
   return ReplicaSession.ready({
     view: patch.view ?? previous.view,
-    camera: patch.camera ?? previous.camera,
-    selection: patch.selection ?? previous.selection,
     connection: patch.connection ?? previous.connection,
     notice: Object.hasOwn(patch, "notice") ? patch.notice : previous.notice
   })
@@ -97,11 +101,7 @@ export const patchReadyReplicaSession = (
 
 export const applyOpenedReplicaSession = (
   previous: ReplicaSession,
-  opened: Result.Result<ReplicaView, ReplicaSessionUnavailable>,
-  chrome: {
-    readonly camera: CanvasCamera
-    readonly selection: CanvasSelection
-  }
+  opened: Result.Result<ReplicaView, ReplicaSessionUnavailable>
 ): ReplicaSession => {
   if (Result.isFailure(opened)) {
     return ReplicaSession.$is("ready")(previous)
@@ -110,8 +110,6 @@ export const applyOpenedReplicaSession = (
   }
   return ReplicaSession.ready({
     view: opened.success,
-    camera: chrome.camera,
-    selection: chrome.selection,
     connection: ReplicaSession.$is("ready")(previous)
       ? previous.connection
       : liveReplicaConnection,
@@ -132,8 +130,6 @@ export const applyRefreshReplicaSession = (
     ? patchReadyReplicaSession(previous, { view: opened.success })
     : ReplicaSession.ready({
       view: opened.success,
-      camera: defaultReplicaCamera,
-      selection: defaultReplicaSelection,
       connection: liveReplicaConnection,
       notice: undefined
     })
@@ -150,8 +146,6 @@ export const applySubmittedReplicaSession = (
     ? patchReadyReplicaSession(previous, { view: result.success, notice: undefined })
     : ReplicaSession.ready({
       view: result.success,
-      camera: defaultReplicaCamera,
-      selection: defaultReplicaSelection,
       connection: liveReplicaConnection,
       notice: undefined
     })

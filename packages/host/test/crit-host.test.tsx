@@ -221,6 +221,8 @@ describe("CritHost", () => {
     await waitFor(() => expect(container.textContent).toContain(
       "Your last edit was not applied. Rejected because its frame no longer exists."
     ))
+    const frameBeforeLost = container.querySelector(".crit-frame")
+    expect(frameBeforeLost).toBeInstanceOf(HTMLElement)
     if (publish === undefined) throw new Error("Subscription listener missing")
     await act(async() => publish(ReplicaSubscriptionEvent.lost({ reason: "socket closed." })))
 
@@ -228,6 +230,7 @@ describe("CritHost", () => {
       "Connection lost. socket closed. Showing the last known state."
     ))
     expect(container.querySelector("[aria-label='Review controls']")).toBeNull()
+    expect(container.querySelector(".crit-frame")).toBe(frameBeforeLost)
   })
 
   it("lists Access-authenticated occupancy from attend", async() => {

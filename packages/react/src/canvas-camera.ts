@@ -1,6 +1,7 @@
 import type { FrameInputIntent } from "@crit/protocol"
 import { Match, Schema } from "effect"
-import type { CSSProperties } from "react"
+
+export { canvasCameraStyle } from "./canvas-camera-presentation.js"
 
 const CanvasCameraCoordinate = Schema.Number.check(Schema.isFinite()).pipe(
   Schema.brand("CanvasCameraCoordinate")
@@ -23,12 +24,6 @@ export const CanvasCamera = {
   make: Schema.decodeUnknownSync(CanvasCameraValue),
   schema: CanvasCameraValue
 }
-
-export const canvasCameraStyle = (camera: CanvasCamera): CSSProperties => ({
-  position: "relative",
-  transform: `translate(${camera.x}px, ${camera.y}px) scale(${camera.zoom})`,
-  transformOrigin: "0 0"
-})
 
 const MIN_ZOOM = 0.05
 const MAX_ZOOM = 8

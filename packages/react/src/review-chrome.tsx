@@ -1,9 +1,10 @@
 import type { CanvasCommandBatch, CanvasProjection } from "@crit/domain"
 import { type ReactElement } from "react"
 
+import { useLiveCanvasSelection } from "./canvas-selection-store.js"
 import { GlyphProvider } from "./glyph.js"
 import { CritOverlayProvider, useCritOverlayContainer } from "./overlay-container.js"
-import type { ReviewClientEffect, ReviewSelection } from "./review-actions.js"
+import { ReviewSelection, type ReviewClientEffect } from "./review-actions.js"
 import { ReviewChromeView } from "./review-chrome-view.js"
 import {
   ReviewRunnerProvider,
@@ -26,14 +27,17 @@ export interface ReviewChromeProps {
 export function ReviewChrome(props: ReviewChromeProps): ReactElement {
   const overlay = useCritOverlayContainer()
   const runner = useOptionalReviewRunner()
+  const liveItems = useLiveCanvasSelection(props.selection.items)
+  const liveSelection = ReviewSelection.items({ items: liveItems })
   const view = runner === null
     ? (
       <ReviewRunnerProvider
         fullscreen={props.fullscreen ?? false}
+        getSelection={() => ReviewSelection.items({ items: liveItems })}
         onEffect={props.onEffect}
         onSubmit={props.onSubmit}
         projection={props.projection}
-        selection={props.selection}
+        selection={liveSelection}
         snapshotter={props.snapshotter}
       >
         <ReviewChrome {...props} />
@@ -45,7 +49,7 @@ export function ReviewChrome(props: ReviewChromeProps): ReactElement {
         projection={props.projection}
         requestAddFrame={runner.requestAddFrame}
         run={runner.run}
-        runnableIds={runner.runnableIds}
+        runnableIds={runner.runnableIds()}
         snapshotCapturing={runner.snapshotCapturing}
         snapshotFailed={runner.snapshotFailed}
       />

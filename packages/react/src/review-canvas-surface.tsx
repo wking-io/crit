@@ -38,11 +38,11 @@ export const canvasCenterPlacement = (
 }
 
 export function ReviewCanvasSurface({
-  camera,
+  cameraRef,
   children,
   rootRef
 }: {
-  readonly camera: CanvasCamera
+  readonly cameraRef: { readonly current: CanvasCamera }
   readonly children: ReactElement
   readonly rootRef: { readonly current: HTMLElement | null }
 }): ReactElement {
@@ -64,13 +64,13 @@ export function ReviewCanvasSurface({
             const root = rootRef.current
             if (root === null) return
             runner.requestAddFrame(
-              actionPointRef.current ?? canvasCenterPlacement(root, camera)
+              actionPointRef.current ?? canvasCenterPlacement(root, cameraRef.current)
             )
           }
         }),
         ReviewMenuItem.action({
           policy: zoomToFit,
-          disabled: !runner.runnableIds.has("zoom-to-fit"),
+          disabled: !runner.runnableIds().has("zoom-to-fit"),
           onSelect: () => runner.run("zoom-to-fit")
         })
       ]}
@@ -92,7 +92,7 @@ export function ReviewCanvasSurface({
         }
         actionPointRef.current = canvasWorldPoint(
           root,
-          camera,
+          cameraRef.current,
           event.clientX,
           event.clientY
         )
