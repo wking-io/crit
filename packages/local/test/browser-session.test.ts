@@ -44,18 +44,27 @@ const bootstrapUrlOf = (development: Context.Tag.Service<LocalDevelopment>) => O
   }
 )
 
-const bootstrap = async (bootstrapUrl: string) => {
-  const url = new URL(bootstrapUrl)
-  const capability = url.hash.slice(1)
-  url.hash = ""
+const bootstrap = async (development: Context.Tag.Service<LocalDevelopment>) => {
+  const printed = new URL(bootstrapUrlOf(development))
+  const capability = printed.hash.slice(1)
+  const url = new URL(`${printed.pathname}${printed.search}`, development.descriptor.baseUrl)
   const document = await fetch(url)
   const documentText = await document.text()
   const response = await fetch(new URL("session", url), {
     method: "POST",
-    headers: { "content-type": "application/json", origin: url.origin },
+    headers: { "content-type": "application/json", origin: printed.origin },
     body: JSON.stringify({ capability })
   })
-  return { capability, document, documentText, response, url }
+  return { capability, document, documentText, printed, response, url }
+}
+
+const proxiedDaemonUrl = (input: RequestInfo | URL, daemonBaseUrl: string) => {
+  const raw = typeof input === "string" || input instanceof URL ? String(input) : input.url
+  const url = new URL(raw)
+  const daemon = new URL(daemonBaseUrl)
+  url.protocol = daemon.protocol
+  url.host = daemon.host
+  return url
 }
 
 const cookiePair = (response: Response) => response.headers.get("set-cookie")?.split(";", 1)[0]
@@ -189,7 +198,9 @@ describe("browser session HTTP protocol", () => {
       const directory = yield* temporaryRoot
       const dataRoot = join(directory, ".crit", "v1")
       const development = yield* start(dataRoot, yield* Effect.scope)
-      const result = yield* Effect.promise(() => bootstrap(bootstrapUrlOf(development)))
+      const result = yield* Effect.promise(() => bootstrap(development))
+      expect(result.printed.origin).toBe(browserOrigin)
+      expect(result.printed.origin).not.toBe(new URL(development.descriptor.baseUrl).origin)
       expect(result.document.status).toBe(200)
       expect(result.document.url).not.toContain(result.capability)
       expect(result.documentText).not.toContain(result.capability)
@@ -221,7 +232,9 @@ describe("browser session HTTP protocol", () => {
       const sentSocketMessages: WebSocket.Data[] = []
       class BrowserWebSocket extends WebSocket {
         constructor(url: string, protocols?: string | string[]) {
-          super(url, protocols ?? [], { headers: { cookie: cookie ?? "", origin: browserOrigin } })
+          super(proxiedDaemonUrl(url, development.descriptor.baseUrl).href, protocols ?? [], {
+            headers: { cookie: cookie ?? "", origin: browserOrigin }
+          })
         }
 
         override send(data: WebSocket.Data, cb?: (error?: Error) => void): void {
@@ -236,9 +249,11 @@ describe("browser session HTTP protocol", () => {
         requestCount += 1
         headers.set("cookie", cookie ?? "")
         headers.set("origin", browserOrigin)
-        return fetch(input, { ...init, headers })
+        return fetch(proxiedDaemonUrl(input, development.descriptor.baseUrl), { ...init, headers })
       })
       const decodedConnection = LocalBrowserConnection.decode(redirect.hash)
+      expect(Result.getOrThrow(decodedConnection).baseUrl).toBe(browserOrigin)
+      expect(Result.getOrThrow(decodedConnection).baseUrl).not.toBe(development.descriptor.baseUrl)
       const browserOptions = LocalBrowserConnection.options(Result.getOrThrow(decodedConnection))
       const resolved = yield* Effect.promise(() => resolveRepresentation({
         baseUrl: development.descriptor.baseUrl,
@@ -362,7 +377,7 @@ describe("browser session HTTP protocol", () => {
       expect(opened.status).toBe(200)
       const replay = yield* Effect.promise(() => fetch(new URL("session", result.url), {
         method: "POST",
-        headers: { "content-type": "application/json", origin: result.url.origin },
+        headers: { "content-type": "application/json", origin: browserOrigin },
         body: JSON.stringify({ capability: result.capability })
       }))
       expect(replay.status).toBe(401)
@@ -372,7 +387,7 @@ describe("browser session HTTP protocol", () => {
     Effect.runPromise(Effect.scoped(Effect.gen(function*() {
       const directory = yield* temporaryRoot
       const development = yield* start(join(directory, ".crit", "v1"), yield* Effect.scope)
-      const result = yield* Effect.promise(() => bootstrap(bootstrapUrlOf(development)))
+      const result = yield* Effect.promise(() => bootstrap(development))
       const { redirectTo } = Schema.decodeUnknownSync(BrowserSessionResponse)(
         yield* Effect.promise(() => result.response.json())
       )
@@ -400,11 +415,40 @@ describe("browser session HTTP protocol", () => {
       expect(landed.hash.startsWith("#crit=")).toBe(true)
     }))))
 
+  it("binds the printed URL, session cookie, and canvas API to the host origin", () =>
+    Effect.runPromise(Effect.scoped(Effect.gen(function*() {
+      const directory = yield* temporaryRoot
+      const development = yield* start(join(directory, ".crit", "v1"), yield* Effect.scope)
+      const printed = new URL(bootstrapUrlOf(development))
+      expect(printed.origin).toBe(browserOrigin)
+      expect(printed.origin).not.toBe(new URL(development.descriptor.baseUrl).origin)
+      const result = yield* Effect.promise(() => bootstrap(development))
+      expect(result.response.status).toBe(200)
+      expect(result.response.headers.get("set-cookie")).toContain("HttpOnly")
+      expect(result.response.headers.get("set-cookie")).toContain(
+        `Path=/browser/${development.descriptor.instance}/`
+      )
+      const { redirectTo } = Schema.decodeUnknownSync(BrowserSessionResponse)(
+        yield* Effect.promise(() => result.response.json())
+      )
+      const connection = Result.getOrThrow(LocalBrowserConnection.decode(new URL(redirectTo).hash))
+      expect(connection.baseUrl).toBe(browserOrigin)
+      expect(connection.baseUrl).not.toBe(development.descriptor.baseUrl)
+      expect(new URL(`${connection.browserPath}api/v1/canvas`, connection.baseUrl).origin)
+        .toBe(browserOrigin)
+      const replayOnDaemonOrigin = yield* Effect.promise(() => fetch(new URL("session", result.url), {
+        method: "POST",
+        headers: { "content-type": "application/json", origin: result.url.origin },
+        body: JSON.stringify({ capability: result.capability })
+      }))
+      expect(replayOnDaemonOrigin.status).toBe(403)
+    }))))
+
   it("includes CORS on browser canvas list success and unauthorized responses", () =>
     Effect.runPromise(Effect.scoped(Effect.gen(function*() {
       const directory = yield* temporaryRoot
       const development = yield* start(join(directory, ".crit", "v1"), yield* Effect.scope)
-      const result = yield* Effect.promise(() => bootstrap(bootstrapUrlOf(development)))
+      const result = yield* Effect.promise(() => bootstrap(development))
       const cookie = cookiePair(result.response)
       const listed = yield* Effect.promise(() => listCanvases({
         baseUrl: development.descriptor.baseUrl,
@@ -466,30 +510,30 @@ describe("browser session HTTP protocol", () => {
     Effect.runPromise(Effect.scoped(Effect.gen(function*() {
       const directory = yield* temporaryRoot
       const development = yield* start(join(directory, ".crit", "v1"), yield* Effect.scope)
-      const url = new URL(bootstrapUrlOf(development))
-      const capability = url.hash.slice(1)
-      url.hash = ""
+      const printed = new URL(bootstrapUrlOf(development))
+      const capability = printed.hash.slice(1)
+      const url = new URL(printed.pathname, development.descriptor.baseUrl)
       const rejectedOrigin = yield* Effect.promise(() => fetch(new URL("session", url), {
         method: "POST",
-        headers: { "content-type": "application/json", origin: browserOrigin },
+        headers: { "content-type": "application/json", origin: url.origin },
         body: JSON.stringify({ capability })
       }))
       expect(rejectedOrigin.status).toBe(403)
       const malformed = yield* Effect.promise(() => fetch(new URL("session", url), {
         method: "POST",
-        headers: { "content-type": "application/json", origin: url.origin },
+        headers: { "content-type": "application/json", origin: printed.origin },
         body: JSON.stringify({ capability: "short" })
       }))
       expect(malformed.status).toBe(400)
       const oversized = yield* Effect.promise(() => fetch(new URL("session", url), {
         method: "POST",
-        headers: { "content-type": "application/json", origin: url.origin },
+        headers: { "content-type": "application/json", origin: printed.origin },
         body: JSON.stringify({ capability: "x".repeat(1_024) })
       }))
       expect(oversized.status).toBe(413)
       const request = () => fetch(new URL("session", url), {
         method: "POST",
-        headers: { "content-type": "application/json", origin: url.origin },
+        headers: { "content-type": "application/json", origin: printed.origin },
         body: JSON.stringify({ capability })
       })
       const responses = yield* Effect.promise(() => Promise.all([request(), request()]))
@@ -500,7 +544,7 @@ describe("browser session HTTP protocol", () => {
     Effect.runPromise(Effect.scoped(Effect.gen(function*() {
       const directory = yield* temporaryRoot
       const development = yield* start(join(directory, ".crit", "v1"), yield* Effect.scope)
-      const result = yield* Effect.promise(() => bootstrap(bootstrapUrlOf(development)))
+      const result = yield* Effect.promise(() => bootstrap(development))
       const cookie = cookiePair(result.response)
       let sequence = 0
       const request = (overrides: Partial<Parameters<typeof createCanvas>[0]>) => createCanvas({
@@ -586,12 +630,10 @@ describe("browser session HTTP protocol", () => {
         const scope = yield* Effect.scope
         const first = yield* start(firstRoot, scope)
         const second = yield* start(secondRoot, scope)
-        const firstUrl = bootstrapUrlOf(first)
-        const secondUrl = bootstrapUrlOf(second)
-        const firstBootstrap = yield* Effect.promise(() => bootstrap(firstUrl))
-        const secondBootstrap = yield* Effect.promise(() => bootstrap(secondUrl))
+        const firstBootstrap = yield* Effect.promise(() => bootstrap(first))
+        const secondBootstrap = yield* Effect.promise(() => bootstrap(second))
         oldCookie = cookiePair(firstBootstrap.response) ?? ""
-        oldBootstrap = firstUrl
+        oldBootstrap = bootstrapUrlOf(first)
         const jar = `${oldCookie}; ${cookiePair(secondBootstrap.response)}`
         expect(cookiePair(firstBootstrap.response)?.split("=", 1)[0]).not.toBe(
           cookiePair(secondBootstrap.response)?.split("=", 1)[0]

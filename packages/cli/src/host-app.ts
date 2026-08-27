@@ -17,7 +17,7 @@ export const resolveHostRoot = (
   from = fileURLToPath(new URL("../../host", import.meta.url))
 ): string | undefined => existsSync(path.join(from, "vite.config.ts")) ? from : undefined
 
-export const startHostApp = (root: string) =>
+export const startHostApp = (root: string, daemonOrigin: string) =>
   Effect.acquireRelease(
     Effect.tryPromise({
       try: async() => {
@@ -27,7 +27,14 @@ export const startHostApp = (root: string) =>
           server: {
             host: "127.0.0.1",
             port: HOST_PORT,
-            strictPort: true
+            strictPort: true,
+            proxy: {
+              "/browser": {
+                target: daemonOrigin,
+                changeOrigin: true,
+                ws: true
+              }
+            }
           }
         })
         await server.listen()
