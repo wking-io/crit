@@ -784,14 +784,6 @@ button.crit-toolbar__title:focus-visible { border-radius: 2px; outline: 2px soli
   max-width: 307px;
   text-wrap: pretty;
 }
-.crit-help__shortcuts {
-  color: var(--crit-help-description-ink, var(--crit-color-t1, oklch(52% 0 0)));
-  font: 400 12px/20px InterVariable, Inter, sans-serif;
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-.crit-help__shortcuts li { min-width: 0; }
 
 .crit-frame:fullscreen {
   --crit-frame-chrome-height: 36px;

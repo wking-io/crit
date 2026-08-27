@@ -105,10 +105,11 @@ export function CanvasBoard({
   const navigationRef = useRef({ camera, onCameraChange })
   const selectionRef = useRef({ selection, onSelectionChange })
   const inputTarget = CanvasSelection.inputTarget(selection)
-  const itemDragOptions = onSubmit === undefined
-    ? { camera }
-    : { camera, onSubmit }
-  const itemDrag = useCanvasItemDrag(itemDragOptions)
+  const itemDrag = useCanvasItemDrag(
+    onSubmit === undefined
+      ? { camera, frames: projection.frames }
+      : { camera, frames: projection.frames, onSubmit }
+  )
   const zoomToFit = useCallback(() => {
     const root = rootRef.current
     if (root === null) return
