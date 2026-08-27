@@ -131,6 +131,11 @@ describe("CritHost", () => {
         .toBeInstanceOf(HTMLElement)
     )
     expect(container.textContent).toContain("Review is synchronized.")
+    expect(container.querySelector("[data-crit-styles]")).toBeInstanceOf(
+      HTMLStyleElement
+    )
+    expect(container.querySelector(".crit-canvas")).not.toBeNull()
+    expect(container.querySelector(".crit-frame")).not.toBeNull()
   })
 
   it("shows the unavailable reason when open fails", async() => {

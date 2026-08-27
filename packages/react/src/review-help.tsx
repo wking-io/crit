@@ -173,22 +173,26 @@ const ReviewHelpAction = ({
   readonly details: Extract<ReviewHelpDetails, { readonly _tag: "action" }>
 }): ReactElement => (
   <>
-    <div>
-      <div>{details.name}</div>
-      {details.shortcut === null ? null : <div>{details.shortcut}</div>}
+    <div className="crit-help__header">
+      <div className="crit-help__title">{details.name}</div>
+      {details.shortcut === null
+        ? null
+        : <div className="crit-help__shortcut">{details.shortcut}</div>}
     </div>
-    <p>{details.description}</p>
+    <p className="crit-help__description">{details.description}</p>
     {details.availabilityMessage === null
       ? null
-      : <p>{details.availabilityMessage}</p>}
+      : <p className="crit-help__availability">{details.availabilityMessage}</p>}
   </>
 )
 
 const IdleReviewHelp = (): ReactElement => (
   <>
-    <div>{idleReviewHelp.name}</div>
-    <p>{idleReviewHelp.description}</p>
-    <ul>
+    <div className="crit-help__header">
+      <div className="crit-help__title">{idleReviewHelp.name}</div>
+    </div>
+    <p className="crit-help__description">{idleReviewHelp.description}</p>
+    <ul className="crit-help__shortcuts">
       {shortcutedPolicies.map((policy) => {
         const shortcut = policy.shortcuts[0]
         return (
@@ -209,8 +213,10 @@ const reviewHelpBody = (
   if (ReviewHelpDetails.$is("informational")(details)) {
     return (
       <>
-        <div>{details.name}</div>
-        <p>{details.description}</p>
+        <div className="crit-help__header">
+          <div className="crit-help__title">{details.name}</div>
+        </div>
+        <p className="crit-help__description">{details.description}</p>
       </>
     )
   }
@@ -220,7 +226,7 @@ const reviewHelpBody = (
 export function ReviewHelpPanel(): ReactElement {
   const details = useContext(ReviewHelpContext)
   return (
-    <aside aria-label="Control help" aria-live="polite">
+    <aside aria-label="Control help" aria-live="polite" className="crit-help">
       {reviewHelpBody(details)}
     </aside>
   )

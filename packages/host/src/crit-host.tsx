@@ -65,8 +65,10 @@ function CritHostSession({
 export function CritHost(props: CritHostProps): ReactElement {
   const [queryClient] = useState(() => new QueryClient())
   return (
-    <QueryClientProvider client={queryClient}>
-      <CritHostSession {...props} />
-    </QueryClientProvider>
+    <div className="crit-host">
+      <QueryClientProvider client={queryClient}>
+        <CritHostSession {...props} />
+      </QueryClientProvider>
+    </div>
   )
 }

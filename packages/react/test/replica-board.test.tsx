@@ -300,6 +300,12 @@ describe("ReplicaBoard", () => {
     )
     expect(region?.querySelector("ul")).toBeNull()
     expect(container.querySelector(".workspace")).not.toBeNull()
+    expect(container.querySelector(".crit-replica.workspace")).not.toBeNull()
+    expect(container.querySelector("[data-crit-styles]")).toBeInstanceOf(
+      HTMLStyleElement
+    )
+    expect(container.querySelector("[data-crit-styles]")?.textContent)
+      .toContain(".crit-canvas")
     expect(container.querySelector("[aria-label='Checkout']")).toBeInstanceOf(HTMLElement)
     expect(container.querySelector("iframe")?.getAttribute("src")).toBe(url)
   })

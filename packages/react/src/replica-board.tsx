@@ -191,6 +191,9 @@ const connectionAllowsMutation = (
     lost: () => false
   }))
 
+const replicaClassName = (className: string | undefined): string =>
+  className === undefined ? "crit-replica" : `crit-replica ${className}`
+
 export function ReplicaBoard({
   camera,
   className,
@@ -215,14 +218,23 @@ export function ReplicaBoard({
     snapshotter !== undefined
     ? { onSubmit, snapshotter }
     : {}
+  const alerts = [connectionCopy, noticeCopy].filter(
+    (copy): copy is string => copy !== undefined
+  )
   return (
-    <div className={className}>
-      {connectionCopy === undefined ? null : <p role="alert">{connectionCopy}</p>}
-      {noticeCopy === undefined ? null : <p role="alert">{noticeCopy}</p>}
+    <div className={replicaClassName(className)}>
+      {alerts.length === 0
+        ? null
+        : (
+          <div className="crit-replica__alerts">
+            {alerts.map((copy) => <p key={copy} role="alert">{copy}</p>)}
+          </div>
+        )}
       {showPresence
         ? (
           <section
             aria-label={`${view.projection.title} presence`}
+            className="crit-replica__presence"
             role="status"
           >
             <ul>
@@ -233,8 +245,13 @@ export function ReplicaBoard({
           </section>
         )
         : null}
-      <section aria-label={`${view.projection.title} sync status`}>
-        <p role={statusTone(status)}>{statusCopy(view.projection.title, status)}</p>
+      <section
+        aria-label={`${view.projection.title} sync status`}
+        className="crit-replica__sync"
+      >
+        <p className="crit-save-state" role={statusTone(status)}>
+          {statusCopy(view.projection.title, status)}
+        </p>
         {ReplicaBoardStatus.$is("outstanding")(status)
           ? (
             <ul>
