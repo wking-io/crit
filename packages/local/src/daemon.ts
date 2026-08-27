@@ -274,6 +274,18 @@ const browserCors = (origin: string) => HttpMiddleware.cors({
   credentials: true
 })
 
+const browserApiPreflight = (
+  origin: string,
+  request: HttpServerRequest.HttpServerRequest
+) =>
+  browserCors(origin)(Effect.succeed(HttpServerResponse.empty({ status: 204 }))).pipe(
+    Effect.map((response) =>
+      request.headers["access-control-request-private-network"] === "true"
+        ? HttpServerResponse.setHeader(response, "access-control-allow-private-network", "true")
+        : response
+    )
+  )
+
 const browserRequestAuthority = (
   request: HttpServerRequest.HttpServerRequest,
   browser: BrowserSessionService,
@@ -286,17 +298,6 @@ const browserRequestAuthority = (
   if (requireOrigin && origin === undefined) return "origin"
   return undefined
 }
-
-const browserRequestAuthorizationFailure = (
-  request: HttpServerRequest.HttpServerRequest,
-  browser: BrowserSessionService,
-  requireOrigin: boolean
-): Effect.Effect<LocalRequestAuthorizationFailure | undefined> => Effect.gen(function*() {
-  if (browserRequestAuthority(request, browser, browser.browserOrigin, requireOrigin) !== undefined) {
-    return new LocalApiOriginRejected({ origin: request.headers.origin ?? "missing" })
-  }
-  return yield* browserSessionAuthorizationFailure(request, browser)
-})
 
 const browserSessionAuthorizationFailure = (
   request: HttpServerRequest.HttpServerRequest,
@@ -427,13 +428,20 @@ const browserAuthorizationLayer = Layer.effect(
     return LocalApiAuthorization.of({
       bearer: Effect.fn(function*(httpEffect) {
         const request = yield* HttpServerRequest.HttpServerRequest
-        const failure = yield* browserRequestAuthorizationFailure(request, browser, request.method !== "GET")
-        if (failure !== undefined) return yield* failure
-        return yield* Effect.provideService(
-          browserCors(browser.browserOrigin)(httpEffect),
-          AuthenticatedInvocation,
-          browser.invocation
-        )
+        if (browserRequestAuthority(request, browser, browser.browserOrigin, request.method !== "GET") !== undefined) {
+          return yield* new LocalApiOriginRejected({
+            origin: request.headers.origin ?? "missing"
+          })
+        }
+        return yield* browserCors(browser.browserOrigin)(Effect.gen(function*() {
+          const failure = yield* browserSessionAuthorizationFailure(request, browser)
+          if (failure !== undefined) return yield* failure
+          return yield* Effect.provideService(
+            httpEffect,
+            AuthenticatedInvocation,
+            browser.invocation
+          )
+        }))
       })
     })
   })
@@ -667,7 +675,7 @@ const browserBootstrapRoutes = HttpRouter.use(Effect.fn(function*(router) {
     if (browserRequestAuthority(request, browser, browser.browserOrigin, true) !== undefined) {
       return Effect.succeed(HttpServerResponse.empty({ status: 403 }))
     }
-    return browserCors(browser.browserOrigin)(Effect.succeed(HttpServerResponse.empty({ status: 204 })))
+    return browserApiPreflight(browser.browserOrigin, request)
   })
 }))
 

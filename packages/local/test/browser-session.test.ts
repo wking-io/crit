@@ -97,6 +97,21 @@ const createCanvas = (args: {
   })
 }
 
+const listCanvases = (args: {
+  readonly baseUrl: string
+  readonly instance: string
+  readonly cookie?: string
+  readonly origin?: string
+  readonly version?: string
+}) => {
+  const headers = new Headers({
+    "x-crit-api-version": args.version ?? "1"
+  })
+  if (args.cookie !== undefined) headers.set("cookie", args.cookie)
+  if (args.origin !== undefined) headers.set("origin", args.origin)
+  return fetch(`${args.baseUrl}/browser/${args.instance}/api/v1/canvas`, { headers })
+}
+
 const resolveRepresentation = (args: {
   readonly baseUrl: string
   readonly instance: string
@@ -302,6 +317,68 @@ describe("browser session HTTP protocol", () => {
         body: JSON.stringify({ capability: result.capability })
       }))
       expect(replay.status).toBe(401)
+    }))))
+
+  it("includes CORS on browser canvas list success and unauthorized responses", () =>
+    Effect.runPromise(Effect.scoped(Effect.gen(function*() {
+      const directory = yield* temporaryRoot
+      const development = yield* start(join(directory, ".crit", "v1"), yield* Effect.scope)
+      const result = yield* Effect.promise(() => bootstrap(bootstrapUrlOf(development)))
+      const cookie = cookiePair(result.response)
+      const listed = yield* Effect.promise(() => listCanvases({
+        baseUrl: development.descriptor.baseUrl,
+        instance: development.descriptor.instance,
+        cookie,
+        origin: browserOrigin
+      }))
+      expect(listed.status).toBe(200)
+      expect(listed.headers.get("access-control-allow-origin")).toBe(browserOrigin)
+      expect(listed.headers.get("access-control-allow-credentials")).toBe("true")
+      expect(listed.headers.get("access-control-allow-origin")).not.toBe("*")
+      const unauthorized = yield* Effect.promise(() => listCanvases({
+        baseUrl: development.descriptor.baseUrl,
+        instance: development.descriptor.instance,
+        cookie: "crit_session_wrong=wrong",
+        origin: browserOrigin
+      }))
+      expect(unauthorized.status).toBe(401)
+      expect(unauthorized.headers.get("access-control-allow-origin")).toBe(browserOrigin)
+      expect(unauthorized.headers.get("access-control-allow-credentials")).toBe("true")
+      const unsupported = yield* Effect.promise(() => listCanvases({
+        baseUrl: development.descriptor.baseUrl,
+        instance: development.descriptor.instance,
+        cookie,
+        origin: browserOrigin,
+        version: "2"
+      }))
+      expect(unsupported.status).toBe(426)
+      expect(unsupported.headers.get("access-control-allow-origin")).toBe(browserOrigin)
+      const rejectedOrigin = yield* Effect.promise(() => listCanvases({
+        baseUrl: development.descriptor.baseUrl,
+        instance: development.descriptor.instance,
+        cookie,
+        origin: "http://neighbor.example"
+      }))
+      expect(rejectedOrigin.status).toBe(403)
+      expect(rejectedOrigin.headers.get("access-control-allow-origin")).toBeNull()
+      const preflight = yield* Effect.promise(() => fetch(
+        `${development.descriptor.baseUrl}/browser/${development.descriptor.instance}/api/v1/canvas`,
+        {
+          method: "OPTIONS",
+          headers: {
+            origin: browserOrigin,
+            "access-control-request-method": "GET",
+            "access-control-request-headers": "content-type,x-crit-api-version",
+            "access-control-request-private-network": "true"
+          }
+        }
+      ))
+      expect(preflight.status).toBe(204)
+      expect(preflight.headers.get("access-control-allow-origin")).toBe(browserOrigin)
+      expect(preflight.headers.get("access-control-allow-credentials")).toBe("true")
+      expect(preflight.headers.get("access-control-allow-methods")).toMatch(/GET/)
+      expect(preflight.headers.get("access-control-allow-headers")).toMatch(/x-crit-api-version/)
+      expect(preflight.headers.get("access-control-allow-private-network")).toBe("true")
     }))))
 
   it("allows exactly one concurrent bootstrap exchange", () =>
