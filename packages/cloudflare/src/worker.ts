@@ -16,6 +16,7 @@ import {
   parseArtifactPath,
   parseRemoteAuthorityPath,
   remoteCanvasCollectionPath,
+  RemoteAuthorityRoute,
   ShareDigestMismatch,
   type RegisterDeploymentWire
 } from "@crit/protocol"
@@ -366,7 +367,7 @@ const worker: ExportedHandler<Cloudflare.Env> = {
     }
     const ledger = parseRemoteAuthorityPath(url.pathname)
     if (ledger !== undefined) {
-      if (ledger._tag === "presence") {
+      if (RemoteAuthorityRoute.$is("presence")(ledger)) {
         return handlePresenceRequest(request, env, ledger.canvasId)
       }
       return handleLedgerRequest(request, env, ledger)
