@@ -12,12 +12,15 @@ The Frame stores `applicationId` and a route. CI replaces the Installation's rev
 1. Confirm `crit.manifest.json` exists at the project root. Done when it has `applicationId`.
 2. Run `crit register-deployment --help`. Done when the live flags are in context. Prefer `--help` over this file for flag names.
 3. Find the workflow that deploys the application preview. Done when you have the step that produces the preview origin.
+4. Confirm the preview deploy builds in `crit-review-preview` mode with `CRIT_PARENT_ORIGIN` set to `CRIT_INSTALLATION_URL`. Use the `install-crit-frame-bridge` skill for the route script and `frame-ancestors` header.
 
 If `crit` is not on PATH, use `npx crit`.
 
 ## Edit
 
 Add a step after that deploy. Pass the preview origin as `--url` with a trailing slash. Pass `${{ github.sha }}` as `--revision` when the run has one.
+
+The deploy step that builds the preview should run in `crit-review-preview` mode with `CRIT_PARENT_ORIGIN: ${{ secrets.CRIT_INSTALLATION_URL }}`.
 
 ```yaml
 - name: Register the preview with Crit
@@ -43,4 +46,4 @@ The token is a machine secret. It is not an Access user email and not `CLOUDFLAR
 
 ## Done
 
-The workflow runs `crit register-deployment` after a successful preview deploy. `--url` comes from that deploy's origin. The two Crit secrets are named. No preview hostname is written onto a Frame, into `crit.manifest.json`, or into git.
+The workflow runs `crit register-deployment` after a successful preview deploy. `--url` comes from that deploy's origin. The preview build is frameable by the Crit host. The two Crit secrets are named. No preview hostname is written onto a Frame, into `crit.manifest.json`, or into git.

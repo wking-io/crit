@@ -50,7 +50,10 @@ Use the optional Vite leaf when the project uses Vite:
 
 ```ts
 import { parseFrameBridgeParentOrigin } from "@crit/frame-bridge/html"
-import { frameRouteBridgeVitePlugin } from "@crit/frame-bridge/vite"
+import {
+  frameAncestorsPreviewVitePlugin,
+  frameRouteBridgeVitePlugin
+} from "@crit/frame-bridge/vite"
 import { defineConfig, loadEnv } from "vite"
 
 export default defineConfig(({ command, mode }) => {
@@ -58,6 +61,7 @@ export default defineConfig(({ command, mode }) => {
   const wantsBridge =
     (command === "serve" && mode === "development") ||
     mode === "crit-review-preview"
+  const wantsPreviewFrameAncestors = mode === "crit-review-preview"
   const parentOrigin = wantsBridge
     ? parseFrameBridgeParentOrigin(env.CRIT_PARENT_ORIGIN)
     : undefined
@@ -66,17 +70,37 @@ export default defineConfig(({ command, mode }) => {
     plugins: [
       parentOrigin === undefined
         ? undefined
-        : frameRouteBridgeVitePlugin({ parentOrigin })
+        : frameRouteBridgeVitePlugin({ parentOrigin }),
+      wantsPreviewFrameAncestors && parentOrigin !== undefined
+        ? frameAncestorsPreviewVitePlugin({ parentOrigin })
+        : undefined
     ]
   }
 })
 ```
 
-Set `CRIT_PARENT_ORIGIN` to the exact HTTP or HTTPS origin of the Crit parent page. Keep credentials, paths, queries, fragments, and wildcard targets out of this value.
+Set `CRIT_PARENT_ORIGIN` to the exact HTTP or HTTPS origin of the Crit parent page. In preview CI, set it to `CRIT_INSTALLATION_URL`. Keep credentials, paths, queries, fragments, and wildcard targets out of this value.
 
 ## Frame the preview
 
-Send `Content-Security-Policy: frame-ancestors <CRIT_PARENT_ORIGIN>` as an HTTP header on shared-review-preview responses. Put it on the Worker, Pages `_headers`, or CDN rule that serves that HTML. Browsers ignore `frame-ancestors` in a meta tag.
+Use the headers helper on shared-review-preview responses only. Browsers ignore `frame-ancestors` in a meta tag.
+
+```ts
+import { parseFrameBridgeParentOrigin } from "@crit/frame-bridge/html"
+import {
+  renderCloudflarePagesHeadersFile,
+  renderFrameAncestorsResponseHeaders
+} from "@crit/frame-bridge/headers"
+
+const parentOrigin = wantsPreviewFrameAncestors
+  ? parseFrameBridgeParentOrigin(process.env.CRIT_PARENT_ORIGIN)
+  : undefined
+const frameAncestorsHeaders = parentOrigin === undefined
+  ? {}
+  : renderFrameAncestorsResponseHeaders({ parentOrigin })
+```
+
+For Vite preview, add `frameAncestorsPreviewVitePlugin` only in `crit-review-preview` mode. For Cloudflare Pages, write `renderCloudflarePagesHeadersFile({ parentOrigin })` into `dist/_headers` before deploy. For a Worker, merge `frameAncestorsHeaders` into the HTML response headers.
 
 Ordinary production responses do not name the Crit host in `frame-ancestors`.
 
@@ -105,5 +129,5 @@ The Access login can sit in the Frame. The Cloudflare account IdP at `dash.cloud
 1. Run the real local-development command. Fetch its HTML and require exactly one `data-crit-route-bridge` marker with the configured parent origin.
 2. Run the real ordinary production build. Search every emitted file and require zero markers.
 3. Start the real production preview from that build. Fetch its HTML and require zero markers. Require the Crit origin absent from `frame-ancestors`.
-4. Build in `crit-review-preview` mode with the parent origin set. Require exactly one marker. Require the HTML response `frame-ancestors` header to include the Crit origin.
+4. Build in `crit-review-preview` mode with the parent origin set. Require exactly one marker. Require the HTML response `frame-ancestors` header to include the Crit origin. Use `frameAncestorsNamesOrigin` from `@crit/frame-bridge/headers` when checking a response header.
 5. When the preview is Access-gated, fetch the Access login URL and require no `X-Frame-Options` and no `frame-ancestors 'none'`.

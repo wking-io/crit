@@ -8,7 +8,7 @@ This file is the current inventory. Phase docs own the prove. [Decision record](
 
 ## Next
 
-- [ ] Shared review preview is frameable by the Crit host. `frame-ancestors` names the Crit origin. Access on the preview, if any, has `allow_iframe`. Ordinary production does not name Crit. The Frame Bridge skill performs that setup.
+- [ ] Presence of Access-authenticated people viewing a shared Canvas. Local review does not attend.
 
 ## Remaining
 
@@ -30,7 +30,7 @@ Plan: [phase 6](phase-06-cloudflare-platform.md), [phase 7](phase-07-sync-and-sh
 - [x] Worker, static assets, Access, D1, R2 artifacts.
 - [x] Hosted review UI served from the Worker.
 - [x] Teammate signs in with Access, views Frames and shared previews, and sets review status. No Crit install. The hosted UI iframes the registered preview.
-- [ ] Shared review preview is frameable by the Crit host. `frame-ancestors` names the Crit origin. Access on the preview, if any, has `allow_iframe`. Ordinary production does not name Crit. The Frame Bridge skill performs that setup.
+- [x] Shared review preview is frameable by the Crit host. `frame-ancestors` names the Crit origin. Access on the preview, if any, has `allow_iframe`. Ordinary production does not name Crit. The Frame Bridge skill performs that setup.
 - [ ] Presence of Access-authenticated people viewing a shared Canvas. Local review does not attend.
 - [ ] Author's local replica receives the reviewer's accepted changes.
 
@@ -84,6 +84,7 @@ Local Frames authoring on one machine.
 - Mid-session daemon loss keeps the last projection and shows a connection alert.
 - Enqueue rejection is a submit notice. Conflict repair stays later.
 - Official HTML renderer and optional Vite adapter inject the route script. Ordinary production stays unmarked.
+- `@crit/frame-bridge/headers` and the preview Vite plugin send `frame-ancestors` for the Crit host on shared review previews only. The Frame Bridge skill configures preview headers and Access `allow_iframe`.
 - Remote authority HTTP push/pull. Submit is keyed by change ID. Pull resumes after an opaque cursor. Access stamps the caller. The Worker exposes `/canvas/:id` and `/canvas/:id/changes`.
 - First share is idempotent. Stable share and import IDs plus a projection digest bind one remote Canvas. A retry returns that receipt. A changed digest under the same share ID fails.
 - After share, a linked replica rebases onto the remote genesis when its local cursor is unknown, then two author replicas can edit offline and converge in either order. `crit sync` pushes pending work and pulls accepted history.

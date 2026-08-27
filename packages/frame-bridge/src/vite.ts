@@ -1,6 +1,7 @@
 import type { FrameBridgeOrigin } from "@crit/protocol"
 import type { Plugin } from "vite"
 
+import { renderFrameAncestorsResponseHeaders } from "./headers.js"
 import {
   FRAME_ROUTE_BRIDGE_HTML_MARKER,
   critFrameRouteBridgeScript
@@ -18,5 +19,20 @@ export const frameRouteBridgeVitePlugin = (input: {
       children: critFrameRouteBridgeScript(input),
       injectTo: "head-prepend"
     }]
+  }
+})
+
+export const frameAncestorsPreviewVitePlugin = (input: {
+  readonly parentOrigin: FrameBridgeOrigin
+}): Plugin => ({
+  name: "crit-frame-ancestors-preview",
+  configurePreviewServer(server) {
+    const headers = renderFrameAncestorsResponseHeaders(input)
+    server.middlewares.use((_request, response, next) => {
+      for (const [name, value] of Object.entries(headers)) {
+        response.setHeader(name, value)
+      }
+      next()
+    })
   }
 })

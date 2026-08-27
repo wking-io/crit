@@ -17,7 +17,10 @@ import {
   FRAME_ROUTE_BRIDGE_HTML_MARKER,
   parseFrameBridgeParentOrigin
 } from "../src/html.js"
-import { frameRouteBridgeVitePlugin } from "../src/vite.js"
+import {
+  frameAncestorsPreviewVitePlugin,
+  frameRouteBridgeVitePlugin
+} from "../src/vite.js"
 
 const sourceHtml = "<!doctype html><html><head></head><body>Fixture</body></html>"
 
@@ -103,5 +106,58 @@ describe("Frame Bridge Vite plugin", () => {
     const html = readFileSync(path.join(root, "dist-review", "index.html"), "utf8")
     expect(html.split(FRAME_ROUTE_BRIDGE_HTML_MARKER)).toHaveLength(2)
     expect(html).toContain(JSON.stringify(parentOrigin))
+  })
+
+  it("sends frame-ancestors only from a review-preview preview server", async() => {
+    const parentOrigin = parseFrameBridgeParentOrigin("https://crit.acme.internal")
+    if (parentOrigin === undefined) throw new Error("Expected a valid parent origin")
+
+    await build({ root, logLevel: "silent" })
+
+    await build({
+      root,
+      logLevel: "silent",
+      mode: "crit-review-preview",
+      plugins: [
+        frameRouteBridgeVitePlugin({ parentOrigin }),
+        frameAncestorsPreviewVitePlugin({ parentOrigin })
+      ],
+      build: { outDir: "dist-review" }
+    })
+
+    const server = await preview({
+      root,
+      logLevel: "silent",
+      preview: { host: "127.0.0.1", port: 0 },
+      plugins: [frameAncestorsPreviewVitePlugin({ parentOrigin })],
+      build: { outDir: "dist-review" }
+    })
+    try {
+      const previewUrl = server.resolvedUrls?.local[0]
+      if (previewUrl === undefined) throw new Error("Expected a local preview URL")
+      const response = await fetch(previewUrl)
+      expect(response.status).toBe(200)
+      expect(response.headers.get("content-security-policy"))
+        .toBe("frame-ancestors https://crit.acme.internal")
+      expect(await response.text()).toContain(FRAME_ROUTE_BRIDGE_HTML_MARKER)
+    } finally {
+      await server.close()
+    }
+
+    const ordinaryServer = await preview({
+      root,
+      logLevel: "silent",
+      preview: { host: "127.0.0.1", port: 0 }
+    })
+    try {
+      const previewUrl = ordinaryServer.resolvedUrls?.local[0]
+      if (previewUrl === undefined) throw new Error("Expected a local preview URL")
+      const response = await fetch(previewUrl)
+      expect(response.status).toBe(200)
+      expect(response.headers.get("content-security-policy")).toBeNull()
+      expect(await response.text()).not.toContain(FRAME_ROUTE_BRIDGE_HTML_MARKER)
+    } finally {
+      await ordinaryServer.close()
+    }
   })
 })
