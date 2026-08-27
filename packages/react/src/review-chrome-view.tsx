@@ -62,7 +62,9 @@ export function ReviewChromeView({
   snapshotCapturing,
   snapshotFailed
 }: {
-  readonly onAddFramePlacement?: () => { readonly x: number; readonly y: number }
+  readonly onAddFramePlacement?:
+    | (() => { readonly x: number; readonly y: number })
+    | undefined
   readonly projection: CanvasProjection
   readonly requestAddFrame: ReviewRunner["requestAddFrame"]
   readonly run: ReviewRunner["run"]

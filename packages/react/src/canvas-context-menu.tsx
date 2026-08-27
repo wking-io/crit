@@ -25,7 +25,7 @@ export type ReviewMenuItem = Data.TaggedEnum<{
   readonly action: {
     readonly policy: ReviewActionPolicy
     readonly disabled?: boolean
-    readonly detail?: string
+    readonly detail?: string | undefined
     readonly onSelect: () => void
   }
   readonly link: {
@@ -103,7 +103,7 @@ function ActionItemContent({
   detail,
   label
 }: {
-  readonly detail?: string
+  readonly detail?: string | undefined
   readonly label: string
 }) {
   return (
@@ -142,7 +142,7 @@ function ReviewMenuEntry({
         ? (
           <ContextMenu.Item {...sharedProps}>
             <ActionItemContent
-              {...(entry.detail === undefined ? {} : { detail: entry.detail })}
+              detail={entry.detail}
               label={entry.policy.label}
             />
           </ContextMenu.Item>
@@ -150,7 +150,7 @@ function ReviewMenuEntry({
         : (
           <Menu.Item {...sharedProps}>
             <ActionItemContent
-              {...(entry.detail === undefined ? {} : { detail: entry.detail })}
+              detail={entry.detail}
               label={entry.policy.label}
             />
           </Menu.Item>

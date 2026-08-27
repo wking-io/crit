@@ -10,7 +10,7 @@ import type { ReviewClientEffect } from "./review-actions.js"
 
 export interface ReviewEffectContext {
   readonly frameElement: HTMLElement | null
-  readonly zoomToFit?: () => void
+  readonly zoomToFit?: (() => void) | undefined
 }
 
 export const applyReviewEffect = (
@@ -84,7 +84,7 @@ export const useReviewEffects = (args: {
     }
     applyReviewEffect(effect, {
       frameElement: args.selectedFrameRef.current,
-      ...(args.zoomToFit === undefined ? {} : { zoomToFit: args.zoomToFit })
+      zoomToFit: args.zoomToFit
     })
   }
 
