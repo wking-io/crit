@@ -8,7 +8,7 @@ This file is the current inventory. Phase docs own the prove. [Decision record](
 
 ## Next
 
-- [ ] Teammate signs in with Access, views Frames and shared previews, and sets review status. No Crit install. The hosted UI iframes the registered preview.
+- [ ] Shared review preview is frameable by the Crit host. `frame-ancestors` names the Crit origin. Access on the preview, if any, has `allow_iframe`. Ordinary production does not name Crit. The Frame Bridge skill performs that setup.
 
 ## Remaining
 
@@ -29,7 +29,7 @@ Plan: [phase 6](phase-06-cloudflare-platform.md), [phase 7](phase-07-sync-and-sh
 - [x] Recoverable remote conflicts that keep dependent pending work. Local replica policy exists.
 - [x] Worker, static assets, Access, D1, R2 artifacts.
 - [x] Hosted review UI served from the Worker.
-- [ ] Teammate signs in with Access, views Frames and shared previews, and sets review status. No Crit install. The hosted UI iframes the registered preview.
+- [x] Teammate signs in with Access, views Frames and shared previews, and sets review status. No Crit install. The hosted UI iframes the registered preview.
 - [ ] Shared review preview is frameable by the Crit host. `frame-ancestors` names the Crit origin. Access on the preview, if any, has `allow_iframe`. Ordinary production does not name Crit. The Frame Bridge skill performs that setup.
 - [ ] Presence of Access-authenticated people viewing a shared Canvas. Local review does not attend.
 - [ ] Author's local replica receives the reviewer's accepted changes.
