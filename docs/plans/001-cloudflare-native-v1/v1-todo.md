@@ -32,7 +32,7 @@ Plan: [phase 6](phase-06-cloudflare-platform.md), [phase 7](phase-07-sync-and-sh
 - [x] Teammate signs in with Access, views Frames and shared previews, and sets review status. No Crit install. The hosted UI iframes the registered preview.
 - [x] Shared review preview is frameable by the Crit host. `frame-ancestors` names the Crit origin. Access on the preview, if any, has `allow_iframe`. Ordinary production does not name Crit. The Frame Bridge skill performs that setup.
 - [ ] Presence of Access-authenticated people viewing a shared Canvas. Local review does not attend.
-- [ ] Author's local replica receives the reviewer's accepted changes.
+- [x] Author's local replica receives the reviewer's accepted changes.
 
 ### Agents
 
@@ -89,6 +89,7 @@ Local Frames authoring on one machine.
 - First share is idempotent. Stable share and import IDs plus a projection digest bind one remote Canvas. A retry returns that receipt. A changed digest under the same share ID fails.
 - After share, a linked replica rebases onto the remote genesis when its local cursor is unknown, then two author replicas can edit offline and converge in either order. `crit sync` pushes pending work and pulls accepted history.
 - A remote content collision keeps the losing change conflicted and its dependents blocked. Independent pending work still lands. `crit sync` prints those leftover counts.
+- A reviewer with no replica can accept a Frame on the shared remote. The author's `crit sync` pulls that change, including after a genesis rebase, and the local projection shows the new review status.
 - The hosted Worker serves the canvas list at `/`, lists shared canvases from D1 at `GET /canvas`, and stores immutable artifacts in R2. Ledger JSON stays on `/canvas/:id` when the request is not a document.
 - The Worker serves the host document at `/` and `/canvas/:id`. A public HTTPS origin with no `#crit=` boots hosted ports over directory, ledger, artifacts, and `POST /representations/application-route`. Local `#crit=` still talks to the daemon. Deploy copies `packages/host/dist-web` into Worker assets.
 - [`docs/install/cloudflare.md`](../../install/cloudflare.md) documents customer Cloudflare install: build the review website, create Cloudflare resources, configure Wrangler and Access, deploy, verify, and connect authors.
