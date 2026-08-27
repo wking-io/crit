@@ -1,4 +1,4 @@
-import { LocalBrowserConnection } from "@crit/client"
+import { IntegratedConnectionDocument, LocalBrowserConnection } from "@crit/client"
 import { LocalDaemonInstanceNonce } from "@crit/replica/http"
 import { createMemoryHistory } from "@tanstack/react-router"
 import { Schema } from "effect"
@@ -33,7 +33,7 @@ const hostAt = (
   path: string,
   fragment: string,
   origin = "http://127.0.0.1:5173",
-  injected?: unknown
+  injected?: IntegratedConnectionDocument
 ) => (
   <HostRoot
     history={createMemoryHistory({ initialEntries: [path] })}
@@ -173,10 +173,12 @@ describe("HostRoot", () => {
     fetchMock.mockImplementation(() => listed)
 
     await act(async() => render(
-      hostAt("/", "", "http://127.0.0.1:5173", {
+      hostAt("/", "", "http://127.0.0.1:5173", Schema.decodeUnknownSync(
+        IntegratedConnectionDocument
+      )({
         kind: "integrated",
         apiBase: "/__crit/"
-      })
+      }))
     ))
 
     await act(async() => {

@@ -1,7 +1,7 @@
 import type { VerifiedInvocation } from "@crit/authority"
 import { BrowserOrigin } from "@crit/client"
 import type { LocalDaemonInstanceNonce } from "@crit/replica/http"
-import { Crypto, Data, Effect, Encoding, Redacted, Schema } from "effect"
+import { Crypto, Data, Effect, Encoding, Option, Redacted, Schema } from "effect"
 import { HttpServerRequest } from "effect/unstable/http"
 import { createHash, timingSafeEqual } from "node:crypto"
 
@@ -65,9 +65,9 @@ export const authorizeIntegrated = (
 ): Effect.Effect<boolean> =>
   Effect.sync(() => {
     const origin = request.headers.origin
-    const token = request.headers[hostTokenHeader]
-    if (origin !== plane.hostOrigin || typeof token !== "string") return false
+    const token = Schema.decodeUnknownOption(HostToken)(request.headers[hostTokenHeader])
+    if (origin !== plane.hostOrigin || Option.isNone(token)) return false
     const expected = tokenDigest(Redacted.value(plane.hostToken))
-    const actual = tokenDigest(token)
+    const actual = tokenDigest(token.value)
     return actual.length === expected.length && timingSafeEqual(actual, expected)
   })

@@ -33,11 +33,15 @@ const isHostedOrigin = (origin: string): boolean => {
   }
 }
 
-export const readInjectedHostRuntime = (document: Document): unknown => {
+export const readInjectedHostRuntime = (
+  document: Document
+): IntegratedConnectionDocument | undefined => {
   const node = document.getElementById("crit-host-runtime")
   if (node === null || node.textContent === null) return undefined
   try {
-    return JSON.parse(node.textContent)
+    return Option.getOrUndefined(
+      Schema.decodeUnknownOption(IntegratedConnectionDocument)(JSON.parse(node.textContent))
+    )
   } catch {
     return undefined
   }
@@ -46,14 +50,13 @@ export const readInjectedHostRuntime = (document: Document): unknown => {
 export const resolveHostRuntime = (input: {
   readonly origin: string
   readonly fragment: string
-  readonly injected: unknown
+  readonly injected?: IntegratedConnectionDocument | undefined
 }): HostRuntime => {
   const loopback = Schema.decodeUnknownOption(BrowserOrigin)(input.origin)
-  const document = Schema.decodeUnknownOption(IntegratedConnectionDocument)(input.injected)
-  if (Option.isSome(loopback) && Option.isSome(document)) {
+  if (Option.isSome(loopback) && input.injected !== undefined) {
     return HostRuntime.integrated({
       origin: loopback.value,
-      apiBase: document.value.apiBase
+      apiBase: input.injected.apiBase
     })
   }
   if (input.fragment.startsWith("#crit=")) {

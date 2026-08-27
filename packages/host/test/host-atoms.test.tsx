@@ -22,8 +22,8 @@ const shopCanvasId = Id.canvas("canvas_shop")
 const reviewCanvasId = Id.canvas("canvas_review")
 const localOrigin = "http://127.0.0.1:5173"
 
-const runtimeAt = (fragment: string, origin = localOrigin, injected?: unknown) =>
-  resolveHostRuntime({ fragment, injected, origin })
+const runtimeAt = (fragment: string, origin = localOrigin) =>
+  resolveHostRuntime({ fragment, origin })
 
 afterEach(() => {
   fetchMock.mockReset()

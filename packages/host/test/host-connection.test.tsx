@@ -1,4 +1,4 @@
-import { LocalBrowserConnection } from "@crit/client"
+import { IntegratedConnectionDocument, LocalBrowserConnection } from "@crit/client"
 import { LocalDaemonInstanceNonce } from "@crit/replica/http"
 import { Schema } from "effect"
 import { describe, expect, it } from "vitest"
@@ -9,7 +9,10 @@ const instance = Schema.decodeUnknownSync(LocalDaemonInstanceNonce)(
   "0123456789abcdef0123456789abcdef"
 )
 const loopback = "http://127.0.0.1:5173"
-const injected = { kind: "integrated", apiBase: "/__crit/" } as const
+const injected = Schema.decodeUnknownSync(IntegratedConnectionDocument)({
+  kind: "integrated",
+  apiBase: "/__crit/"
+})
 
 describe("resolveHostRuntime", () => {
   it("treats loopback with an injected integrated document as integrated", () => {
