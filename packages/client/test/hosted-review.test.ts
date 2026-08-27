@@ -3,7 +3,7 @@ import {
   Id
 } from "@crit/domain"
 import { formatProtocolFailure } from "@crit/protocol"
-import { Effect, Schema } from "effect"
+import { Effect } from "effect"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import {
