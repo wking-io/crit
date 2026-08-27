@@ -1,7 +1,8 @@
 import { type AuthorityView, type ChangeRejected } from "@crit/authority"
 import {
   CanvasEngine,
-  ChangeId
+  ChangeId,
+  type CanvasProjection
 } from "@crit/domain"
 import {
   ChangeValue,
@@ -9,7 +10,7 @@ import {
   type ProposedCanvasChange,
   type SubmitChangeReceipt
 } from "@crit/protocol"
-import { Match, Result, Schema } from "effect"
+import { Match, Option, Predicate, Result, Schema } from "effect"
 
 import {
   AcceptedUnconfirmed,
@@ -30,7 +31,8 @@ import {
 } from "./model.js"
 
 const decodeNonEmptyChangeIds = Schema.decodeUnknownSync(Schema.NonEmptyArray(ChangeId))
-const active = (record: PendingRecord) => record.state._tag === "ready" || record.state._tag === "acceptedUnconfirmed"
+const active = (record: PendingRecord) =>
+  Predicate.isTagged(record.state, "ready") || Predicate.isTagged(record.state, "acceptedUnconfirmed")
 
 const pendingAuthor = (invocation: PendingRecord["invocation"]): PendingAuthor =>
   Match.value(invocation).pipe(Match.tagsExhaustive({
@@ -50,46 +52,56 @@ const pendingAuthor = (invocation: PendingRecord["invocation"]): PendingAuthor =
         })
   }))
 
-const rebuild = (state: ReplicaState) => {
-  const replay = CanvasEngine.replay(state.genesisProjection, state.accepted)
-  if (replay._tag === "replayFailed") return Result.fail(new ReplicaInvariantFailure({
-    canvasId: state.canvasId,
-    reason: `accepted history failed at ${replay.failure._tag}`
-  }))
-  let projection = replay.projection
-  const statuses = new Map<ChangeId, PendingRecord["state"]>()
-  const pending: PendingRecord[] = []
-  for (const record of state.pending) {
-    const blockedBy = record.dependencies.filter((id) => {
-      const status = statuses.get(id)
-      return status?._tag === "conflicted" || status?._tag === "blocked"
+const rebuild = (state: ReplicaState): Result.Result<{
+  readonly state: ReplicaState
+  readonly projection: CanvasProjection
+}, ReplicaInvariantFailure> =>
+  Match.value(CanvasEngine.replay(state.genesisProjection, state.accepted)).pipe(
+    Match.tag("replayFailed", (replay) => Result.fail(new ReplicaInvariantFailure({
+      canvasId: state.canvasId,
+      reason: `accepted history failed at ${replay.failure._tag}`
+    }))),
+    Match.orElse((replay) => {
+      let projection = replay.projection
+      const statuses = new Map<ChangeId, PendingRecord["state"]>()
+      const pending: PendingRecord[] = []
+      for (const record of state.pending) {
+        const blockedBy = record.dependencies.filter((id) => {
+          const status = statuses.get(id)
+          return Predicate.isTagged(status, "conflicted") || Predicate.isTagged(status, "blocked")
+        })
+        if (blockedBy.length > 0) {
+          const next = { ...record, state: Blocked.make({ blockedBy: decodeNonEmptyChangeIds(blockedBy) }) }
+          pending.push(next)
+          statuses.set(record.proposal.changeId, next.state)
+          continue
+        }
+        if (Predicate.isTagged(record.state, "conflicted")) {
+          pending.push(record)
+          statuses.set(record.proposal.changeId, record.state)
+          continue
+        }
+        const applied = CanvasEngine.apply(projection, record.proposal)
+        Match.value(applied).pipe(Match.tagsExhaustive({
+          rejected: ({ failure }) => {
+            const next = { ...record, state: Conflicted.make({ failure }) }
+            pending.push(next)
+            statuses.set(record.proposal.changeId, next.state)
+          },
+          applied: ({ projection: nextProjection }) => {
+            const stateValue = Predicate.isTagged(record.state, "acceptedUnconfirmed")
+              ? record.state
+              : Ready.make({})
+            const next = { ...record, state: stateValue }
+            pending.push(next)
+            statuses.set(record.proposal.changeId, next.state)
+            projection = nextProjection
+          }
+        }))
+      }
+      return Result.succeed({ state: { ...state, pending }, projection })
     })
-    if (blockedBy.length > 0) {
-      const next = { ...record, state: Blocked.make({ blockedBy: decodeNonEmptyChangeIds(blockedBy) }) }
-      pending.push(next)
-      statuses.set(record.proposal.changeId, next.state)
-      continue
-    }
-    if (record.state._tag === "conflicted") {
-      pending.push(record)
-      statuses.set(record.proposal.changeId, record.state)
-      continue
-    }
-    const applied = CanvasEngine.apply(projection, record.proposal)
-    if (applied._tag === "rejected") {
-      const next = { ...record, state: Conflicted.make({ failure: applied.failure }) }
-      pending.push(next)
-      statuses.set(record.proposal.changeId, next.state)
-      continue
-    }
-    const stateValue = record.state._tag === "acceptedUnconfirmed" ? record.state : Ready.make({})
-    const next = { ...record, state: stateValue }
-    pending.push(next)
-    statuses.set(record.proposal.changeId, next.state)
-    projection = applied.projection
-  }
-  return Result.succeed({ state: { ...state, pending }, projection })
-}
+  )
 
 const view = (state: ReplicaState) => Result.map(rebuild(state), ({ state: rebuilt, projection }) => ReplicaView.make({
   canvasId: rebuilt.canvasId,
@@ -113,24 +125,46 @@ const initialize = (authority: AuthorityView): ReplicaState => ({
   pending: []
 })
 
-const enqueue = (state: ReplicaState, input: ReplicaChange, invocation: PendingRecord["invocation"], changeId: ChangeId) => {
+const enqueue = (
+  state: ReplicaState,
+  input: ReplicaChange,
+  invocation: PendingRecord["invocation"],
+  changeId: ChangeId
+): Result.Result<ReplicaState, ChangeIdAlreadyPresent | ReplicaInvariantFailure | LocalChangeRejected> => {
   if (state.pending.some((record) => record.proposal.changeId === changeId) || state.accepted.some((change) => change.changeId === changeId)) {
     return Result.fail(new ChangeIdAlreadyPresent({ canvasId: state.canvasId, changeId }))
   }
   const current = rebuild(state)
-  if (current._tag === "Failure") return current
+  if (Result.isFailure(current)) return Result.fail(current.failure)
   const proposal: ProposedCanvasChange = { changeId, canvasId: input.canvasId, observedCursor: state.acknowledgedCursor, commands: input.commands }
   const onAcknowledged = CanvasEngine.replay(state.genesisProjection, state.accepted)
-  if (onAcknowledged._tag === "replayFailed") return Result.fail(new ReplicaInvariantFailure({ canvasId: state.canvasId, reason: "accepted history is invalid" }))
+  if (Predicate.isTagged(onAcknowledged, "replayFailed")) {
+    return Result.fail(new ReplicaInvariantFailure({ canvasId: state.canvasId, reason: "accepted history is invalid" }))
+  }
   const acknowledgedResult = CanvasEngine.apply(onAcknowledged.projection, proposal)
   const optimisticResult = CanvasEngine.apply(current.success.projection, proposal)
-  if (optimisticResult._tag === "rejected") return Result.fail(new LocalChangeRejected({ canvasId: state.canvasId, changeId, failure: optimisticResult.failure }))
-  const dependencies = acknowledgedResult._tag === "applied" ? [] : state.pending.filter(active).map((record) => record.proposal.changeId)
+  const optimisticFailure = Match.value(optimisticResult).pipe(
+    Match.tag("rejected", (result) => result.failure),
+    Match.option
+  )
+  if (Option.isSome(optimisticFailure)) {
+    return Result.fail(new LocalChangeRejected({ canvasId: state.canvasId, changeId, failure: optimisticFailure.value }))
+  }
+  const dependencies = Predicate.isTagged(acknowledgedResult, "applied")
+    ? []
+    : state.pending.filter(active).map((record) => record.proposal.changeId)
   const next = { ...state, pending: [...current.success.state.pending, { proposal, invocation, dependencies, state: Ready.make({}) }] }
   return Result.succeed(next)
 }
 
-const incorporatePage = (state: ReplicaState, page: ChangePage) => {
+const incorporatePage = (
+  state: ReplicaState,
+  page: ChangePage
+): Result.Result<{
+  readonly state: ReplicaState
+  readonly pulled: number
+  readonly acknowledged: number
+}, ReplicaDiverged | ReplicaInvariantFailure> => {
   if (page.canvasId !== state.canvasId) return Result.fail(new ReplicaDiverged({ canvasId: state.canvasId, reason: "page Canvas does not match replica" }))
   const knownAfter = page.after === state.genesisCursor || state.accepted.some((change) => change.cursor === page.after)
   if (!knownAfter) return Result.fail(new ReplicaDiverged({ canvasId: state.canvasId, reason: "page starts from an unknown cursor" }))
@@ -161,7 +195,8 @@ const incorporatePage = (state: ReplicaState, page: ChangePage) => {
   }
   const acknowledgedCursor = accepted.at(-1)?.cursor ?? state.genesisCursor
   const rebuilt = rebuild({ ...state, accepted, pending, acknowledgedCursor, acceptedBaseSequence })
-  return rebuilt._tag === "Failure" ? rebuilt : Result.succeed({ state: rebuilt.success.state, pulled, acknowledged })
+  if (Result.isFailure(rebuilt)) return Result.fail(rebuilt.failure)
+  return Result.succeed({ state: rebuilt.success.state, pulled, acknowledged })
 }
 
 const receipt = (state: ReplicaState, value: SubmitChangeReceipt) => {
@@ -182,12 +217,16 @@ const receipt = (state: ReplicaState, value: SubmitChangeReceipt) => {
   return Result.succeed({ ...state, pending })
 }
 
-const rejection = (state: ReplicaState, value: ChangeRejected) => {
+const rejection = (
+  state: ReplicaState,
+  value: ChangeRejected
+): Result.Result<ReplicaState, ReplicaInvariantFailure> => {
   const pending = state.pending.map((record) => record.proposal.changeId === value.changeId
     ? { ...record, state: Conflicted.make({ failure: value.failure }) }
     : record)
   const rebuilt = rebuild({ ...state, pending })
-  return rebuilt._tag === "Failure" ? rebuilt : Result.succeed(rebuilt.success.state)
+  if (Result.isFailure(rebuilt)) return Result.fail(rebuilt.failure)
+  return Result.succeed(rebuilt.success.state)
 }
 
 export const ReplicaPolicy = {

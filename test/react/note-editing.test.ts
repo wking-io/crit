@@ -1,3 +1,4 @@
+import { Predicate } from "effect"
 import { describe, expect, it } from "vitest"
 
 import type { CanvasCommand, CanvasNote } from "../../src/core/index.js"
@@ -64,7 +65,8 @@ describe("Note editing", () => {
 
     scheduled?.()
     expect(batches).toHaveLength(1)
-    expect(batches[0]?.map((command) => command._tag)).toEqual(["EditNote"])
+    expect(batches[0]).toHaveLength(1)
+    expect(Predicate.isTagged(batches[0]?.[0], "EditNote")).toBe(true)
     expect(batches[0]?.[0]).toMatchObject({ text: "Latest" })
 
     session.flush({ text: "Latest" })

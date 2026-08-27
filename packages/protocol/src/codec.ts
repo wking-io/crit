@@ -1,4 +1,4 @@
-import { Option, Result, Schema, SchemaAST } from "effect"
+import { Option, Predicate, Result, Schema, SchemaAST } from "effect"
 
 import type {
   AcceptedCanvasChange,
@@ -92,12 +92,16 @@ const hasUnknownCommandKind = (input: Schema.Json): boolean => {
   if (Option.isNone(commands)) return false
   for (const command of commands.value) {
     const header = readCommandHeader(command)
-    if (Option.isSome(header) && !new Set([
-      "renameCanvas", "addFrame", "setFrameTitle", "setFrameRepresentation",
-      "setFrameStatus", "setFrameGeometry", "removeFrame", "placeCanvasItem"
-    ]).has(header.value._tag)) {
-      return true
-    }
+    if (Option.isSome(header) && !(
+      Predicate.isTagged(header.value, "renameCanvas") ||
+      Predicate.isTagged(header.value, "addFrame") ||
+      Predicate.isTagged(header.value, "setFrameTitle") ||
+      Predicate.isTagged(header.value, "setFrameRepresentation") ||
+      Predicate.isTagged(header.value, "setFrameStatus") ||
+      Predicate.isTagged(header.value, "setFrameGeometry") ||
+      Predicate.isTagged(header.value, "removeFrame") ||
+      Predicate.isTagged(header.value, "placeCanvasItem")
+    )) return true
   }
   return false
 }

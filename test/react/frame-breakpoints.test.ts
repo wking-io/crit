@@ -1,4 +1,4 @@
-import { Effect } from "effect"
+import { Effect, Predicate } from "effect"
 import { describe, expect, it } from "vitest"
 
 import { Canvas, CanvasCommand } from "../../src/core/index.js"
@@ -80,9 +80,9 @@ describe("Frame breakpoint duplication", () => {
       createId: () => `copy-${++sequence}`
     })
 
-    expect(commands.filter((command) => command._tag === "AddFrame")).toHaveLength(3)
+    expect(commands.filter(Predicate.isTagged("AddFrame"))).toHaveLength(3)
     expect(commands.some((command) =>
-      command._tag === "ResizeFrame" && command.width === 402
+      Predicate.isTagged(command, "ResizeFrame") && "width" in command && command.width === 402
     )).toBe(false)
   })
 

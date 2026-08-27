@@ -10,7 +10,7 @@ import {
   emptyCanvasProjection,
   Id
 } from "@crit/domain"
-import { Schema } from "effect"
+import { Match, Predicate, Schema } from "effect"
 import { afterEach, describe, expect, it } from "vitest"
 
 import { canvasLayout, formatCanvasLayout } from "../src/layout.js"
@@ -40,10 +40,12 @@ const populated = () => {
       ]
     })
   )
-  if (result._tag !== "applied") {
-    throw new Error(`expected applied projection, received ${result._tag}`)
-  }
-  return result.projection
+  return Match.value(result).pipe(
+    Match.tag("applied", ({ projection }) => projection),
+    Match.orElse(() => {
+      throw new Error(`expected applied projection, received ${result._tag}`)
+    })
+  )
 }
 
 describe("canvasLayout", () => {
@@ -174,7 +176,7 @@ describe("built crit-target layout", () => {
     expect(layout.canvasId).toBe("canvas_cli_layout")
     expect(layout.title).toBe("Board")
     expect(layout.items).toHaveLength(1)
-    expect(layout.items[0]._tag).toBe("frame")
+    expect(Predicate.isTagged(layout.items[0], "frame")).toBe(true)
     expect(layout.items[0].title).toBe("Pricing")
     expect(layout.items[0].representation).toBe("webUrl")
     expect(layout.items[0].geometry).toEqual({ x: 80, y: 40, width: 1200, height: 800 })

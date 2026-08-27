@@ -3,7 +3,7 @@ import { createServer as createHttpServer } from "node:http"
 import path from "node:path"
 
 import { describe, expect, it } from "vitest"
-import { Effect, Schema } from "effect"
+import { Effect, Predicate, Schema } from "effect"
 import { createServer } from "vite"
 
 import { CanvasCommandSchema } from "../../src/core/index.js"
@@ -430,11 +430,7 @@ describe("Crit feature lab", () => {
     ])
     expect(canvas.frames.every((frame) => frame.geometry !== undefined)).toBe(true)
 
-    expect(
-      commands
-        .filter((command) => command._tag === "SetFrameStatus")
-        .map((command) => command.status)
-    ).toEqual([])
-    expect(commands.filter((command) => command._tag === "AddNote")).toHaveLength(1)
+    expect(commands.filter(Predicate.isTagged("SetFrameStatus"))).toEqual([])
+    expect(commands.filter(Predicate.isTagged("AddNote"))).toHaveLength(1)
   })
 })

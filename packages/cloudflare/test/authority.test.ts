@@ -16,7 +16,7 @@ import {
   decodeCanvasCommandBatch,
   emptyCanvasProjection
 } from "@crit/domain"
-import { Cause, Context, Effect, Exit, Layer, Result, Schema } from "effect"
+import { Cause, Context, Effect, Exit, Layer, Match, Predicate, Result, Schema } from "effect"
 import { describe, expect, it } from "vitest"
 
 import { CloudflareCanvasAuthority } from "../src/index.js"
@@ -150,8 +150,8 @@ describe("Cloudflare CanvasAuthority", () => {
           }])
         }, person))
         expect(
-          changedRetry._tag === "Failure" && changedRetry.failure._tag
-        ).toBe("changeIdReused")
+          Result.isFailure(changedRetry) && Predicate.isTagged(changedRetry.failure, "changeIdReused")
+        ).toBe(true)
 
         const next = yield* authority.submit({
           canvasId,
@@ -178,9 +178,10 @@ describe("Cloudflare CanvasAuthority", () => {
         )
         expect(view.projection.title).toBe("Final")
         expect(page.changes).toHaveLength(2)
-        expect(
-          replay._tag === "replayed" && replay.projection
-        ).toEqual(view.projection)
+        Match.value(replay).pipe(
+          Match.tag("replayed", ({ projection }) => { expect(projection).toEqual(view.projection) }),
+          Match.orElse(() => { throw new Error("expected replayed") })
+        )
       }))
     })))
   })

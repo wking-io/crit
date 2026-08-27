@@ -14,7 +14,7 @@ import {
   type ReplicaOpenFailure
 } from "@crit/replica"
 import { NodeFileSystem, NodePath } from "@effect/platform-node"
-import { Effect, FileSystem, Layer, Path } from "effect"
+import { Effect, FileSystem, Layer, Path, Predicate, Result } from "effect"
 import { FetchHttpClient, HttpClient } from "effect/unstable/http"
 
 import { LocalCanvasCatalog } from "./sqlite.js"
@@ -31,7 +31,7 @@ export const rebaseIfRemoteCursorUnknown = (
       after: view.acknowledgedCursor,
       limit: AuthorityModel.pageLimit(1)
     })).pipe(Effect.result)
-    if (page._tag === "Failure" && page.failure._tag === "cursorNotFound") {
+    if (Result.isFailure(page) && Predicate.isTagged(page.failure, "cursorNotFound")) {
       yield* replica.relink(canvasId)
     }
   })
@@ -61,7 +61,7 @@ const makeLinkedCanvasAuthority = (dataRoot: string) =>
         }
         const installation = yield* loadInstallation
         const email = installation.principal.person.email
-        if (email._tag === "access") {
+        if (Predicate.isTagged(email, "access") && "address" in email) {
           return makeRemoteCanvasAuthority(http, RemoteAuthorityOptions.make({
             baseUrl: share.installationOrigin,
             accessEmail: email.address

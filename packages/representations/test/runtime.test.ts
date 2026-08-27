@@ -9,7 +9,7 @@ import {
   Sha256Digest,
   WebUrlRepresentation
 } from "@crit/domain"
-import { Crypto, Effect, Layer, Option, Result, Schema } from "effect"
+import { Crypto, Effect, Layer, Match, Option, Predicate, Result, Schema } from "effect"
 import { describe, expect, it } from "vitest"
 
 import {
@@ -182,20 +182,22 @@ describe("RepresentationRuntime", () => {
 
     const local = await Effect.runPromise(resolveWith(decodeBaseUrl("http://localhost:5173/")))
     const preview = await Effect.runPromise(resolveWith(decodeBaseUrl("https://preview.example/")))
-    expect(local._tag).toBe("iframe")
-    expect(preview._tag).toBe("iframe")
-    if (local._tag !== "iframe" || preview._tag !== "iframe") return
-    expect(local.url).toBe("http://localhost:5173/review?mode=wide")
-    expect(preview.url).toBe("https://preview.example/review?mode=wide")
-    expect(local.url).not.toBe(preview.url)
-    expect(local.representation).toEqual(representation)
-    expect(preview.representation).toEqual(representation)
-    expect(local.representation).not.toBe(representation)
-    expect(preview.representation).not.toBe(representation)
+    expect(Predicate.isTagged(local, "iframe")).toBe(true)
+    expect(Predicate.isTagged(preview, "iframe")).toBe(true)
+    const localIframe = Match.value(local).pipe(Match.tag("iframe", (plan) => plan), Match.option)
+    const previewIframe = Match.value(preview).pipe(Match.tag("iframe", (plan) => plan), Match.option)
+    if (Option.isNone(localIframe) || Option.isNone(previewIframe)) return
+    expect(localIframe.value.url).toBe("http://localhost:5173/review?mode=wide")
+    expect(previewIframe.value.url).toBe("https://preview.example/review?mode=wide")
+    expect(localIframe.value.url).not.toBe(previewIframe.value.url)
+    expect(localIframe.value.representation).toEqual(representation)
+    expect(previewIframe.value.representation).toEqual(representation)
+    expect(localIframe.value.representation).not.toBe(representation)
+    expect(previewIframe.value.representation).not.toBe(representation)
     expect(JSON.stringify(representation)).toBe(encoded)
     state.selection.frame = "frame_2"
-    expect(JSON.stringify(local.representation)).toBe(encoded)
-    expect(JSON.stringify(preview.representation)).toBe(encoded)
+    expect(JSON.stringify(localIframe.value.representation)).toBe(encoded)
+    expect(JSON.stringify(previewIframe.value.representation)).toBe(encoded)
   })
 
   it("resolves a web URL without consulting bindings or artifacts", async() => {
@@ -265,10 +267,11 @@ describe("RepresentationRuntime", () => {
       const service = yield* RepresentationRuntime
       return yield* service.resolve(artifact)
     }).pipe(Effect.provide(runtime)))
-    expect(plan._tag).toBe("artifactBytes")
-    if (plan._tag !== "artifactBytes") return
+    expect(Predicate.isTagged(plan, "artifactBytes")).toBe(true)
+    const artifactBytes = Match.value(plan).pipe(Match.tag("artifactBytes", (plan) => plan), Match.option)
+    if (Option.isNone(artifactBytes)) return
     expect(transferred).toBeDefined()
-    expect(plan.bytes).toBe(transferred)
+    expect(artifactBytes.value.bytes).toBe(transferred)
   })
 
   it("fails capture when an application has no binding", async() => {
@@ -324,9 +327,10 @@ describe("RepresentationRuntime", () => {
     }).pipe(Effect.provide(runtime)))
     expect(result.artifact.artifactId).toMatch(/^artifact_[0-9a-f]{32}$/)
     expect(result.artifact.digest).toBe(digestOf(bytes))
-    expect(result.plan._tag).toBe("artifactBytes")
-    if (result.plan._tag !== "artifactBytes") return
-    expect([...result.plan.bytes]).toEqual([2, 7, 1])
+    expect(Predicate.isTagged(result.plan, "artifactBytes")).toBe(true)
+    const captured = Match.value(result.plan).pipe(Match.tag("artifactBytes", (plan) => plan), Match.option)
+    if (Option.isNone(captured)) return
+    expect([...captured.value.bytes]).toEqual([2, 7, 1])
   })
 
   it("mints a new artifact for a second identical fetch", async() => {

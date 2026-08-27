@@ -5,7 +5,7 @@ import {
   encodeArtifactStoredWire,
   parseArtifactDigestSearch
 } from "@crit/protocol"
-import { Effect, Schema } from "effect"
+import { Effect, Match, Result, Schema } from "effect"
 
 import { resolveCallerIdentity, respondWithCallerCookie } from "./caller.js"
 import { R2ArtifactStore } from "./r2-artifact-store.js"
@@ -33,7 +33,7 @@ export const handleArtifactRequest = async (
   if (request.method === "PUT") {
     const bytes = new Uint8Array(await request.arrayBuffer())
     const outcome = await Effect.runPromise(Effect.result(store.put({ artifactId, bytes })))
-    if (outcome._tag === "Success") {
+    if (Result.isSuccess(outcome)) {
       return respond(new Response(JSON.stringify(encodeArtifactStoredWire({
         kind: "artifact-stored",
         schemaVersion: 1,
@@ -44,21 +44,21 @@ export const handleArtifactRequest = async (
         headers: { "content-type": "application/json" }
       }))
     }
-    if (outcome.failure._tag === "ArtifactConflict") {
-      return respond(encodedJson(409, ArtifactDigestConflict, ArtifactDigestConflict.make({
-        artifactId: outcome.failure.artifactId,
-        storedDigest: outcome.failure.storedDigest,
-        suppliedDigest: outcome.failure.suppliedDigest
-      })))
-    }
-    return respond(emptyResponse(500))
+    return Match.value(outcome.failure).pipe(
+      Match.tag("ArtifactConflict", (conflict) => respond(encodedJson(409, ArtifactDigestConflict, ArtifactDigestConflict.make({
+        artifactId: conflict.artifactId,
+        storedDigest: conflict.storedDigest,
+        suppliedDigest: conflict.suppliedDigest
+      })))),
+      Match.orElse(() => respond(emptyResponse(500)))
+    )
   }
   if (request.method === "GET") {
     const digest = parseArtifactDigestSearch(new URL(request.url).search)
     if (digest === undefined) return respond(emptyResponse(400))
     const artifact = ArtifactRepresentation.make({ artifactId, digest })
     const outcome = await Effect.runPromise(Effect.result(store.read(artifact)))
-    if (outcome._tag === "Success") {
+    if (Result.isSuccess(outcome)) {
       return respond(new Response(outcome.success, {
         status: 200,
         headers: {
@@ -67,15 +67,15 @@ export const handleArtifactRequest = async (
         }
       }))
     }
-    if (outcome.failure._tag === "ArtifactNotFound") return respond(emptyResponse(404))
-    if (outcome.failure._tag === "ArtifactCorrupt") {
-      return respond(encodedJson(409, ArtifactContentCorrupt, ArtifactContentCorrupt.make({
-        artifactId: outcome.failure.artifact.artifactId,
-        expectedDigest: outcome.failure.artifact.digest,
-        actualDigest: outcome.failure.actualDigest
-      })))
-    }
-    return respond(emptyResponse(500))
+    return Match.value(outcome.failure).pipe(
+      Match.tag("ArtifactNotFound", () => respond(emptyResponse(404))),
+      Match.tag("ArtifactCorrupt", (corrupt) => respond(encodedJson(409, ArtifactContentCorrupt, ArtifactContentCorrupt.make({
+        artifactId: corrupt.artifact.artifactId,
+        expectedDigest: corrupt.artifact.digest,
+        actualDigest: corrupt.actualDigest
+      })))),
+      Match.orElse(() => respond(emptyResponse(500)))
+    )
   }
   return respond(emptyResponse(405))
 }

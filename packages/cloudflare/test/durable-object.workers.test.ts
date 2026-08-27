@@ -20,7 +20,7 @@ import {
   listDurableObjectIds,
   runInDurableObject
 } from "cloudflare:test"
-import { Cause, Context, Effect, Exit, Layer, Result, Schema } from "effect"
+import { Cause, Context, Effect, Exit, Layer, Match, Predicate, Result, Schema } from "effect"
 import { beforeEach, describe, expect, it } from "vitest"
 
 import { durableObjectLayer } from "../src/durable-authority.js"
@@ -149,8 +149,8 @@ describe("CanvasDurableObject", () => {
         }])
       }, person))
       expect(
-        changedRetry._tag === "Failure" && changedRetry.failure._tag
-      ).toBe("changeIdReused")
+        Result.isFailure(changedRetry) && Predicate.isTagged(changedRetry.failure, "changeIdReused")
+      ).toBe(true)
 
       const next = yield* authority.submit({
         canvasId,
@@ -176,9 +176,10 @@ describe("CanvasDurableObject", () => {
         page.changes
       )
       expect(page.changes).toHaveLength(2)
-      expect(
-        replay._tag === "replayed" && replay.projection
-      ).toEqual(view.projection)
+      Match.value(replay).pipe(
+        Match.tag("replayed", ({ projection }) => { expect(projection).toEqual(view.projection) }),
+        Match.orElse(() => { throw new Error("expected replayed") })
+      )
     })))
   })
 

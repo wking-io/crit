@@ -12,7 +12,7 @@ import {
   type ReplicaSessionPorts
 } from "@crit/react"
 import { formatLocalApiVersionUnsupported } from "@crit/replica/http"
-import { Cause, Effect, Fiber, Match, Result, Stream } from "effect"
+import { Cause, Effect, Fiber, Match, Predicate, Result, Stream } from "effect"
 import * as Socket from "effect/unstable/socket/Socket"
 
 export const localTransportFailureReason = (failure: StatusFailure): string =>
@@ -25,7 +25,7 @@ export const localTransportFailureReason = (failure: StatusFailure): string =>
   }))
 
 const openFailureReason = (failure: OpenFailure): string =>
-  failure._tag === "canvasNotFound"
+  Predicate.isTagged(failure, "canvasNotFound")
     ? "The canvas does not exist on the local daemon."
     : localTransportFailureReason(failure)
 
@@ -92,15 +92,17 @@ export const localReplicaSessionPorts = (
   change: ({ canvasId, commands }) =>
     client.change(ReplicaChange.make({ canvasId, commands })).pipe(
       Effect.map((receipt) => receipt.view),
-      Effect.mapError((failure) => {
-        if (failure._tag === "changeRejected") {
-          return new ReplicaChangeRejected({ canvasId, failure: failure.failure })
-        }
-        return new ReplicaSessionUnavailable({
-          canvasId,
-          reason: openFailureReason(failure)
-        })
-      })
+      Effect.mapError((failure) =>
+        Match.value(failure).pipe(
+          Match.tag("changeRejected", (failure) =>
+            new ReplicaChangeRejected({ canvasId, failure: failure.failure })),
+          Match.orElse((failure) =>
+            new ReplicaSessionUnavailable({
+              canvasId,
+              reason: openFailureReason(failure)
+            }))
+        )
+      )
     ),
   attend: () => () => undefined
 })

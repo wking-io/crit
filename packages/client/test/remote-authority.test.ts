@@ -15,7 +15,8 @@ import {
   ChangeProtocol,
   decodeSubmitCanvasChangeWire,
   parseChangesAfterSearch,
-  parseRemoteAuthorityPath
+  parseRemoteAuthorityPath,
+  RemoteAuthorityRoute
 } from "@crit/protocol"
 import {
   CanvasReplica,
@@ -23,7 +24,7 @@ import {
   ReplicaChangeIds,
   ReplicaModel
 } from "@crit/replica"
-import { Effect, Layer, Result, Schema } from "effect"
+import { Effect, Layer, Predicate, Result, Schema } from "effect"
 import { describe, expect, it } from "vitest"
 
 import {
@@ -109,7 +110,7 @@ const serveAuthority = (
           response.writeHead(404).end()
           return
         }
-        if (route._tag === "canvas") {
+        if (RemoteAuthorityRoute.$is("canvas")(route)) {
           if (request.method !== "GET") {
             response.writeHead(405).end()
             return
@@ -139,7 +140,7 @@ const serveAuthority = (
             writeJson(response, 200, JSON.stringify(ChangeProtocol.page.encode(page.success)))
             return
           }
-          const schema = page.failure._tag === "canvasNotFound" ? CanvasNotFound : CursorNotFound
+          const schema = Predicate.isTagged(page.failure, "canvasNotFound") ? CanvasNotFound : CursorNotFound
           writeJson(response, 404, JSON.stringify(Schema.encodeSync(schema)(page.failure)))
           return
         }
@@ -159,8 +160,8 @@ const serveAuthority = (
           writeJson(response, 200, JSON.stringify(ChangeProtocol.receipt.encode(submitted.success)))
           return
         }
-        const status = submitted.failure._tag === "changeRejected"
-          || submitted.failure._tag === "changeIdReused"
+        const status = Predicate.isTagged(submitted.failure, "changeRejected")
+          || Predicate.isTagged(submitted.failure, "changeIdReused")
           ? 409
           : 404
         writeJson(response, status, JSON.stringify(submitted.failure))
@@ -242,7 +243,7 @@ describe("RemoteCanvasAuthority", () => {
       const remote = yield* remoteFrom(served.origin)
       const failure = yield* remote.open(Id.canvas("canvas_remote_missing")).pipe(Effect.flip)
 
-      expect(failure._tag).toBe("canvasNotFound")
+      expect(Predicate.isTagged(failure, "canvasNotFound")).toBe(true)
     }).pipe(Effect.provide(memoryAuthority))))
   )
 

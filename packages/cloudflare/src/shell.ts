@@ -1,4 +1,4 @@
-import { parseRemoteAuthorityPath } from "@crit/protocol"
+import { parseRemoteAuthorityPath, RemoteAuthorityRoute } from "@crit/protocol"
 
 export const isDocumentRequest = (request: Request): boolean => {
   if (request.method !== "GET" && request.method !== "HEAD") return false
@@ -10,7 +10,7 @@ export const isDocumentRequest = (request: Request): boolean => {
 export const isHostDocumentPath = (pathname: string): boolean => {
   if (pathname === "/") return true
   const route = parseRemoteAuthorityPath(pathname)
-  return route !== undefined && route._tag === "canvas"
+  return route !== undefined && RemoteAuthorityRoute.$is("canvas")(route)
 }
 
 const emptyResponse = (status: number) => new Response(null, { status })

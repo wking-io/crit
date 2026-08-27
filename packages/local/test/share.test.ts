@@ -23,7 +23,7 @@ import {
   encodeCanvasSharedWire,
   ShareDigestMismatch as ShareDigestMismatchWire
 } from "@crit/protocol"
-import { Effect, Layer, Schema } from "effect"
+import { Effect, Layer, Predicate, Schema } from "effect"
 import { describe, expect, it } from "vitest"
 
 import {
@@ -163,7 +163,7 @@ describe("shareCanvas", () => {
 
       const failure = yield* shareCanvas({ dataRoot, projection }).pipe(Effect.flip)
 
-      expect(failure._tag).toBe("ShareRequiresLogin")
+      expect(Predicate.isTagged(failure, "ShareRequiresLogin")).toBe(true)
       expect(existsSync(join(dataRoot, "shares.json"))).toBe(false)
     })).pipe(Effect.provide(NodeServices.layer))))
 
@@ -179,7 +179,7 @@ describe("shareCanvas", () => {
 
       const failure = yield* shareCanvas({ dataRoot, projection }).pipe(Effect.flip)
 
-      expect(failure._tag).toBe("ShareRequiresLogin")
+      expect(Predicate.isTagged(failure, "ShareRequiresLogin")).toBe(true)
       expect(existsSync(join(dataRoot, "shares.json"))).toBe(false)
     })).pipe(Effect.provide(NodeServices.layer))))
 
@@ -270,7 +270,7 @@ describe("shareCanvas", () => {
 
       const failure = yield* shareCanvas({ dataRoot, projection }).pipe(Effect.flip)
 
-      expect(failure._tag).toBe("ShareDigestMismatch")
+      expect(Predicate.isTagged(failure, "ShareDigestMismatch")).toBe(true)
       expect(failure).toMatchObject({
         shareId,
         expectedDigest: digest
@@ -291,7 +291,7 @@ describe("shareCanvas", () => {
 
       const failure = yield* shareCanvas({ dataRoot, projection }).pipe(Effect.flip)
 
-      expect(failure._tag).toBe("AccessPersonUnauthenticated")
+      expect(Predicate.isTagged(failure, "AccessPersonUnauthenticated")).toBe(true)
       expect(existsSync(join(dataRoot, "shares.json"))).toBe(false)
     })).pipe(Effect.provide(NodeServices.layer))))
 
@@ -315,11 +315,9 @@ describe("shareCanvas", () => {
       expect(failure).toMatchObject({
         _tag: "unsupportedVersion",
         requestedVersion: 3,
-        supportedVersion: 2
+        supportedVersion: 2,
+        message: expect.stringContaining("Upgrade Crit so the client and installation match.")
       })
-      expect(failure._tag === "unsupportedVersion" && failure.message).toContain(
-        "Upgrade Crit so the client and installation match."
-      )
       expect(existsSync(join(dataRoot, "shares.json"))).toBe(false)
     })).pipe(Effect.provide(NodeServices.layer))))
 

@@ -12,7 +12,7 @@ import {
   ChangePageSchema,
   SubmitChangeReceiptSchema
 } from "@crit/protocol"
-import { Effect, Layer, Schema } from "effect"
+import { Effect, Layer, Match, Schema } from "effect"
 
 import {
   CanvasDurableObject,
@@ -45,21 +45,16 @@ const foldResult = <
   value: Value,
   error: Error
 ): Effect.Effect<Value["Type"], Error["Type"]> => {
-  switch (result._tag) {
-    case "success":
-      return Effect.succeed(Schema.decodeUnknownSync(value)(result.value))
-    case "failure":
-      return Effect.fail(Schema.decodeUnknownSync(error)(result.error))
-    case "defect":
-      return Effect.die(new Error(result.message))
-    case "interrupted":
-      return Effect.interrupt
-    case "durableSqlRowLimitExceeded":
-      return Effect.die(new DurableSqlRowLimitExceeded({
-        bytes: result.bytes,
-        limit: result.limit
-      }))
-  }
+  return Match.value(result).pipe(Match.tagsExhaustive({
+    success: ({ value: decoded }) => Effect.succeed(Schema.decodeUnknownSync(value)(decoded)),
+    failure: ({ error: encoded }) => Effect.fail(Schema.decodeUnknownSync(error)(encoded)),
+    defect: ({ message }) => Effect.die(new Error(message)),
+    interrupted: () => Effect.interrupt,
+    durableSqlRowLimitExceeded: ({ bytes, limit }) => Effect.die(new DurableSqlRowLimitExceeded({
+      bytes,
+      limit
+    }))
+  }))
 }
 
 const fromResult = <

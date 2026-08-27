@@ -44,10 +44,10 @@ const helpTarget = (details: ReviewHelpDetails): ReviewHelpAttributes => ({
   "data-crit-help-kind": details._tag,
   "data-crit-help-name": details.name,
   "data-crit-help-description": details.description,
-  "data-crit-help-shortcut": details._tag === "action"
+  "data-crit-help-shortcut": ReviewHelpDetails.$is("action")(details)
     ? details.shortcut ?? undefined
     : undefined,
-  "data-crit-help-availability": details._tag === "action"
+  "data-crit-help-availability": ReviewHelpDetails.$is("action")(details)
     ? details.availabilityMessage ?? undefined
     : undefined
 })
@@ -111,7 +111,7 @@ export const activeReviewHelpDetails = (
   pointer: ReviewHelpPointer,
   focusDetails: ReviewHelpDetails | null
 ): ReviewHelpDetails | null =>
-  pointer._tag === "away" ? focusDetails : pointer.details
+  ReviewHelpPointer.$is("away")(pointer) ? focusDetails : pointer.details
 
 export function ReviewHelpSurface({
   children,
@@ -206,7 +206,7 @@ const reviewHelpBody = (
   details: ReviewHelpDetails | null
 ): ReactElement => {
   if (details === null) return <IdleReviewHelp />
-  if (details._tag === "informational") {
+  if (ReviewHelpDetails.$is("informational")(details)) {
     return (
       <>
         <div>{details.name}</div>

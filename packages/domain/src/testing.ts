@@ -1,4 +1,4 @@
-import { Data, Effect, Schema } from "effect"
+import { Data, Effect, Predicate, Schema } from "effect"
 
 import type { CanvasChange } from "./command.js"
 import { CanvasEngine } from "./engine.js"
@@ -26,8 +26,8 @@ export const DomainReplayConformance = {
     const initial = DomainValue.detach(input.initial)
     const changes = DomainValue.detach(input.changes)
     const result = CanvasEngine.replay(input.initial, input.changes)
-    yield* requireFact(result._tag === "replayed", "replay did not succeed")
-    if (result._tag !== "replayed") return
+    yield* requireFact(Predicate.isTagged(result, "replayed"), "replay did not succeed")
+    if (Predicate.isTagged(result, "replayFailed")) return
     yield* requireFact(
       sameProjection(result.projection, input.expected),
       "replayed projection did not match expected"
@@ -47,7 +47,7 @@ export const DomainReplayConformance = {
   }) => Effect.gen(function*() {
     const before = DomainValue.detach(input.initial)
     const result = CanvasEngine.apply(input.initial, input.change)
-    yield* requireFact(result._tag === "rejected", "batch was not rejected")
+    yield* requireFact(Predicate.isTagged(result, "rejected"), "batch was not rejected")
     yield* requireFact(
       sameProjection(input.initial, before),
       "rejected batch changed the projection"

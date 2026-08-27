@@ -1,3 +1,4 @@
+import { Predicate } from "effect"
 import { describe, expect, it } from "vitest"
 
 import {
@@ -29,7 +30,7 @@ const apply = (projection: ReturnType<typeof empty>, changeId: string, commands:
     projection,
     decodeCanvasChange({ canvasId: "canvas_review", changeId, commands })
   )
-  if (result._tag !== "applied") throw new Error("expected applied")
+  if (Predicate.isTagged(result, "rejected")) throw new Error("expected applied")
   return result.projection
 }
 

@@ -10,7 +10,7 @@ import {
   IsoTimestamp,
   SourceRevision
 } from "@crit/domain"
-import { Effect, Redacted, Schema } from "effect"
+import { Effect, Predicate, Redacted, Schema } from "effect"
 import { describe, expect, it } from "vitest"
 
 import {
@@ -152,16 +152,12 @@ describe("deployment registration client", () => {
         channel
       }).pipe(Effect.flip)
 
-      expect((yield* failureFor(unauthenticated.origin))._tag).toBe(
-        "DeploymentRegistrationUnauthenticated"
-      )
+      expect(Predicate.isTagged(yield* failureFor(unauthenticated.origin), "DeploymentRegistrationUnauthenticated")).toBe(true)
       expect(yield* failureFor(rejected.origin)).toMatchObject({
         _tag: "DeploymentRegistrationResponseRejected",
         status: 503
       })
-      expect((yield* failureFor(invalid.origin))._tag).toBe(
-        "DeploymentRegistrationResponseInvalid"
-      )
+      expect(Predicate.isTagged(yield* failureFor(invalid.origin), "DeploymentRegistrationResponseInvalid")).toBe(true)
     })).pipe(Effect.provide(NodeServices.layer))))
 
   it("rejects an unsupported receipt schema version with an upgrade error", () =>
@@ -184,11 +180,9 @@ describe("deployment registration client", () => {
       expect(failure).toMatchObject({
         _tag: "unsupportedVersion",
         requestedVersion: 2,
-        supportedVersion: 1
+        supportedVersion: 1,
+        message: expect.stringContaining("Upgrade Crit so the client and installation match.")
       })
-      expect(failure._tag === "unsupportedVersion" && failure.message).toContain(
-        "Upgrade Crit so the client and installation match."
-      )
     })).pipe(Effect.provide(NodeServices.layer))))
 
   it("classifies invalid installation URLs, request failures, and manifest failures", () =>
@@ -201,7 +195,7 @@ describe("deployment registration client", () => {
         url,
         channel
       }).pipe(Effect.flip)
-      expect(missingManifest._tag).toBe("ProjectManifestIoFailure")
+      expect(Predicate.isTagged(missingManifest, "ProjectManifestIoFailure")).toBe(true)
 
       yield* initializeManifest(root)
       const invalidInstallation = yield* registerDeployment({
@@ -211,7 +205,7 @@ describe("deployment registration client", () => {
         url,
         channel
       }).pipe(Effect.flip)
-      expect(invalidInstallation._tag).toBe("InstallationUrlInvalid")
+      expect(Predicate.isTagged(invalidInstallation, "InstallationUrlInvalid")).toBe(true)
 
       const requestFailure = yield* registerDeployment({
         root,
@@ -220,6 +214,6 @@ describe("deployment registration client", () => {
         url,
         channel
       }).pipe(Effect.flip)
-      expect(requestFailure._tag).toBe("DeploymentRegistrationRequestFailed")
+      expect(Predicate.isTagged(requestFailure, "DeploymentRegistrationRequestFailed")).toBe(true)
     })).pipe(Effect.provide(NodeServices.layer))))
 })

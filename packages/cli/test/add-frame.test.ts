@@ -10,7 +10,7 @@ import {
   Id,
   RootedRoute
 } from "@crit/domain"
-import { Option, Result, Schema } from "effect"
+import { Option, Predicate, Result, Schema } from "effect"
 import { afterEach, describe, expect, it } from "vitest"
 
 import {
@@ -178,7 +178,7 @@ describe("built crit-target add-frame", () => {
     const view = JSON.parse(added.stdout)
     expect(view.projection.frames).toHaveLength(1)
     const frame = view.projection.frames[0]
-    expect(frame.representation._tag).toBe("applicationRoute")
+    expect(Predicate.isTagged(frame.representation, "applicationRoute")).toBe(true)
     expect(frame.representation.applicationId).toBe(applicationId)
     expect(frame.representation.route).toBe("/checkout")
     expect(frame.title).toBe("Checkout")

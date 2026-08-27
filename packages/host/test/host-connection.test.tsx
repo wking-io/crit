@@ -37,17 +37,17 @@ describe("parseHostConnection", () => {
   })
 
   it("rejects fragment-free loopback and insecure origins", () => {
-    expect(parseHostConnection({
+    expect(HostConnection.$is("invalid")(parseHostConnection({
       fragment: "",
       origin: "https://localhost:5173"
-    })._tag).toBe("invalid")
-    expect(parseHostConnection({
+    }))).toBe(true)
+    expect(HostConnection.$is("invalid")(parseHostConnection({
       fragment: "",
       origin: "https://127.0.0.1"
-    })._tag).toBe("invalid")
-    expect(parseHostConnection({
+    }))).toBe(true)
+    expect(HostConnection.$is("invalid")(parseHostConnection({
       fragment: "",
       origin: "http://crit.example"
-    })._tag).toBe("invalid")
+    }))).toBe(true)
   })
 })

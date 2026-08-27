@@ -18,7 +18,7 @@ import {
   type ProposedCanvasChange,
   type SubmitChangeReceipt
 } from "@crit/protocol"
-import { Data, Effect, Result } from "effect"
+import { Data, Effect, Match, Result } from "effect"
 
 import {
   AuthorityFailure,
@@ -62,18 +62,24 @@ export type FreshEvaluation = Data.TaggedEnum<{
 }>
 export const FreshEvaluation = Data.taggedEnum<FreshEvaluation>()
 
-const attribution = (invocation: VerifiedInvocation): AcceptedAttribution => invocation._tag === "person"
-  ? PersonAttribution.make({ person: invocation.principal.person })
-  : AgentAttribution.make(invocation.reportedRuntime === undefined ? {
-      agent: invocation.principal.agent,
-      delegatedBy: invocation.principal.delegatedBy,
-      executionId: invocation.executionId
-    } : {
-      agent: invocation.principal.agent,
-      delegatedBy: invocation.principal.delegatedBy,
-      executionId: invocation.executionId,
-      reportedRuntime: invocation.reportedRuntime
-    })
+const attribution = (invocation: VerifiedInvocation): AcceptedAttribution =>
+  Match.value(invocation).pipe(Match.tagsExhaustive({
+    person: ({ principal }) => PersonAttribution.make({ person: principal.person }),
+    agent: ({ principal, executionId, reportedRuntime }) => AgentAttribution.make(
+      reportedRuntime === undefined
+        ? {
+          agent: principal.agent,
+          delegatedBy: principal.delegatedBy,
+          executionId
+        }
+        : {
+          agent: principal.agent,
+          delegatedBy: principal.delegatedBy,
+          executionId,
+          reportedRuntime
+        }
+    )
+  }))
 
 const cursorAt = (canvasId: CanvasId, position: number): Cursor =>
   ProtocolValue.cursor(`cursor_${canvasId}_${position}`)
@@ -116,7 +122,7 @@ const evaluateRetry = (args: {
     })) })
   }
   return RetryEvaluation.decided({
-    decision: args.prior.outcome._tag === "Success"
+    decision: Result.isSuccess(args.prior.outcome)
       ? Result.succeed({ disposition: "identical-retry", change: args.prior.outcome.success })
       : Result.fail(args.prior.outcome.failure)
   })
@@ -136,25 +142,27 @@ const evaluateFresh = (args: {
   }
   const identity = retryIdentity(args.proposal, args.invocation)
   const result = CanvasEngine.apply(args.projection, args.proposal)
-  if (result._tag === "rejected") {
-    const failure = AuthorityFailure.changeRejected({
-      canvasId: args.proposal.canvasId,
-      changeId: args.proposal.changeId,
-      failure: result.failure
+  return Match.value(result).pipe(Match.tagsExhaustive({
+    rejected: ({ failure }) => {
+      const rejected = AuthorityFailure.changeRejected({
+        canvasId: args.proposal.canvasId,
+        changeId: args.proposal.changeId,
+        failure
+      })
+      return FreshEvaluation.rejected({
+        decision: Result.fail(rejected),
+        retry: { identity, outcome: Result.fail(rejected) }
+      })
+    },
+    applied: ({ projection }) => FreshEvaluation.acceptance({
+      candidate: {
+        proposal: args.proposal,
+        attribution: attribution(args.invocation),
+        projection,
+        identity
+      }
     })
-    return FreshEvaluation.rejected({
-      decision: Result.fail(failure),
-      retry: { identity, outcome: Result.fail(failure) }
-    })
-  }
-  return FreshEvaluation.acceptance({
-    candidate: {
-      proposal: args.proposal,
-      attribution: attribution(args.invocation),
-      projection: result.projection,
-      identity
-    }
-  })
+  }))
 }
 
 const completeAcceptance = (args: {
@@ -195,7 +203,7 @@ const makeChangePage = (args: {
 
 const decisionEffect = (
   decision: SubmitDecision
-): Effect.Effect<SubmitChangeReceipt, SubmitCanvasChangeFailure> => decision._tag === "Success"
+): Effect.Effect<SubmitChangeReceipt, SubmitCanvasChangeFailure> => Result.isSuccess(decision)
   ? Effect.succeed(DomainValue.detach(decision.success))
   : Effect.fail(decision.failure)
 

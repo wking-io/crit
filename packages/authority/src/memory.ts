@@ -11,6 +11,8 @@ import {
 } from "./model.js"
 import {
   AuthorityPolicy,
+  FreshEvaluation,
+  RetryEvaluation,
   type RetryRecord,
   type SubmitDecision
 } from "./policy.js"
@@ -78,7 +80,7 @@ const make = Effect.gen(function*() {
           invocation: ownedInvocation,
           prior: current.retries.get(ownedProposal.changeId)
         })
-        if (retry._tag === "decided") return Effect.succeed([retry.decision, current] as const)
+        if (RetryEvaluation.$is("decided")(retry)) return Effect.succeed([retry.decision, current] as const)
         const fresh = AuthorityPolicy.evaluateFresh({
           proposal: ownedProposal,
           invocation: ownedInvocation,
@@ -86,8 +88,8 @@ const make = Effect.gen(function*() {
           observedCursorKnown: ownedProposal.observedCursor === null ||
             current.cursorPositions.has(ownedProposal.observedCursor)
         })
-        if (fresh._tag === "decided") return Effect.succeed([fresh.decision, current] as const)
-        if (fresh._tag === "rejected") {
+        if (FreshEvaluation.$is("decided")(fresh)) return Effect.succeed([fresh.decision, current] as const)
+        if (FreshEvaluation.$is("rejected")(fresh)) {
           return Effect.succeed([fresh.decision, {
             ...current,
             retries: new Map(current.retries).set(ownedProposal.changeId, fresh.retry)

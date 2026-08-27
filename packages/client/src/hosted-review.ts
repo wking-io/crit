@@ -13,7 +13,7 @@ import {
 } from "@crit/protocol"
 import { CanvasListing } from "@crit/replica/http"
 import { RenderPlan } from "@crit/representations"
-import { Context, Data, Effect, Exit, Layer, Option, Queue, Result, Schema, Stream, type Scope, type Take } from "effect"
+import { Context, Data, Effect, Exit, Layer, Option, Predicate, Queue, Result, Schema, Stream, type Scope, type Take } from "effect"
 import {
   FetchHttpClient,
   HttpClient,
@@ -65,8 +65,8 @@ const negotiationFailure = (
   if (
     Result.isFailure(negotiated)
     && (
-      negotiated.failure._tag === "unsupportedVersion"
-      || negotiated.failure._tag === "messageKindMismatch"
+      Predicate.isTagged(negotiated.failure, "unsupportedVersion")
+      || Predicate.isTagged(negotiated.failure, "messageKindMismatch")
     )
   ) {
     return Option.some(negotiated.failure)

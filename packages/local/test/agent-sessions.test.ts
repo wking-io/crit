@@ -4,7 +4,7 @@ import { join } from "node:path"
 
 import { PersonSnapshot, UnspecifiedPersonEmail, Id } from "@crit/domain"
 import { AgentSessionDeclaration, AgentSessionRejected } from "@crit/replica/http"
-import { Context, Effect, Layer, Option, Redacted, Schema } from "effect"
+import { Context, Effect, Layer, Option, Predicate, Redacted, Schema } from "effect"
 import { describe, expect, it } from "vitest"
 
 import { AGENT_SESSION_LIMIT, AgentSessions, type AgentSessionsService } from "../src/agent-sessions.js"
@@ -38,7 +38,7 @@ describe("AgentSessions", () => {
         displayName: "Codex"
       })
       const { grant, invocation } = yield* sessions.begin(declaration, delegatedBy)
-      expect(invocation._tag).toBe("agent")
+      expect(Predicate.isTagged(invocation, "agent")).toBe(true)
       expect(invocation.principal.agent.displayName).toBe("Codex")
       expect(invocation.principal.delegatedBy).toEqual(delegatedBy)
       expect(invocation.principal.subject).toBe(`local-agent|${invocation.executionId}`)

@@ -108,7 +108,7 @@ export class BrowserSession extends Context.Service<BrowserSession, BrowserSessi
             BrowserAuthState
           ] => {
             if (
-              current._tag === "awaitingBootstrap" &&
+              BrowserAuthState.$is("awaitingBootstrap")(current) &&
               current.bootstrapDigest === candidateDigest
             ) {
               return [
@@ -122,7 +122,7 @@ export class BrowserSession extends Context.Service<BrowserSession, BrowserSessi
         authorize: (session) => Effect.gen(function*() {
           const sessionDigest = yield* digest(session)
           return yield* Ref.get(state).pipe(Effect.map((current) =>
-            current._tag === "bootstrapped" && current.sessionDigest === sessionDigest
+            BrowserAuthState.$is("bootstrapped")(current) && current.sessionDigest === sessionDigest
           ))
         })
       })

@@ -14,7 +14,9 @@ import {
   Crypto,
   Effect,
   Layer,
+  Match,
   Option,
+  Predicate,
   Result,
   Schema
 } from "effect"
@@ -159,16 +161,18 @@ describe("DeploymentApplicationBindings", () => {
     const local = await Effect.runPromise(resolve(localBindings))
     const shared = await Effect.runPromise(resolve(sharedBindings))
 
-    expect(local._tag).toBe("iframe")
-    expect(shared._tag).toBe("iframe")
-    if (local._tag !== "iframe" || shared._tag !== "iframe") return
-    expect(local.url).toBe("http://127.0.0.1:5173/checkout")
-    expect(shared.url).toBe("https://preview.example/checkout")
+    expect(Predicate.isTagged(local, "iframe")).toBe(true)
+    expect(Predicate.isTagged(shared, "iframe")).toBe(true)
+    const localIframe = Match.value(local).pipe(Match.tag("iframe", (plan) => plan), Match.option)
+    const sharedIframe = Match.value(shared).pipe(Match.tag("iframe", (plan) => plan), Match.option)
+    if (Option.isNone(localIframe) || Option.isNone(sharedIframe)) return
+    expect(localIframe.value.url).toBe("http://127.0.0.1:5173/checkout")
+    expect(sharedIframe.value.url).toBe("https://preview.example/checkout")
     expect(JSON.stringify(
-      Schema.encodeSync(RepresentationRef)(local.representation)
+      Schema.encodeSync(RepresentationRef)(localIframe.value.representation)
     )).toBe(representationBytes)
     expect(JSON.stringify(
-      Schema.encodeSync(RepresentationRef)(shared.representation)
+      Schema.encodeSync(RepresentationRef)(sharedIframe.value.representation)
     )).toBe(representationBytes)
     expect(JSON.stringify(Schema.encodeSync(Frame)(frame))).toBe(frameBytes)
     expect(frame.representation).toBe(frameRepresentation)

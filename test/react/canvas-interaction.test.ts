@@ -1,4 +1,4 @@
-import { Effect } from "effect"
+import { Effect, Predicate } from "effect"
 import { describe, expect, it } from "vitest"
 
 import { Canvas, CanvasCommand } from "../../src/core/index.js"
@@ -258,15 +258,13 @@ describe("Canvas interaction rules", () => {
       selectedFrameIds: new Set()
     }).finish({ x: 800, y: 500 })
 
-    expect(attach.map((command) => command._tag)).toEqual([
-      "MoveNote",
-      "AttachNote"
-    ])
+    expect(attach).toHaveLength(2)
+    expect(Predicate.isTagged(attach[0], "MoveNote")).toBe(true)
+    expect(Predicate.isTagged(attach[1], "AttachNote")).toBe(true)
     expect(attach[1]).toMatchObject({ frameId: "candidate" })
-    expect(detach.map((command) => command._tag)).toEqual([
-      "MoveNote",
-      "DetachNote"
-    ])
+    expect(detach).toHaveLength(2)
+    expect(Predicate.isTagged(detach[0], "MoveNote")).toBe(true)
+    expect(Predicate.isTagged(detach[1], "DetachNote")).toBe(true)
   })
 
   it("resets fit-page Frames and emits move plus resize from anchored edges", async () => {
@@ -297,10 +295,9 @@ describe("Canvas interaction rules", () => {
       height: 360
     })
     expect(preview.attached).toMatchObject({ x: 200, y: 190 })
-    expect(commands.map((command) => command._tag)).toEqual([
-      "SetFrameDisplay",
-      "MoveFrame",
-      "ResizeFrame"
-    ])
+    expect(commands).toHaveLength(3)
+    expect(Predicate.isTagged(commands[0], "SetFrameDisplay")).toBe(true)
+    expect(Predicate.isTagged(commands[1], "MoveFrame")).toBe(true)
+    expect(Predicate.isTagged(commands[2], "ResizeFrame")).toBe(true)
   })
 })

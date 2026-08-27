@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs"
 
-import { assert, describe, expect, it } from "vitest"
+import { Match, Predicate } from "effect"
+import { describe, expect, it } from "vitest"
 
 import {
   CanvasEngine,
@@ -55,8 +56,12 @@ describe("CanvasEngine.apply", () => {
     if (first === undefined || second === undefined) {
       throw new Error("Replay fixture needs two changes")
     }
-    const firstResult = CanvasEngine.apply(initial, first)
-    assert(firstResult._tag === "applied")
+    const firstResult = Match.value(CanvasEngine.apply(initial, first)).pipe(
+      Match.tag("applied", (value) => value),
+      Match.orElse(() => {
+        throw new Error("expected applied")
+      })
+    )
 
     expect(CanvasEngine.apply(firstResult.projection, second)).toEqual({
       _tag: "applied",
@@ -100,7 +105,8 @@ describe("CanvasEngine.apply", () => {
     const result = CanvasEngine.apply(initial, change)
 
     expect(result).toEqual({ _tag: "applied", projection: initial })
-    if (result._tag === "applied") expect(result.projection).toBe(initial)
+    if (Predicate.isTagged(result, "rejected")) return
+    expect(result.projection).toBe(initial)
   })
 
   it("rejects a change for another Canvas before dispatching commands", () => {
@@ -129,7 +135,8 @@ describe("CanvasEngine.replay", () => {
     const { initial } = decodedFixture()
     const result = CanvasEngine.replay(initial, [])
     expect(result).toEqual({ _tag: "replayed", projection: initial })
-    if (result._tag === "replayed") expect(result.projection).toBe(initial)
+    if (Predicate.isTagged(result, "replayFailed")) return
+    expect(result.projection).toBe(initial)
   })
 
   it("rejects duplicate change identity with both positions", () => {

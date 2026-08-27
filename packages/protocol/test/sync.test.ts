@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises"
 
 import { Id } from "@crit/domain"
-import { Result, Schema } from "effect"
+import { Predicate, Result, Schema } from "effect"
 import { describe, expect, it } from "vitest"
 
 import {
@@ -30,7 +30,7 @@ describe("remote authority protocol", () => {
     if (Result.isFailure(decoded)) return
     expect(encodeSubmitCanvasChangeWire(decoded.success)).toEqual(input)
     expect(decoded.success.proposal.changeId).toBe("change_a")
-    expect(decoded.success.invocation._tag).toBe("person")
+    expect(Predicate.isTagged(decoded.success.invocation, "person")).toBe(true)
   })
 
   it("rejects a trusted field inside a nested command", async() => {
@@ -38,7 +38,7 @@ describe("remote authority protocol", () => {
     input.change.commands[0].sequence = 1
     const decoded = decodeSubmitCanvasChangeWire(input)
 
-    expect(Result.isFailure(decoded) && decoded.failure._tag).toBe("trustedField")
+    expect(Result.isFailure(decoded) && Predicate.isTagged(decoded.failure, "trustedField")).toBe(true)
   })
 
   it("rejects an excess envelope property", async() => {
@@ -46,7 +46,7 @@ describe("remote authority protocol", () => {
     input.extra = true
     const decoded = decodeSubmitCanvasChangeWire(input)
 
-    expect(Result.isFailure(decoded) && decoded.failure._tag).toBe("envelopeInvalid")
+    expect(Result.isFailure(decoded) && Predicate.isTagged(decoded.failure, "envelopeInvalid")).toBe(true)
   })
 
   it("rejects an unsupported submit envelope version with an upgrade error", async() => {

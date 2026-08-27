@@ -1,5 +1,5 @@
 import { describe, expect, it } from "@effect/vitest"
-import { Effect } from "effect"
+import { Effect, Predicate } from "effect"
 
 import {
   Canvas,
@@ -23,7 +23,12 @@ describe("Canvas Document size policy", () => {
         _tag: "CanvasDocumentTooLarge",
         maxBytes: 10_000_000
       })
-      if (failure._tag !== "CanvasDocumentTooLarge") {
+      if (
+        !Predicate.isTagged(failure, "CanvasDocumentTooLarge") ||
+        !("actualBytes" in failure) ||
+        !("maxBytes" in failure) ||
+        !("detail" in failure)
+      ) {
         throw new Error(`Expected CanvasDocumentTooLarge, received ${failure._tag}`)
       }
       expect(failure.actualBytes).toBeGreaterThan(failure.maxBytes)

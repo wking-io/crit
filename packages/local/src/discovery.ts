@@ -4,7 +4,7 @@ import {
   LocalApiVersionUnsupported,
   localApiToken
 } from "@crit/replica/http"
-import { Context, Duration, Effect, FileSystem, Layer, Option, Path, Schema } from "effect"
+import { Context, Duration, Effect, FileSystem, Layer, Option, Path, Predicate, Schema } from "effect"
 import { FetchHttpClient } from "effect/unstable/http"
 
 import { LocalDaemonDescriptor, LocalInstallation } from "./development.js"
@@ -136,7 +136,7 @@ export const inspectLocalDaemon = (options: LocalDaemonDiscoveryOptions) => Effe
     Effect.map((status): ProbeResult => ({ kind: "responded", status })),
     Effect.timeoutOption(options.probeTimeout ?? "500 millis"),
     Effect.map(Option.getOrElse((): ProbeResult => ({ kind: "stale", reason: "probe-timed-out" }))),
-    Effect.catchTag("HttpClientError", (failure) => failure.reason._tag === "TransportError"
+    Effect.catchTag("HttpClientError", (failure) => Predicate.isTagged(failure.reason, "TransportError")
       ? Effect.succeed<ProbeResult>({ kind: "stale", reason: "connection-failed" })
       : Effect.fail(new LocalDaemonProtocolFailure({ reason: failure.reason._tag }))),
     Effect.mapError((failure) => {

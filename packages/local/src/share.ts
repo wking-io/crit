@@ -18,7 +18,7 @@ import {
   remoteCanvasCollectionPath,
   ShareDigestMismatch as ShareDigestMismatchWire
 } from "@crit/protocol"
-import { Effect, FileSystem, Option, Path, Result, Schema } from "effect"
+import { Effect, FileSystem, Option, Path, Predicate, Result, Schema } from "effect"
 import {
   FetchHttpClient,
   HttpClient,
@@ -284,7 +284,7 @@ export const shareCanvas = (
     HttpClientRequest.post(`${installationOrigin}${remoteCanvasCollectionPath}`),
     payload
   )
-  if (email._tag === "unspecified") {
+  if (Predicate.isTagged(email, "unspecified")) {
     request = HttpClientRequest.setHeader(
       request,
       critPersonIdHeader,
@@ -314,8 +314,8 @@ export const shareCanvas = (
   if (
     Result.isFailure(negotiated)
     && (
-      negotiated.failure._tag === "unsupportedVersion"
-      || negotiated.failure._tag === "messageKindMismatch"
+      Predicate.isTagged(negotiated.failure, "unsupportedVersion")
+      || Predicate.isTagged(negotiated.failure, "messageKindMismatch")
     )
   ) {
     return yield* Effect.fail(negotiated.failure)

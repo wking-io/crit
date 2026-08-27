@@ -14,7 +14,7 @@ import {
   proposeSetFrameStatus,
   proposeSetFrameTitle
 } from "@crit/domain"
-import { Data, Effect, Option, Schema } from "effect"
+import { Data, Effect, Match, Option, Predicate, Schema } from "effect"
 
 import {
   Align,
@@ -120,11 +120,15 @@ const selectedFrames = (
   selection: ReviewSelection,
   projection: CanvasProjection
 ): readonly Frame[] =>
-  selection.items.flatMap((item) => {
-    if (item._tag !== "frame") return []
-    const frame = projection.frames.find((entry) => entry.frameId === item.frameId)
-    return frame === undefined ? [] : [frame]
-  })
+  selection.items.flatMap((item) =>
+    Match.value(item).pipe(
+      Match.tag("frame", (item) => {
+        const frame = projection.frames.find((entry) => entry.frameId === item.frameId)
+        return frame === undefined ? [] : [frame]
+      }),
+      Match.orElse(() => [])
+    )
+  )
 
 const selectedFrame = (
   selection: ReviewSelection,
@@ -139,7 +143,7 @@ const snapshotSources = (
   projection: CanvasProjection
 ): readonly SnapshotSource[] =>
   selectedFrames(selection, projection).flatMap((frame) => {
-    if (frame.representation._tag === "artifact") return []
+    if (Predicate.isTagged(frame.representation, "artifact")) return []
     return [{
       title: frame.title,
       status: frame.status,
@@ -158,7 +162,7 @@ const reviewBatch = (
 }
 
 const textInput = (input: ReviewActionInput) => {
-  if (input._tag !== "text") return undefined
+  if (!ReviewActionInput.$is("text")(input)) return undefined
   return Option.getOrUndefined(
     Schema.decodeUnknownOption(AuthoredText)(input.text.trim())
   )
@@ -399,14 +403,16 @@ const openUrlPolicy = policy({
   description: "Open this Frame's page in a new browser tab.",
   shortcuts: ["O"],
   available: (selection, projection) =>
-    selectedFrame(selection, projection)?.representation._tag === "webUrl",
+    Predicate.isTagged(selectedFrame(selection, projection)?.representation, "webUrl"),
   run: ({ projection, selection }) => {
     const frame = selectedFrame(selection, projection)
-    return frame?.representation._tag === "webUrl"
-      ? ReviewAction.effect({
-        effect: ReviewClientEffect.openUrl({ url: frame.representation.url })
-      })
-      : null
+    if (frame === undefined) return null
+    return Match.value(frame.representation).pipe(
+      Match.tag("webUrl", ({ url }) => ReviewAction.effect({
+        effect: ReviewClientEffect.openUrl({ url })
+      })),
+      Match.orElse(() => null)
+    )
   }
 })
 

@@ -19,6 +19,7 @@ import {
   type ReviewSelection
 } from "./review-actions.js"
 import {
+  SnapshotRunState,
   useSnapshotRunner,
   type FrameSnapshotter
 } from "./frame-snapshot.js"
@@ -126,7 +127,7 @@ export function ReviewChrome({
     onSubmit,
     snapshotter: snapshotter ?? unavailableSnapshotter
   })
-  const snapshotCapturing = snapshot.state._tag === "capturing"
+  const snapshotCapturing = SnapshotRunState.$is("capturing")(snapshot.state)
   const context = {
     projection,
     selection,
@@ -218,10 +219,10 @@ export function ReviewChrome({
             policy={entry.policy}
           />
         ))}
-        {snapshot.state._tag === "capturing"
+        {snapshotCapturing
           ? <p role="status">Capturing snapshot.</p>
           : null}
-        {snapshot.state._tag === "failed"
+        {SnapshotRunState.$is("failed")(snapshot.state)
           ? <p role="alert">Snapshot failed.</p>
           : null}
         <ReviewHelpPanel />

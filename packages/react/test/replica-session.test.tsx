@@ -17,6 +17,7 @@ import {
   ReplicaConnection,
   ReplicaChangeRejected,
   ReplicaSubscriptionEvent,
+  ReplicaSession,
   ReplicaSessionUnavailable,
   getCanvasCameraSession,
   getCanvasSelectionSession,
@@ -286,7 +287,7 @@ describe("useReplicaSession", () => {
     await act(async() => render(
       <Probe canvasId={canvasA} ports={replica.ports} run={makeRun()} />
     ))
-    await waitFor(() => expect(latest?.session._tag).toBe("unavailable"))
+    await waitFor(() => expect(ReplicaSession.$is("unavailable")(latest?.session)).toBe(true))
 
     replica.views.set(canvasA, viewOne)
     await act(async() => replica.notify(canvasA))
@@ -315,7 +316,7 @@ describe("useReplicaSession", () => {
     await act(async() => render(
       <Probe canvasId={canvasA} ports={replica.ports} run={run} />
     ))
-    await waitFor(() => expect(latest?.session._tag).toBe("ready"))
+    await waitFor(() => expect(ReplicaSession.$is("ready")(latest?.session)).toBe(true))
 
     await act(async() => replica.notify(
       canvasA,
@@ -342,9 +343,9 @@ describe("useReplicaSession", () => {
     await act(async() => render(
       <Probe canvasId={canvasA} ports={replica.ports} run={makeRun()} />
     ))
-    await waitFor(() => expect(latest?.session._tag).toBe("ready"))
+    await waitFor(() => expect(ReplicaSession.$is("ready")(latest?.session)).toBe(true))
     const previous = latest?.session
-    expect(previous?._tag).toBe("ready")
+    expect(ReplicaSession.$is("ready")(previous)).toBe(true)
 
     await act(async() => replica.notify(
       canvasA,
@@ -359,7 +360,7 @@ describe("useReplicaSession", () => {
       connection: ReplicaConnection.lost({ reason: "socket closed" }),
       notice: undefined
     })
-    if (previous?._tag === "ready" && latest?.session._tag === "ready") {
+    if (ReplicaSession.$is("ready")(previous) && ReplicaSession.$is("ready")(latest?.session)) {
       expect(latest.session.view).toBe(previous.view)
       expect(latest.session.camera).toBe(previous.camera)
       expect(latest.session.selection).toBe(previous.selection)
@@ -372,7 +373,7 @@ describe("useReplicaSession", () => {
     await act(async() => render(
       <Probe canvasId={canvasA} ports={replica.ports} run={makeRun()} />
     ))
-    await waitFor(() => expect(latest?.session._tag).toBe("ready"))
+    await waitFor(() => expect(ReplicaSession.$is("ready")(latest?.session)).toBe(true))
     await act(async() => replica.notify(
       canvasA,
       ReplicaSubscriptionEvent.lost({ reason: "socket closed" })
@@ -405,7 +406,7 @@ describe("useReplicaSession", () => {
     await act(async() => render(
       <Probe canvasId={canvasA} ports={replica.ports} run={run} />
     ))
-    await waitFor(() => expect(latest?.session._tag).toBe("ready"))
+    await waitFor(() => expect(ReplicaSession.$is("ready")(latest?.session)).toBe(true))
 
     replica.views.set(canvasA, viewTwo)
     await act(async() => replica.notify(canvasA))
@@ -430,7 +431,7 @@ describe("useReplicaSession", () => {
     await act(async() => render(
       <Probe canvasId={canvasA} ports={replica.ports} run={run} />
     ))
-    await waitFor(() => expect(latest?.session._tag).toBe("ready"))
+    await waitFor(() => expect(ReplicaSession.$is("ready")(latest?.session)).toBe(true))
 
     await act(async() => latest?.onCameraChange(moved))
 
@@ -456,7 +457,7 @@ describe("useReplicaSession", () => {
     await act(async() => render(
       <Probe canvasId={canvasA} ports={replica.ports} run={run} />
     ))
-    await waitFor(() => expect(latest?.session._tag).toBe("ready"))
+    await waitFor(() => expect(ReplicaSession.$is("ready")(latest?.session)).toBe(true))
 
     await act(async() => latest?.onSelectionChange(savedSelection))
 
@@ -484,7 +485,7 @@ describe("useReplicaSession", () => {
     await act(async() => render(
       <Probe canvasId={canvasA} ports={replica.ports} run={run} />
     ))
-    await waitFor(() => expect(latest?.session._tag).toBe("ready"))
+    await waitFor(() => expect(ReplicaSession.$is("ready")(latest?.session)).toBe(true))
     expect(replica.activeSubscriptions(canvasA)).toBe(1)
 
     await act(async() => render(
@@ -517,7 +518,7 @@ describe("useReplicaSession", () => {
     await act(async() => render(
       <Probe canvasId={canvasA} ports={replica.ports} run={run} />
     ))
-    await waitFor(() => expect(latest?.session._tag).toBe("ready"))
+    await waitFor(() => expect(ReplicaSession.$is("ready")(latest?.session)).toBe(true))
 
     replica.views.set(canvasA, viewAfterAdd)
     let submitted: Awaited<ReturnType<ReplicaSessionHandle["submit"]>> | undefined
@@ -565,7 +566,7 @@ describe("useReplicaSession", () => {
     await act(async() => render(
       <Probe canvasId={canvasA} ports={ports} run={run} />
     ))
-    await waitFor(() => expect(latest?.session._tag).toBe("ready"))
+    await waitFor(() => expect(ReplicaSession.$is("ready")(latest?.session)).toBe(true))
 
     let submitted: Awaited<ReturnType<ReplicaSessionHandle["submit"]>> | undefined
     await act(async() => {
@@ -613,7 +614,7 @@ describe("useReplicaSession", () => {
     await act(async() => render(
       <Probe canvasId={canvasA} ports={ports} run={makeRun()} />
     ))
-    await waitFor(() => expect(latest?.session._tag).toBe("ready"))
+    await waitFor(() => expect(ReplicaSession.$is("ready")(latest?.session)).toBe(true))
     await act(async() => {
       await latest?.submit(addFrame)
     })
@@ -637,7 +638,7 @@ describe("useReplicaSession", () => {
     await act(async() => render(
       <Probe canvasId={canvasA} ports={replica.ports} run={run} />
     ))
-    await waitFor(() => expect(latest?.session._tag).toBe("ready"))
+    await waitFor(() => expect(ReplicaSession.$is("ready")(latest?.session)).toBe(true))
 
     replica.views.set(canvasA, viewAfterAdd)
     await act(async() => {
@@ -698,7 +699,7 @@ describe("useReplicaSession", () => {
     expect(change).not.toHaveBeenCalled()
 
     await act(async() => release(viewOne))
-    await waitFor(() => expect(latest?.session._tag).toBe("ready"))
+    await waitFor(() => expect(ReplicaSession.$is("ready")(latest?.session)).toBe(true))
 
     const unavailable = makeReplica([])
     const unavailableChange = vi.fn(() => Effect.die("change must not run"))
@@ -712,7 +713,7 @@ describe("useReplicaSession", () => {
     await act(async() => render(
       <Probe canvasId={canvasA} ports={unavailablePorts} run={makeRun()} />
     ))
-    await waitFor(() => expect(latest?.session._tag).toBe("unavailable"))
+    await waitFor(() => expect(ReplicaSession.$is("unavailable")(latest?.session)).toBe(true))
 
     let unavailableSubmit: Awaited<ReturnType<ReplicaSessionHandle["submit"]>> | undefined
     await act(async() => {
@@ -744,7 +745,7 @@ describe("useReplicaSession", () => {
     await act(async() => render(
       <Probe canvasId={canvasA} ports={ports} run={run} />
     ))
-    await waitFor(() => expect(latest?.session._tag).toBe("ready"))
+    await waitFor(() => expect(ReplicaSession.$is("ready")(latest?.session)).toBe(true))
 
     let submitted: Awaited<ReturnType<ReplicaSessionHandle["submit"]>> | undefined
     const pending = latest?.submit(addFrame)

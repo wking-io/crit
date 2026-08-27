@@ -7,7 +7,7 @@ import {
   type ReportedRuntime
 } from "@crit/domain"
 import type { ReplicaView } from "@crit/replica"
-import { Data, Match } from "effect"
+import { Data, Match, Predicate } from "effect"
 import type { ReactElement } from "react"
 
 import type { CanvasCamera } from "./canvas-camera.js"
@@ -118,16 +118,17 @@ const executionCopy = (executionId: ExecutionId): string => {
   return `Run ${visible}`
 }
 
-const entryCopy = (change: PendingChange): string => {
-  if (change.author._tag === "person") {
-    return `${entryStateCopy(change.state)} ${authorCopy(change.author)}`
-  }
-  const runtime = runtimeCopy(change.author.reportedRuntime)
-  const execution = executionCopy(change.author.executionId)
-  return runtime === ""
-    ? `${entryStateCopy(change.state)} ${authorCopy(change.author)} ${execution}`
-    : `${entryStateCopy(change.state)} ${authorCopy(change.author)} ${runtime} ${execution}`
-}
+const entryCopy = (change: PendingChange): string =>
+  Match.value(change.author).pipe(Match.tagsExhaustive({
+    person: (author) => `${entryStateCopy(change.state)} ${authorCopy(author)}`,
+    agent: (author) => {
+      const runtime = runtimeCopy(author.reportedRuntime)
+      const execution = executionCopy(author.executionId)
+      return runtime === ""
+        ? `${entryStateCopy(change.state)} ${authorCopy(author)} ${execution}`
+        : `${entryStateCopy(change.state)} ${authorCopy(author)} ${runtime} ${execution}`
+    }
+  }))
 
 const connectedPersonCopy = (
   person: PresenceRoster["people"][number]
@@ -137,10 +138,10 @@ const outstandingHeadline = (
   title: ReplicaView["projection"]["title"],
   changes: readonly [PendingChange, ...PendingChange[]]
 ): string => {
-  if (changes.some((change) => change.state._tag === "conflicted")) {
+  if (changes.some((change) => Predicate.isTagged(change.state, "conflicted"))) {
     return `${title} has conflicted changes.`
   }
-  if (changes.some((change) => change.state._tag === "blocked")) {
+  if (changes.some((change) => Predicate.isTagged(change.state, "blocked"))) {
     return `${title} has blocked changes.`
   }
   return `${title} has pending changes.`
@@ -156,8 +157,8 @@ const statusCopy = (
   }))
 
 const statusTone = (status: ReplicaBoardStatus): "status" | "alert" =>
-  status._tag === "outstanding" &&
-    status.changes.some((change) => change.state._tag === "conflicted")
+  ReplicaBoardStatus.$is("outstanding")(status) &&
+    status.changes.some((change) => Predicate.isTagged(change.state, "conflicted"))
     ? "alert"
     : "status"
 
@@ -234,7 +235,7 @@ export function ReplicaBoard({
         : null}
       <section aria-label={`${view.projection.title} sync status`}>
         <p role={statusTone(status)}>{statusCopy(view.projection.title, status)}</p>
-        {status._tag === "outstanding"
+        {ReplicaBoardStatus.$is("outstanding")(status)
           ? (
             <ul>
               {status.changes.map((change) => (

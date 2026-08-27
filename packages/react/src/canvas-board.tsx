@@ -26,6 +26,7 @@ import {
 } from "./canvas-camera.js"
 import { useCanvasItemDrag } from "./canvas-item-drag.js"
 import {
+  CanvasInputTarget,
   CanvasSelection,
   CanvasSelectionCommand,
   type CanvasSelectionCommand as CanvasSelectionCommandValue
@@ -128,7 +129,7 @@ export function CanvasBoard({
   }, [onSelectionChange, selection])
 
   useLayoutEffect(() => {
-    selectedFrameRef.current = inputTarget._tag === "frame"
+    selectedFrameRef.current = CanvasInputTarget.$is("frame")(inputTarget)
       ? frameElementsRef.current.get(inputTarget.frameId) ?? null
       : null
   }, [inputTarget])
@@ -195,7 +196,7 @@ export function CanvasBoard({
     )
     : frameEntries.map(({ frame, item, zIndex }) => {
       const { frameId } = item
-      const frameIsInputTarget = inputTarget._tag === "frame" &&
+      const frameIsInputTarget = CanvasInputTarget.$is("frame")(inputTarget) &&
         inputTarget.frameId === frameId
       return (
         <div

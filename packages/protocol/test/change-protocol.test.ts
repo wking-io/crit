@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs"
 
 import { CanvasEngine, Id, decodeCanvasProjection } from "@crit/domain"
-import { Result } from "effect"
+import { Predicate, Result } from "effect"
 import { assert, describe, expect, it } from "vitest"
 
 import { ChangeProtocol, ChangeValue, ProtocolValue } from "../src/index.js"
@@ -36,7 +36,7 @@ describe("ChangeProtocol", () => {
     })
     for (const name of ["receipt-first", "receipt-retry"]) {
       const receipt = ChangeProtocol.receipt.decode(fixture(name))
-      expect(Result.isSuccess(receipt) && receipt.success.change.attribution._tag).toBe("person")
+      expect(Result.isSuccess(receipt) && Predicate.isTagged(receipt.success.change.attribution, "person")).toBe(true)
     }
     const rawPage = fixture("page")
     expect(Result.isSuccess(ChangeProtocol.accepted.decode(rawPage.changes[0]))).toBe(true)
@@ -58,7 +58,7 @@ describe("ChangeProtocol", () => {
     for (const [input, tag] of cases) {
       expect(() => ChangeProtocol.proposed.decode(input)).not.toThrow()
       const result = ChangeProtocol.proposed.decode(input)
-      expect(Result.isFailure(result) && result.failure._tag).toBe(tag)
+      expect(Result.isFailure(result) && Predicate.isTagged(result.failure, tag)).toBe(true)
     }
   })
 
@@ -93,7 +93,7 @@ describe("ChangeProtocol", () => {
     const wrongNestedVersion = fixture("page")
     wrongNestedVersion.changes[0].schemaVersion = 1
     const versionResult = ChangeProtocol.page.decode(wrongNestedVersion)
-    expect(Result.isFailure(versionResult) && versionResult.failure._tag).toBe("unsupportedVersion")
+    expect(Result.isFailure(versionResult) && Predicate.isTagged(versionResult.failure, "unsupportedVersion")).toBe(true)
     const privateReceipt = fixture("receipt-first")
     privateReceipt.digest = "authority-private"
     expect(Result.isFailure(ChangeProtocol.receipt.decode(privateReceipt))).toBe(true)

@@ -96,7 +96,7 @@ const patchReady = (
     readonly notice?: ReplicaChangeRejected | ReplicaSessionUnavailable | undefined
   }
 ): ReplicaSession => {
-  if (previous._tag !== "ready") return previous
+  if (!ReplicaSession.$is("ready")(previous)) return previous
   return ReplicaSession.ready({
     view: patch.view ?? previous.view,
     camera: patch.camera ?? previous.camera,
@@ -115,7 +115,7 @@ const applyOpened = (
   }
 ): ReplicaSession => {
   if (Result.isFailure(opened)) {
-    return previous._tag === "ready"
+    return ReplicaSession.$is("ready")(previous)
       ? previous
       : ReplicaSession.unavailable({ reason: opened.failure.reason })
   }
@@ -123,8 +123,8 @@ const applyOpened = (
     view: opened.success,
     camera: chrome.camera,
     selection: chrome.selection,
-    connection: previous._tag === "ready" ? previous.connection : liveConnection,
-    notice: previous._tag === "ready" ? previous.notice : undefined
+    connection: ReplicaSession.$is("ready")(previous) ? previous.connection : liveConnection,
+    notice: ReplicaSession.$is("ready")(previous) ? previous.notice : undefined
   })
 }
 
@@ -133,11 +133,11 @@ const applyRefresh = (
   opened: Result.Result<ReplicaView, ReplicaSessionUnavailable>
 ): ReplicaSession => {
   if (Result.isFailure(opened)) {
-    return previous._tag === "ready"
+    return ReplicaSession.$is("ready")(previous)
       ? previous
       : ReplicaSession.unavailable({ reason: opened.failure.reason })
   }
-  return previous._tag === "ready"
+  return ReplicaSession.$is("ready")(previous)
     ? patchReady(previous, { view: opened.success })
     : ReplicaSession.ready({
       view: opened.success,
@@ -155,7 +155,7 @@ const applySubmitted = (
   if (Result.isFailure(result)) {
     return patchReady(previous, { notice: result.failure })
   }
-  return previous._tag === "ready"
+  return ReplicaSession.$is("ready")(previous)
     ? patchReady(previous, { view: result.success, notice: undefined })
     : ReplicaSession.ready({
       view: result.success,
@@ -240,19 +240,19 @@ export const useReplicaSession = (args: {
   }, [canvasId, ports, run])
 
   const onCameraChange = useCallback((camera: CanvasCamera) => {
-    if (session._tag !== "ready") return
+    if (!ReplicaSession.$is("ready")(session)) return
     setSession((previous) => patchReady(previous, { camera }))
     void run(Effect.ignore(setCanvasCameraSession({ camera, canvasId })))
   }, [canvasId, run, session])
 
   const onSelectionChange = useCallback((selection: CanvasSelection) => {
-    if (session._tag !== "ready") return
+    if (!ReplicaSession.$is("ready")(session)) return
     setSession((previous) => patchReady(previous, { selection }))
     void run(Effect.ignore(setCanvasSelectionSession({ canvasId, selection })))
   }, [canvasId, run, session])
 
   const submit = useCallback((commands: CanvasCommandBatch) => {
-    if (session._tag !== "ready") {
+    if (!ReplicaSession.$is("ready")(session)) {
       return Promise.resolve(Result.fail(new ReplicaSessionUnavailable({
         canvasId,
         reason: "The replica is not ready."
