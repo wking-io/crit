@@ -9,8 +9,10 @@ import {
   Id,
   PersonPrincipal,
   PersonSnapshot,
+  UnspecifiedPersonEmail,
   type EmailAddress
 } from "@crit/domain"
+import type { InstallationPersonWire } from "@crit/protocol"
 import { Effect, Schema } from "effect"
 
 const hex = (bytes: Uint8Array): string =>
@@ -32,24 +34,51 @@ const personIdFromEmail = (
     })
   })
 
+const principalFromInstallationPerson = (
+  wire: InstallationPersonWire
+): Effect.Effect<PersonPrincipal, HostedReviewFailure> => {
+  if (wire.kind === "access-authenticated-person") {
+    return Effect.gen(function*() {
+      const personId = yield* personIdFromEmail(wire.address)
+      const subject = yield* Schema.decodeUnknownEffect(AuthSubject)(
+        `access|${wire.address}`
+      ).pipe(
+        Effect.mapError(() => new HostedReviewUnreachable({
+          reason: "The hosted identity is invalid."
+        }))
+      )
+      return PersonPrincipal.make({
+        subject,
+        person: PersonSnapshot.make({
+          personId,
+          displayName: wire.address.slice(0, wire.address.indexOf("@")),
+          email: AccessPersonEmail.make({ address: wire.address })
+        })
+      })
+    })
+  }
+  return Effect.gen(function*() {
+    const subject = yield* Schema.decodeUnknownEffect(AuthSubject)(
+      `anonymous|${wire.personId}`
+    ).pipe(
+      Effect.mapError(() => new HostedReviewUnreachable({
+        reason: "The hosted identity is invalid."
+      }))
+    )
+    return PersonPrincipal.make({
+      subject,
+      person: PersonSnapshot.make({
+        personId: wire.personId,
+        displayName: "Anonymous",
+        email: UnspecifiedPersonEmail.make({})
+      })
+    })
+  })
+}
+
 export const hostedPersonPrincipal = (
   client: HostedReviewClientService
 ): Effect.Effect<PersonPrincipal, HostedReviewFailure> => Effect.gen(function*() {
-  const address = yield* client.identity()
-  const personId = yield* personIdFromEmail(address)
-  const subject = yield* Schema.decodeUnknownEffect(AuthSubject)(
-    `access|${address}`
-  ).pipe(
-    Effect.mapError(() => new HostedReviewUnreachable({
-      reason: "The hosted identity is invalid."
-    }))
-  )
-  return PersonPrincipal.make({
-    subject,
-    person: PersonSnapshot.make({
-      personId,
-      displayName: address.slice(0, address.indexOf("@")),
-      email: AccessPersonEmail.make({ address })
-    })
-  })
+  const wire = yield* client.identity()
+  return yield* principalFromInstallationPerson(wire)
 })

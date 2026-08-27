@@ -6,7 +6,7 @@ Authors keep working locally with `crit dev`. After they share a Canvas, teammat
 
 This guide covers the Crit installation only. If you need to wire up live app previews inside Frames, use the [`install-crit-frame-bridge`](../../skills/install-crit-frame-bridge/SKILL.md) skill separately.
 
-Agents deploying Crit should use the [`install-crit-cloudflare`](../../skills/install-crit-cloudflare/SKILL.md) skill. Crit v1 requires Cloudflare Access on the installation URL to identify people. A public URL without Access is not a supported team setup.
+Agents deploying Crit should use the [`install-crit-cloudflare`](../../skills/install-crit-cloudflare/SKILL.md) skill. Cloudflare Access is optional. Without Access, Crit treats everyone as one anonymous person.
 
 ## What you are setting up
 
@@ -146,13 +146,15 @@ npx wrangler deploy
 
 When deploy finishes, note the URL Wrangler prints if you are using `*.workers.dev`.
 
-## 6. Turn on Cloudflare Access
+## 6. Cloudflare Access (optional)
 
-Create a Cloudflare Access application for your Crit hostname.
+Add Cloudflare Access when the team needs named people on shared work.
 
-Add every author and reviewer who needs to share or review work. Crit checks that each request came through Access before serving protected pages and APIs.
+Create an Access application for your Crit hostname. Add every author and reviewer who needs to share or review work. Crit uses the signed-in Access email for those requests.
 
-Preview registration from CI is different. It uses the `CRIT_DEPLOY_TOKEN` bearer token on `POST /deployments`, not a person's Access login.
+Skip Access for a try-out install on `workers.dev`. Crit still works. Everyone appears as one anonymous person. You can add Access later without redeploying the Worker.
+
+Preview registration from CI still uses the `CRIT_DEPLOY_TOKEN` bearer token on `POST /deployments`, not a person's login.
 
 Authors connect with:
 
@@ -160,7 +162,7 @@ Authors connect with:
 npx crit login https://crit.acme.internal
 ```
 
-That command only works once the author can reach the Crit URL through Access.
+With Access, that command binds the local Person to the signed-in company email. Without Access, it records the Crit URL and keeps the local Person anonymous.
 
 ## 7. Check that it works
 
@@ -168,28 +170,36 @@ Replace `https://crit.acme.internal` with your Crit URL.
 
 ### Sign-in endpoint
 
+With Access:
+
 ```sh
 curl -sS -H 'Cf-Access-Authenticated-User-Email: you@acme.com' \
   https://crit.acme.internal/identity
 ```
 
-You should get `200` and your email back as JSON. Without Access, you should get `401`.
+You should get `200` and your email back as JSON.
+
+Without Access:
+
+```sh
+curl -sS https://crit.acme.internal/identity
+```
+
+You should get `200` and an anonymous person id.
 
 ### Review website
 
 ```sh
 curl -sS -H 'accept: text/html' \
-  -H 'Cf-Access-Authenticated-User-Email: you@acme.com' \
   https://crit.acme.internal/
 ```
 
-You should get `200` and an HTML page.
+You should get `200` and an HTML page. Add the Access header when Access is enabled.
 
 ### Shared Canvas list
 
 ```sh
-curl -sS -H 'Cf-Access-Authenticated-User-Email: you@acme.com' \
-  https://crit.acme.internal/canvas
+curl -sS https://crit.acme.internal/canvas
 ```
 
 You should get `200`. A new installation returns an empty list.

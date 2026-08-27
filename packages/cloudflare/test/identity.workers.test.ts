@@ -1,4 +1,7 @@
-import { decodeAccessAuthenticatedPersonWire } from "@crit/protocol"
+import {
+  decodeAccessAuthenticatedPersonWire,
+  decodeAnonymousPersonWire
+} from "@crit/protocol"
 import { SELF } from "cloudflare:test"
 import { describe, expect, it } from "vitest"
 
@@ -20,22 +23,28 @@ describe("Worker identity route", () => {
     })
   })
 
-  it("rejects a missing Access header", async() => {
+  it("returns an anonymous Person without Access", async() => {
     const response = await SELF.fetch("https://crit.example/identity")
+    const body: unknown = await response.json()
 
-    expect(response.status).toBe(401)
-    expect(await response.text()).toBe("")
+    expect(response.status).toBe(200)
+    expect(decodeAnonymousPersonWire(body)).toEqual({
+      kind: "anonymous-person",
+      schemaVersion: 1,
+      personId: "person_anonymous"
+    })
   })
 
-  it("rejects an invalid Access email", async() => {
+  it("falls back to anonymous when the Access email is invalid", async() => {
     const response = await SELF.fetch("https://crit.example/identity", {
       headers: {
         "Cf-Access-Authenticated-User-Email": "not-an-email"
       }
     })
+    const body: unknown = await response.json()
 
-    expect(response.status).toBe(401)
-    expect(await response.text()).toBe("")
+    expect(response.status).toBe(200)
+    expect(decodeAnonymousPersonWire(body).personId).toBe("person_anonymous")
   })
 
   it("rejects other methods and leaves unrelated paths missing", async() => {

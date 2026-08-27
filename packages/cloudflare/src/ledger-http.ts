@@ -7,17 +7,16 @@ import {
   CursorNotFound,
   type SubmitCanvasChangeFailure
 } from "@crit/authority"
-import { EmailAddress, type CanvasId } from "@crit/domain"
+import { type CanvasId } from "@crit/domain"
 import {
   ChangeProtocol,
   decodeSubmitCanvasChangeWire,
   parseChangesAfterSearch,
-  type RemoteAuthorityRoute,
-  type SubmitInvocation
+  type RemoteAuthorityRoute
 } from "@crit/protocol"
-import { Option, Result, Schema } from "effect"
+import { Result, Schema } from "effect"
 
-import { readAccessEmail } from "./access.js"
+import { callerMatchesInvocation, resolveCallerIdentity } from "./caller.js"
 
 const emptyResponse = (status: number) => new Response(null, { status })
 
@@ -31,13 +30,6 @@ const encodedJson = <A>(
   schema: Schema.Schema<A>,
   value: A
 ) => jsonResponse(status, JSON.stringify(Schema.encodeSync(schema)(value)))
-
-const accessAddress = (invocation: SubmitInvocation): EmailAddress | undefined => {
-  const email = invocation._tag === "person"
-    ? invocation.principal.person.email
-    : invocation.principal.delegatedBy.email
-  return email._tag === "access" ? email.address : undefined
-}
 
 const encodeSubmitFailure = (error: SubmitCanvasChangeFailure) => {
   switch (error._tag) {
@@ -104,9 +96,9 @@ const pullChanges = async (
 const pushChange = async (
   request: Request,
   env: Cloudflare.Env,
-  canvasId: CanvasId,
-  address: EmailAddress
+  canvasId: CanvasId
 ): Promise<Response> => {
+  const caller = resolveCallerIdentity(request)
   const input = await readJsonBody(request)
   if (input === undefined) return emptyResponse(400)
   const decoded = decodeSubmitCanvasChangeWire(input)
@@ -116,8 +108,9 @@ const pushChange = async (
       : jsonResponse(400, JSON.stringify(ChangeProtocol.failure.encode(decoded.failure)))
   }
   if (decoded.success.proposal.canvasId !== canvasId) return emptyResponse(400)
-  const invocationAddress = accessAddress(decoded.success.invocation)
-  if (invocationAddress !== address) return emptyResponse(401)
+  if (!callerMatchesInvocation(caller, decoded.success.invocation)) {
+    return emptyResponse(401)
+  }
   const { canvasId: _canvasId, ...proposal } = decoded.success.proposal
   const stub = env.CANVASES.get(env.CANVASES.idFromName(canvasId))
   const submitted = await stub.submit(proposal, decoded.success.invocation)
@@ -135,12 +128,11 @@ export const handleLedgerRequest = async (
   env: Cloudflare.Env,
   route: RemoteAuthorityRoute
 ): Promise<Response> => {
-  const address = readAccessEmail(request)
-  if (Option.isNone(address)) return emptyResponse(401)
+  resolveCallerIdentity(request)
   if (route._tag === "canvas") {
     return request.method === "GET" ? openCanvas(env, route.canvasId) : emptyResponse(405)
   }
   if (request.method === "GET") return pullChanges(request, env, route.canvasId)
-  if (request.method === "POST") return pushChange(request, env, route.canvasId, address.value)
+  if (request.method === "POST") return pushChange(request, env, route.canvasId)
   return emptyResponse(405)
 }

@@ -249,7 +249,7 @@ export const shareCanvas = (
   const installation = yield* readLocalInstallation(options.dataRoot)
   const email = installation.principal.person.email
   const installationOrigin = installation.installationOrigin
-  if (email._tag !== "access" || installationOrigin === undefined) {
+  if (installationOrigin === undefined) {
     return yield* new ShareRequiresLogin({})
   }
 

@@ -17,14 +17,16 @@ Local-only work records a Person with unspecified email. Git name and email do n
 
 ## Login reconcile
 
-`crit login` is the only join from local Person to company Person.
+`crit login` is the only join from local Person to company Person when Access is enabled.
 
-1. Complete Access sign-in against the Installation hostname.
+1. Complete Access sign-in against the Installation hostname when Access protects that URL.
 2. Map Access claims onto the existing local Person. Email becomes `{ _tag: "access", address }`.
 3. Keep `personId` as the durable id.
 4. Share and later sync use that bound Person.
 
-Share does not invent a second join. Hosted reviewers sign in with Access on their own.
+When Access is not set up, `crit login` still records the Crit URL. The local Person stays anonymous and share uses that anonymous identity.
+
+Share does not invent a second join. Hosted reviewers sign in with Access on their own when Access exists.
 
 ## Remote person identity
 

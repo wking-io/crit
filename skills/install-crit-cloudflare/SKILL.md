@@ -9,38 +9,37 @@ Deploy Crit once in the customer's Cloudflare account. Authors keep using `crit 
 
 Read [`docs/install/cloudflare.md`](../../docs/install/cloudflare.md) for the full command list. Prefer that file over this one for exact flags and config snippets.
 
-## Identity first
+## Identity
 
-Crit v1 knows who a person is through **Cloudflare Access** on the Crit installation URL.
+Crit supports two installation modes:
 
-- `crit login`, share, sync, hosted review, and the review website all need a signed-in company person.
-- Crit does not accept client-supplied email or Git identity for remote work.
-- Preview registration from CI uses `CRIT_DEPLOY_TOKEN` only. That token is for machines, not people.
+| Mode | When | Who people are |
+|---|---|---|
+| Access-backed | Cloudflare Access protects the Crit URL | Named company people from Access |
+| Anonymous | No Access on the Crit URL | One shared anonymous person |
 
-**A public URL without Access is not a working team installation.** A `*.workers.dev` address can be reachable on the internet and still fail every human flow with `401`.
+When Access is not set up, Crit does not reject human requests. `/identity` returns an anonymous person. Share, review, and sync still work, but attribution is anonymous.
 
-Do not help the user skip Access because they chose `workers.dev`. Do not invent another way to track users. v1 has no substitute for Access on the installation URL.
+When Access is set up later, requests that arrive with a valid Access email use that person instead.
 
-If the user wants anonymous or public review, stop and say Crit v1 requires Access. That product question is open; this skill only covers the supported path.
-
-Use [`skills/crit-identity/SKILL.md`](../crit-identity/SKILL.md) when `crit login` or hosted sign-in fails after Access exists.
+Use [`skills/crit-identity/SKILL.md`](../crit-identity/SKILL.md) when login or hosted sign-in fails after Access exists.
 
 ## Choose the Crit URL
 
-Ask which hostname mode they want. Both modes still require Access on that exact URL.
+Ask which hostname mode they want.
 
 | Mode | Crit URL example | Extra setup |
 |---|---|---|
 | Company hostname | `https://crit.acme.internal` | DNS on Cloudflare and a `routes` entry in `wrangler.jsonc` |
 | Workers.dev | `https://crit-cloudflare.<subdomain>.workers.dev` | Skip `routes`; use the URL Wrangler prints after deploy |
 
-The difference is naming and DNS only. Access, D1, R2, deploy token, build steps, and verification are the same.
+The difference is naming and DNS only. Build steps, D1, R2, deploy token, and verification are the same.
 
 Record the chosen URL as `CRIT_INSTALLATION_URL` for authors and CI.
 
 ## Start
 
-1. Confirm the Cloudflare account has Workers, D1, R2, and Access enabled.
+1. Confirm the Cloudflare account has Workers, D1, and R2 enabled. Access is optional.
 2. Confirm Node.js 22.16.0 or newer and the Crit source tree are available.
 3. Pick company hostname or `workers.dev` using the table above.
 4. Open `docs/install/cloudflare.md` and follow it step by step.
@@ -59,7 +58,7 @@ Work from the Crit repository root unless a step says otherwise.
    - **workers.dev only:** leave out `routes`
    - set `CRIT_DEPLOY_TOKEN` with `wrangler secret put` for production
 5. **Deploy** — `npx wrangler deploy` from `packages/cloudflare`. Copy the live Crit URL.
-6. **Turn on Access** — create an Access application for that exact Crit URL. Include every author and reviewer.
+6. **Access (optional)** — if the team needs named people, create an Access application for the Crit URL and include every author and reviewer. Skip this for an anonymous try-out install on `workers.dev`.
 7. **Verify** — run the curl checks in the install doc against the chosen URL.
 8. **Connect authors** — `npx crit login <crit-url>` then `npx crit share <canvas-id>`.
 
@@ -78,8 +77,9 @@ Set repository secrets after deploy:
 
 ## Done
 
-- The Crit URL loads the review website for Access-signed-in users.
-- `crit login <crit-url>` succeeds for an author who passed Access.
-- `GET /identity` without Access returns `401`.
+- The Crit URL loads the review website.
+- `crit login <crit-url>` succeeds for an author.
+- Without Access, `/identity` returns an anonymous person.
+- With Access, `/identity` returns the signed-in email.
 - `/mcp` returns `404`.
-- The user knows whether they are on a company hostname or `workers.dev`, and Access protects that URL either way.
+- The user knows whether they are on a company hostname or `workers.dev`.

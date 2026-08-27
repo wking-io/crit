@@ -1,16 +1,15 @@
 import { AuthorityModel, CreateCanvas, type PersonInvocation } from "@crit/authority"
 import {
-  AccessPersonEmail,
-  AuthSubject,
-  IsoTimestamp,
   PersonEmail,
   PersonPrincipal,
-  PersonSnapshot
+  PersonSnapshot,
+  IsoTimestamp
 } from "@crit/domain"
 import {
   decodeRegisterDeploymentWire,
   decodeShareCanvasWire,
   encodeAccessAuthenticatedPersonWire,
+  encodeAnonymousPersonWire,
   encodeCanvasDirectoryWire,
   encodeCanvasSharedWire,
   hostedApplicationResolvePath,
@@ -22,7 +21,11 @@ import {
 } from "@crit/protocol"
 import { Effect, Exit, Option, Schema } from "effect"
 
-import { readAccessEmail } from "./access.js"
+import {
+  authSubjectForCaller,
+  CallerIdentity,
+  resolveCallerIdentity
+} from "./caller.js"
 import { handleArtifactRequest } from "./artifact-http.js"
 import {
   CanvasDurableObject,
@@ -133,12 +136,20 @@ const openOrCreateRemoteCanvas = async (
   }
 }
 
+const shareMatchesCaller = (
+  caller: CallerIdentity,
+  share: ReturnType<typeof decodeShareCanvasWire>
+): boolean =>
+  caller._tag === "access"
+    ? share.person.email._tag === "access"
+      && share.person.email.address === caller.address
+    : share.person.email._tag === "unspecified"
+
 const shareCanvas = async (
   request: Request,
   env: Cloudflare.Env
 ): Promise<Response> => {
-  const address = readAccessEmail(request)
-  if (Option.isNone(address)) return emptyResponse(401)
+  const caller = resolveCallerIdentity(request)
 
   let input: unknown
   try {
@@ -155,11 +166,15 @@ const shareCanvas = async (
       SharePersonEmailProbe,
       { onExcessProperty: "ignore" }
     )(input)
-    return Option.isSome(probe) && probe.value.person.email._tag !== "access"
-      ? emptyResponse(401)
-      : emptyResponse(400)
+    if (Option.isSome(probe)) {
+      const mismatched = caller._tag === "access"
+        ? probe.value.person.email._tag !== "access"
+        : probe.value.person.email._tag === "access"
+      if (mismatched) return emptyResponse(401)
+    }
+    return emptyResponse(400)
   }
-  if (share.person.email.address !== address.value) {
+  if (!shareMatchesCaller(caller, share)) {
     return emptyResponse(401)
   }
 
@@ -179,12 +194,10 @@ const shareCanvas = async (
   const person = PersonSnapshot.make({
     personId: share.person.personId,
     displayName: share.person.displayName,
-    email: AccessPersonEmail.make({
-      address: share.person.email.address
-    })
+    email: share.person.email
   })
   const principal = PersonPrincipal.make({
-    subject: Schema.decodeUnknownSync(AuthSubject)(`access|${address.value}`),
+    subject: authSubjectForCaller(caller),
     person
   })
   return openOrCreateRemoteCanvas(
@@ -238,8 +251,7 @@ const readCanvasDirectory = async (
   env: Cloudflare.Env
 ): Promise<Response> => {
   if (request.method !== "GET") return emptyResponse(405)
-  const address = readAccessEmail(request)
-  if (Option.isNone(address)) return emptyResponse(401)
+  resolveCallerIdentity(request)
   return new Response(JSON.stringify(encodeCanvasDirectoryWire({
     kind: "canvas-directory",
     schemaVersion: 1,
@@ -252,13 +264,18 @@ const readCanvasDirectory = async (
 
 const readIdentity = (request: Request): Response => {
   if (request.method !== "GET") return emptyResponse(405)
-  const address = readAccessEmail(request)
-  if (Option.isNone(address)) return emptyResponse(401)
-  const body = encodeAccessAuthenticatedPersonWire({
-    kind: "access-authenticated-person",
-    schemaVersion: 1,
-    address: address.value
-  })
+  const caller = resolveCallerIdentity(request)
+  const body = caller._tag === "access"
+    ? encodeAccessAuthenticatedPersonWire({
+      kind: "access-authenticated-person",
+      schemaVersion: 1,
+      address: caller.address
+    })
+    : encodeAnonymousPersonWire({
+      kind: "anonymous-person",
+      schemaVersion: 1,
+      personId: caller.personId
+    })
   return new Response(JSON.stringify(body), {
     headers: { "content-type": "application/json" }
   })

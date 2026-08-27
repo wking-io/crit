@@ -14,9 +14,9 @@ import {
   RepresentationRuntime,
   RepresentationRuntimeLive
 } from "@crit/representations"
-import { Crypto, Effect, Layer, Option, Schema } from "effect"
+import { Crypto, Effect, Layer, Schema } from "effect"
 
-import { readAccessEmail } from "./access.js"
+import { resolveCallerIdentity } from "./caller.js"
 import { listControlDeployments } from "./deployments.js"
 
 const review = Schema.decodeUnknownSync(DeploymentChannel)("review")
@@ -47,7 +47,7 @@ export const handleHostedApplicationResolve = async (
   request: Request,
   env: Cloudflare.Env
 ): Promise<Response> => {
-  if (Option.isNone(readAccessEmail(request))) return emptyResponse(401)
+  resolveCallerIdentity(request)
   if (request.method !== "POST") return emptyResponse(405)
 
   let input: unknown

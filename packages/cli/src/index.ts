@@ -18,6 +18,7 @@ import {
 } from "@crit/domain"
 import {
   AccessPersonAlreadyBound,
+  AnonymousInstallationBound,
   AccessPersonBinding,
   AccessPersonRequestFailed,
   AccessPersonResponseInvalid,
@@ -35,6 +36,7 @@ import {
   LocalDaemonStateUnreadable,
   LocalDevelopment,
   LocalProjectManifest,
+  LoginResult,
   loginToInstallation,
   ProjectManifestInitialization,
   registerDeployment,
@@ -316,10 +318,15 @@ const login = Command.make("login", {
 }, ({ dataRoot: root, installationUrl, json: asJson }) =>
   loginToInstallation({ dataRoot: root, installationUrl }).pipe(
     Effect.flatMap((result) => asJson
-      ? Console.log(JSON.stringify(Schema.encodeSync(AccessPersonBinding)(result)))
-      : Console.log(`Person  ${result.personId}`).pipe(
-        Effect.andThen(Console.log(`Access  ${result.email.address}`))
-      )),
+      ? Console.log(JSON.stringify(Schema.encodeSync(LoginResult)(result)))
+      : Match.valueTags(result, {
+        accessPersonBound: (bound) => Console.log(`Person  ${bound.personId}`).pipe(
+          Effect.andThen(Console.log(`Access  ${bound.email.address}`))
+        ),
+        anonymousInstallationBound: (bound) => Console.log(`Person  ${bound.personId}`).pipe(
+          Effect.andThen(Console.log("Access  anonymous"))
+        )
+      })),
     Effect.mapError((failure) => new CliOperationalFailure({
       message: formatLoginFailure(failure)
     }))

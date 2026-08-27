@@ -1,10 +1,11 @@
-import type { ApplicationRouteRepresentation, EmailAddress } from "@crit/domain"
+import type { ApplicationRouteRepresentation } from "@crit/domain"
 import {
-  decodeAccessAuthenticatedPersonWire,
+  decodeInstallationPersonWire,
   decodeCanvasDirectoryWire,
   decodeHostedApplicationResolveResponse,
   encodeHostedApplicationResolveRequest,
-  hostedApplicationResolvePath
+  hostedApplicationResolvePath,
+  type InstallationPersonWire
 } from "@crit/protocol"
 import { CanvasListing } from "@crit/replica/http"
 import { RenderPlan } from "@crit/representations"
@@ -27,7 +28,7 @@ export type HostedReviewFailure =
   | HostedReviewUnreachable
 
 export interface HostedReviewClientService {
-  readonly identity: () => Effect.Effect<EmailAddress, HostedReviewFailure>
+  readonly identity: () => Effect.Effect<InstallationPersonWire, HostedReviewFailure>
   readonly directory: () => Effect.Effect<
     ReadonlyArray<CanvasListing>,
     HostedReviewFailure
@@ -83,10 +84,9 @@ export class HostedReviewClient extends Context.Service<
           "identity"
         )),
         Effect.flatMap((body) => Effect.try({
-          try: () => decodeAccessAuthenticatedPersonWire(body),
+          try: () => decodeInstallationPersonWire(body),
           catch: () => unavailable("identity")
-        })),
-        Effect.map((wire) => wire.address)
+        }))
       )
       const directory = () => execute(
         HttpClientRequest.get(`${rootUrl(options.baseUrl)}/canvas`),

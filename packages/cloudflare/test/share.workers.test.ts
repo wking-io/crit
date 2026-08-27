@@ -124,7 +124,23 @@ describe("Worker Canvas share route", () => {
     })
   })
 
-  it("rejects a missing Access identity", async() => {
+  it("accepts an anonymous share without Access", async() => {
+    const input = JSON.parse(body("canvas_worker_share_anonymous"))
+    input.person.email = { _tag: "unspecified" }
+    const response = await SELF.fetch("https://crit.example/canvas", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(input)
+    })
+    const receipt: unknown = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(decodeCanvasSharedWire(receipt)).toMatchObject({
+      canvasId: "canvas_worker_share_anonymous"
+    })
+  })
+
+  it("rejects an access share body from an anonymous caller", async() => {
     const response = await SELF.fetch("https://crit.example/canvas", {
       method: "POST",
       headers: { "content-type": "application/json" },

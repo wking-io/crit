@@ -6,7 +6,7 @@ import {
   PersonSnapshot
 } from "@crit/domain"
 import {
-  decodeAccessAuthenticatedPersonWire
+  decodeInstallationPersonWire
 } from "@crit/protocol"
 import { Effect, FileSystem, Path, Schema } from "effect"
 import {
@@ -32,6 +32,18 @@ export const AccessPersonBinding = Schema.TaggedStruct("accessPersonBound", {
   email: AccessPersonEmail
 })
 export type AccessPersonBinding = typeof AccessPersonBinding.Type
+
+export const AnonymousInstallationBound = Schema.TaggedStruct(
+  "anonymousInstallationBound",
+  { personId: PersonId }
+)
+export type AnonymousInstallationBound = typeof AnonymousInstallationBound.Type
+
+export const LoginResult = Schema.Union([
+  AccessPersonBinding,
+  AnonymousInstallationBound
+])
+export type LoginResult = typeof LoginResult.Type
 
 export class AccessPersonAlreadyBound extends Schema.TaggedError<AccessPersonAlreadyBound>()(
   "AccessPersonAlreadyBound",
@@ -224,6 +236,41 @@ const installationEndpoint = (
   catch: () => new InstallationUrlInvalid({ installationUrl })
 })
 
+const readInstallationPerson = (
+  dataRoot: string
+): Effect.Effect<PersonId, LocalDaemonStateMissing | LocalDaemonStateUnreadable | LocalDaemonStateMalformed> =>
+  Effect.gen(function*() {
+    const fs = yield* FileSystem.FileSystem
+    const path = yield* Path.Path
+    const installationPath = path.join(dataRoot, "installation.json")
+    const stateUnreadable = (reason: string) => new LocalDaemonStateUnreadable({
+      state: "installation",
+      path: installationPath,
+      reason
+    })
+    const exists = yield* fs.exists(installationPath).pipe(
+      Effect.mapError(() => stateUnreadable("Unable to inspect installation state"))
+    )
+    if (!exists) {
+      return yield* new LocalDaemonStateMissing({
+        state: "installation",
+        path: installationPath
+      })
+    }
+    const contents = yield* fs.readFileString(installationPath).pipe(
+      Effect.mapError(() => stateUnreadable("Unable to read installation state"))
+    )
+    const installation = yield* Effect.try({
+      try: () => decodeStored(LocalInstallation, contents),
+      catch: () => new LocalDaemonStateMalformed({
+        state: "installation",
+        path: installationPath,
+        reason: "Stored JSON does not match the required schema"
+      })
+    })
+    return installation.principal.person.personId
+  })
+
 export const loginToInstallation = (
   options: LoginToInstallationOptions
 ) => Effect.gen(function*() {
@@ -242,15 +289,18 @@ export const loginToInstallation = (
     Effect.mapError(() => new AccessPersonResponseInvalid({}))
   )
   const wire = yield* Effect.try({
-    try: () => decodeAccessAuthenticatedPersonWire(JSON.parse(contents)),
+    try: () => decodeInstallationPersonWire(JSON.parse(contents)),
     catch: () => new AccessPersonResponseInvalid({})
   })
-  const binding = yield* bindAccessPerson({
-    dataRoot: options.dataRoot,
-    email: AccessPersonEmail.make({
-      address: wire.address
-    })
-  })
   yield* rememberInstallationOrigin(options.dataRoot, endpoint.installationOrigin)
-  return binding
+  if (wire.kind === "access-authenticated-person") {
+    return yield* bindAccessPerson({
+      dataRoot: options.dataRoot,
+      email: AccessPersonEmail.make({
+        address: wire.address
+      })
+    })
+  }
+  const personId = yield* readInstallationPerson(options.dataRoot)
+  return AnonymousInstallationBound.make({ personId })
 }).pipe(Effect.provide(FetchHttpClient.layer))

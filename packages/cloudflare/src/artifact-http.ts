@@ -5,9 +5,9 @@ import {
   encodeArtifactStoredWire,
   parseArtifactDigestSearch
 } from "@crit/protocol"
-import { Effect, Option, Schema } from "effect"
+import { Effect, Schema } from "effect"
 
-import { readAccessEmail } from "./access.js"
+import { resolveCallerIdentity } from "./caller.js"
 import { R2ArtifactStore } from "./r2-artifact-store.js"
 
 const emptyResponse = (status: number) => new Response(null, { status })
@@ -26,8 +26,7 @@ export const handleArtifactRequest = async (
   env: Cloudflare.Env,
   artifactId: ArtifactId
 ): Promise<Response> => {
-  const address = readAccessEmail(request)
-  if (Option.isNone(address)) return emptyResponse(401)
+  resolveCallerIdentity(request)
   const store = R2ArtifactStore.make(env.ARTIFACTS)
   if (request.method === "PUT") {
     const bytes = new Uint8Array(await request.arrayBuffer())
