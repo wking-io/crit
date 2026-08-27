@@ -11,12 +11,12 @@ import {
   type RouterHistory
 } from "@tanstack/react-router"
 
+import type { HostRuntime } from "./host-connection.js"
 import { parseHostCanvasId } from "./host-canvas-id.js"
 import { HostIndexView, HostScreenView } from "./host-views.js"
 
 export type HostRouterContext = {
-  readonly fragment: string
-  readonly origin: string
+  readonly runtime: HostRuntime
 }
 
 const rootRoute = createRootRouteWithContext<HostRouterContext>()({
@@ -27,8 +27,8 @@ const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/",
   component: function HostIndexPage(): ReactElement {
-    const { fragment, origin } = useRouter().options.context
-    return <HostIndexView fragment={fragment} origin={origin} />
+    const { runtime } = useRouter().options.context
+    return <HostIndexView runtime={runtime} />
   }
 })
 
@@ -36,11 +36,11 @@ const canvasRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/canvas/$canvasId",
   component: function HostCanvasPage(): ReactElement {
-    const { fragment, origin } = useRouter().options.context
+    const { runtime } = useRouter().options.context
     return Result.match(parseHostCanvasId(canvasRoute.useParams().canvasId), {
       onFailure: () => <p role="alert">That is not a Canvas ID.</p>,
       onSuccess: (canvasId) => (
-        <HostScreenView canvasId={canvasId} fragment={fragment} origin={origin} />
+        <HostScreenView canvasId={canvasId} runtime={runtime} />
       )
     })
   }
@@ -49,27 +49,24 @@ const canvasRoute = createRoute({
 export const hostRouteTree = rootRoute.addChildren([indexRoute, canvasRoute])
 
 export const createHostRouter = (options: {
-  readonly fragment: string
-  readonly origin: string
+  readonly runtime: HostRuntime
   readonly history?: RouterHistory | undefined
 }) =>
   createRouter({
     routeTree: hostRouteTree,
     context: {
-      fragment: options.fragment,
-      origin: options.origin
+      runtime: options.runtime
     },
     defaultNotFoundComponent: () => <p role="alert">That page does not exist.</p>,
     history: options.history ?? createBrowserHistory(),
     scrollRestoration: () => false
   })
 
-export function HostRouter({ fragment, history, origin }: {
-  readonly fragment: string
+export function HostRouter({ history, runtime }: {
   readonly history?: RouterHistory | undefined
-  readonly origin: string
+  readonly runtime: HostRuntime
 }): ReactElement {
-  const [router] = useState(() => createHostRouter({ fragment, history, origin }))
+  const [router] = useState(() => createHostRouter({ history, runtime }))
   return <RouterProvider router={router} />
 }
 

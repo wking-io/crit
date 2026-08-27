@@ -3,21 +3,21 @@ import { RegistryProvider } from "@effect/atom-react"
 import { type ReactElement } from "react"
 import type { RouterHistory } from "@tanstack/react-router"
 
+import type { HostRuntime } from "./host-connection.js"
 import { HostRouter } from "./host-router.js"
 
 const registryIdleTtlMs = 400
 
-export function HostRoot({ fragment, history, origin }: {
-  readonly fragment: string
+export function HostRoot({ history, runtime }: {
   readonly history?: RouterHistory | undefined
-  readonly origin: string
+  readonly runtime: HostRuntime
 }): ReactElement {
   return (
     <RegistryProvider
       defaultIdleTTL={registryIdleTtlMs}
       scheduleTask={scheduleCritRegistryTask}
     >
-      <HostRouter fragment={fragment} history={history} origin={origin} />
+      <HostRouter history={history} runtime={runtime} />
     </RegistryProvider>
   )
 }

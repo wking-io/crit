@@ -2,11 +2,9 @@ import type { CanvasListing } from "@crit/replica/http"
 import { Link } from "@tanstack/react-router"
 import { type ReactElement } from "react"
 
-import { sessionHash } from "./host-canvas-id.js"
-
-export function HostCanvasList({ fragment, listings }: {
-  readonly fragment: string
+export function HostCanvasList({ listings, sessionHash }: {
   readonly listings: ReadonlyArray<CanvasListing>
+  readonly sessionHash?: string
 }): ReactElement {
   if (listings.length === 0) return <p>No canvases yet.</p>
   return (
@@ -14,7 +12,7 @@ export function HostCanvasList({ fragment, listings }: {
       {listings.map((listing) => (
         <li key={listing.canvasId}>
           <Link
-            hash={sessionHash(fragment)}
+            hash={sessionHash}
             params={{ canvasId: listing.canvasId }}
             to="/canvas/$canvasId"
           >

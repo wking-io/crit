@@ -1,18 +1,20 @@
+import { LocalBrowserConnection } from "@crit/client"
 import type { CanvasId } from "@crit/domain"
 import { useAtomValue } from "@effect/atom-react"
 import { Match } from "effect"
 import { type ReactElement } from "react"
 
 import { CritHost } from "./crit-host.js"
+import { sessionHash } from "./host-canvas-id.js"
+import type { HostRuntime } from "./host-connection.js"
 import { hostIndexAtom, hostScreenAtom } from "./host-atoms.js"
 import { HostCanvasList } from "./host-canvas-list.js"
 
-export function HostScreenView({ canvasId, fragment, origin }: {
+export function HostScreenView({ canvasId, runtime }: {
   readonly canvasId: CanvasId
-  readonly fragment: string
-  readonly origin: string
+  readonly runtime: HostRuntime
 }): ReactElement {
-  const screen = useAtomValue(hostScreenAtom(fragment)(origin)(canvasId))
+  const screen = useAtomValue(hostScreenAtom(runtime)(canvasId))
   return Match.value(screen).pipe(Match.tagsExhaustive({
     invalid: ({ reason }) => <p role="alert">{reason}</p>,
     connecting: () => <p role="status">Connecting to Crit…</p>,
@@ -20,15 +22,23 @@ export function HostScreenView({ canvasId, fragment, origin }: {
   }))
 }
 
-export function HostIndexView({ fragment, origin }: {
-  readonly fragment: string
-  readonly origin: string
+export function HostIndexView({ runtime }: {
+  readonly runtime: HostRuntime
 }): ReactElement {
-  const screen = useAtomValue(hostIndexAtom(fragment)(origin))
+  const screen = useAtomValue(hostIndexAtom(runtime))
   return Match.value(screen).pipe(Match.tagsExhaustive({
     invalid: ({ reason }) => <p role="alert">{reason}</p>,
     connecting: () => <p role="status">Connecting to Crit…</p>,
     failed: ({ reason }) => <p role="alert">{reason}</p>,
-    ready: ({ listings }) => <HostCanvasList fragment={fragment} listings={listings} />
+    ready: ({ listings }) => (
+      <HostCanvasList
+        listings={listings}
+        sessionHash={
+          runtime._tag === "standalone"
+            ? sessionHash(LocalBrowserConnection.encode(runtime.descriptor))
+            : undefined
+        }
+      />
+    )
   }))
 }

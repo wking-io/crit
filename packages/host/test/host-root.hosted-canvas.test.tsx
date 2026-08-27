@@ -15,7 +15,7 @@ import { StrictMode, act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
-import { HostRoot } from "../src/index.js"
+import { HostRoot, resolveHostRuntime } from "../src/index.js"
 
 const fetchMock = vi.hoisted(() => {
   const mock = vi.fn<typeof globalThis.fetch>()
@@ -137,9 +137,12 @@ describe("HostRoot hosted canvas", () => {
     await act(async() => root.render(
       <StrictMode>
         <HostRoot
-          fragment=""
           history={createMemoryHistory({ initialEntries: ["/canvas/canvas_shop"] })}
-          origin="https://crit.example"
+          runtime={resolveHostRuntime({
+            fragment: "",
+            injected: undefined,
+            origin: "https://crit.example"
+          })}
         />
       </StrictMode>
     ))

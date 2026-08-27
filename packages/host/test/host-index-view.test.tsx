@@ -13,6 +13,7 @@ import { StrictMode, act, type ReactElement } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
+import { resolveHostRuntime } from "../src/host-connection.js"
 import { HostIndexView } from "../src/host-views.js"
 
 const fetchMock = vi.hoisted(() => {
@@ -72,7 +73,11 @@ const indexAt = (
   const rootRoute = createRootRoute({
     component: () => (
       <RegistryProvider scheduleTask={scheduleTask}>
-        <HostIndexView fragment={fragment} origin={localOrigin} />
+        <HostIndexView runtime={resolveHostRuntime({
+          fragment,
+          injected: undefined,
+          origin: localOrigin
+        })} />
       </RegistryProvider>
     )
   })
