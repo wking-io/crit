@@ -113,7 +113,8 @@ describe("ChangeProtocol", () => {
       "FrameInputBridgeMessageSchema", "FrameInputIntentSchema",
       "FrameRoute", "FrameRouteBridgeMessageSchema",
       "HostedApplicationResolveRequest", "HostedApplicationResolveResponse",
-      "PresenceChangedSchema", "ProposedCanvasChangeSchema", "ProtocolValue",
+      "PresenceChangedSchema", "ProposedCanvasChangeSchema", "ProtocolFailure",
+      "ProtocolFailureSchema", "ProtocolValue",
       "RegisterDeploymentWire", "RemoteAuthorityRoute", "ReplicaChangedSchema",
       "SequenceSchema",
       "ShareCanvasWire", "ShareDigestMismatch", "SubmitCanvasChangeWire",
@@ -134,8 +135,11 @@ describe("ChangeProtocol", () => {
       "encodeHostedApplicationResolveRequest",
       "encodeHostedApplicationResolveResponse", "encodeRegisterDeploymentWire",
       "encodeShareCanvasWire", "encodeSubmitCanvasChangeWire",
-      "hostedApplicationResolvePath", "parseArtifactDigestSearch",
+      "formatProtocolFailure", "formatUnsupportedVersion",
+      "hostedApplicationResolvePath", "isProtocolFailure", "negotiateWire",
+      "parseArtifactDigestSearch",
       "parseArtifactPath", "parseChangesAfterSearch", "parseRemoteAuthorityPath",
+      "protocolFailureHttpStatus", "readProtocolFailure",
       "remoteArtifactPath",
       "remoteCanvasChangesPath", "remoteCanvasCollectionPath",
       "remoteCanvasPath", "remoteChangesPageLimit"
@@ -210,7 +214,13 @@ describe("ChangeProtocol", () => {
       input.schemaVersion = 1
       const codec = name === "proposed" ? ChangeProtocol.proposed : name === "accepted" ? ChangeProtocol.accepted : name === "page" ? ChangeProtocol.page : ChangeProtocol.receipt
       const result = codec.decode(input)
-      expect(Result.isFailure(result) && result.failure._tag).toBe("unsupportedVersion")
+      expect(Result.isFailure(result) && result.failure).toEqual({
+        _tag: "unsupportedVersion",
+        location: "message",
+        requestedVersion: 1,
+        supportedVersion: 2,
+        message: "Schema version 1 is unsupported. This installation speaks version 2. Upgrade Crit so the client and installation match."
+      })
     }
   })
 

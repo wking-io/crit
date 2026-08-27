@@ -18,6 +18,7 @@ import { Crypto, Effect, Layer, Schema } from "effect"
 
 import { resolveCallerIdentity, respondWithCallerCookie } from "./caller.js"
 import { listControlDeployments } from "./deployments.js"
+import { negotiateRequest } from "./protocol-http.js"
 
 const review = Schema.decodeUnknownSync(DeploymentChannel)("review")
 
@@ -58,6 +59,12 @@ export const handleHostedApplicationResolve = async (
   } catch {
     return respond(emptyResponse(400))
   }
+
+  const rejected = negotiateRequest(input, {
+    kind: "resolveApplicationRoute",
+    schemaVersion: 1
+  })
+  if (rejected !== undefined) return rejected
 
   let decoded: ReturnType<typeof decodeHostedApplicationResolveRequest>
   try {

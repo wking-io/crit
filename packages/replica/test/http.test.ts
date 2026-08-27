@@ -4,7 +4,9 @@ import { describe, expect, it } from "vitest"
 
 import {
   LocalReplicaSocketHello,
-  LocalReplicaSocketServerFrame
+  LocalReplicaSocketServerFrame,
+  LocalApiVersionUnsupported,
+  formatLocalApiVersionUnsupported
 } from "../src/http.js"
 
 describe("local replica socket frames", () => {
@@ -34,5 +36,22 @@ describe("local replica socket frames", () => {
       schemaVersion: 1,
       canvasId
     })).toEqual({ kind: "subscription-ready", schemaVersion: 1, canvasId })
+  })
+})
+
+describe("local API version errors", () => {
+  it("formats an API version mismatch as an upgrade error", () => {
+    expect(formatLocalApiVersionUnsupported(new LocalApiVersionUnsupported({
+      requestedVersion: "2",
+      supportedVersion: "1"
+    }))).toBe(
+      "The local daemon API version 2 is unsupported. This daemon speaks version 1. Upgrade Crit so the client and daemon match."
+    )
+    expect(formatLocalApiVersionUnsupported(new LocalApiVersionUnsupported({
+      requestedVersion: null,
+      supportedVersion: "1"
+    }))).toBe(
+      "The local daemon API version is missing. This daemon speaks version 1. Upgrade Crit so the client and daemon match."
+    )
   })
 })

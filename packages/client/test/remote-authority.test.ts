@@ -294,4 +294,99 @@ describe("RemoteCanvasAuthority", () => {
       expect(opened.projection.title).toBe("Remote")
     }).pipe(Effect.provide(memoryAuthority))))
   )
+
+  it("fails a mismatched change page with an upgrade error", () =>
+    Effect.runPromise(Effect.scoped(Effect.gen(function*() {
+      const served = yield* Effect.acquireRelease(
+        Effect.promise(() => new Promise<{
+          readonly origin: string
+          readonly server: Server
+        }>((resolve, reject) => {
+          const server = createServer((_request, response) => {
+            writeJson(response, 200, JSON.stringify({
+              kind: "canvas-change-page",
+              schemaVersion: 3,
+              canvasId: "canvas_protocol",
+              after: null,
+              changes: [],
+              cursor: "cursor_a",
+              hasMore: false
+            }))
+          })
+          server.once("error", reject)
+          server.listen(0, "127.0.0.1", () => {
+            const address = Schema.decodeUnknownSync(TcpAddress)(server.address())
+            resolve({
+              origin: `http://127.0.0.1:${address.port}`,
+              server
+            })
+          })
+        })),
+        ({ server }) => Effect.promise(() => new Promise<void>((finish) => {
+          server.close(() => finish())
+        }))
+      )
+      const remote = yield* remoteFrom(served.origin)
+      const failure = yield* remote.changesAfter(AuthorityModel.changesAfter({
+        canvasId: Id.canvas("canvas_protocol"),
+        after: null,
+        limit: AuthorityModel.pageLimit(10)
+      })).pipe(Effect.flip)
+
+      expect(failure).toEqual({
+        _tag: "unsupportedVersion",
+        location: "message",
+        requestedVersion: 3,
+        supportedVersion: 2,
+        message: "Schema version 3 is unsupported. This installation speaks version 2. Upgrade Crit so the client and installation match."
+      })
+    })))
+  )
+
+  it("fails a protocol-failure upgrade response from submit", () =>
+    Effect.runPromise(Effect.scoped(Effect.gen(function*() {
+      const served = yield* Effect.acquireRelease(
+        Effect.promise(() => new Promise<{
+          readonly origin: string
+          readonly server: Server
+        }>((resolve, reject) => {
+          const server = createServer((_request, response) => {
+            writeJson(response, 426, JSON.stringify(ChangeProtocol.failure.encode({
+              _tag: "unsupportedVersion",
+              location: "message",
+              requestedVersion: 2,
+              supportedVersion: 1,
+              message: "Schema version 2 is unsupported. This installation speaks version 1. Upgrade Crit so the client and installation match."
+            })))
+          })
+          server.once("error", reject)
+          server.listen(0, "127.0.0.1", () => {
+            const address = Schema.decodeUnknownSync(TcpAddress)(server.address())
+            resolve({
+              origin: `http://127.0.0.1:${address.port}`,
+              server
+            })
+          })
+        })),
+        ({ server }) => Effect.promise(() => new Promise<void>((finish) => {
+          server.close(() => finish())
+        }))
+      )
+      const remote = yield* remoteFrom(served.origin)
+      const failure = yield* remote.submit({
+        changeId: Id.change("change_protocol"),
+        canvasId: Id.canvas("canvas_protocol"),
+        observedCursor: null,
+        commands: rename
+      }, person).pipe(Effect.flip)
+
+      expect(failure).toEqual({
+        _tag: "unsupportedVersion",
+        location: "message",
+        requestedVersion: 2,
+        supportedVersion: 1,
+        message: "Schema version 2 is unsupported. This installation speaks version 1. Upgrade Crit so the client and installation match."
+      })
+    })))
+  )
 })

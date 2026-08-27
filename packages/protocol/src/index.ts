@@ -1,5 +1,14 @@
 export { ChangeProtocol } from "./codec.js"
 export {
+  formatProtocolFailure,
+  formatUnsupportedVersion,
+  isProtocolFailure,
+  negotiateWire,
+  protocolFailureHttpStatus,
+  readProtocolFailure
+} from "./negotiate.js"
+export { ProtocolFailure, ProtocolFailureSchema } from "./failure.js"
+export {
   AcceptedCanvasChangeSchema,
   ChangeValue,
   ChangePageSchema,

@@ -2,7 +2,8 @@ import {
   ApplicationRouteRepresentation,
   Id
 } from "@crit/domain"
-import { Effect } from "effect"
+import { formatProtocolFailure } from "@crit/protocol"
+import { Effect, Schema } from "effect"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import {
@@ -98,5 +99,69 @@ describe("HostedReviewClient", () => {
     expect(failed).toBeInstanceOf(HostedReviewUnreachable)
     expect(invalidJson).toBeInstanceOf(HostedReviewUnreachable)
     expect(invalidSchema).toBeInstanceOf(HostedReviewUnreachable)
+  })
+})
+
+describe("HostedReviewClient protocol negotiation", () => {
+  it("fails a mismatched directory schema version with an upgrade error", async() => {
+    fetchMock.mockImplementation(async() => new Response(JSON.stringify({
+      kind: "canvas-directory",
+      schemaVersion: 2,
+      canvases: []
+    }), {
+      status: 200,
+      headers: { "content-type": "application/json" }
+    }))
+
+    const failure = await Effect.runPromise(
+      withClient((client) => client.directory().pipe(Effect.flip))
+    )
+
+    expect(failure._tag).toBe("unsupportedVersion")
+    if (failure._tag !== "unsupportedVersion") return
+    expect(failure).toEqual({
+      _tag: "unsupportedVersion",
+      location: "message",
+      requestedVersion: 2,
+      supportedVersion: 1,
+      message: "Schema version 2 is unsupported. This installation speaks version 1. Upgrade Crit so the client and installation match."
+    })
+    expect(formatProtocolFailure(failure)).toBe(
+      "Schema version 2 is unsupported. This installation speaks version 1. Upgrade Crit so the client and installation match."
+    )
+  })
+
+  it("fails a protocol-failure upgrade response from resolve", async() => {
+    fetchMock.mockImplementation(async() => new Response(JSON.stringify({
+      kind: "protocol-failure",
+      schemaVersion: 1,
+      failure: {
+        _tag: "unsupportedVersion",
+        location: "message",
+        requestedVersion: 2,
+        supportedVersion: 1,
+        message: "Schema version 2 is unsupported. This installation speaks version 1. Upgrade Crit so the client and installation match."
+      }
+    }), {
+      status: 426,
+      headers: { "content-type": "application/json" }
+    }))
+
+    const failure = await Effect.runPromise(
+      withClient((client) => Effect.flip(
+        client.resolveApplicationRoute(
+          ApplicationRouteRepresentation.make({
+            applicationId: Id.application("application_protocol"),
+            route: "/checkout"
+          })
+        )
+      ))
+    )
+
+    expect(failure._tag).toBe("unsupportedVersion")
+    if (failure._tag !== "unsupportedVersion") return
+    expect(formatProtocolFailure(failure)).toBe(
+      "Schema version 2 is unsupported. This installation speaks version 1. Upgrade Crit so the client and installation match."
+    )
   })
 })

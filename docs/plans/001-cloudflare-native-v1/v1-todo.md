@@ -45,7 +45,7 @@ Plan: [phase 9](phase-09-release.md), [testing](testing.md).
 
 - [x] Documented customer Cloudflare install.
 - [x] Backup, restore, retention, key rotation, incident runbooks.
-- [ ] Protocol negotiation with actionable client errors.
+- [x] Protocol negotiation with actionable client errors.
 - [x] Published SDK for domain, client, React, Frame Bridge, and testing.
 - [x] Alpha removed from the release artifact.
 - [ ] `/mcp` and agent OAuth routes stay absent.
@@ -95,6 +95,7 @@ Local Frames authoring on one machine.
 - Installation operations runbooks for backup, restore, retention, key rotation, and incident response live in `docs/runbooks/`.
 - The published npm pack omits alpha `src/`, compiled `dist/`, playground, and www. `npm run check:package` rejects those paths. The repo still keeps the alpha as a behavior reference.
 - Published SDK packages for domain, client, React, Frame Bridge, and testing. `npm run check:sdk-package` packs them and imports those entry points.
+- Protocol negotiation rejects mismatched schema versions with a 426 `protocol-failure`. The error names the requested and supported versions and tells the user to upgrade Crit. Local daemon API, remote JSON, share, login, register-deployment, and hosted review all surface that copy.
 
 ## Out of v1
 

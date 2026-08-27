@@ -8,13 +8,17 @@ import type {
   RemoteCanvasAuthorityService
 } from "@crit/client"
 import {
+  AccessPersonEmail,
+  AuthSubject,
   CanvasChangeFailureSchema,
   EmailAddress,
   Id,
+  PersonPrincipal,
+  PersonSnapshot,
   decodeCanvasCommandBatch,
   decodeCanvasProjection
 } from "@crit/domain"
-import { SubmitChangeReceiptSchema } from "@crit/protocol"
+import { ProtocolFailure, SubmitChangeReceiptSchema } from "@crit/protocol"
 import {
   ReplicaChangeRejected,
   ReplicaSessionUnavailable
@@ -79,7 +83,11 @@ const domainFailure = Schema.decodeUnknownSync(CanvasChangeFailureSchema)({
   id: "frame_missing"
 })
 const hostedClient: HostedReviewClientService = {
-  identity: () => Effect.succeed(email),
+  identity: () => Effect.succeed({
+    kind: "access-authenticated-person",
+    schemaVersion: 1,
+    address: email
+  }),
   directory: () => Effect.die("unused"),
   resolveApplicationRoute: () => Effect.die("unused")
 }
@@ -202,6 +210,45 @@ describe("hostedReplicaSessionPorts.change", () => {
     expect(failure).toEqual(new ReplicaSessionUnavailable({
       canvasId,
       reason: "The hosted service is unreachable."
+    }))
+  })
+})
+
+describe("hostedReplicaSessionPorts.open", () => {
+  const protocolCanvasId = Id.canvas("canvas_review")
+  const upgradePrincipal = PersonPrincipal.make({
+    subject: Schema.decodeUnknownSync(AuthSubject)("access|ada@acme.com"),
+    person: PersonSnapshot.make({
+      personId: Id.person("person_ada"),
+      displayName: "Ada",
+      email: AccessPersonEmail.make({
+        address: Schema.decodeUnknownSync(EmailAddress)("ada@acme.com")
+      })
+    })
+  })
+  const upgrade = ProtocolFailure.unsupportedVersion({
+    location: "message",
+    requestedVersion: 2,
+    supportedVersion: 1,
+    message:
+      "Schema version 2 is unsupported. This installation speaks version 1. Upgrade Crit so the client and installation match."
+  })
+
+  it("maps a protocol failure to the upgrade copy", async() => {
+    const ports = hostedReplicaSessionPorts({
+      authority: {
+        open: () => Effect.fail(upgrade),
+        submit: () => Effect.die("unused"),
+        changesAfter: () => Effect.die("unused")
+      },
+      principal: upgradePrincipal
+    })
+
+    const failure = await Effect.runPromise(Effect.flip(ports.open(protocolCanvasId)))
+
+    expect(failure).toEqual(new ReplicaSessionUnavailable({
+      canvasId: protocolCanvasId,
+      reason: upgrade.message
     }))
   })
 })

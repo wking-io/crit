@@ -36,6 +36,7 @@ import {
 import { registerControlDeployment } from "./deployments.js"
 import { handleHostedApplicationResolve } from "./hosted-representation.js"
 import { handleLedgerRequest } from "./ledger-http.js"
+import { negotiateRequest } from "./protocol-http.js"
 import { isDocumentRequest, isHostDocumentPath, serveShell } from "./shell.js"
 import {
   compareShareReceipt,
@@ -161,6 +162,9 @@ const shareCanvas = async (
     return respondWithCallerCookie(emptyResponse(400), request, resolved)
   }
 
+  const rejected = negotiateRequest(input, { kind: "share-canvas", schemaVersion: 2 })
+  if (rejected !== undefined) return rejected
+
   let share: ReturnType<typeof decodeShareCanvasWire>
   try {
     share = decodeShareCanvasWire(input)
@@ -242,9 +246,20 @@ const registerDeployment = async (
 ): Promise<Response> => {
   if (request.method !== "POST") return emptyResponse(405)
   if (!isDeploymentAuthorized(request, env)) return emptyResponse(401)
+  let input: unknown
+  try {
+    input = await request.json()
+  } catch {
+    return emptyResponse(400)
+  }
+  const rejected = negotiateRequest(input, {
+    kind: "register-deployment",
+    schemaVersion: 1
+  })
+  if (rejected !== undefined) return rejected
   let registration: RegisterDeploymentWire
   try {
-    registration = decodeRegisterDeploymentWire(await request.json())
+    registration = decodeRegisterDeploymentWire(input)
   } catch {
     return emptyResponse(400)
   }

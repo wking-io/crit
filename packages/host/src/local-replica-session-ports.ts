@@ -11,6 +11,7 @@ import {
   ReplicaSessionUnavailable,
   type ReplicaSessionPorts
 } from "@crit/react"
+import { formatLocalApiVersionUnsupported } from "@crit/replica/http"
 import { Cause, Effect, Fiber, Match, Result, Stream } from "effect"
 import * as Socket from "effect/unstable/socket/Socket"
 
@@ -19,7 +20,7 @@ export const localTransportFailureReason = (failure: StatusFailure): string =>
     HttpClientError: () => "The local daemon is unreachable.",
     LocalApiOriginRejected: () => "The local daemon rejected this origin.",
     LocalApiUnauthorized: () => "The browser session is no longer authorized.",
-    LocalApiVersionUnsupported: () => "The local daemon speaks an unsupported API version.",
+    LocalApiVersionUnsupported: formatLocalApiVersionUnsupported,
     SchemaError: () => "The local daemon sent an unexpected response."
   }))
 

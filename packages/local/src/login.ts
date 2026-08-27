@@ -9,9 +9,11 @@ import {
 } from "@crit/domain"
 import {
   critPersonIdHeader,
-  decodeInstallationPersonWire
+  decodeInstallationPersonWire,
+  negotiateWire,
+  readProtocolFailure
 } from "@crit/protocol"
-import { Effect, FileSystem, Path, Schema } from "effect"
+import { Effect, FileSystem, Option, Path, Result, Schema } from "effect"
 import {
   FetchHttpClient,
   HttpClient,
@@ -383,14 +385,35 @@ export const loginToInstallation = (
   if (response.status === 401) {
     return yield* new AccessPersonUnauthenticated({})
   }
-  if (response.status !== 200) {
-    return yield* new AccessPersonResponseRejected({ status: response.status })
-  }
   const contents = yield* response.text.pipe(
     Effect.mapError(() => new AccessPersonResponseInvalid({}))
   )
+  const parsed = yield* Effect.try({
+    try: () => Schema.decodeUnknownSync(Schema.Json)(JSON.parse(contents)),
+    catch: () => new AccessPersonResponseInvalid({})
+  })
+  const protocol = readProtocolFailure(parsed)
+  if (Option.isSome(protocol) && (response.status === 400 || response.status === 426)) {
+    return yield* Effect.fail(protocol.value)
+  }
+  if (response.status !== 200) {
+    return yield* new AccessPersonResponseRejected({ status: response.status })
+  }
+  const negotiated = negotiateWire(parsed, {
+    kind: "access-authenticated-person",
+    schemaVersion: 1
+  })
+  if (
+    Result.isFailure(negotiated)
+    && (
+      negotiated.failure._tag === "unsupportedVersion"
+      || negotiated.failure._tag === "messageKindMismatch"
+    )
+  ) {
+    return yield* Effect.fail(negotiated.failure)
+  }
   const wire = yield* Effect.try({
-    try: () => decodeInstallationPersonWire(JSON.parse(contents)),
+    try: () => decodeInstallationPersonWire(parsed),
     catch: () => new AccessPersonResponseInvalid({})
   })
   yield* rememberInstallationOrigin(options.dataRoot, endpoint.installationOrigin)

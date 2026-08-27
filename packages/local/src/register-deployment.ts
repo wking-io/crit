@@ -6,9 +6,12 @@ import {
 } from "@crit/domain"
 import {
   decodeDeploymentRegisteredWire,
-  encodeRegisterDeploymentWire
+  encodeRegisterDeploymentWire,
+  negotiateWire,
+  readProtocolFailure,
+  type ProtocolFailure
 } from "@crit/protocol"
-import { Effect, Redacted, Schema } from "effect"
+import { Effect, Option, Redacted, Result, Schema } from "effect"
 import {
   FetchHttpClient,
   HttpClient,
@@ -58,6 +61,7 @@ export type RegisterDeploymentFailure =
   | DeploymentRegistrationRequestFailed
   | InstallationUrlInvalid
   | ProjectManifestFailure
+  | ProtocolFailure
 
 interface DeploymentDetails {
   sourceRevision?: SourceRevision
@@ -116,16 +120,37 @@ export const registerDeployment = (
   if (response.status === 401) {
     return yield* new DeploymentRegistrationUnauthenticated({})
   }
+  const contents = yield* response.text.pipe(
+    Effect.mapError(() => new DeploymentRegistrationResponseInvalid({}))
+  )
+  const parsed = yield* Effect.try({
+    try: (): unknown => JSON.parse(contents),
+    catch: () => new DeploymentRegistrationResponseInvalid({})
+  })
+  const protocol = readProtocolFailure(parsed)
+  if (Option.isSome(protocol) && (response.status === 400 || response.status === 426)) {
+    return yield* Effect.fail(protocol.value)
+  }
   if (response.status !== 200) {
     return yield* new DeploymentRegistrationResponseRejected({
       status: response.status
     })
   }
-  const contents = yield* response.text.pipe(
-    Effect.mapError(() => new DeploymentRegistrationResponseInvalid({}))
-  )
+  const negotiated = negotiateWire(parsed, {
+    kind: "deployment-registered",
+    schemaVersion: 1
+  })
+  if (
+    Result.isFailure(negotiated)
+    && (
+      negotiated.failure._tag === "unsupportedVersion"
+      || negotiated.failure._tag === "messageKindMismatch"
+    )
+  ) {
+    return yield* Effect.fail(negotiated.failure)
+  }
   return yield* Effect.try({
-    try: () => decodeDeploymentRegisteredWire(JSON.parse(contents)),
+    try: () => decodeDeploymentRegisteredWire(parsed),
     catch: () => new DeploymentRegistrationResponseInvalid({})
   })
 }).pipe(Effect.provide(FetchHttpClient.layer))

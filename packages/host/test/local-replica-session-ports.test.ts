@@ -12,7 +12,7 @@ import {
   ReplicaSubscriptionEvent
 } from "@crit/react"
 import { ReplicaModel, ReplicaView } from "@crit/replica"
-import { LocalApiUnauthorized } from "@crit/replica/http"
+import { LocalApiUnauthorized, LocalApiVersionUnsupported } from "@crit/replica/http"
 import { Effect, Schema, Stream } from "effect"
 import { describe, expect, it, vi } from "vitest"
 
@@ -195,6 +195,22 @@ describe("localReplicaSessionPorts.change", () => {
     expect(failure).toEqual(new ReplicaSessionUnavailable({
       canvasId,
       reason: "The browser session is no longer authorized."
+    }))
+  })
+
+  it("maps an unsupported API version to the upgrade copy", async() => {
+    const ports = localReplicaSessionPorts(unusedClient(() =>
+      Effect.fail(new LocalApiVersionUnsupported({
+        requestedVersion: "2",
+        supportedVersion: "1"
+      }))
+    ))
+
+    const failure = await Effect.runPromise(Effect.flip(ports.change({ canvasId, commands })))
+
+    expect(failure).toEqual(new ReplicaSessionUnavailable({
+      canvasId,
+      reason: "The local daemon API version 2 is unsupported. This daemon speaks version 1. Upgrade Crit so the client and daemon match."
     }))
   })
 })

@@ -107,6 +107,12 @@ export class LocalApiVersionUnsupported extends Schema.TaggedError<LocalApiVersi
   { httpApiStatus: 426 }
 ) {}
 
+export const formatLocalApiVersionUnsupported = (
+  failure: LocalApiVersionUnsupported
+): string => failure.requestedVersion === null
+  ? `The local daemon API version is missing. This daemon speaks version ${failure.supportedVersion}. Upgrade Crit so the client and daemon match.`
+  : `The local daemon API version ${failure.requestedVersion} is unsupported. This daemon speaks version ${failure.supportedVersion}. Upgrade Crit so the client and daemon match.`
+
 export class AuthenticatedInvocation extends Context.Service<
   AuthenticatedInvocation,
   typeof VerifiedInvocation.Type

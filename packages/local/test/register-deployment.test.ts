@@ -164,6 +164,33 @@ describe("deployment registration client", () => {
       )
     })).pipe(Effect.provide(NodeServices.layer))))
 
+  it("rejects an unsupported receipt schema version with an upgrade error", () =>
+    Effect.runPromise(Effect.scoped(Effect.gen(function*() {
+      const root = yield* temporaryRoot
+      yield* initializeManifest(root)
+      const installation = yield* mockInstallation(200, {
+        kind: "deployment-registered",
+        schemaVersion: 2
+      })
+
+      const failure = yield* registerDeployment({
+        root,
+        installationUrl: installation.origin,
+        token: "test-deploy-token",
+        url,
+        channel
+      }).pipe(Effect.flip)
+
+      expect(failure).toMatchObject({
+        _tag: "unsupportedVersion",
+        requestedVersion: 2,
+        supportedVersion: 1
+      })
+      expect(failure._tag === "unsupportedVersion" && failure.message).toContain(
+        "Upgrade Crit so the client and installation match."
+      )
+    })).pipe(Effect.provide(NodeServices.layer))))
+
   it("classifies invalid installation URLs, request failures, and manifest failures", () =>
     Effect.runPromise(Effect.scoped(Effect.gen(function*() {
       const root = yield* temporaryRoot

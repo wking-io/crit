@@ -11,8 +11,12 @@ import {
   ChangeProtocol,
   encodeChangesAfterSearch,
   encodeSubmitCanvasChangeWire,
+  isProtocolFailure,
   remoteCanvasChangesPath,
-  remoteCanvasPath
+  remoteCanvasPath,
+  type ChangePage,
+  type ProtocolFailure,
+  type SubmitChangeReceipt
 } from "@crit/protocol"
 import { Context, Effect, Layer, Option, Result, Schema } from "effect"
 import {
@@ -21,6 +25,8 @@ import {
   HttpClientRequest,
   HttpClientResponse
 } from "effect/unstable/http"
+
+import { failProtocolResponse } from "./protocol-error.js"
 
 const SubmitError = Schema.Union([
   CanvasNotFound,
@@ -41,10 +47,30 @@ export const RemoteAuthorityOptions = Schema.TaggedStruct("remoteAuthorityOption
 export type RemoteAuthorityOptions = typeof RemoteAuthorityOptions.Type
 
 export interface RemoteCanvasAuthorityService {
-  readonly open: CanvasAuthority["Service"]["open"]
-  readonly submit: CanvasAuthority["Service"]["submit"]
-  readonly changesAfter: CanvasAuthority["Service"]["changesAfter"]
+  readonly open: (
+    canvasId: Parameters<CanvasAuthority["Service"]["open"]>[0]
+  ) => Effect.Effect<
+    AuthorityView,
+    CanvasNotFound | ProtocolFailure
+  >
+  readonly submit: (
+    ...args: Parameters<CanvasAuthority["Service"]["submit"]>
+  ) => Effect.Effect<
+    SubmitChangeReceipt,
+    CanvasNotFound | CursorNotFound | ChangeIdReused | ChangeRejected | ProtocolFailure
+  >
+  readonly changesAfter: (
+    query: Parameters<CanvasAuthority["Service"]["changesAfter"]>[0]
+  ) => Effect.Effect<
+    ChangePage,
+    CanvasNotFound | CursorNotFound | ProtocolFailure
+  >
 }
+
+const absorbProtocolFailure = <A, E>(
+  effect: Effect.Effect<A, E>
+): Effect.Effect<A, Exclude<E, ProtocolFailure>> =>
+  effect.pipe(Effect.catchIf(isProtocolFailure, (failure) => Effect.die(failure)))
 
 const rootUrl = (baseUrl: string): string => baseUrl.replace(/\/$/, "")
 
@@ -68,11 +94,11 @@ const readJson = (response: HttpClientResponse.HttpClientResponse) =>
     Effect.orDie
   )
 
-const decodeOrDie = <A>(
-  decoded: Result.Result<A, { readonly _tag: string }>
-): Effect.Effect<A> => Result.isSuccess(decoded)
+const decodeProtocol = <A>(
+  decoded: Result.Result<A, ProtocolFailure>
+): Effect.Effect<A, ProtocolFailure> => Result.isSuccess(decoded)
   ? Effect.succeed(decoded.success)
-  : Effect.die(decoded.failure)
+  : Effect.fail(decoded.failure)
 
 const failEncoded = <E>(
   encoded: Option.Option<E>
@@ -80,14 +106,22 @@ const failEncoded = <E>(
   ? Effect.fail(encoded.value)
   : Effect.die("Remote authority returned an unexpected error body")
 
+const failRemoteBody = (
+  response: HttpClientResponse.HttpClientResponse,
+  body: unknown
+): Effect.Effect<never, ProtocolFailure> => {
+  const protocol = failProtocolResponse(response, body)
+  return protocol ?? Effect.die(body)
+}
+
 export const overlayRemoteLedger = (
   create: CanvasAuthority["Service"]["create"],
   remote: RemoteCanvasAuthorityService
 ): CanvasAuthority["Service"] => ({
   create,
-  open: remote.open,
-  submit: remote.submit,
-  changesAfter: remote.changesAfter
+  open: (canvasId) => absorbProtocolFailure(remote.open(canvasId)),
+  submit: (proposal, invocation) => absorbProtocolFailure(remote.submit(proposal, invocation)),
+  changesAfter: (query) => absorbProtocolFailure(remote.changesAfter(query))
 })
 
 export const routeSharedCanvases = (
@@ -97,16 +131,18 @@ export const routeSharedCanvases = (
 ): CanvasAuthority["Service"] => ({
   create: local.create,
   open: (canvasId) => sharedCanvas(canvasId).pipe(
-    Effect.flatMap((shared) => shared ? remote.open(canvasId) : local.open(canvasId))
+    Effect.flatMap((shared) => shared
+      ? absorbProtocolFailure(remote.open(canvasId))
+      : local.open(canvasId))
   ),
   submit: (proposal, invocation) => sharedCanvas(proposal.canvasId).pipe(
     Effect.flatMap((shared) => shared
-      ? remote.submit(proposal, invocation)
+      ? absorbProtocolFailure(remote.submit(proposal, invocation))
       : local.submit(proposal, invocation))
   ),
   changesAfter: (query) => sharedCanvas(query.canvasId).pipe(
     Effect.flatMap((shared) => shared
-      ? remote.changesAfter(query)
+      ? absorbProtocolFailure(remote.changesAfter(query))
       : local.changesAfter(query))
   )
 })
@@ -131,7 +167,7 @@ export const makeRemoteCanvasAuthority = (
             Schema.decodeUnknownOption(OpenError)(body)
           )
         }
-        return yield* Effect.die(body)
+        return yield* failRemoteBody(response, body)
       }))
     )
 
@@ -145,14 +181,14 @@ export const makeRemoteCanvasAuthority = (
       Effect.flatMap((response) => Effect.gen(function*() {
         const body = yield* readJson(response)
         if (response.status === 200) {
-          return yield* decodeOrDie(ChangeProtocol.receipt.decode(body))
+          return yield* decodeProtocol(ChangeProtocol.receipt.decode(body))
         }
         if (response.status === 404 || response.status === 409) {
           return yield* failEncoded(
             Schema.decodeUnknownOption(SubmitError)(body)
           )
         }
-        return yield* Effect.die(body)
+        return yield* failRemoteBody(response, body)
       }))
     )
 
@@ -166,14 +202,14 @@ export const makeRemoteCanvasAuthority = (
       Effect.flatMap((response) => Effect.gen(function*() {
         const body = yield* readJson(response)
         if (response.status === 200) {
-          return yield* decodeOrDie(ChangeProtocol.page.decode(body))
+          return yield* decodeProtocol(ChangeProtocol.page.decode(body))
         }
         if (response.status === 404) {
           return yield* failEncoded(
             Schema.decodeUnknownOption(PullError)(body)
           )
         }
-        return yield* Effect.die(body)
+        return yield* failRemoteBody(response, body)
       }))
     )
 

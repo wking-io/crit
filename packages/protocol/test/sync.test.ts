@@ -48,6 +48,20 @@ describe("remote authority protocol", () => {
     expect(Result.isFailure(decoded) && decoded.failure._tag).toBe("envelopeInvalid")
   })
 
+  it("rejects an unsupported submit envelope version with an upgrade error", async() => {
+    const input = JSON.parse(await fixtureContents("submit-canvas-change"))
+    input.schemaVersion = 2
+    const decoded = decodeSubmitCanvasChangeWire(input)
+
+    expect(Result.isFailure(decoded) && decoded.failure).toEqual({
+      _tag: "unsupportedVersion",
+      location: "message",
+      requestedVersion: 2,
+      supportedVersion: 1,
+      message: "Schema version 2 is unsupported. This installation speaks version 1. Upgrade Crit so the client and installation match."
+    })
+  })
+
   it("parses canvas and changes paths", () => {
     const canvasId = Id.canvas("canvas_checkout")
 
