@@ -90,4 +90,10 @@ describe("applyReviewEffect", () => {
     expect(exitFullscreen).toHaveBeenCalledOnce()
   })
 
+  it("fits the camera when a zoom handler is provided", () => {
+    const zoomToFit = vi.fn()
+    applyReviewEffect({ _tag: "zoomToFit" }, { frameElement: null, zoomToFit })
+    expect(zoomToFit).toHaveBeenCalledOnce()
+  })
+
 })

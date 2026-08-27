@@ -1,3 +1,4 @@
+import { MOVE_CANVAS_CURSOR } from "./move-cursor.js"
 import { resizeCursors } from "./resize-cursors.js"
 
 const INTER = "InterVariable, Inter, sans-serif"
@@ -111,17 +112,16 @@ export const critStyles = String.raw`
     oklch(14.7% 0.004 49.3 / 20%) 0 0 0 .5px;
   color: oklch(26.9% 0 0);
   display: flex;
-  flex-wrap: wrap;
   font-family: InterVariable, Inter, sans-serif;
   font-feature-settings: "calt" 1, "case" 1, "ss02" 1, "tnum" 1, "ss03" 1;
   font-optical-sizing: none;
   font-variation-settings: "opsz" 14;
   gap: 8px;
+  height: 40px;
   left: 0;
   letter-spacing: 0;
   max-width: 100%;
-  min-height: 40px;
-  padding: 6px 8px 6px 14px;
+  padding: 0 8px 0 14px;
   pointer-events: auto;
   position: absolute;
   top: 0;
@@ -403,6 +403,7 @@ button.crit-toolbar__title:focus-visible { border-radius: 2px; outline: 2px soli
   background: linear-gradient(var(--frame-shell), var(--frame-shell)), var(--crit-paper);
   border-start-end-radius: inherit;
   border-start-start-radius: inherit;
+  cursor: ${MOVE_CANVAS_CURSOR};
   display: flex;
   flex: 0 0 var(--crit-frame-chrome-height);
   font-family: InterVariable, Inter, sans-serif;
@@ -971,6 +972,51 @@ button.crit-toolbar__title:focus-visible { border-radius: 2px; outline: 2px soli
 }
 .crit-dialog-backdrop[data-starting-style],
 .crit-dialog-backdrop[data-ending-style] { opacity: 0; }
+.crit-confirmation-dialog {
+  background: oklch(98.5% 0 none);
+  border-radius: 10px;
+  box-shadow: rgba(25, 25, 24, .22) 0 16px 48px, rgba(25, 25, 24, .2) 0 0 0 .5px;
+  color: #191918;
+  display: grid;
+  font-family: ${INTER};
+  ${INTER_LOCK};
+  gap: 18px;
+  left: 50%;
+  max-width: 380px;
+  outline: 0;
+  padding: 20px;
+  position: fixed;
+  top: 50%;
+  transform: translate(-50%, -50%) scale(1);
+  transition: opacity 100ms ease-out, transform 100ms ease-out;
+  width: calc(100% - 48px);
+  z-index: 5101;
+}
+.crit-confirmation-dialog[data-starting-style],
+.crit-confirmation-dialog[data-ending-style] {
+  opacity: 0;
+  transform: translate(-50%, -50%) scale(.98);
+}
+.crit-confirmation-dialog__intro { display: grid; gap: 6px; }
+.crit-confirmation-dialog h2 { font-size: 16px; margin: 0; }
+.crit-confirmation-dialog p { color: #68655e; font: 400 13px/1.5 ${INTER}; ${INTER_LOCK}; margin: 0; }
+.crit-confirmation-dialog__actions { display: flex; gap: 8px; justify-content: flex-end; }
+.crit-confirmation-dialog__actions button {
+  background: transparent;
+  border: 1px solid #d8d5cc;
+  border-radius: 6px;
+  color: #191918;
+  cursor: pointer;
+  font: 600 12px/1 ${INTER};
+  ${INTER_LOCK};
+  height: 34px;
+  padding: 0 12px;
+}
+.crit-confirmation-dialog__actions button:hover,
+.crit-confirmation-dialog__actions button:focus-visible { background: #eeece7; outline: 0; }
+.crit-confirmation-dialog__actions button[data-tone="danger"] { background: #b42318; border-color: #b42318; color: #fff; }
+.crit-confirmation-dialog__actions button[data-tone="danger"]:hover,
+.crit-confirmation-dialog__actions button[data-tone="danger"]:focus-visible { background: #8f1d14; }
 .crit-new-frame-dialog {
   background: oklch(98.5% 0 none);
   border-radius: 10px;

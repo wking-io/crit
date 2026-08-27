@@ -33,8 +33,12 @@ import {
   CritContextActions,
   ReviewMenuItem
 } from "./canvas-context-menu.js"
+import { ConfirmationDialog } from "./confirmation-dialog.js"
 import { cssVariableStyle } from "./css-variable-style.js"
-import { FRAME_SIZE_PRESETS } from "./frame-breakpoints.js"
+import {
+  FRAME_SIZE_PRESETS,
+  presetSizeDetail
+} from "./frame-breakpoints.js"
 import {
   STATUS_PILL_MOTION,
   calculateStatusFanLayout,
@@ -129,56 +133,107 @@ const visibleFrameActions = (
   delete: canMutate && screenWidth >= 60
 })
 
-const reviewFrameMenuItems = (
-  runner: ReviewRunner,
-  live: boolean,
-  url: string | undefined,
-  fullscreenPolicy: ReturnType<typeof reviewActionPolicy>,
-  removePolicy: ReturnType<typeof reviewActionPolicy>,
-  openPolicy: ReturnType<typeof reviewActionPolicy>
-) => [
+const reviewFrameMenuItems = (input: {
+  readonly fullscreenPolicy: ReturnType<typeof reviewActionPolicy>
+  readonly live: boolean
+  readonly onFitContent: () => void
+  readonly onRemove: () => void
+  readonly openPolicy: ReturnType<typeof reviewActionPolicy>
+  readonly removePolicy: ReturnType<typeof reviewActionPolicy>
+  readonly runner: ReviewRunner
+  readonly url: string | undefined
+}) => [
   ReviewMenuItem.action({
-    policy: removePolicy,
-    disabled: !runner.runnableIds.has("remove"),
-    onSelect: () => runner.run("remove")
+    policy: input.removePolicy,
+    disabled: !input.runner.runnableIds.has("remove"),
+    onSelect: input.onRemove
   }),
   ReviewMenuItem.action({
-    policy: fullscreenPolicy,
-    disabled: !runner.runnableIds.has(fullscreenPolicy.id),
-    onSelect: () => runner.run(fullscreenPolicy.id)
+    policy: input.fullscreenPolicy,
+    disabled: !input.runner.runnableIds.has(input.fullscreenPolicy.id),
+    onSelect: () => input.runner.run(input.fullscreenPolicy.id)
   }),
-  ...(url === undefined
+  ...(input.url === undefined
     ? []
     : [ReviewMenuItem.link({
-      policy: openPolicy,
-      href: url
+      policy: input.openPolicy,
+      href: input.url
     })]),
   ReviewMenuItem.action({
     policy: reviewActionPolicy("bring-to-front"),
-    disabled: !runner.runnableIds.has("bring-to-front"),
-    onSelect: () => runner.run("bring-to-front")
+    disabled: !input.runner.runnableIds.has("bring-to-front"),
+    onSelect: () => input.runner.run("bring-to-front")
   }),
   ReviewMenuItem.action({
     policy: reviewActionPolicy("send-to-back"),
-    disabled: !runner.runnableIds.has("send-to-back"),
-    onSelect: () => runner.run("send-to-back")
+    disabled: !input.runner.runnableIds.has("send-to-back"),
+    onSelect: () => input.runner.run("send-to-back")
   }),
-  ...(live
-    ? [ReviewMenuItem.submenu({
-      id: "resize-presets",
-      label: "Resize to",
-      description: "Resize this Frame to a standard viewport size.",
-      items: FRAME_SIZE_PRESETS.map((preset) => {
-        const id = `resize-frame-${preset.id}` as const
-        return ReviewMenuItem.action({
-          policy: reviewActionPolicy(id),
-          disabled: !runner.runnableIds.has(id),
-          onSelect: () => runner.run(id)
+  ...(input.live
+    ? [
+      ReviewMenuItem.submenu({
+        id: "set-size",
+        label: "Set size",
+        description: "Resize this Frame to a standard viewport size.",
+        items: FRAME_SIZE_PRESETS.map((preset) => {
+          const id = `resize-frame-${preset.id}` as const
+          return ReviewMenuItem.action({
+            policy: reviewActionPolicy(id),
+            disabled: !input.runner.runnableIds.has(id),
+            detail: presetSizeDetail(preset),
+            onSelect: () => input.runner.run(id)
+          })
         })
+      }),
+      ReviewMenuItem.submenu({
+        id: "duplicate-at-preset",
+        label: "Duplicate at preset",
+        description: "Duplicate this live Frame at a standard viewport size.",
+        items: FRAME_SIZE_PRESETS.map((preset) => {
+          const id = `duplicate-frame-${preset.id}` as const
+          return ReviewMenuItem.action({
+            policy: reviewActionPolicy(id),
+            disabled: !input.runner.runnableIds.has(id),
+            detail: presetSizeDetail(preset),
+            onSelect: () => input.runner.run(id)
+          })
+        })
+      }),
+      ReviewMenuItem.action({
+        policy: reviewActionPolicy("fit-frame-content"),
+        onSelect: input.onFitContent
       })
-    })]
+    ]
     : [])
 ]
+
+export const measureFrameContentHeight = (
+  frameElement: HTMLElement
+): number | undefined => {
+  const iframe = frameElement.querySelector("iframe")
+  if (!(iframe instanceof HTMLIFrameElement)) return undefined
+  try {
+    const contentDocument = iframe.contentDocument
+    if (contentDocument === null) return undefined
+    const root = contentDocument.documentElement
+    const body = contentDocument.body
+    const contentHeight = Math.max(
+      root.scrollHeight,
+      root.offsetHeight,
+      root.clientHeight,
+      body?.scrollHeight ?? 0,
+      body?.offsetHeight ?? 0,
+      body?.clientHeight ?? 0
+    )
+    const chrome = frameElement.querySelector(".crit-frame__chrome")
+    const chromeHeight = chrome instanceof HTMLElement
+      ? chrome.getBoundingClientRect().height
+      : FRAME_CHROME_HEIGHT
+    return Math.max(120, Math.ceil(contentHeight + chromeHeight))
+  } catch {
+    return undefined
+  }
+}
 
 function StatusPillOption({
   disabled,
@@ -585,6 +640,7 @@ function FrameActionBar({
   actions,
   breakpointsOpen,
   fullscreenPolicy,
+  onRemove,
   openPolicy,
   removePolicy,
   runner,
@@ -596,6 +652,7 @@ function FrameActionBar({
   readonly actions: ReturnType<typeof visibleFrameActions>
   readonly breakpointsOpen: boolean
   readonly fullscreenPolicy: ReturnType<typeof reviewActionPolicy>
+  readonly onRemove: () => void
   readonly openPolicy: ReturnType<typeof reviewActionPolicy>
   readonly removePolicy: ReturnType<typeof reviewActionPolicy>
   readonly runner: ReviewRunner | null
@@ -646,7 +703,10 @@ function FrameActionBar({
                         {...reviewActionHelpTarget(policy)}
                         onClick={() => runner?.run(id)}
                       >
-                        {policy.label}
+                        <span>{policy.label}</span>
+                        <span className="crit-context-menu__detail">
+                          {presetSizeDetail(preset)}
+                        </span>
                       </Menu.Item>
                     )
                   })}
@@ -710,7 +770,7 @@ function FrameActionBar({
             className="crit-frame__action"
             disabled={!runner?.runnableIds.has("remove")}
             {...reviewActionHelpTarget(removePolicy)}
-            onClick={() => runner?.run("remove")}
+            onClick={onRemove}
             type="button"
           >
             <Glyph name="trash" />
@@ -765,6 +825,7 @@ export function ReviewFrame({
   const [statusMenuOpen, setStatusMenuOpen] = useState(false)
   const [statusMenuLayerActive, setStatusMenuLayerActive] = useState(false)
   const [breakpointsOpen, setBreakpointsOpen] = useState(false)
+  const [removeOpen, setRemoveOpen] = useState(false)
   const statusMenuActionsRef = useRef<Menu.Root.Actions | null>(null)
   const statusMenuTriggerRef = useRef<HTMLButtonElement>(null)
   const restoreStatusTriggerFocusRef = useRef(false)
@@ -797,16 +858,34 @@ export function ReviewFrame({
   const toolbarMode = frameToolbarMode(screenWidth, actionCount)
   const titleVisible = toolbarMode === "full"
 
+  const requestRemove = () => setRemoveOpen(true)
+  const fitContent = () => {
+    const frameElement = frameElementRef.current
+    if (frameElement === null || runner === null) return
+    const height = measureFrameContentHeight(frameElement)
+    if (height === undefined) return
+    runner.run("fit-frame-content", ReviewActionInput.height({ height }))
+  }
   const menuItems = runner === null
     ? []
-    : reviewFrameMenuItems(
-      runner,
-      live,
-      url,
+    : reviewFrameMenuItems({
       fullscreenPolicy,
+      live,
+      onFitContent: fitContent,
+      onRemove: requestRemove,
+      openPolicy,
       removePolicy,
-      openPolicy
-    )
+      runner,
+      url
+    })
+
+  useEffect(() => {
+    const frame = frameElementRef.current
+    if (frame === null) return () => {}
+    const stop = (event: Event) => event.stopPropagation()
+    frame.addEventListener("contextmenu", stop)
+    return () => frame.removeEventListener("contextmenu", stop)
+  }, [frameElementRef])
 
   const bindFrameRef = (element: HTMLDivElement | null) => {
     frameElementRef.current = element
@@ -885,6 +964,7 @@ export function ReviewFrame({
             actions={actions}
             breakpointsOpen={breakpointsOpen}
             fullscreenPolicy={fullscreenPolicy}
+            onRemove={requestRemove}
             openPolicy={openPolicy}
             removePolicy={removePolicy}
             runner={runner}
@@ -892,6 +972,17 @@ export function ReviewFrame({
             snapshotCapturing={snapshotCapturing}
             snapshotPolicy={snapshotPolicy}
             url={url}
+          />
+          <ConfirmationDialog
+            confirmLabel={removePolicy.label}
+            description="This removes the selected Frames from the canvas."
+            onCancel={() => setRemoveOpen(false)}
+            onConfirm={() => {
+              runner?.run("remove")
+              setRemoveOpen(false)
+            }}
+            open={removeOpen}
+            title="Remove Frame?"
           />
         </header>
         <div className="crit-frame__viewport">

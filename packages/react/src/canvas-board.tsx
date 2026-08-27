@@ -18,9 +18,11 @@ import {
 
 import {
   applyCanvasCameraIntent,
+  fitCameraToFrames,
   type CanvasCamera,
   canvasCameraStyle
 } from "./canvas-camera.js"
+import { CritContextMenuDismissalScope } from "./canvas-context-menu.js"
 import { useCanvasItemDrag } from "./canvas-item-drag.js"
 import {
   CanvasInputTarget,
@@ -38,9 +40,14 @@ import { framesById } from "./projection-index.js"
 import { GlyphProvider } from "./glyph.js"
 import { CritOverlayProvider } from "./overlay-container.js"
 import { shortIdForIndex } from "./frame-status-chrome.js"
+import { ReviewCanvasSurface, canvasCenterPlacement } from "./review-canvas-surface.js"
 import { ReviewChrome } from "./review-chrome.js"
 import { ReviewFrame, canvasUiScale } from "./review-frame.js"
-import { ReviewSelection, type ReviewClientEffect } from "./review-actions.js"
+import {
+  ReviewClientEffect,
+  ReviewSelection,
+  type ReviewClientEffect as ReviewClientEffectValue
+} from "./review-actions.js"
 import { useReviewEffects } from "./review-effects.js"
 import { ReviewRunnerProvider } from "./review-runner.js"
 
@@ -51,7 +58,7 @@ interface CanvasBoardBaseProps {
   readonly onCameraChange: (camera: CanvasCamera) => void
   readonly selection: CanvasSelection
   readonly onSelectionChange: (selection: CanvasSelection) => void
-  readonly onEffect?: ((effect: ReviewClientEffect) => void) | undefined
+  readonly onEffect?: ((effect: ReviewClientEffectValue) => void) | undefined
   readonly className?: string
 }
 
@@ -102,10 +109,40 @@ export function CanvasBoard({
     ? { camera }
     : { camera, onSubmit }
   const itemDrag = useCanvasItemDrag(itemDragOptions)
+  const zoomToFit = useCallback(() => {
+    const root = rootRef.current
+    if (root === null) return
+    const viewport = root.getBoundingClientRect()
+    onCameraChange(fitCameraToFrames(
+      projection.frames.map((frame) => frame.geometry),
+      { width: viewport.width, height: viewport.height }
+    ))
+  }, [onCameraChange, projection.frames])
   const reviewEffectOptions = onEffect === undefined
-    ? { frameElementsRef, frames: projection.frames, selectedFrameRef }
-    : { frameElementsRef, frames: projection.frames, onEffect, selectedFrameRef }
+    ? {
+      frameElementsRef,
+      frames: projection.frames,
+      selectedFrameRef,
+      zoomToFit
+    }
+    : {
+      frameElementsRef,
+      frames: projection.frames,
+      onEffect,
+      selectedFrameRef,
+      zoomToFit
+    }
   const reviewEffects = useReviewEffects(reviewEffectOptions)
+  const handleEffect = useCallback((effect: ReviewClientEffectValue) => {
+    if (ReviewClientEffect.$is("zoomToFit")(effect)) zoomToFit()
+    reviewEffects.handle(effect)
+  }, [reviewEffects, zoomToFit])
+  const addFramePlacement = useCallback(() => {
+    const root = rootRef.current
+    return root === null
+      ? { x: 0, y: 0 }
+      : canvasCenterPlacement(root, camera)
+  }, [camera])
 
   useLayoutEffect(() => {
     navigationRef.current = { camera, onCameraChange }
@@ -260,27 +297,35 @@ export function CanvasBoard({
             : (
               <ReviewRunnerProvider
                 fullscreen={reviewEffects.fullscreen}
-                onEffect={reviewEffects.handle}
+                onEffect={handleEffect}
                 onSubmit={onSubmit}
                 projection={projection}
                 selection={ReviewSelection.items({ items: selection })}
                 snapshotter={snapshotter}
               >
-                <ReviewChrome
-                  fullscreen={reviewEffects.fullscreen}
-                  onEffect={reviewEffects.handle}
-                  onSubmit={onSubmit}
-                  projection={projection}
-                  selection={ReviewSelection.items({ items: selection })}
-                  snapshotter={snapshotter}
-                />
-                {hasItems
-                  ? (
-                    <div className="crit-canvas__plane" style={canvasCameraStyle(camera)}>
-                      {items}
-                    </div>
-                  )
-                  : items}
+                <CritContextMenuDismissalScope signal={camera.zoom}>
+                  <ReviewChrome
+                    fullscreen={reviewEffects.fullscreen}
+                    onAddFramePlacement={addFramePlacement}
+                    onEffect={handleEffect}
+                    onSubmit={onSubmit}
+                    projection={projection}
+                    selection={ReviewSelection.items({ items: selection })}
+                    snapshotter={snapshotter}
+                  />
+                  <ReviewCanvasSurface camera={camera} rootRef={rootRef}>
+                    {hasItems
+                      ? (
+                        <div
+                          className="crit-canvas__plane"
+                          style={canvasCameraStyle(camera)}
+                        >
+                          {items}
+                        </div>
+                      )
+                      : <div className="crit-canvas__surface">{items}</div>}
+                  </ReviewCanvasSurface>
+                </CritContextMenuDismissalScope>
               </ReviewRunnerProvider>
             )}
         </CritOverlayProvider>

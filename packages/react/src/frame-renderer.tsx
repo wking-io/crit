@@ -24,6 +24,7 @@ import {
   type ReactElement
 } from "react"
 
+import { connectIframeContextMenu } from "./iframe-context-menu.js"
 import { UnsandboxedLiveReviewIframe } from "./unsandboxed-live-review-iframe.js"
 
 export type FrameRendererFrame = Pick<
@@ -229,6 +230,12 @@ function LiveFrame({
       disconnect()
     }
   }, [onRouteChange, plan.url])
+
+  useEffect(() => {
+    const iframe = iframeRef.current
+    if (iframe === null) return
+    return connectIframeContextMenu(iframe)
+  }, [plan.url])
 
   return (
     <UnsandboxedLiveReviewIframe

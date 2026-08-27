@@ -277,26 +277,50 @@ describe("ReviewChrome", () => {
       .toBeInstanceOf(HTMLElement)
     expect(container.querySelector("[aria-label='Align and distribute']"))
       .toBeInstanceOf(HTMLButtonElement)
-    expect(container.querySelector("[aria-label='Add frame']")).toBeNull()
+    expect(container.querySelector("[aria-label='Add frame']"))
+      .toBeInstanceOf(HTMLButtonElement)
   })
 
-  it("does not offer Add frame in the review UI", async() => {
+  it("opens the add-frame dialog from the toolbar", async() => {
+    const onSubmit = vi.fn()
     await act(async() => render(
       <ReviewChrome
-        onSubmit={vi.fn()}
+        onSubmit={onSubmit}
         projection={projection}
         selection={selection([])}
       />
     ))
 
-    expect(container.querySelector("[aria-label='Add frame']")).toBeNull()
-    expect(container.querySelector("[aria-label='Frame URL']")).toBeNull()
-    expect(container.textContent).not.toContain("Add frame")
+    expect(container.querySelector("[aria-label='Add frame']"))
+      .toBeInstanceOf(HTMLButtonElement)
     expect(container.querySelector("[aria-label='Pause offscreen frames']"))
       .toBeNull()
     expect(container.querySelector("[aria-label='Set status to approved']"))
       .toBeNull()
     expect(container.querySelector("[aria-label='Enter fullscreen']")).toBeNull()
+
+    await act(async() => button("Add frame").click())
+    const url = await vi.waitFor(() => {
+      const match = queryUi("[aria-label='Frame URL']")
+      if (!(match instanceof HTMLInputElement)) {
+        throw new Error("Frame URL input missing")
+      }
+      return match
+    })
+    const form = queryUi("form[aria-label='Add frame']")
+    if (!(form instanceof HTMLFormElement)) {
+      throw new Error("Add frame form missing")
+    }
+    await act(async() => setInputValue(url, "https://example.com/new"))
+    await act(async() => form.requestSubmit())
+    expect(onSubmit).toHaveBeenCalledWith([{
+      _tag: "addFrame",
+      frameId: expect.stringMatching(/^frame_[0-9a-f]{32}$/),
+      title: "new",
+      representation: { _tag: "webUrl", url: "https://example.com/new" },
+      status: "in-progress",
+      geometry: { x: 0, y: 0, width: 1280, height: 832 }
+    }])
   })
 
   it("lists Remove and its table shortcut in idle help", async() => {

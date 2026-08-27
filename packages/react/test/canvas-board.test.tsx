@@ -459,7 +459,8 @@ describe("CanvasBoard", () => {
     expect(container.querySelector("[aria-label='Canvas toolbar']")).not.toBeNull()
     expect(container.querySelector("[aria-label='Align and distribute']"))
       .toBeInstanceOf(HTMLButtonElement)
-    expect(container.querySelector("[aria-label='Add frame']")).toBeNull()
+    expect(container.querySelector("[aria-label='Add frame']"))
+      .toBeInstanceOf(HTMLButtonElement)
     expect(container.querySelector("[aria-label='Undo']")).toBeNull()
     expect(container.querySelector("[aria-label='Add note']")).toBeNull()
   })
@@ -516,7 +517,51 @@ describe("CanvasBoard", () => {
       expect(menu).not.toBeNull()
       expect(menu?.textContent).toContain("Remove")
       expect(menu?.textContent).toContain("Bring to front")
-      expect(menu?.textContent).toContain("Resize to")
+      expect(menu?.textContent).toContain("Set size")
+      expect(menu?.textContent).toContain("Duplicate at preset")
+      expect(menu?.textContent).toContain("Fit frame content")
+    })
+  })
+
+  it("offers add frame and zoom to fit on the empty canvas", async() => {
+    const onSubmit = vi.fn()
+    const onCameraChange = vi.fn()
+    const resolver: FrameRepresentationResolver = {
+      resolve: () => Effect.die("empty canvas must not resolve a Frame")
+    }
+    await act(async() => render(
+      <CanvasBoard
+        {...requiredBoard}
+        onCameraChange={onCameraChange}
+        onSubmit={onSubmit}
+        projection={empty}
+        resolver={resolver}
+        snapshotter={snapshotter}
+      />
+    ))
+
+    expect(container.querySelector("[aria-label='Add frame']"))
+      .toBeInstanceOf(HTMLButtonElement)
+    const surface = container.querySelector("[aria-label='Canvas actions']")
+    if (!(surface instanceof HTMLElement)) {
+      throw new Error("Canvas actions trigger missing")
+    }
+    await act(async() => {
+      surface.dispatchEvent(new MouseEvent("contextmenu", {
+        bubbles: true,
+        button: 2,
+        clientX: 40,
+        clientY: 80
+      }))
+    })
+    await waitFor(() => {
+      const menu = document.querySelector("[aria-label='Canvas actions'][role='menu']")
+        ?? [...document.querySelectorAll("[aria-label='Canvas actions']")]
+          .find((node) => node.getAttribute("role") === "menu")
+      expect(menu).not.toBeNull()
+      expect(menu?.textContent).toContain("Add frame")
+      expect(menu?.textContent).toContain("Zoom to fit")
+      expect(menu?.textContent).not.toContain("Add note")
     })
   })
 })

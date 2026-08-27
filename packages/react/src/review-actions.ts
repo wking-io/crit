@@ -1,11 +1,15 @@
 import {
   AuthoredText,
+  Id,
+  WebUrlRepresentation,
   type CanvasCommand,
   type CanvasCommandBatch,
   type CanvasProjection,
   type Frame,
+  type FrameId,
   type LiveRepresentation,
   type ReviewStatus,
+  proposeAddFrame,
   proposeBringToFront,
   proposeRemoveFrame,
   proposeRenameCanvas,
@@ -25,7 +29,11 @@ import {
   type CanvasArrangementOperation
 } from "./canvas-arrangement.js"
 import type { CanvasSelection } from "./canvas-selection.js"
-import { FRAME_SIZE_PRESETS } from "./frame-breakpoints.js"
+import {
+  DEFAULT_NEW_FRAME_SIZE,
+  DUPLICATE_FRAME_GAP,
+  FRAME_SIZE_PRESETS
+} from "./frame-breakpoints.js"
 
 export type ReviewAction = Data.TaggedEnum<{
   readonly batch: { readonly commands: CanvasCommandBatch }
@@ -50,6 +58,7 @@ export type ReviewClientEffect = Data.TaggedEnum<{
   readonly openUrl: { readonly url: string }
   readonly fullscreen: { readonly target: "frame" | "exit" }
   readonly copy: { readonly text: string }
+  readonly zoomToFit: {}
 }>
 export const ReviewClientEffect = Data.taggedEnum<ReviewClientEffect>()
 
@@ -61,6 +70,13 @@ export const ReviewSelection = Data.taggedEnum<ReviewSelection>()
 export type ReviewActionInput = Data.TaggedEnum<{
   readonly none: {}
   readonly text: { readonly text: string }
+  readonly addFrame: {
+    readonly url: string
+    readonly title: string
+    readonly x: number
+    readonly y: number
+  }
+  readonly height: { readonly height: number }
 }>
 export const ReviewActionInput = Data.taggedEnum<ReviewActionInput>()
 
@@ -138,6 +154,9 @@ const selectedFrame = (
   return frames.length === 1 ? frames[0] : undefined
 }
 
+const isLiveFrame = (frame: Frame): boolean =>
+  !Predicate.isTagged(frame.representation, "artifact")
+
 const snapshotSources = (
   selection: ReviewSelection,
   projection: CanvasProjection
@@ -161,11 +180,36 @@ const reviewBatch = (
     : ReviewAction.batch({ commands: [first, ...rest] })
 }
 
+const mintFrameId = (): FrameId =>
+  Id.frame(`frame_${crypto.randomUUID().replaceAll("-", "")}`)
+
 const textInput = (input: ReviewActionInput) => {
   if (!ReviewActionInput.$is("text")(input)) return undefined
   return Option.getOrUndefined(
     Schema.decodeUnknownOption(AuthoredText)(input.text.trim())
   )
+}
+
+const addFrameInput = (input: ReviewActionInput) => {
+  if (!ReviewActionInput.$is("addFrame")(input)) return undefined
+  if (!Number.isFinite(input.x) || !Number.isFinite(input.y)) return undefined
+  const title = Option.getOrUndefined(
+    Schema.decodeUnknownOption(AuthoredText)(input.title.trim())
+  )
+  const representation = Option.getOrUndefined(
+    Schema.decodeUnknownOption(WebUrlRepresentation)({
+      _tag: "webUrl",
+      url: input.url
+    })
+  )
+  if (title === undefined || representation === undefined) return undefined
+  return { representation, title, x: input.x, y: input.y }
+}
+
+const heightInput = (input: ReviewActionInput) => {
+  if (!ReviewActionInput.$is("height")(input)) return undefined
+  if (!Number.isFinite(input.height) || input.height < 120) return undefined
+  return input.height
 }
 
 const alignmentDescription = {
@@ -460,8 +504,95 @@ const copyNodeIdPolicy = policy({
   }
 })
 
+const addFramePolicy = policy({
+  id: "add-frame",
+  label: "Add frame",
+  description: "Add a live web page to the current canvas.",
+  shortcuts: [],
+  available: () => true,
+  run: ({ input }) => {
+    const frame = addFrameInput(input)
+    return frame === undefined
+      ? null
+      : reviewBatch([proposeAddFrame({
+        frameId: mintFrameId(),
+        title: frame.title,
+        representation: frame.representation,
+        status: "in-progress",
+        geometry: {
+          x: frame.x,
+          y: frame.y,
+          width: DEFAULT_NEW_FRAME_SIZE.width,
+          height: DEFAULT_NEW_FRAME_SIZE.height
+        }
+      })])
+  }
+})
+
+const zoomToFitPolicy = policy({
+  id: "zoom-to-fit",
+  label: "Zoom to fit",
+  description: "Adjust the view so every Frame is visible.",
+  shortcuts: [],
+  available: (_selection, projection) => projection.frames.length > 0,
+  run: () => ReviewAction.effect({
+    effect: ReviewClientEffect.zoomToFit()
+  })
+})
+
+const fitFrameContentPolicy = policy({
+  id: "fit-frame-content",
+  label: "Fit frame content",
+  description: "Resize the Frame height to fit its same-origin page content.",
+  shortcuts: [],
+  available: (selection, projection) => {
+    const frame = selectedFrame(selection, projection)
+    return frame !== undefined && isLiveFrame(frame)
+  },
+  run: ({ input, projection, selection }) => {
+    const frame = selectedFrame(selection, projection)
+    const height = heightInput(input)
+    if (frame === undefined || height === undefined) return null
+    if (frame.geometry.height === height) return null
+    return reviewBatch([proposeSetFrameGeometry(frame, {
+      ...frame.geometry,
+      height
+    })])
+  }
+})
+
+const frameDuplicatePolicies = FRAME_SIZE_PRESETS.map((preset) => policy({
+  id: `duplicate-frame-${preset.id}` as const,
+  label: `Duplicate at ${preset.label}`,
+  description:
+    `Duplicate this live Frame at the ${preset.label.toLowerCase()} preset.`,
+  shortcuts: [],
+  available: (selection, projection) => {
+    const frame = selectedFrame(selection, projection)
+    return frame !== undefined && isLiveFrame(frame)
+  },
+  run: ({ projection, selection }) => {
+    const frame = selectedFrame(selection, projection)
+    if (frame === undefined || !isLiveFrame(frame)) return null
+    return reviewBatch([proposeAddFrame({
+      frameId: mintFrameId(),
+      title: frame.title,
+      representation: frame.representation,
+      status: frame.status,
+      geometry: {
+        x: frame.geometry.x - preset.width - DUPLICATE_FRAME_GAP,
+        y: frame.geometry.y,
+        width: preset.width,
+        height: preset.height
+      }
+    })])
+  }
+}))
+
 export const reviewActionPolicies = [
   renameCanvasPolicy,
+  addFramePolicy,
+  zoomToFitPolicy,
   removePolicy,
   snapshotPolicy,
   bringToFrontPolicy,
@@ -478,6 +609,8 @@ export const reviewActionPolicies = [
   distributionPolicy("vertical"),
   arrangeGridPolicy,
   ...framePresetPolicies,
+  ...frameDuplicatePolicies,
+  fitFrameContentPolicy,
   openUrlPolicy,
   enterFullscreenPolicy,
   exitFullscreenPolicy,

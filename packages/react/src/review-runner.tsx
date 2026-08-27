@@ -1,7 +1,14 @@
 import type { CanvasCommandBatch, CanvasProjection } from "@crit/domain"
 import { Effect, Match } from "effect"
-import { createContext, useContext, type ReactElement, type ReactNode } from "react"
+import {
+  createContext,
+  useContext,
+  useState,
+  type ReactElement,
+  type ReactNode
+} from "react"
 
+import { NewFrameDialog } from "./new-frame-dialog.js"
 import {
   SnapshotRunState,
   useSnapshotRunner,
@@ -89,11 +96,23 @@ export const useReviewRunner = ({
     return true
   }
 
+  const [addFramePlacement, setAddFramePlacement] = useState<{
+    readonly x: number
+    readonly y: number
+  } | null>(null)
+
   return {
     run,
     runnableIds,
     snapshotCapturing,
-    snapshotFailed
+    snapshotFailed,
+    addFramePlacement,
+    requestAddFrame: (placement: { readonly x: number; readonly y: number }) => {
+      setAddFramePlacement(placement)
+    },
+    closeAddFrame: () => {
+      setAddFramePlacement(null)
+    }
   }
 }
 
@@ -111,6 +130,20 @@ export function ReviewRunnerProvider({
   return (
     <ReviewRunnerContext.Provider value={runner}>
       {children}
+      <NewFrameDialog
+        onCancel={runner.closeAddFrame}
+        onCreate={(url, title) => {
+          const placement = runner.addFramePlacement
+          if (placement === null) return false
+          return runner.run("add-frame", ReviewActionInput.addFrame({
+            title,
+            url,
+            x: placement.x,
+            y: placement.y
+          }))
+        }}
+        open={runner.addFramePlacement !== null}
+      />
     </ReviewRunnerContext.Provider>
   )
 }

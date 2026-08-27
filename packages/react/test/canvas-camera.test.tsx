@@ -25,6 +25,7 @@ import {
   CanvasCamera,
   CanvasSelection,
   ReplicaBoard,
+  fitCameraToFrames,
   type FrameRepresentationResolver
 } from "../src/index.js"
 import { requiredBoard } from "./required-board.js"
@@ -160,6 +161,20 @@ describe("CanvasCamera", () => {
     for (const zoom of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
       expect(() => CanvasCamera.make({ x: 0, y: 0, zoom })).toThrow()
     }
+  })
+
+  it("fits the camera to every Frame with a viewport inset", () => {
+    expect(fitCameraToFrames([
+      { x: 0, y: 0, width: 200, height: 100 },
+      { x: 300, y: 50, width: 100, height: 150 }
+    ], { width: 800, height: 600 })).toEqual(CanvasCamera.make({
+      x: 200,
+      y: 200,
+      zoom: 1
+    }))
+    expect(fitCameraToFrames([], { width: 800, height: 600 })).toEqual(
+      CanvasCamera.make({ x: 0, y: 0, zoom: 1 })
+    )
   })
 })
 
