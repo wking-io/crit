@@ -17,10 +17,12 @@ describe("Worker hosted shell", () => {
         "Cf-Access-Authenticated-User-Email": "ada@acme.com"
       }
     })
+    const homeHtml = await home.text()
 
     expect(home.status).toBe(200)
     expect(home.headers.get("content-type")).toContain("text/html")
-    expect(await home.text()).toContain("id=\"root\"")
+    expect(homeHtml).toContain("id=\"root\"")
+    expect(homeHtml).not.toContain("/src/main.tsx")
     expect(canvas.status).toBe(200)
     expect(await canvas.text()).toContain("id=\"root\"")
     expect(missing.status).toBe(404)
