@@ -1,4 +1,4 @@
-import type { CanvasChangeFailure, CanvasCommandBatch, CanvasId } from "@crit/domain"
+import type { CanvasChangeFailure, CanvasCommandBatch, CanvasId, PresenceRoster } from "@crit/domain"
 import type { ReplicaView } from "@crit/replica"
 import { Data, Effect, Match, Result } from "effect"
 import type { KeyValueStore } from "effect/unstable/persistence"
@@ -43,6 +43,10 @@ export interface ReplicaSessionPorts {
   readonly subscribe: (
     canvasId: CanvasId,
     onEvent: (event: ReplicaSubscriptionEvent) => void
+  ) => () => void
+  readonly attend: (
+    canvasId: CanvasId,
+    onRoster: (roster: PresenceRoster) => void
   ) => () => void
   readonly change: (input: {
     readonly canvasId: CanvasId

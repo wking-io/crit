@@ -3,12 +3,13 @@ import {
   type AuthorityView,
   type SubmitCanvasChangeFailure
 } from "@crit/authority"
-import type { RemoteCanvasAuthorityService } from "@crit/client"
+import type { RemoteCanvasAuthorityService, HostedReviewFailure } from "@crit/client"
 import {
   Id,
   type CanvasId,
   type ChangeId,
-  type PersonPrincipal
+  type PersonPrincipal,
+  type PresenceRoster
 } from "@crit/domain"
 import {
   formatProtocolFailure,
@@ -24,15 +25,22 @@ import {
   ReplicaSubscriptionEvent,
   type ReplicaSessionPorts
 } from "@crit/react"
-import { Cause, Effect, Fiber, Result } from "effect"
+import { Cause, Effect, Fiber, Result, Stream, type Scope } from "effect"
+import * as Socket from "effect/unstable/socket/Socket"
 
 export interface HostedReplicaSessionDeps {
   readonly authority: RemoteCanvasAuthorityService
   readonly principal: PersonPrincipal
+  readonly attend: (canvasId: CanvasId) => Effect.Effect<
+    Stream.Stream<PresenceRoster, HostedReviewFailure>,
+    HostedReviewFailure,
+    Socket.WebSocketConstructor | Scope.Scope
+  >
   readonly pollIntervalMs?: number
 }
 
 const maximumPollIntervalMs = 30_000
+const initialPresenceReconnectMs = 500
 
 const widen = (view: AuthorityView): ReplicaView => ReplicaView.make({
   canvasId: view.canvasId,
@@ -133,6 +141,33 @@ export const hostedReplicaSessionPorts = (
     }
   }
 
+  const attend: ReplicaSessionPorts["attend"] = (canvasId, onRoster) => {
+    const emit = (roster: PresenceRoster) => Effect.sync(() => onRoster(roster))
+    const once = deps.attend(canvasId).pipe(
+      Effect.flatMap((notifications) => Stream.runForEach(notifications, emit)),
+      Effect.provide(Socket.layerWebSocketConstructorGlobal)
+    )
+    const nextDelay = (delay: number) =>
+      delay === 0
+        ? initialPresenceReconnectMs
+        : Math.min(delay * 2, maximumPollIntervalMs)
+    const reconnect = (delay: number): Effect.Effect<void> =>
+      Effect.sleep(delay).pipe(
+        Effect.andThen(once.pipe(Effect.scoped)),
+        Effect.matchCauseEffect({
+          onFailure: (cause) => {
+            if (Cause.hasInterruptsOnly(cause)) return Effect.void
+            return reconnect(nextDelay(delay))
+          },
+          onSuccess: () => reconnect(initialPresenceReconnectMs)
+        })
+      )
+    const fiber = Effect.runFork(reconnect(0))
+    return () => {
+      Effect.runFork(Fiber.interrupt(fiber))
+    }
+  }
+
   const change: ReplicaSessionPorts["change"] = ({
     canvasId,
     commands
@@ -178,5 +213,5 @@ export const hostedReplicaSessionPorts = (
     }))
   }
 
-  return { open, subscribe, change }
+  return { open, subscribe, change, attend }
 }

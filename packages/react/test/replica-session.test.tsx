@@ -160,6 +160,7 @@ const makeReplica = (initial: ReadonlyArray<ReplicaView>) => {
         set.delete(onEvent)
       }
     },
+    attend: () => () => undefined,
     change: ({ canvasId }) => {
       const view = views.get(canvasId)
       return view === undefined
@@ -551,6 +552,7 @@ describe("useReplicaSession", () => {
     const ports: ReplicaSessionPorts = {
       open: replica.ports.open,
       subscribe: replica.ports.subscribe,
+      attend: replica.ports.attend,
       change: () => {
         if (rejectNext) {
           rejectNext = false
@@ -604,6 +606,7 @@ describe("useReplicaSession", () => {
     const ports: ReplicaSessionPorts = {
       open: replica.ports.open,
       subscribe: replica.ports.subscribe,
+      attend: replica.ports.attend,
       change: () => Effect.fail(failure)
     }
 
@@ -675,6 +678,7 @@ describe("useReplicaSession", () => {
     const ports: ReplicaSessionPorts = {
       open: () => Effect.promise(() => gate),
       subscribe: () => () => undefined,
+      attend: () => () => undefined,
       change
     }
 
@@ -701,6 +705,7 @@ describe("useReplicaSession", () => {
     const unavailablePorts: ReplicaSessionPorts = {
       open: unavailable.ports.open,
       subscribe: unavailable.ports.subscribe,
+      attend: unavailable.ports.attend,
       change: unavailableChange
     }
 
@@ -729,6 +734,7 @@ describe("useReplicaSession", () => {
     const ports: ReplicaSessionPorts = {
       open: replica.ports.open,
       subscribe: replica.ports.subscribe,
+      attend: replica.ports.attend,
       change: ({ canvasId }) => canvasId === canvasA
         ? Effect.promise(() => gate)
         : replica.ports.change({ canvasId, commands: addFrame })

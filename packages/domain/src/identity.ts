@@ -4,6 +4,7 @@ import {
   AgentId,
   AuthSubject,
   ExecutionId,
+  Id,
   PersonId
 } from "./ids.js"
 import { NonBlankString } from "./text.js"
@@ -148,3 +149,27 @@ export const actorFromAttribution = (attribution: AcceptedAttribution): ActorSna
 
 export const actorFromPrincipal = (principal: Principal): ActorSnapshot =>
   principal._tag === "person" ? principal.person : principal.agent
+
+const hex = (bytes: Uint8Array): string =>
+  Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("")
+
+export const accessPersonId = (
+  address: EmailAddress
+): Effect.Effect<PersonId> =>
+  Effect.promise(async() => {
+    const digest = new Uint8Array(
+      await crypto.subtle.digest("SHA-256", new TextEncoder().encode(address))
+    )
+    return Id.person(`person_${hex(digest).slice(0, 32)}`)
+  })
+
+export const accessPersonSnapshot = (
+  address: EmailAddress
+): Effect.Effect<PersonSnapshot> =>
+  accessPersonId(address).pipe(
+    Effect.map((personId) => PersonSnapshot.make({
+      personId,
+      displayName: address.slice(0, address.indexOf("@")),
+      email: AccessPersonEmail.make({ address })
+    }))
+  )

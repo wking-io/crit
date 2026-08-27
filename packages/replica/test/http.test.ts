@@ -36,6 +36,15 @@ describe("local replica socket frames", () => {
       schemaVersion: 1,
       canvasId
     })).toEqual({ kind: "subscription-ready", schemaVersion: 1, canvasId })
+    expect(() => Schema.decodeUnknownSync(LocalReplicaSocketServerFrame)({
+      kind: "presence-changed",
+      schemaVersion: 1,
+      roster: {
+        _tag: "presenceRoster",
+        canvasId,
+        people: []
+      }
+    })).toThrow()
   })
 })
 

@@ -101,5 +101,6 @@ export const localReplicaSessionPorts = (
           reason: openFailureReason(failure)
         })
       })
-    )
+    ),
+  attend: () => () => undefined
 })

@@ -1,6 +1,10 @@
-import { Schema } from "effect"
+import { Effect, Schema } from "effect"
 
-import { PersonSnapshot } from "./identity.js"
+import {
+  accessPersonSnapshot,
+  PersonSnapshot,
+  type EmailAddress
+} from "./identity.js"
 import { CanvasId } from "./ids.js"
 
 export const ConnectedPerson = Schema.TaggedStruct("connectedPerson", {
@@ -40,3 +44,40 @@ export const decodePresenceRoster = (input: Schema.Json): PresenceRoster =>
     PresenceRoster,
     { onExcessProperty: "error" }
   )(input)
+
+const uniquePeople = (
+  people: ReadonlyArray<ConnectedPerson>
+): ReadonlyArray<ConnectedPerson> => {
+  const seen = new Set<string>()
+  const unique: Array<ConnectedPerson> = []
+  for (const person of people) {
+    const personId = person.person.personId
+    if (seen.has(personId)) continue
+    seen.add(personId)
+    unique.push(person)
+  }
+  return unique.toSorted((left, right) =>
+    left.person.personId < right.person.personId
+      ? -1
+      : left.person.personId > right.person.personId
+        ? 1
+        : 0
+  )
+}
+
+export const occupancyRoster = (
+  canvasId: CanvasId,
+  people: ReadonlyArray<ConnectedPerson>
+): PresenceRoster =>
+  Schema.decodeUnknownSync(PresenceRoster)({
+    _tag: "presenceRoster",
+    canvasId,
+    people: uniquePeople(people)
+  })
+
+export const accessConnectedPerson = (
+  address: EmailAddress
+): Effect.Effect<ConnectedPerson> =>
+  accessPersonSnapshot(address).pipe(
+    Effect.map((person) => ConnectedPerson.make({ person }))
+  )

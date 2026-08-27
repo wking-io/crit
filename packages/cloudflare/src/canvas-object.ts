@@ -15,18 +15,23 @@ import {
 } from "@crit/authority"
 import { AuthorityPolicy } from "@crit/authority/adapter"
 import {
+  accessConnectedPerson,
   CanvasId,
+  ConnectedPerson,
   DomainValue,
-  IsoTimestamp
+  IsoTimestamp,
+  occupancyRoster
 } from "@crit/domain"
-import type {
-  ChangePage,
-  ProposedCanvasChange,
-  SubmitChangeReceipt
+import {
+  PresenceChangedSchema,
+  type ChangePage,
+  type ProposedCanvasChange,
+  type SubmitChangeReceipt
 } from "@crit/protocol"
 import { DurableObject } from "cloudflare:workers"
-import { Cause, Data, Effect, Exit, Result, Schema } from "effect"
+import { Cause, Data, Effect, Exit, Option, Result, Schema } from "effect"
 
+import { readAccessEmail } from "./access.js"
 import { DurableSqliteStorage } from "./durable-sqlite.js"
 import {
   createOneCanvas,
@@ -265,5 +270,59 @@ export class CanvasDurableObject extends DurableObject {
       const canvas = yield* canvases.open({ canvasId, sqlite, clock })
       return yield* canvas.changesAfter(DomainValue.detach(query))
     }), requestId)
+  }
+
+  async fetch(request: Request): Promise<Response> {
+    if (request.headers.get("Upgrade")?.toLowerCase() !== "websocket") {
+      return new Response(null, { status: 400 })
+    }
+    const address = readAccessEmail(request)
+    if (Option.isNone(address)) return new Response(null, { status: 401 })
+    const person = await Effect.runPromise(accessConnectedPerson(address.value))
+    const opened = await this.open()
+    if (opened._tag === "failure") return new Response(null, { status: 404 })
+    if (opened._tag !== "success") return new Response(null, { status: 500 })
+    const pair = new WebSocketPair()
+    this.ctx.acceptWebSocket(pair[1])
+    pair[1].serializeAttachment(DomainValue.detach(person))
+    this.broadcastPresence()
+    return new Response(null, { status: 101, webSocket: pair[0] })
+  }
+
+  webSocketMessage(): void {
+    this.broadcastPresence()
+  }
+
+  webSocketClose(socket: WebSocket): void {
+    this.broadcastPresence(socket)
+  }
+
+  webSocketError(socket: WebSocket): void {
+    this.broadcastPresence(socket)
+  }
+
+  private occupancyPeople(excluding?: WebSocket): ConnectedPerson[] {
+    const people: Array<ConnectedPerson> = []
+    for (const socket of this.ctx.getWebSockets()) {
+      if (socket === excluding) continue
+      const attached = Schema.decodeUnknownOption(ConnectedPerson)(
+        socket.deserializeAttachment()
+      )
+      if (Option.isSome(attached)) people.push(attached.value)
+    }
+    return people
+  }
+
+  private broadcastPresence(excluding?: WebSocket): void {
+    const roster = occupancyRoster(this.canvasId, this.occupancyPeople(excluding))
+    const frame = JSON.stringify(Schema.encodeSync(PresenceChangedSchema)({
+      kind: "presence-changed",
+      schemaVersion: 1,
+      roster
+    }))
+    for (const socket of this.ctx.getWebSockets()) {
+      if (socket === excluding) continue
+      socket.send(frame)
+    }
   }
 }

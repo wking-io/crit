@@ -1,7 +1,8 @@
 import {
   CanvasChangeFailureSchema,
   Id,
-  decodeCanvasProjection
+  decodeCanvasProjection,
+  decodePresenceRoster
 } from "@crit/domain"
 import {
   ReplicaChangeRejected,
@@ -108,6 +109,7 @@ describe("CritHost", () => {
     const ports: ReplicaSessionPorts = {
       open: () => Effect.promise(() => gate.then(() => view)),
       subscribe: () => () => undefined,
+      attend: () => () => undefined,
       change: () => Effect.die("change must not run")
     }
 
@@ -138,6 +140,7 @@ describe("CritHost", () => {
         reason: "replica missing"
       })),
       subscribe: () => () => undefined,
+      attend: () => () => undefined,
       change: () => Effect.die("change must not run")
     }
 
@@ -171,6 +174,7 @@ describe("CritHost", () => {
         publish = onEvent
         return () => undefined
       },
+      attend: () => () => undefined,
       change: () => Effect.fail(rejected)
     }
 
@@ -206,5 +210,72 @@ describe("CritHost", () => {
       "Connection lost. socket closed. Showing the last known state."
     ))
     expect(container.querySelector("[aria-label='Review controls']")).toBeNull()
+  })
+
+  it("lists Access-authenticated occupancy from attend", async() => {
+    const roster = decodePresenceRoster({
+      _tag: "presenceRoster",
+      canvasId,
+      people: [{
+        _tag: "connectedPerson",
+        person: {
+          _tag: "person",
+          personId: "person_ada",
+          displayName: "Ada",
+          email: { _tag: "access", address: "ada@acme.com" }
+        }
+      }]
+    })
+    const ports: ReplicaSessionPorts = {
+      open: () => Effect.succeed(view),
+      subscribe: () => () => undefined,
+      attend: (_canvasId, onRoster) => {
+        onRoster(roster)
+        return () => undefined
+      },
+      change: () => Effect.die("change must not run")
+    }
+
+    await act(async() => render(
+      <CritHost
+        canvasId={canvasId}
+        ports={ports}
+        resolver={representations}
+        run={makeRun()}
+        snapshotter={representations}
+      />
+    ))
+
+    await waitFor(() =>
+      expect(container.querySelector("[aria-label='Review presence']"))
+        .toBeInstanceOf(HTMLElement)
+    )
+    expect([...container.querySelectorAll("[aria-label='Review presence'] li")]
+      .map((row) => row.textContent)).toEqual(["Ada"])
+  })
+
+  it("does not show occupancy when local review does not attend", async() => {
+    const ports: ReplicaSessionPorts = {
+      open: () => Effect.succeed(view),
+      subscribe: () => () => undefined,
+      attend: () => () => undefined,
+      change: () => Effect.die("change must not run")
+    }
+
+    await act(async() => render(
+      <CritHost
+        canvasId={canvasId}
+        ports={ports}
+        resolver={representations}
+        run={makeRun()}
+        snapshotter={representations}
+      />
+    ))
+
+    await waitFor(() =>
+      expect(container.querySelector("[aria-label='Review sync status']"))
+        .toBeInstanceOf(HTMLElement)
+    )
+    expect(container.querySelector("[aria-label='Review presence']")).toBeNull()
   })
 })

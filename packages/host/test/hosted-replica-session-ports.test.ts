@@ -18,6 +18,7 @@ import {
   CanvasChangeFailureSchema,
   EmailAddress,
   Id,
+  occupancyRoster,
   PersonPrincipal,
   PersonSnapshot,
   decodeCanvasCommandBatch,
@@ -35,7 +36,7 @@ import {
   ReplicaChangeRejected,
   ReplicaSessionUnavailable
 } from "@crit/react"
-import { Context, Effect, Layer, Schema } from "effect"
+import { Context, Effect, Layer, Schema, Stream } from "effect"
 import { describe, expect, it, vi } from "vitest"
 
 import {
@@ -101,8 +102,11 @@ const hostedClient: HostedReviewClientService = {
     address: email
   }),
   directory: () => Effect.die("unused"),
-  resolveApplicationRoute: () => Effect.die("unused")
+  resolveApplicationRoute: () => Effect.die("unused"),
+  attend: () => Effect.die("unused")
 }
+
+const noAttend = () => Effect.die("unused")
 
 const principal = () => Effect.runPromise(hostedPersonPrincipal(hostedClient))
 
@@ -177,6 +181,7 @@ describe("hostedReplicaSessionPorts.change", () => {
       }))
     }, open)
     const ports = hostedReplicaSessionPorts({
+      attend: noAttend,
       authority,
       principal: reviewer
     })
@@ -208,6 +213,7 @@ describe("hostedReplicaSessionPorts.change", () => {
       }))
     )
     const ports = hostedReplicaSessionPorts({
+      attend: noAttend,
       authority,
       principal: reviewer
     })
@@ -228,6 +234,7 @@ describe("hostedReplicaSessionPorts.change", () => {
       Effect.fail(CanvasNotFound.make({ canvasId }))
     )
     const ports = hostedReplicaSessionPorts({
+      attend: noAttend,
       authority,
       principal: reviewer
     })
@@ -248,6 +255,7 @@ describe("hostedReplicaSessionPorts.change", () => {
       Effect.die(new Error("network unavailable"))
     )
     const ports = hostedReplicaSessionPorts({
+      attend: noAttend,
       authority,
       principal: reviewer
     })
@@ -285,6 +293,7 @@ describe("hostedReplicaSessionPorts.open", () => {
 
   it("maps a protocol failure to the upgrade copy", async() => {
     const ports = hostedReplicaSessionPorts({
+      attend: noAttend,
       authority: {
         open: () => Effect.fail(upgrade),
         submit: () => Effect.die("unused"),
@@ -334,6 +343,7 @@ describe("hostedReplicaSessionPorts reviewer sync", () => {
       yield* replica.sync(reviewerCanvasId)
 
       const ports = hostedReplicaSessionPorts({
+        attend: noAttend,
         authority: remote,
         principal: reviewerPrincipal,
         pollIntervalMs: 60_000
@@ -357,4 +367,43 @@ describe("hostedReplicaSessionPorts reviewer sync", () => {
       expect(synced.view.pending).toEqual([])
       expect(synced.view.projection.frames[0]?.status).toBe("approved")
     }))))
+})
+
+const presenceCanvasId = Id.canvas("canvas_hosted_presence")
+const presencePrincipal = Schema.decodeUnknownSync(PersonPrincipal)({
+  _tag: "person",
+  subject: "access|ada@acme.com",
+  person: {
+    _tag: "person",
+    personId: "person_ada",
+    displayName: "Ada",
+    email: { _tag: "access", address: "ada@acme.com" }
+  }
+})
+const presenceRoster = occupancyRoster(presenceCanvasId, [{
+  _tag: "connectedPerson",
+  person: presencePrincipal.person
+}])
+
+const unusedAuthority: RemoteCanvasAuthorityService = {
+  open: () => Effect.die("unused"),
+  submit: () => Effect.die("unused"),
+  changesAfter: () => Effect.die("unused")
+}
+
+describe("hostedReplicaSessionPorts.attend", () => {
+  it("publishes occupancy from the hosted attendance stream", async() => {
+    const ports = hostedReplicaSessionPorts({
+      authority: unusedAuthority,
+      principal: presencePrincipal,
+      attend: () => Effect.succeed(Stream.make(presenceRoster))
+    })
+    const received: Array<typeof presenceRoster> = []
+
+    const leave = ports.attend(presenceCanvasId, (next) => {
+      received.push(next)
+    })
+    await vi.waitFor(() => expect(received).toEqual([presenceRoster]))
+    leave()
+  })
 })

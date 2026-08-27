@@ -12,6 +12,7 @@ import {
   parseRemoteAuthorityPath,
   remoteCanvasChangesPath,
   remoteCanvasPath,
+  remoteCanvasPresencePath,
   remoteChangesPageLimit
 } from "../src/sync.js"
 
@@ -71,6 +72,10 @@ describe("remote authority protocol", () => {
     })
     expect(parseRemoteAuthorityPath(remoteCanvasChangesPath(canvasId))).toEqual({
       _tag: "changes",
+      canvasId
+    })
+    expect(parseRemoteAuthorityPath(remoteCanvasPresencePath(canvasId))).toEqual({
+      _tag: "presence",
       canvasId
     })
     expect(parseRemoteAuthorityPath("/canvas")).toBeUndefined()

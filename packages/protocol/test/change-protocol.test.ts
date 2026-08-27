@@ -153,7 +153,7 @@ describe("ChangeProtocol", () => {
       "protocolFailureHttpStatus", "readProtocolFailure",
       "remoteArtifactPath",
       "remoteCanvasChangesPath", "remoteCanvasCollectionPath",
-      "remoteCanvasPath", "remoteChangesPageLimit"
+      "remoteCanvasPath", "remoteCanvasPresencePath", "remoteChangesPageLimit"
     ])
   })
 
