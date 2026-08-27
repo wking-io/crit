@@ -12,7 +12,7 @@ export function HostCanvasList({ listings, sessionHash }: {
       {listings.map((listing) => (
         <li key={listing.canvasId}>
           <Link
-            hash={sessionHash}
+            {...(sessionHash === undefined ? {} : { hash: sessionHash })}
             params={{ canvasId: listing.canvasId }}
             to="/canvas/$canvasId"
           >

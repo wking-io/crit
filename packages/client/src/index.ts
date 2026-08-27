@@ -76,11 +76,6 @@ export {
   LocalClientOptions,
   localPath
 } from "./local-client-options.js"
-export type {
-  BrowserOrigin,
-  IntegratedApiBase,
-  IntegratedConnectionDocument
-} from "./local-client-options.js"
 export { ReplicaChange }
 export {
   makeRemoteCanvasAuthority,

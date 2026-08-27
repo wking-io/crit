@@ -30,15 +30,13 @@ export function HostIndexView({ runtime }: {
     invalid: ({ reason }) => <p role="alert">{reason}</p>,
     connecting: () => <p role="status">Connecting to Crit…</p>,
     failed: ({ reason }) => <p role="alert">{reason}</p>,
-    ready: ({ listings }) => (
-      <HostCanvasList
-        listings={listings}
-        sessionHash={
-          runtime._tag === "standalone"
-            ? sessionHash(LocalBrowserConnection.encode(runtime.descriptor))
-            : undefined
-        }
-      />
-    )
+    ready: ({ listings }) => runtime._tag === "standalone"
+      ? (
+        <HostCanvasList
+          listings={listings}
+          sessionHash={sessionHash(LocalBrowserConnection.encode(runtime.descriptor))}
+        />
+      )
+      : <HostCanvasList listings={listings} />
   }))
 }

@@ -10,7 +10,7 @@ import { Data, Option, Result, Schema } from "effect"
 
 export type HostRuntime = Data.TaggedEnum<{
   readonly integrated: {
-    readonly origin: BrowserOrigin
+    readonly origin: typeof BrowserOrigin.Type
     readonly apiBase: IntegratedApiBase
   }
   readonly standalone: {
