@@ -29,9 +29,10 @@ export const frameAncestorsPreviewVitePlugin = (input: {
   configurePreviewServer(server) {
     const headers = renderFrameAncestorsResponseHeaders(input)
     server.middlewares.use((_request, response, next) => {
-      for (const [name, value] of Object.entries(headers)) {
-        response.setHeader(name, value)
-      }
+      response.setHeader(
+        "content-security-policy",
+        headers["content-security-policy"]
+      )
       next()
     })
   }

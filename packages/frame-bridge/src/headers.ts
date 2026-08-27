@@ -4,13 +4,9 @@ export const renderFrameAncestorsContentSecurityPolicy = (input: {
   readonly parentOrigin: FrameBridgeOrigin
 }): string => `frame-ancestors ${input.parentOrigin}`
 
-export interface FrameAncestorsResponseHeaders {
-  readonly "content-security-policy": string
-}
-
 export const renderFrameAncestorsResponseHeaders = (input: {
   readonly parentOrigin: FrameBridgeOrigin
-}): FrameAncestorsResponseHeaders => ({
+}) => ({
   "content-security-policy": renderFrameAncestorsContentSecurityPolicy(input)
 })
 
