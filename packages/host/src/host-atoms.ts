@@ -12,6 +12,7 @@ import {
   type StatusFailure
 } from "@crit/client"
 import { type CanvasId } from "@crit/domain"
+import { formatProtocolFailure, isProtocolFailure } from "@crit/protocol"
 import type { CanvasListing } from "@crit/replica/http"
 import { layerMemory, layerStorage, type ReplicaSessionRun } from "@crit/react"
 import { Cause, Data, Effect, Layer, Match, Result } from "effect"
@@ -100,9 +101,13 @@ const hostedReasonFromCause = (
   cause: Cause.Cause<HostedReviewFailure>
 ): string => Result.match(Cause.findError(cause), {
   onFailure: () => "The hosted service is unreachable.",
-  onSuccess: (failure) => failure instanceof HostedAccessDenied
-    ? "Crit Access denied this browser session."
-    : failure.reason
+  onSuccess: (failure) => {
+    if (failure instanceof HostedAccessDenied) {
+      return "Crit Access denied this browser session."
+    }
+    if (isProtocolFailure(failure)) return formatProtocolFailure(failure)
+    return failure.reason
+  }
 })
 
 const localIndexFromList = (

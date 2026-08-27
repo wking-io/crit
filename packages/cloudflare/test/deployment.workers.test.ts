@@ -1,5 +1,6 @@
-import { decodeDeploymentRegisteredWire } from "@crit/protocol"
+import { ChangeProtocol, decodeDeploymentRegisteredWire } from "@crit/protocol"
 import { SELF } from "cloudflare:test"
+import { Result } from "effect"
 import { describe, expect, it } from "vitest"
 
 const registration = {
@@ -108,6 +109,23 @@ describe("Worker deployment registration route", () => {
     expect(invalidJson.status).toBe(400)
     expect(invalidUrl.status).toBe(400)
     expect(wrongMethod.status).toBe(405)
+  })
+
+  it("rejects an unsupported registration schema version with an upgrade error", async() => {
+    const response = await post({
+      ...registration,
+      schemaVersion: 2
+    })
+    const failure = ChangeProtocol.failure.decode(await response.json())
+
+    expect(response.status).toBe(426)
+    expect(Result.isSuccess(failure) && failure.success).toEqual({
+      _tag: "unsupportedVersion",
+      location: "message",
+      requestedVersion: 2,
+      supportedVersion: 1,
+      message: "Schema version 2 is unsupported. This installation speaks version 1. Upgrade Crit so the client and installation match."
+    })
   })
 
   it("leaves the identity route working", async() => {

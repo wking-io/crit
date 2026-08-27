@@ -51,8 +51,9 @@ import {
   type ProjectManifestFailure,
   type LocalDaemonInspection
 } from "@crit/local"
+import { formatProtocolFailure, isProtocolFailure, type ProtocolFailure } from "@crit/protocol"
 import { ReplicaModel, ReplicaView, SyncResult } from "@crit/replica"
-import { LocalApiUnauthorized, LocalApiVersionUnsupported } from "@crit/replica/http"
+import { LocalApiUnauthorized, LocalApiVersionUnsupported, formatLocalApiVersionUnsupported } from "@crit/replica/http"
 import { ApplicationBaseUrl } from "@crit/representations"
 import { Console, Context, Crypto, Effect, FileSystem, Layer, Match, Option, Path, Redacted, Result, Schema, type Effect as EffectType } from "effect"
 import { Argument, Command, Flag } from "effect/unstable/cli"
@@ -135,7 +136,7 @@ const formatFailure = Match.typeTags<DiscoveryFailure, string>()({
   LocalDaemonIdentityMismatch: () => "Crit daemon identity does not match local state",
   LocalDaemonProtocolFailure: () => "Crit daemon returned an invalid response",
   LocalApiUnauthorized: () => "Crit daemon authentication failed",
-  LocalApiVersionUnsupported: () => "Crit daemon API version is incompatible"
+  LocalApiVersionUnsupported: formatLocalApiVersionUnsupported
 })
 
 const printView = (view: typeof ReplicaView.Type, asJson: boolean) => asJson
@@ -293,8 +294,9 @@ type LoginFailure =
   | LocalDaemonStateMalformed
   | LocalDaemonStateMissing
   | LocalDaemonStateUnreadable
+  | ProtocolFailure
 
-const formatLoginFailure = Match.typeTags<LoginFailure, string>()({
+const formatLoginTagged = Match.typeTags<Exclude<LoginFailure, ProtocolFailure>, string>()({
   AccessPersonAlreadyBound: ({ existingAddress }) =>
     `Crit Person is already bound to ${existingAddress}`,
   AccessPersonRequestFailed: () => "Unable to reach the Crit installation",
@@ -310,6 +312,9 @@ const formatLoginFailure = Match.typeTags<LoginFailure, string>()({
   LocalDaemonStateMissing: () => "Crit is not initialized at this data root",
   LocalDaemonStateUnreadable: () => "Crit installation state cannot be read"
 })
+
+const formatLoginFailure = (failure: LoginFailure): string =>
+  isProtocolFailure(failure) ? formatProtocolFailure(failure) : formatLoginTagged(failure)
 
 const login = Command.make("login", {
   dataRoot,
@@ -345,8 +350,9 @@ type ShareFailure =
   | ShareRequiresLogin
   | ShareResponseInvalid
   | ShareResponseRejected
+  | ProtocolFailure
 
-const formatShareFailure = Match.typeTags<ShareFailure, string>()({
+const formatShareTagged = Match.typeTags<Exclude<ShareFailure, ProtocolFailure>, string>()({
   AccessPersonUnauthenticated: () => "Installation did not accept the share",
   LocalDaemonStateMalformed: () => "Run crit login",
   LocalDaemonStateMissing: () => "Run crit login",
@@ -361,13 +367,16 @@ const formatShareFailure = Match.typeTags<ShareFailure, string>()({
     `Installation returned an unexpected share response (HTTP ${status})`
 })
 
+const formatShareFailure = (failure: ShareFailure): string =>
+  isProtocolFailure(failure) ? formatProtocolFailure(failure) : formatShareTagged(failure)
+
 interface DeploymentDetails {
   sourceRevision?: SourceRevision
   expiresAt?: IsoTimestamp
 }
 
-const formatRegisterDeploymentFailure = Match.typeTags<
-  RegisterDeploymentFailure,
+const formatRegisterDeploymentTagged = Match.typeTags<
+  Exclude<RegisterDeploymentFailure, ProtocolFailure>,
   string
 >()({
   DeploymentRegistrationRequestFailed: () =>
@@ -385,6 +394,9 @@ const formatRegisterDeploymentFailure = Match.typeTags<
   ProjectManifestIoFailure: ({ operation, path, reason }) =>
     `Unable to ${operation} Crit project manifest at ${path} (${reason})`
 })
+
+const formatRegisterDeploymentFailure = (failure: RegisterDeploymentFailure): string =>
+  isProtocolFailure(failure) ? formatProtocolFailure(failure) : formatRegisterDeploymentTagged(failure)
 
 const registerDeploymentCommand = Command.make("register-deployment", {
   url: Flag.string("url").pipe(

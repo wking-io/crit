@@ -7,12 +7,13 @@ import {
   Sha256Digest
 } from "@crit/domain"
 import {
+  ChangeProtocol,
   decodeCanvasSharedWire,
   encodeShareCanvasWire,
   ShareDigestMismatch
 } from "@crit/protocol"
 import { SELF } from "cloudflare:test"
-import { Schema } from "effect"
+import { Result, Schema } from "effect"
 import { describe, expect, it } from "vitest"
 
 const digest = (hex: string) => Schema.decodeUnknownSync(Sha256Digest)(
@@ -211,6 +212,29 @@ describe("Worker Canvas share route", () => {
 
     expect(response.status).toBe(400)
     expect(await response.text()).toBe("")
+  })
+
+  it("rejects an unsupported share schema version with an upgrade error", async() => {
+    const input = JSON.parse(body("canvas_worker_share_version"))
+    input.schemaVersion = 3
+    const response = await SELF.fetch("https://crit.example/canvas", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "Cf-Access-Authenticated-User-Email": "ada@acme.com"
+      },
+      body: JSON.stringify(input)
+    })
+    const failure = ChangeProtocol.failure.decode(await response.json())
+
+    expect(response.status).toBe(426)
+    expect(Result.isSuccess(failure) && failure.success).toEqual({
+      _tag: "unsupportedVersion",
+      location: "message",
+      requestedVersion: 3,
+      supportedVersion: 2,
+      message: "Schema version 3 is unsupported. This installation speaks version 2. Upgrade Crit so the client and installation match."
+    })
   })
 
   it("rejects methods other than GET and POST on the Canvas collection", async() => {

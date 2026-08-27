@@ -7,6 +7,7 @@ import type {
   SubmitChangeReceipt
 } from "./change.js"
 import { ProtocolFailure, type DecodeResult } from "./failure.js"
+import { negotiateWire } from "./negotiate.js"
 import {
   AcceptedWire,
   FailureWire,
@@ -15,12 +16,10 @@ import {
   ReceiptWire
 } from "./wire.js"
 
-const Header = Schema.Struct({ kind: Schema.String, schemaVersion: Schema.Number })
 const CommandHeader = Schema.Struct({ _tag: Schema.String })
 const JsonRecord = Schema.Record(Schema.String, Schema.Json)
 const JsonArray = Schema.Array(Schema.Json)
 const exact: SchemaAST.ParseOptions = { onExcessProperty: "error" }
-const readHeader = Schema.decodeUnknownOption(Header)
 const readCommandHeader = Schema.decodeUnknownOption(CommandHeader)
 const readRecord = Schema.decodeUnknownOption(JsonRecord, exact)
 const readArray = Schema.decodeUnknownOption(JsonArray, exact)
@@ -31,7 +30,7 @@ const readReceiptWire = Schema.decodeUnknownOption(ReceiptWire, exact)
 const readFailureWire = Schema.decodeUnknownOption(FailureWire, exact)
 
 const fail = (
-  tag: ProtocolFailure["_tag"],
+  tag: Exclude<ProtocolFailure["_tag"], "unsupportedVersion">,
   location: ProtocolFailure["location"],
   message: string
 ): DecodeResult<never> => Result.fail(ProtocolFailure[tag]({ location, message }))
@@ -40,19 +39,14 @@ const decoded = <A>(value: A): DecodeResult<A> => Result.succeed(value)
 
 const preflight = (
   input: Schema.Json,
-  expectedKind: string
+  expectedKind: string,
+  expectedVersion: number
 ): DecodeResult<Schema.Json> => {
-  const header = readHeader(input)
-  if (Option.isNone(header)) {
-    return fail("malformedMessage", "message", "Message header is malformed")
-  }
-  if (header.value.kind !== expectedKind) {
-    return fail("messageKindMismatch", "message", "Message kind does not match this codec")
-  }
-  if (header.value.schemaVersion !== (expectedKind === "protocol-failure" ? 1 : 2)) {
-    return fail("unsupportedVersion", "message", "Message schema version is unsupported")
-  }
-  return decoded(input)
+  const negotiated = negotiateWire(input, {
+    kind: expectedKind,
+    schemaVersion: expectedVersion
+  })
+  return Result.isFailure(negotiated) ? Result.fail(negotiated.failure) : decoded(input)
 }
 
 const trustedFields = new Set([
@@ -120,7 +114,7 @@ const toAcceptedWire = (change: AcceptedCanvasChange): typeof AcceptedWire.Type 
 })
 
 const decodeProposed = (input: Schema.Json): DecodeResult<ProposedCanvasChange> => {
-  const header = preflight(input, "proposed-canvas-change")
+  const header = preflight(input, "proposed-canvas-change", 2)
   if (Result.isFailure(header)) return Result.fail(header.failure)
   const injection = injectedField(input)
   if (injection !== undefined) {
@@ -136,7 +130,7 @@ const decodeProposed = (input: Schema.Json): DecodeResult<ProposedCanvasChange> 
 }
 
 const decodeAccepted = (input: Schema.Json): DecodeResult<AcceptedCanvasChange> => {
-  const header = preflight(input, "accepted-canvas-change")
+  const header = preflight(input, "accepted-canvas-change", 2)
   if (Result.isFailure(header)) return Result.fail(header.failure)
   const wire = readAcceptedWire(input)
   return Option.isNone(wire)
@@ -145,7 +139,7 @@ const decodeAccepted = (input: Schema.Json): DecodeResult<AcceptedCanvasChange> 
 }
 
 const decodePage = (input: Schema.Json): DecodeResult<ChangePage> => {
-  const header = preflight(input, "canvas-change-page")
+  const header = preflight(input, "canvas-change-page", 2)
   if (Result.isFailure(header)) return Result.fail(header.failure)
   const root = readRecord(input)
   if (Option.isSome(root) && root.value.changes !== undefined) {
@@ -164,7 +158,7 @@ const decodePage = (input: Schema.Json): DecodeResult<ChangePage> => {
 }
 
 const decodeReceipt = (input: Schema.Json): DecodeResult<SubmitChangeReceipt> => {
-  const header = preflight(input, "submit-change-receipt")
+  const header = preflight(input, "submit-change-receipt", 2)
   if (Result.isFailure(header)) return Result.fail(header.failure)
   const root = readRecord(input)
   if (Option.isSome(root) && root.value.change !== undefined) {
@@ -178,7 +172,7 @@ const decodeReceipt = (input: Schema.Json): DecodeResult<SubmitChangeReceipt> =>
 }
 
 const decodeFailure = (input: Schema.Json): DecodeResult<ProtocolFailure> => {
-  const header = preflight(input, "protocol-failure")
+  const header = preflight(input, "protocol-failure", 1)
   if (Result.isFailure(header)) return Result.fail(header.failure)
   const wire = readFailureWire(input)
   return Option.isNone(wire)

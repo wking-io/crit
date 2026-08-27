@@ -1,1 +1,1 @@
-{"kind":"protocol-failure","schemaVersion":1,"failure":{"_tag":"unsupportedVersion","location":"message","message":"Wrong version"}}
+{"kind":"protocol-failure","schemaVersion":1,"failure":{"_tag":"unsupportedVersion","location":"message","requestedVersion":99,"supportedVersion":2,"message":"Schema version 99 is unsupported. This installation speaks version 2. Upgrade Crit so the client and installation match."}}

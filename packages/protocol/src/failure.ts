@@ -13,6 +13,8 @@ const MessageKindMismatch = Schema.TaggedStruct("messageKindMismatch", {
 })
 const UnsupportedVersion = Schema.TaggedStruct("unsupportedVersion", {
   location: FailureLocation,
+  requestedVersion: Schema.Number,
+  supportedVersion: Schema.Number,
   message: FailureMessage
 })
 const TrustedField = Schema.TaggedStruct("trustedField", {

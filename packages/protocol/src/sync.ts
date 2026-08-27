@@ -11,6 +11,7 @@ import type { ProposedCanvasChange } from "./change.js"
 import { ChangeProtocol } from "./codec.js"
 import type { ProtocolFailure } from "./failure.js"
 import { encodeQuery, queryParam } from "./query.js"
+import { negotiateWire } from "./negotiate.js"
 import { CursorSchema } from "./value.js"
 
 export const remoteChangesPageLimit = 1_000
@@ -123,6 +124,11 @@ export const encodeChangesAfterSearch = (query: ChangesAfterQuery): string => {
 export const decodeSubmitCanvasChangeWire = (
   input: Schema.Json
 ): Result.Result<SubmitCanvasChange, SubmitCanvasChangeDecodeFailure> => {
+  const negotiated = negotiateWire(input, {
+    kind: "submit-canvas-change",
+    schemaVersion: 1
+  })
+  if (Result.isFailure(negotiated)) return Result.fail(negotiated.failure)
   const wire = Schema.decodeUnknownOption(
     SubmitCanvasChangeWire,
     { onExcessProperty: "error" }

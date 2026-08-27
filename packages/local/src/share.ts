@@ -13,10 +13,12 @@ import {
   decodeCanvasSharedWire,
   critPersonIdHeader,
   encodeShareCanvasWire,
+  negotiateWire,
+  readProtocolFailure,
   remoteCanvasCollectionPath,
   ShareDigestMismatch as ShareDigestMismatchWire
 } from "@crit/protocol"
-import { Effect, FileSystem, Path, Schema } from "effect"
+import { Effect, FileSystem, Option, Path, Result, Schema } from "effect"
 import {
   FetchHttpClient,
   HttpClient,
@@ -209,6 +211,13 @@ const writeShare = (
 })
 
 const rejectedShare = (status: number, body: string) => {
+  try {
+    const parsed = Schema.decodeUnknownSync(Schema.Json)(JSON.parse(body))
+    const protocol = readProtocolFailure(parsed)
+    if (Option.isSome(protocol)) return protocol.value
+  } catch {
+    return new ShareResponseRejected({ status })
+  }
   if (status !== 409) return new ShareResponseRejected({ status })
   try {
     const mismatch = Schema.decodeUnknownSync(ShareDigestMismatchWire)(
@@ -292,10 +301,27 @@ export const shareCanvas = (
     Effect.mapError(() => new ShareResponseInvalid({}))
   )
   if (response.status !== 200) {
-    return yield* rejectedShare(response.status, contents)
+    return yield* Effect.fail(rejectedShare(response.status, contents))
+  }
+  const parsed = yield* Effect.try({
+    try: () => Schema.decodeUnknownSync(Schema.Json)(JSON.parse(contents)),
+    catch: () => new ShareResponseInvalid({})
+  })
+  const negotiated = negotiateWire(parsed, {
+    kind: "canvas-shared",
+    schemaVersion: 2
+  })
+  if (
+    Result.isFailure(negotiated)
+    && (
+      negotiated.failure._tag === "unsupportedVersion"
+      || negotiated.failure._tag === "messageKindMismatch"
+    )
+  ) {
+    return yield* Effect.fail(negotiated.failure)
   }
   const receipt = yield* Effect.try({
-    try: () => decodeCanvasSharedWire(JSON.parse(contents)),
+    try: () => decodeCanvasSharedWire(parsed),
     catch: () => new ShareResponseInvalid({})
   })
 

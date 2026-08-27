@@ -11,7 +11,6 @@ import { join } from "node:path"
 
 import { NodeServices } from "@effect/platform-node"
 import { AccessPersonEmail, EmailAddress } from "@crit/domain"
-import { encodeAccessAuthenticatedPersonWire } from "@crit/protocol"
 import { Effect, Layer, Schema } from "effect"
 import { describe, expect, it } from "vitest"
 
@@ -48,7 +47,8 @@ const accessEmail = (address: string) => AccessPersonEmail.make({
 
 const identityServer = (
   status: number,
-  address: string = "ada@acme.com"
+  address: string = "ada@acme.com",
+  schemaVersion = 1
 ) => Effect.acquireRelease(
   Effect.promise(() => new Promise<ReturnType<typeof createServer>>((resolve, reject) => {
     const server = createServer((request, response) => {
@@ -57,11 +57,11 @@ const identityServer = (
         response.writeHead(status).end()
         return
       }
-      const body = JSON.stringify(encodeAccessAuthenticatedPersonWire({
+      const body = JSON.stringify({
         kind: "access-authenticated-person",
-        schemaVersion: 1,
+        schemaVersion,
         address: Schema.decodeUnknownSync(EmailAddress)(address)
-      }))
+      })
       response.writeHead(200, { "content-type": "application/json" }).end(body)
     })
     server.once("error", reject)
@@ -258,6 +258,31 @@ describe("Access Person login", () => {
       expect(installationFrom(dataRoot).principal.person.email).toEqual({
         _tag: "unspecified"
       })
+      expect(readFileSync(installationPath, "utf8")).toBe(first)
+    })).pipe(Effect.provide(NodeServices.layer))))
+
+  it("rejects an unsupported identity schema version with an upgrade error", () =>
+    Effect.runPromise(Effect.scoped(Effect.gen(function*() {
+      const directory = yield* temporaryRoot
+      const dataRoot = join(directory, ".crit", "v1")
+      yield* mintInstallation(dataRoot)
+      const installationPath = join(dataRoot, "installation.json")
+      const first = readFileSync(installationPath, "utf8")
+      const server = yield* identityServer(200, "ada@acme.com", 2)
+
+      const failure = yield* loginToInstallation({
+        dataRoot,
+        installationUrl: serverOrigin(server)
+      }).pipe(Effect.flip)
+
+      expect(failure).toMatchObject({
+        _tag: "unsupportedVersion",
+        requestedVersion: 2,
+        supportedVersion: 1
+      })
+      expect(failure._tag === "unsupportedVersion" && failure.message).toContain(
+        "Upgrade Crit so the client and installation match."
+      )
       expect(readFileSync(installationPath, "utf8")).toBe(first)
     })).pipe(Effect.provide(NodeServices.layer))))
 })

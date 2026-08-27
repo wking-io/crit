@@ -36,6 +36,7 @@ import {
 import { registerControlDeployment } from "./deployments.js"
 import { handleHostedApplicationResolve } from "./hosted-representation.js"
 import { handleLedgerRequest } from "./ledger-http.js"
+import { negotiateRequest, readJsonRequest } from "./protocol-http.js"
 import { isDocumentRequest, isHostDocumentPath, serveShell } from "./shell.js"
 import {
   compareShareReceipt,
@@ -154,11 +155,14 @@ const shareCanvas = async (
   const resolved = resolveCallerIdentity(request)
   const caller = resolved.caller
 
-  let input: unknown
-  try {
-    input = await request.json()
-  } catch {
+  const input = await readJsonRequest(request)
+  if (input === undefined) {
     return respondWithCallerCookie(emptyResponse(400), request, resolved)
+  }
+
+  const rejected = negotiateRequest(input, { kind: "share-canvas", schemaVersion: 2 })
+  if (rejected !== undefined) {
+    return respondWithCallerCookie(rejected, request, resolved)
   }
 
   let share: ReturnType<typeof decodeShareCanvasWire>
@@ -242,9 +246,16 @@ const registerDeployment = async (
 ): Promise<Response> => {
   if (request.method !== "POST") return emptyResponse(405)
   if (!isDeploymentAuthorized(request, env)) return emptyResponse(401)
+  const input = await readJsonRequest(request)
+  if (input === undefined) return emptyResponse(400)
+  const rejected = negotiateRequest(input, {
+    kind: "register-deployment",
+    schemaVersion: 1
+  })
+  if (rejected !== undefined) return rejected
   let registration: RegisterDeploymentWire
   try {
-    registration = decodeRegisterDeploymentWire(await request.json())
+    registration = decodeRegisterDeploymentWire(input)
   } catch {
     return emptyResponse(400)
   }

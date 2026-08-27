@@ -3,11 +3,13 @@ import {
   Id
 } from "@crit/domain"
 import {
+  ChangeProtocol,
   decodeHostedApplicationResolveResponse,
   encodeHostedApplicationResolveRequest,
   hostedApplicationResolvePath
 } from "@crit/protocol"
 import { SELF } from "cloudflare:test"
+import { Result } from "effect"
 import { describe, expect, it } from "vitest"
 
 const checkout = ApplicationRouteRepresentation.make({
@@ -103,5 +105,27 @@ describe("Worker hosted application route resolve", () => {
     const plan = decodeHostedApplicationResolveResponse(await response.json())
 
     expect(plan._tag).toBe("unavailable")
+  })
+
+  it("rejects an unsupported resolve schema version with an upgrade error", async() => {
+    const response = await SELF.fetch(
+      `https://crit.example${hostedApplicationResolvePath}`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "Cf-Access-Authenticated-User-Email": "ada@acme.com"
+        },
+        body: JSON.stringify({
+          kind: "resolveApplicationRoute",
+          schemaVersion: 2,
+          representation: checkout
+        })
+      }
+    )
+    const failure = ChangeProtocol.failure.decode(await response.json())
+
+    expect(response.status).toBe(426)
+    expect(Result.isSuccess(failure) && failure.success._tag).toBe("unsupportedVersion")
   })
 })

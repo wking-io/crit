@@ -21,6 +21,7 @@ import {
   resolveCallerIdentity,
   respondWithCallerCookie
 } from "./caller.js"
+import { protocolFailureResponse } from "./protocol-http.js"
 
 const emptyResponse = (status: number) => new Response(null, { status })
 
@@ -113,7 +114,7 @@ const pushChange = async (
     return respondWithCallerCookie(
       decoded.failure._tag === "envelopeInvalid"
         ? emptyResponse(400)
-        : jsonResponse(400, JSON.stringify(ChangeProtocol.failure.encode(decoded.failure))),
+        : protocolFailureResponse(decoded.failure),
       request,
       resolved
     )

@@ -103,6 +103,7 @@ describe("ChangeProtocol", () => {
   it("exposes only semantic protocol values", async () => {
     expect(Object.keys(await import("../src/index.js")).sort()).toEqual([
       "AcceptedCanvasChangeSchema", "AccessAuthenticatedPersonWire",
+      "AnonymousPersonWire",
       "ArtifactContentCorrupt", "ArtifactDigestConflict", "ArtifactStoredWire",
       "CanvasDirectoryEntryWire", "CanvasDirectoryWire", "CanvasSharedWire",
       "ChangePageSchema", "ChangeProtocol", "ChangeValue",
@@ -113,29 +114,43 @@ describe("ChangeProtocol", () => {
       "FrameInputBridgeMessageSchema", "FrameInputIntentSchema",
       "FrameRoute", "FrameRouteBridgeMessageSchema",
       "HostedApplicationResolveRequest", "HostedApplicationResolveResponse",
-      "PresenceChangedSchema", "ProposedCanvasChangeSchema", "ProtocolValue",
+      "InstallationPersonWire",
+      "PresenceChangedSchema", "ProposedCanvasChangeSchema", "ProtocolFailure",
+      "ProtocolFailureSchema", "ProtocolValue",
       "RegisterDeploymentWire", "RemoteAuthorityRoute", "ReplicaChangedSchema",
       "SequenceSchema",
       "ShareCanvasWire", "ShareDigestMismatch", "SubmitCanvasChangeWire",
       "SubmitChangeReceiptSchema", "artifactCollectionPath",
-      "decodeAccessAuthenticatedPersonWire", "decodeArtifactStoredWire",
+      "critPersonCookieName",
+      "critPersonIdHeader",
+      "decodeAccessAuthenticatedPersonWire",
+      "decodeAnonymousPersonWire",
+      "decodeArtifactStoredWire",
       "decodeCanvasDirectoryWire", "decodeCanvasSharedWire",
       "decodeCritProjectManifestV2", "decodeDeploymentRegisteredWire",
       "decodeFrameInputBridgeMessage", "decodeFrameRouteBridgeMessage",
       "decodeHostedApplicationResolveRequest",
       "decodeHostedApplicationResolveResponse",
+      "decodeInstallationPersonWire",
       "decodeRegisterDeploymentWire", "decodeShareCanvasWire",
       "decodeSubmitCanvasChangeWire",
-      "encodeAccessAuthenticatedPersonWire", "encodeArtifactStoredWire",
+      "encodeAccessAuthenticatedPersonWire",
+      "encodeAnonymousPersonWire",
+      "encodeArtifactStoredWire",
       "encodeCanvasDirectoryWire", "encodeCanvasSharedWire",
       "encodeChangesAfterSearch",
       "encodeCritProjectManifestV2",
       "encodeDeploymentRegisteredWire",
       "encodeHostedApplicationResolveRequest",
-      "encodeHostedApplicationResolveResponse", "encodeRegisterDeploymentWire",
+      "encodeHostedApplicationResolveResponse",
+      "encodeInstallationPersonWire",
+      "encodeRegisterDeploymentWire",
       "encodeShareCanvasWire", "encodeSubmitCanvasChangeWire",
-      "hostedApplicationResolvePath", "parseArtifactDigestSearch",
+      "formatProtocolFailure", "formatUnsupportedVersion",
+      "hostedApplicationResolvePath", "isProtocolFailure", "negotiateWire",
+      "parseArtifactDigestSearch",
       "parseArtifactPath", "parseChangesAfterSearch", "parseRemoteAuthorityPath",
+      "protocolFailureHttpStatus", "readProtocolFailure",
       "remoteArtifactPath",
       "remoteCanvasChangesPath", "remoteCanvasCollectionPath",
       "remoteCanvasPath", "remoteChangesPageLimit"
@@ -210,7 +225,13 @@ describe("ChangeProtocol", () => {
       input.schemaVersion = 1
       const codec = name === "proposed" ? ChangeProtocol.proposed : name === "accepted" ? ChangeProtocol.accepted : name === "page" ? ChangeProtocol.page : ChangeProtocol.receipt
       const result = codec.decode(input)
-      expect(Result.isFailure(result) && result.failure._tag).toBe("unsupportedVersion")
+      expect(Result.isFailure(result) && result.failure).toEqual({
+        _tag: "unsupportedVersion",
+        location: "message",
+        requestedVersion: 1,
+        supportedVersion: 2,
+        message: "Schema version 1 is unsupported. This installation speaks version 2. Upgrade Crit so the client and installation match."
+      })
     }
   })
 

@@ -73,7 +73,8 @@ interface MockInstallation {
 }
 
 const installationServer = (
-  shareStatus = 200
+  shareStatus = 200,
+  shareBody?: Schema.Json
 ) => Effect.acquireRelease(
   Effect.promise(() => new Promise<{
     readonly server: ReturnType<typeof createServer>
@@ -108,7 +109,12 @@ const installationServer = (
         return
       }
       if (shareStatus !== 200) {
-        response.writeHead(shareStatus).end()
+        if (shareBody === undefined) {
+          response.writeHead(shareStatus).end()
+          return
+        }
+        response.writeHead(shareStatus, { "content-type": "application/json" })
+          .end(JSON.stringify(shareBody))
         return
       }
       let contents = ""
@@ -120,7 +126,7 @@ const installationServer = (
         const share = decodeShareCanvasWire(JSON.parse(contents))
         requests.push(share)
         response.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify(
-          encodeCanvasSharedWire({
+          shareBody ?? encodeCanvasSharedWire({
             kind: "canvas-shared",
             schemaVersion: 2,
             canvasId: share.canvasId,
@@ -286,6 +292,66 @@ describe("shareCanvas", () => {
       const failure = yield* shareCanvas({ dataRoot, projection }).pipe(Effect.flip)
 
       expect(failure._tag).toBe("AccessPersonUnauthenticated")
+      expect(existsSync(join(dataRoot, "shares.json"))).toBe(false)
+    })).pipe(Effect.provide(NodeServices.layer))))
+
+  it("rejects an unsupported share receipt version with an upgrade error", () =>
+    Effect.runPromise(Effect.scoped(Effect.gen(function*() {
+      const directory = yield* temporaryRoot
+      const dataRoot = join(directory, ".crit", "v1")
+      yield* mintInstallation(dataRoot)
+      const installation = yield* installationServer(200, {
+        kind: "canvas-shared",
+        schemaVersion: 3,
+        shareId
+      })
+      yield* loginToInstallation({
+        dataRoot,
+        installationUrl: installation.origin
+      })
+
+      const failure = yield* shareCanvas({ dataRoot, projection }).pipe(Effect.flip)
+
+      expect(failure).toMatchObject({
+        _tag: "unsupportedVersion",
+        requestedVersion: 3,
+        supportedVersion: 2
+      })
+      expect(failure._tag === "unsupportedVersion" && failure.message).toContain(
+        "Upgrade Crit so the client and installation match."
+      )
+      expect(existsSync(join(dataRoot, "shares.json"))).toBe(false)
+    })).pipe(Effect.provide(NodeServices.layer))))
+
+  it("rejects a protocol-failure upgrade response without writing local state", () =>
+    Effect.runPromise(Effect.scoped(Effect.gen(function*() {
+      const directory = yield* temporaryRoot
+      const dataRoot = join(directory, ".crit", "v1")
+      yield* mintInstallation(dataRoot)
+      const installation = yield* installationServer(426, {
+        kind: "protocol-failure",
+        schemaVersion: 1,
+        failure: {
+          _tag: "unsupportedVersion",
+          location: "message",
+          requestedVersion: 3,
+          supportedVersion: 2,
+          message:
+            "Schema version 3 is unsupported. This installation speaks version 2. Upgrade Crit so the client and installation match."
+        }
+      })
+      yield* loginToInstallation({
+        dataRoot,
+        installationUrl: installation.origin
+      })
+
+      const failure = yield* shareCanvas({ dataRoot, projection }).pipe(Effect.flip)
+
+      expect(failure).toMatchObject({
+        _tag: "unsupportedVersion",
+        requestedVersion: 3,
+        supportedVersion: 2
+      })
       expect(existsSync(join(dataRoot, "shares.json"))).toBe(false)
     })).pipe(Effect.provide(NodeServices.layer))))
 })

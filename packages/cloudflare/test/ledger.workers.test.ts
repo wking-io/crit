@@ -356,4 +356,33 @@ describe("Worker canvas ledger routes", () => {
     expect(Result.isFailure(decodeSubmitCanvasChangeWire(forged))).toBe(true)
     expect(Result.isSuccess(failure) && failure.success._tag).toBe("trustedField")
   })
+
+  it("rejects an unsupported submit envelope version with an upgrade error", async() => {
+    const canvasId = Id.canvas("canvas_worker_ledger_version")
+    await share(canvasId)
+    const encoded = encodeSubmitCanvasChangeWire({
+      invocation: person,
+      proposal: {
+        changeId: Id.change("change_worker_version"),
+        canvasId,
+        observedCursor: null,
+        commands: rename
+      }
+    })
+    const response = await SELF.fetch(`https://crit.example${remoteCanvasChangesPath(canvasId)}`, {
+      method: "POST",
+      headers: accessHeaders,
+      body: JSON.stringify({ ...encoded, schemaVersion: 2 })
+    })
+    const failure = ChangeProtocol.failure.decode(await response.json())
+
+    expect(response.status).toBe(426)
+    expect(Result.isSuccess(failure) && failure.success).toEqual({
+      _tag: "unsupportedVersion",
+      location: "message",
+      requestedVersion: 2,
+      supportedVersion: 1,
+      message: "Schema version 2 is unsupported. This installation speaks version 1. Upgrade Crit so the client and installation match."
+    })
+  })
 })

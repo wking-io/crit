@@ -10,7 +10,11 @@ import {
   type ChangeId,
   type PersonPrincipal
 } from "@crit/domain"
-import type { Cursor } from "@crit/protocol"
+import {
+  formatProtocolFailure,
+  isProtocolFailure,
+  type Cursor
+} from "@crit/protocol"
 import {
   ReplicaView
 } from "@crit/replica"
@@ -56,10 +60,13 @@ export const hostedReplicaSessionPorts = (
       Effect.matchCauseEffect({
         onFailure: (cause) => {
           const found = Cause.findError(cause)
-          const reason = Result.isSuccess(found)
-            ? "The canvas does not exist."
-            : "The hosted service is unreachable."
-          return Effect.fail(unavailable(canvasId, reason))
+          if (Result.isSuccess(found) && found.success._tag === "canvasNotFound") {
+            return Effect.fail(unavailable(canvasId, "The canvas does not exist."))
+          }
+          if (Result.isSuccess(found) && isProtocolFailure(found.success)) {
+            return Effect.fail(unavailable(canvasId, formatProtocolFailure(found.success)))
+          }
+          return Effect.fail(unavailable(canvasId, "The hosted service is unreachable."))
         },
         onSuccess: (view) => Effect.sync(() => {
           cursors.set(canvasId, view.cursor)
@@ -97,8 +104,12 @@ export const hostedReplicaSessionPorts = (
       return poll(delay).pipe(Effect.matchCauseEffect({
         onFailure: (cause) => {
           if (Cause.hasInterruptsOnly(cause)) return Effect.void
+          const found = Cause.findError(cause)
+          const reason = Result.isSuccess(found) && isProtocolFailure(found.success)
+            ? formatProtocolFailure(found.success)
+            : "The hosted service is unreachable."
           return emit(ReplicaSubscriptionEvent.lost({
-            reason: "The hosted service is unreachable."
+            reason
           })).pipe(
             Effect.andThen(loop(
               Math.min(delay * 2, maximumPollIntervalMs),
@@ -155,11 +166,13 @@ export const hostedReplicaSessionPorts = (
             failure: found.success.failure
           }))
         }
-        const reason = Result.isSuccess(found) &&
-            found.success._tag === "canvasNotFound"
-          ? "The canvas does not exist."
-          : "The hosted service is unreachable."
-        return Effect.fail(unavailable(canvasId, reason))
+        if (Result.isSuccess(found) && found.success._tag === "canvasNotFound") {
+          return Effect.fail(unavailable(canvasId, "The canvas does not exist."))
+        }
+        if (Result.isSuccess(found) && isProtocolFailure(found.success)) {
+          return Effect.fail(unavailable(canvasId, formatProtocolFailure(found.success)))
+        }
+        return Effect.fail(unavailable(canvasId, "The hosted service is unreachable."))
       },
       onSuccess: (view) => Effect.succeed(view)
     }))
