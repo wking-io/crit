@@ -116,9 +116,3 @@ export function ReviewRunnerProvider({
 }
 
 export const useOptionalReviewRunner = () => useContext(ReviewRunnerContext)
-
-export const useRequiredReviewRunner = (): ReviewRunner => {
-  const runner = useContext(ReviewRunnerContext)
-  if (runner === null) throw new Error("Review runner is not available")
-  return runner
-}

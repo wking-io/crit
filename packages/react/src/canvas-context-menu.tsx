@@ -8,8 +8,7 @@ import {
   useRef,
   useState,
   type KeyboardEvent,
-  type ReactElement,
-  type ReactNode
+  type ReactElement
 } from "react"
 
 import { Glyph } from "./glyph.js"
@@ -45,22 +44,10 @@ const CONTEXT_MENU_KEY_SHORTCUTS = "Shift+F10 ContextMenu"
 const CONTEXT_MENU_ITEM_HEIGHT = 28
 const CONTEXT_MENU_VERTICAL_INSET = 8
 
-export interface ContextMenuDismissalState {
-  readonly revision: number
-  readonly signal: number
-}
-
 interface ContextMenuOpenState {
   readonly open: boolean
   readonly revision: number
 }
-
-export const advanceContextMenuDismissal = (
-  current: ContextMenuDismissalState,
-  signal: number
-): ContextMenuDismissalState => Object.is(current.signal, signal)
-  ? current
-  : { revision: current.revision + 1, signal }
 
 export const contextMenuIsOpen = (
   state: ContextMenuOpenState,
@@ -68,28 +55,6 @@ export const contextMenuIsOpen = (
 ) => state.revision === dismissalRevision && state.open
 
 const ContextMenuDismissalRevision = createContext(0)
-
-export function CritContextMenuDismissalScope({
-  children,
-  signal
-}: {
-  readonly children: ReactNode
-  readonly signal: number
-}) {
-  const dismissalRef = useRef<ContextMenuDismissalState>({
-    revision: 0,
-    signal
-  })
-  dismissalRef.current = advanceContextMenuDismissal(
-    dismissalRef.current,
-    signal
-  )
-  return (
-    <ContextMenuDismissalRevision.Provider value={dismissalRef.current.revision}>
-      {children}
-    </ContextMenuDismissalRevision.Provider>
-  )
-}
 
 function openContextMenuFromKeyboard(event: KeyboardEvent<HTMLElement>) {
   const isContextMenuShortcut = event.key === "ContextMenu" ||

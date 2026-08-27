@@ -1028,6 +1028,6 @@ button.crit-toolbar__title:focus-visible { border-radius: 2px; outline: 2px soli
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .crit-frame__mark, .crit-frame__action, .crit-frame__action[data-snapshotting] svg, .crit-frame__title-track, .crit-frame__title-edit-icon, .crit-frame__title-save, .crit-toolbar__title[data-saving] svg { animation-duration: .01ms; transition-duration: .01ms; }
+  .crit-frame__mark, .crit-frame__action, .crit-frame__action[data-snapshotting] svg, .crit-frame__title-track, .crit-frame__title-edit-icon, .crit-frame__title-save, .crit-toolbar__title[data-saving] svg, .crit-status-option { animation-duration: .01ms; transition-duration: .01ms; }
 }
 `

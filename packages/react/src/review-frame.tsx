@@ -5,10 +5,14 @@ import type { Frame } from "@crit/domain"
 import { Predicate } from "effect"
 import {
   AnimatePresence,
+  LazyMotion,
+  MotionConfig,
   animate,
-  motion,
+  domAnimation,
+  m,
   useMotionValue,
   usePresence,
+  useReducedMotion,
   useTransform
 } from "motion/react"
 import {
@@ -231,8 +235,14 @@ function StatusPillOption({
     [STATUS_PILL_MOTION.initialScale, 1]
   )
   const [isPresent, safeToRemove] = usePresence()
+  const reduceMotion = useReducedMotion()
 
   useEffect(() => {
+    if (reduceMotion) {
+      progress.set(isPresent ? 1 : 0)
+      if (!isPresent) safeToRemove?.()
+      return
+    }
     const playback = animate(
       progress,
       isPresent ? 1 : 0,
@@ -242,7 +252,7 @@ function StatusPillOption({
     )
     if (!isPresent) playback.then(() => safeToRemove?.())
     return () => playback.stop()
-  }, [isPresent, progress, safeToRemove])
+  }, [isPresent, progress, reduceMotion, safeToRemove])
 
   return (
     <Menu.Item
@@ -263,7 +273,7 @@ function StatusPillOption({
         onSelect()
       }}
       render={
-        <motion.button
+        <m.button
           style={{ opacity, rotate, scale, x, y }}
           type="button"
         />
@@ -393,139 +403,144 @@ function FrameStatusFan({
 
 function FrameTitleChrome({
   canMutate,
-  commitTitle,
   frameTitle,
+  runner,
   selected,
-  setTitleDraft,
-  setTitleEditing,
   shortId,
-  statusLabel,
-  titleDraft,
-  titleEditing
+  statusLabel
 }: {
   readonly canMutate: boolean
-  readonly commitTitle: () => void
   readonly frameTitle: string
+  readonly runner: ReviewRunner | null
   readonly selected: boolean
-  readonly setTitleDraft: (title: string) => void
-  readonly setTitleEditing: (editing: boolean) => void
   readonly shortId: string
   readonly statusLabel: string
-  readonly titleDraft: string
-  readonly titleEditing: boolean
 }) {
-  if (titleEditing && selected && canMutate) {
-    return (
-      <div
-        className="crit-frame__title-editor"
-        onBlur={(event) => {
-          const nextFocus = event.relatedTarget
-          if (
-            nextFocus instanceof Node &&
-            event.currentTarget.contains(nextFocus)
-          ) return
-          commitTitle()
-        }}
-        onContextMenu={(event) => event.stopPropagation()}
-        onPointerDown={(event) => event.stopPropagation()}
-      >
-        <span className="crit-frame__title-prefix">{shortId}:</span>
-        <span
-          className="crit-frame__title-input-sizer"
-          data-value={titleDraft || " "}
-        >
-          <Input
-            aria-label="Frame title"
-            autoComplete="off"
-            autoFocus
-            spellCheck={false}
-            onChange={(event) => setTitleDraft(event.currentTarget.value)}
-            onKeyDown={(event) => {
-              event.stopPropagation()
-              if (event.key === "Enter") {
-                event.preventDefault()
-                commitTitle()
-              }
-              if (event.key === "Escape") {
-                event.preventDefault()
-                setTitleDraft(frameTitle)
-                setTitleEditing(false)
-              }
-            }}
-            value={titleDraft}
-          />
-        </span>
-        <Button
-          aria-label="Save title"
-          className="crit-frame__title-save"
-          onClick={commitTitle}
-          type="button"
-        >
-          <Glyph name="save" />
-        </Button>
-      </div>
-    )
+  const [titleDraft, setTitleDraft] = useState(frameTitle)
+  const [titleEditing, setTitleEditing] = useState(false)
+  const commitTitle = () => {
+    const title = titleDraft.trim()
+    if (title.length > 0 && title !== frameTitle) {
+      runner?.run("set-frame-title", ReviewActionInput.text({ text: title }))
+    } else {
+      setTitleDraft(frameTitle)
+    }
+    setTitleEditing(false)
   }
-  if (selected && canMutate) {
-    return (
-      <Button
-        aria-label={`Edit frame title: ${frameTitle}`}
-        className="crit-frame__title-button"
-        onClick={() => setTitleEditing(true)}
-        onPointerDown={(event) => event.stopPropagation()}
-        type="button"
-      >
-        <span className="crit-frame__title-track">
-          <strong>{shortId}: {frameTitle}</strong>
-          <strong>{statusLabel}</strong>
-        </span>
-        <Glyph className="crit-frame__title-edit-icon" name="edit" />
-      </Button>
-    )
-  }
+  const editing = titleEditing && selected && canMutate
+  const title = (
+    editing
+      ? (
+        <div
+          className="crit-frame__title-editor"
+          onBlur={(event) => {
+            const nextFocus = event.relatedTarget
+            if (
+              nextFocus instanceof Node &&
+              event.currentTarget.contains(nextFocus)
+            ) return
+            commitTitle()
+          }}
+          onContextMenu={(event) => event.stopPropagation()}
+          onPointerDown={(event) => event.stopPropagation()}
+        >
+          <span className="crit-frame__title-prefix">{shortId}:</span>
+          <span
+            className="crit-frame__title-input-sizer"
+            data-value={titleDraft || " "}
+          >
+            <Input
+              aria-label="Frame title"
+              autoComplete="off"
+              autoFocus
+              spellCheck={false}
+              onChange={(event) => setTitleDraft(event.currentTarget.value)}
+              onKeyDown={(event) => {
+                event.stopPropagation()
+                if (event.key === "Enter") {
+                  event.preventDefault()
+                  commitTitle()
+                }
+                if (event.key === "Escape") {
+                  event.preventDefault()
+                  setTitleDraft(frameTitle)
+                  setTitleEditing(false)
+                }
+              }}
+              value={titleDraft}
+            />
+          </span>
+          <Button
+            aria-label="Save title"
+            className="crit-frame__title-save"
+            onClick={commitTitle}
+            type="button"
+          >
+            <Glyph name="save" />
+          </Button>
+        </div>
+      )
+      : selected && canMutate
+        ? (
+          <Button
+            aria-label={`Edit frame title: ${frameTitle}`}
+            className="crit-frame__title-button"
+            onClick={() => setTitleEditing(true)}
+            onPointerDown={(event) => event.stopPropagation()}
+            type="button"
+          >
+            <span className="crit-frame__title-track">
+              <strong>{shortId}: {frameTitle}</strong>
+              <strong>{statusLabel}</strong>
+            </span>
+            <Glyph className="crit-frame__title-edit-icon" name="edit" />
+          </Button>
+        )
+        : (
+          <span className="crit-frame__title-label">
+            <span className="crit-frame__title-track">
+              <strong>{shortId}: {frameTitle}</strong>
+              <strong>{statusLabel}</strong>
+            </span>
+          </span>
+        )
+  )
   return (
-    <span className="crit-frame__title-label">
-      <span className="crit-frame__title-track">
-        <strong>{shortId}: {frameTitle}</strong>
-        <strong>{statusLabel}</strong>
-      </span>
+    <span
+      className="crit-frame__title-mask"
+      data-editing={editing || undefined}
+      title={editing ? undefined : `${shortId}: ${frameTitle}`}
+    >
+      {title}
     </span>
   )
 }
 
 function FrameIdentity({
   canMutate,
-  commitTitle,
   frameTitle,
   live,
+  runner,
   selected,
-  setTitleDraft,
-  setTitleEditing,
   shortId,
   status,
   statusMenuHandle,
   statusMenuOpen,
   statusMenuTriggerId,
   statusMenuTriggerRef,
-  titleDraft,
-  titleEditing,
   titleVisible
 }: {
   readonly canMutate: boolean
-  readonly commitTitle: () => void
   readonly frameTitle: string
   readonly live: boolean
+  readonly runner: ReviewRunner | null
   readonly selected: boolean
-  readonly setTitleDraft: (title: string) => void
-  readonly setTitleEditing: (editing: boolean) => void
   readonly shortId: string
   readonly status: FrameStatusChrome
   readonly statusMenuHandle: ReturnType<typeof Menu.createHandle>
   readonly statusMenuOpen: boolean
   readonly statusMenuTriggerId: string
   readonly statusMenuTriggerRef: RefObject<HTMLButtonElement | null>
-  readonly titleDraft: string
-  readonly titleEditing: boolean
   readonly titleVisible: boolean
 }) {
   return (
@@ -551,26 +566,15 @@ function FrameIdentity({
         )}
       {titleVisible
         ? (
-          <span
-            className="crit-frame__title-mask"
-            data-editing={titleEditing && selected || undefined}
-            title={titleEditing && selected
-              ? undefined
-              : `${shortId}: ${frameTitle}`}
-          >
-            <FrameTitleChrome
-              canMutate={canMutate}
-              commitTitle={commitTitle}
-              frameTitle={frameTitle}
-              selected={selected}
-              setTitleDraft={setTitleDraft}
-              setTitleEditing={setTitleEditing}
-              shortId={shortId}
-              statusLabel={status.label}
-              titleDraft={titleDraft}
-              titleEditing={titleEditing}
-            />
-          </span>
+          <FrameTitleChrome
+            canMutate={canMutate}
+            frameTitle={frameTitle}
+            key={`${selected}:${frameTitle}`}
+            runner={runner}
+            selected={selected}
+            shortId={shortId}
+            statusLabel={status.label}
+          />
         )
         : null}
     </div>
@@ -669,20 +673,15 @@ function FrameActionBar({
         : null}
       {actions.open && url !== undefined
         ? (
-          <a
+          <Button
             aria-label={openPolicy.label}
             className="crit-frame__action"
-            href={url}
-            rel="noreferrer"
-            target="_blank"
             {...reviewActionHelpTarget(openPolicy)}
-            onClick={(event) => {
-              event.preventDefault()
-              runner?.run("open-url")
-            }}
+            onClick={() => runner?.run("open-url")}
+            type="button"
           >
             <Glyph name="openExternal" />
-          </a>
+          </Button>
         )
         : null}
       {actions.fullscreen
@@ -763,8 +762,6 @@ export function ReviewFrame({
   const live = isLiveFrame(frame)
   const url = liveFrameUrl(frame)
   const canMutate = runner !== null
-  const [titleDraft, setTitleDraft] = useState(frame.title)
-  const [titleEditing, setTitleEditing] = useState(false)
   const [statusMenuOpen, setStatusMenuOpen] = useState(false)
   const [statusMenuLayerActive, setStatusMenuLayerActive] = useState(false)
   const [breakpointsOpen, setBreakpointsOpen] = useState(false)
@@ -799,21 +796,6 @@ export function ReviewFrame({
   const actionCount = Object.values(actions).filter(Boolean).length
   const toolbarMode = frameToolbarMode(screenWidth, actionCount)
   const titleVisible = toolbarMode === "full"
-
-  useEffect(() => setTitleDraft(frame.title), [frame.title])
-  useEffect(() => {
-    if (!selected) setTitleEditing(false)
-  }, [selected])
-
-  const commitTitle = () => {
-    const title = titleDraft.trim()
-    if (title.length > 0 && title !== frame.title) {
-      runner?.run("set-frame-title", ReviewActionInput.text({ text: title }))
-    } else {
-      setTitleDraft(frame.title)
-    }
-    setTitleEditing(false)
-  }
 
   const menuItems = runner === null
     ? []
@@ -887,20 +869,16 @@ export function ReviewFrame({
         >
           <FrameIdentity
             canMutate={canMutate}
-            commitTitle={commitTitle}
             frameTitle={frame.title}
             live={live}
+            runner={runner}
             selected={selected}
-            setTitleDraft={setTitleDraft}
-            setTitleEditing={setTitleEditing}
             shortId={shortId}
             status={status}
             statusMenuHandle={statusMenuHandle}
             statusMenuOpen={statusMenuOpen}
             statusMenuTriggerId={statusMenuTriggerId}
             statusMenuTriggerRef={statusMenuTriggerRef}
-            titleDraft={titleDraft}
-            titleEditing={titleEditing}
             titleVisible={titleVisible}
           />
           <FrameActionBar
@@ -947,17 +925,26 @@ export function ReviewFrame({
     </div>
   )
 
-  if (!canMutate) return frameNode
+  const frameTree = canMutate
+    ? (
+      <CritContextActions
+        ariaLabel={`Actions for ${frame.title}`}
+        items={menuItems}
+        onOpenChange={(open) => {
+          if (!open) return
+        }}
+      >
+        {frameNode}
+      </CritContextActions>
+    )
+    : frameNode
+
   return (
-    <CritContextActions
-      ariaLabel={`Actions for ${frame.title}`}
-      items={menuItems}
-      onOpenChange={(open) => {
-        if (!open) return
-      }}
-    >
-      {frameNode}
-    </CritContextActions>
+    <MotionConfig reducedMotion="user">
+      <LazyMotion features={domAnimation} strict>
+        {frameTree}
+      </LazyMotion>
+    </MotionConfig>
   )
 }
 
