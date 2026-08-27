@@ -137,6 +137,8 @@ describe("CanvasBoard", () => {
     )
     expect(container.querySelector("[data-crit-styles]")?.textContent)
       .toContain("--crit-paper")
+    expect(container.querySelector("[data-crit-styles]")?.textContent)
+      .not.toContain(".crit-help__shortcuts")
     expect(container.querySelector(".crit-canvas")).toBe(board)
     expect(container.querySelector(".crit-canvas__plane")).not.toBeNull()
     expect(container.querySelector(".crit-frame__chrome")).not.toBeNull()
@@ -336,6 +338,199 @@ describe("CanvasBoard", () => {
       expectedChangedByChangeId: "change_1",
       geometry: { x: 60, y: 110, width: 320, height: 200 }
     }])
+  })
+
+  it("does not paint start geometry after a finished drag before the command lands", async() => {
+    const onSubmit = vi.fn()
+    const resolver: FrameRepresentationResolver = {
+      resolve: () => Effect.succeed(IframeRenderPlan.make({
+        representation: projection.frames[0]!.representation,
+        url
+      }) satisfies RenderPlan)
+    }
+    await act(async() => render(
+      <CanvasBoard
+        {...requiredBoard}
+        onSubmit={onSubmit}
+        projection={projection}
+        resolver={resolver}
+        snapshotter={snapshotter}
+      />
+    ))
+    const frame = container.querySelector("[aria-label='Checkout']")
+    const board = container.querySelector("[aria-label='Review']")
+    if (!(frame instanceof HTMLElement) || !(board instanceof HTMLElement)) {
+      throw new Error("Review Frame missing")
+    }
+
+    await act(async() => {
+      pointer(frame, "pointerdown", 100, 100)
+      pointer(board, "pointermove", 120, 130)
+      pointer(board, "pointerup", 120, 130)
+    })
+
+    expect(frame.style.left).toBe("60px")
+    expect(frame.style.top).toBe("110px")
+    expect(frame.style.width).toBe("320px")
+    expect(frame.style.height).toBe("200px")
+    expect(onSubmit).toHaveBeenCalledWith([{
+      _tag: "setFrameGeometry",
+      frameId: "frame_checkout",
+      expectedChangedByChangeId: "change_1",
+      geometry: { x: 60, y: 110, width: 320, height: 200 }
+    }])
+
+    const landed = decodeCanvasProjection({
+      schemaVersion: 3,
+      canvasId: "canvas_review",
+      title: "Review",
+      frames: [{
+        frameId: "frame_checkout",
+        title: "Checkout",
+        representation: { _tag: "webUrl", url },
+        status: "in-progress",
+        geometry: { x: 60, y: 110, width: 320, height: 200 },
+        createdByChangeId: "change_1",
+        updatedByChangeId: "change_2",
+        titleChangedByChangeId: "change_1",
+        representationChangedByChangeId: "change_1",
+        statusChangedByChangeId: "change_1",
+        geometryChangedByChangeId: "change_2"
+      }],
+      stack: [{ _tag: "frame", frameId: "frame_checkout" }],
+      stackChangedByChangeId: "change_1",
+      issuedIds: { frameIds: ["frame_checkout"] }
+    })
+    await act(async() => render(
+      <CanvasBoard
+        {...requiredBoard}
+        onSubmit={onSubmit}
+        projection={landed}
+        resolver={resolver}
+        snapshotter={snapshotter}
+      />
+    ))
+    expect(frame.style.left).toBe("60px")
+    expect(frame.style.top).toBe("110px")
+
+    const later = decodeCanvasProjection({
+      schemaVersion: 3,
+      canvasId: "canvas_review",
+      title: "Review",
+      frames: [{
+        frameId: "frame_checkout",
+        title: "Checkout",
+        representation: { _tag: "webUrl", url },
+        status: "in-progress",
+        geometry: { x: 10, y: 20, width: 320, height: 200 },
+        createdByChangeId: "change_1",
+        updatedByChangeId: "change_3",
+        titleChangedByChangeId: "change_1",
+        representationChangedByChangeId: "change_1",
+        statusChangedByChangeId: "change_1",
+        geometryChangedByChangeId: "change_3"
+      }],
+      stack: [{ _tag: "frame", frameId: "frame_checkout" }],
+      stackChangedByChangeId: "change_1",
+      issuedIds: { frameIds: ["frame_checkout"] }
+    })
+    await act(async() => render(
+      <CanvasBoard
+        {...requiredBoard}
+        onSubmit={onSubmit}
+        projection={later}
+        resolver={resolver}
+        snapshotter={snapshotter}
+      />
+    ))
+    expect(frame.style.left).toBe("10px")
+    expect(frame.style.top).toBe("20px")
+  })
+
+  it("does not paint start geometry after a finished resize before the command lands", async() => {
+    const onSubmit = vi.fn()
+    const resolver: FrameRepresentationResolver = {
+      resolve: () => Effect.succeed(IframeRenderPlan.make({
+        representation: projection.frames[0]!.representation,
+        url
+      }) satisfies RenderPlan)
+    }
+    await act(async() => render(
+      <CanvasBoard
+        {...requiredBoard}
+        onSubmit={onSubmit}
+        projection={projection}
+        resolver={resolver}
+        snapshotter={snapshotter}
+        selection={CanvasSelection.make([{
+          _tag: "frame",
+          frameId: "frame_checkout"
+        }])}
+      />
+    ))
+    const handle = container.querySelector("[data-resize-handle='south-east']")
+    const board = container.querySelector("[aria-label='Review']")
+    const frame = container.querySelector("[aria-label='Checkout']")
+    if (
+      !(handle instanceof HTMLElement) ||
+      !(board instanceof HTMLElement) ||
+      !(frame instanceof HTMLElement)
+    ) {
+      throw new Error("Resize handle missing")
+    }
+
+    await act(async() => {
+      pointer(handle, "pointerdown", 360, 280)
+      pointer(board, "pointermove", 380, 290)
+      pointer(board, "pointerup", 380, 290)
+    })
+
+    expect(frame.style.left).toBe("40px")
+    expect(frame.style.top).toBe("80px")
+    expect(frame.style.width).toBe("340px")
+    expect(frame.style.height).toBe("210px")
+    expect(onSubmit).toHaveBeenCalledWith([{
+      _tag: "setFrameGeometry",
+      frameId: "frame_checkout",
+      expectedChangedByChangeId: "change_1",
+      geometry: { x: 40, y: 80, width: 340, height: 210 }
+    }])
+  })
+
+  it("drops a finished drag overlay when submit throws", async() => {
+    const onSubmit = vi.fn(() => {
+      throw new Error("replica rejected the geometry")
+    })
+    const resolver: FrameRepresentationResolver = {
+      resolve: () => Effect.succeed(IframeRenderPlan.make({
+        representation: projection.frames[0]!.representation,
+        url
+      }) satisfies RenderPlan)
+    }
+    await act(async() => render(
+      <CanvasBoard
+        {...requiredBoard}
+        onSubmit={onSubmit}
+        projection={projection}
+        resolver={resolver}
+        snapshotter={snapshotter}
+      />
+    ))
+    const frame = container.querySelector("[aria-label='Checkout']")
+    const board = container.querySelector("[aria-label='Review']")
+    if (!(frame instanceof HTMLElement) || !(board instanceof HTMLElement)) {
+      throw new Error("Review Frame missing")
+    }
+
+    await act(async() => {
+      pointer(frame, "pointerdown", 100, 100)
+      pointer(board, "pointermove", 120, 130)
+      pointer(board, "pointerup", 120, 130)
+    })
+
+    expect(frame.style.left).toBe("40px")
+    expect(frame.style.top).toBe("80px")
+    expect(onSubmit).toHaveBeenCalled()
   })
 
   it("handles open-url effects without submitting to the replica", async() => {

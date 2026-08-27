@@ -8,10 +8,7 @@ import {
   type ReactNode
 } from "react"
 
-import {
-  reviewActionPolicies,
-  type ReviewActionPolicy
-} from "./review-actions.js"
+import { type ReviewActionPolicy } from "./review-actions.js"
 
 export type ReviewHelpDetails = Data.TaggedEnum<{
   readonly action: {
@@ -34,11 +31,6 @@ type ReviewHelpAttributes = {
   readonly "data-crit-help-shortcut": string | undefined
   readonly "data-crit-help-availability": string | undefined
 }
-
-const idleReviewHelp = ReviewHelpDetails.informational({
-  name: "Review",
-  description: "Hover or focus a control to see what it does."
-})
 
 const helpTarget = (details: ReviewHelpDetails): ReviewHelpAttributes => ({
   "data-crit-help-kind": details._tag,
@@ -170,71 +162,22 @@ export function ReviewHelpSurface({
   )
 }
 
-const shortcutedPolicies = reviewActionPolicies.filter(
-  (policy) => policy.shortcuts.length > 0
-)
-
-const ReviewHelpAction = ({
-  details
-}: {
-  readonly details: Extract<ReviewHelpDetails, { readonly _tag: "action" }>
-}): ReactElement => (
-  <>
-    <div className="crit-help__header">
-      <div className="crit-help__title">{details.name}</div>
-      {details.shortcut === null
-        ? null
-        : <div className="crit-help__shortcut">{details.shortcut}</div>}
-    </div>
-    <p className="crit-help__description">{details.description}</p>
-    {details.availabilityMessage === null
-      ? null
-      : <p className="crit-help__availability">{details.availabilityMessage}</p>}
-  </>
-)
-
-const IdleReviewHelp = (): ReactElement => (
-  <>
-    <div className="crit-help__header">
-      <div className="crit-help__title">{idleReviewHelp.name}</div>
-    </div>
-    <p className="crit-help__description">{idleReviewHelp.description}</p>
-    <ul className="crit-help__shortcuts">
-      {shortcutedPolicies.map((policy) => {
-        const shortcut = policy.shortcuts[0]
-        return (
-          <li key={policy.id}>
-            {policy.label}
-            {shortcut === undefined ? null : ` ${shortcut}`}
-          </li>
-        )
-      })}
-    </ul>
-  </>
-)
-
-const reviewHelpBody = (
-  details: ReviewHelpDetails | null
-): ReactElement => {
-  if (details === null) return <IdleReviewHelp />
-  if (ReviewHelpDetails.$is("informational")(details)) {
-    return (
-      <>
-        <div className="crit-help__header">
-          <div className="crit-help__title">{details.name}</div>
-        </div>
-        <p className="crit-help__description">{details.description}</p>
-      </>
-    )
-  }
-  return <ReviewHelpAction details={details} />
-}
-
-export function ReviewHelpPanel(): ReactElement {
+export function ReviewHelpPanel(): ReactElement | null {
   const details = useContext(ReviewHelpContext)
+  if (details === null) return null
+  const action = ReviewHelpDetails.$is("action")(details) ? details : null
   return (
     <aside aria-label="Control help" aria-live="polite" className="crit-help">
-      {reviewHelpBody(details)}
+      <div className="crit-help__header">
+        <div className="crit-help__title">{details.name}</div>
+        {action === null || action.shortcut === null
+          ? null
+          : <div className="crit-help__shortcut">{action.shortcut}</div>}
+      </div>
+      <p className="crit-help__description">{details.description}</p>
+      {action === null || action.availabilityMessage === null
+        ? null
+        : <p className="crit-help__availability">{action.availabilityMessage}</p>}
     </aside>
   )
 }

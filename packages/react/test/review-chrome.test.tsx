@@ -323,7 +323,7 @@ describe("ReviewChrome", () => {
     }])
   })
 
-  it("lists Remove and its table shortcut in idle help", async() => {
+  it("hides control help until a help target is hovered", async() => {
     await act(async() => render(
       <ReviewChrome
         onSubmit={vi.fn()}
@@ -332,11 +332,8 @@ describe("ReviewChrome", () => {
       />
     ))
 
-    const idle = helpPanel().textContent ?? ""
-    expect(idle).toContain(removePolicy.label)
-    const shortcut = removePolicy.shortcuts[0]
-    if (shortcut === undefined) throw new Error("Remove shortcut missing")
-    expect(idle).toContain(shortcut)
+    expect(container.querySelector('[aria-label="Control help"]')).toBeNull()
+    expect(container.textContent).not.toContain(removePolicy.label)
   })
 
   it("shows the Remove policy description on pointer over", async() => {
@@ -354,7 +351,28 @@ describe("ReviewChrome", () => {
       )
     })
 
-    expect(helpPanel().textContent).toContain("Align, distribute, or arrange")
+    const panel = helpPanel()
+    expect(panel.querySelector(".crit-help__title")?.textContent).toBe(
+      "Align and distribute"
+    )
+    expect(panel.textContent).toContain("Align, distribute, or arrange")
+    expect(panel.querySelector(".crit-help__shortcut")).toBeNull()
+  })
+
+  it("shows control help from keyboard focus", async() => {
+    await act(async() => render(
+      <ReviewChrome
+        onSubmit={vi.fn()}
+        projection={projection}
+        selection={selectedFrame}
+      />
+    ))
+
+    await act(async() => button("Align and distribute").focus())
+
+    expect(helpPanel().querySelector(".crit-help__title")?.textContent).toBe(
+      "Align and distribute"
+    )
   })
 
   it("submits remove from Delete and Backspace when a Frame is selected", async() => {
