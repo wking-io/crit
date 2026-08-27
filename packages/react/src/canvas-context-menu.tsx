@@ -5,10 +5,12 @@ import { Data, Match } from "effect"
 import {
   createContext,
   useContext,
+  useEffect,
   useRef,
   useState,
   type KeyboardEvent,
-  type ReactElement
+  type ReactElement,
+  type ReactNode
 } from "react"
 
 import { Glyph } from "./glyph.js"
@@ -23,6 +25,7 @@ export type ReviewMenuItem = Data.TaggedEnum<{
   readonly action: {
     readonly policy: ReviewActionPolicy
     readonly disabled?: boolean
+    readonly detail?: string | undefined
     readonly onSelect: () => void
   }
   readonly link: {
@@ -75,12 +78,42 @@ function openContextMenuFromKeyboard(event: KeyboardEvent<HTMLElement>) {
   }))
 }
 
+export function CritContextMenuDismissalScope({
+  children,
+  signal
+}: {
+  readonly children: ReactNode
+  readonly signal: number
+}) {
+  const [revision, setRevision] = useState(0)
+  const previous = useRef(signal)
+  useEffect(() => {
+    if (previous.current === signal) return
+    previous.current = signal
+    setRevision((value) => value + 1)
+  }, [signal])
+  return (
+    <ContextMenuDismissalRevision.Provider value={revision}>
+      {children}
+    </ContextMenuDismissalRevision.Provider>
+  )
+}
+
 function ActionItemContent({
+  detail,
   label
 }: {
+  readonly detail?: string | undefined
   readonly label: string
 }) {
-  return <span>{label}</span>
+  return (
+    <>
+      <span>{label}</span>
+      {detail === undefined
+        ? null
+        : <span className="crit-context-menu__detail">{detail}</span>}
+    </>
+  )
 }
 
 function ReviewMenuEntry({
@@ -108,12 +141,18 @@ function ReviewMenuEntry({
       return kind === "context-menu"
         ? (
           <ContextMenu.Item {...sharedProps}>
-            <ActionItemContent label={entry.policy.label} />
+            <ActionItemContent
+              detail={entry.detail}
+              label={entry.policy.label}
+            />
           </ContextMenu.Item>
         )
         : (
           <Menu.Item {...sharedProps}>
-            <ActionItemContent label={entry.policy.label} />
+            <ActionItemContent
+              detail={entry.detail}
+              label={entry.policy.label}
+            />
           </Menu.Item>
         )
     },

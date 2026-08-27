@@ -14,7 +14,11 @@ export {
   sessionPreferenceKey,
   setSessionPreference
 } from "./browser-session.js"
-export { applyCanvasCameraIntent, CanvasCamera } from "./canvas-camera.js"
+export {
+  applyCanvasCameraIntent,
+  CanvasCamera,
+  fitCameraToFrames
+} from "./canvas-camera.js"
 export {
   getCanvasCameraSession,
   removeCanvasCameraSession,
@@ -37,9 +41,13 @@ export { Glyph, GlyphProvider, glyphNames } from "./glyph.js"
 export type { GlyphName } from "./glyph.js"
 export {
   CritContextActions,
+  CritContextMenuDismissalScope,
   CritMenuSpecimen,
   ReviewMenuItem
 } from "./canvas-context-menu.js"
+export { ConfirmationDialog } from "./confirmation-dialog.js"
+export { NewFrameDialog } from "./new-frame-dialog.js"
+export { MOVE_CANVAS_CURSOR } from "./move-cursor.js"
 export {
   CritOverlayProvider,
   useCritOverlayContainer

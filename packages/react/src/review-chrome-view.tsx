@@ -54,13 +54,19 @@ const arrangementTrigger = {
 }
 
 export function ReviewChromeView({
+  onAddFramePlacement,
   projection,
+  requestAddFrame,
   run,
   runnableIds,
   snapshotCapturing,
   snapshotFailed
 }: {
+  readonly onAddFramePlacement?:
+    | (() => { readonly x: number; readonly y: number })
+    | undefined
   readonly projection: CanvasProjection
+  readonly requestAddFrame: ReviewRunner["requestAddFrame"]
   readonly run: ReviewRunner["run"]
   readonly runnableIds: ReadonlySet<string>
   readonly snapshotCapturing: boolean
@@ -72,6 +78,7 @@ export function ReviewChromeView({
   const toolbarRef = useRef<HTMLDivElement>(null)
   const overlayContainer = useCritOverlayContainer()
   const rename = reviewActionPolicy("rename-canvas")
+  const addFrame = reviewActionPolicy("add-frame")
   const arrangeGrid = reviewActionPolicy("arrange-grid")
   const alignmentAvailable = alignmentOptions.some((option) =>
     runnableIds.has(option.id)
@@ -239,6 +246,16 @@ export function ReviewChromeView({
                 </Menu.Positioner>
               </Menu.Portal>
             </Menu.Root>
+            <Toolbar.Button
+              aria-label={addFrame.label}
+              className="crit-icon-button"
+              {...reviewActionHelpTarget(addFrame)}
+              onClick={() => requestAddFrame(
+                onAddFramePlacement?.() ?? { x: 0, y: 0 }
+              )}
+            >
+              <Glyph name="addFrame" />
+            </Toolbar.Button>
           </Toolbar.Group>
           {snapshotCapturing
             ? <p role="status">Capturing snapshot.</p>

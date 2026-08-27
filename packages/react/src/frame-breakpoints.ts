@@ -7,3 +7,9 @@ export const FRAME_SIZE_PRESETS = [
 ] as const
 
 export type FrameSizePreset = (typeof FRAME_SIZE_PRESETS)[number]
+
+export const DEFAULT_NEW_FRAME_SIZE = FRAME_SIZE_PRESETS[2]
+export const DUPLICATE_FRAME_GAP = 40
+
+export const presetSizeDetail = (preset: FrameSizePreset): string =>
+  `${preset.width} × ${preset.height}`

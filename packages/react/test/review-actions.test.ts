@@ -139,8 +139,82 @@ describe("review actions", () => {
     }])
   })
 
-  it("keeps add-frame out of the review policy table", () => {
-    expect(reviewActionPolicies.map((entry) => entry.id)).not.toContain("add-frame")
+  it("adds a live Frame from add-frame input", () => {
+    const action = resolveReviewAction("add-frame", context(
+      itemSelection([]),
+      ReviewActionInput.addFrame({
+        title: "New",
+        url: "https://example.com/new",
+        x: 12,
+        y: 24
+      })
+    ))
+    if (!ReviewAction.$is("batch")(action)) throw new Error("Expected add-frame batch")
+    expect(action.commands).toEqual([{
+      _tag: "addFrame",
+      frameId: expect.stringMatching(/^frame_[0-9a-f]{32}$/),
+      title: "New",
+      representation: { _tag: "webUrl", url: "https://example.com/new" },
+      status: "in-progress",
+      geometry: { x: 12, y: 24, width: 1280, height: 832 }
+    }])
+    expect(policyById("add-frame").available(itemSelection([]), projection)).toBe(true)
+    expect(resolveReviewAction("add-frame", context(itemSelection([])))).toBeNull()
+  })
+
+  it("duplicates a live Frame at a preset and skips artifacts", () => {
+    const live = context(itemSelection([{ _tag: "frame", frameId: "frame_a" }]))
+    const artifact = context(itemSelection([{ _tag: "frame", frameId: "frame_b" }]))
+    expect(policyById("duplicate-frame-mobile").available(live.selection, projection))
+      .toBe(true)
+    expect(policyById("duplicate-frame-mobile").available(artifact.selection, projection))
+      .toBe(false)
+    expect(commandsFor("duplicate-frame-mobile", live)).toEqual([{
+      _tag: "addFrame",
+      frameId: expect.stringMatching(/^frame_[0-9a-f]{32}$/),
+      title: "Alpha",
+      representation: { _tag: "webUrl", url: "https://example.com/a" },
+      status: "in-progress",
+      geometry: { x: 10 - 402 - 40, y: 20, width: 402, height: 874 }
+    }])
+  })
+
+  it("fits live Frame height from measured input", () => {
+    const live = context(
+      itemSelection([{ _tag: "frame", frameId: "frame_a" }]),
+      ReviewActionInput.height({ height: 640 })
+    )
+    expect(commandsFor("fit-frame-content", live)).toEqual([{
+      _tag: "setFrameGeometry",
+      frameId: "frame_a",
+      expectedChangedByChangeId: "change_1",
+      geometry: { x: 10, y: 20, width: 100, height: 640 }
+    }])
+    expect(resolveReviewAction(
+      "fit-frame-content",
+      context(itemSelection([{ _tag: "frame", frameId: "frame_a" }]))
+    )).toBeNull()
+    expect(policyById("fit-frame-content").available(
+      itemSelection([{ _tag: "frame", frameId: "frame_b" }]),
+      projection
+    )).toBe(false)
+  })
+
+  it("zooms to fit when the canvas has Frames", () => {
+    expect(resolveReviewAction("zoom-to-fit", context(itemSelection([])))).toEqual({
+      _tag: "effect",
+      effect: { _tag: "zoomToFit" }
+    })
+    const empty = decodeCanvasProjection({
+      schemaVersion: 3,
+      canvasId: "canvas_empty",
+      title: "Empty",
+      frames: [],
+      stack: [],
+      stackChangedByChangeId: null,
+      issuedIds: { frameIds: [] }
+    })
+    expect(policyById("zoom-to-fit").available(itemSelection([]), empty)).toBe(false)
   })
 
   it("snapshots only selected live Frames", () => {

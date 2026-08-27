@@ -18,6 +18,9 @@ export interface ReviewChromeProps {
   readonly onEffect?: (effect: ReviewClientEffect) => void
   readonly snapshotter?: FrameSnapshotter
   readonly fullscreen?: boolean
+  readonly onAddFramePlacement?:
+    | (() => { readonly x: number; readonly y: number })
+    | undefined
 }
 
 export function ReviewChrome(props: ReviewChromeProps): ReactElement {
@@ -38,7 +41,9 @@ export function ReviewChrome(props: ReviewChromeProps): ReactElement {
     )
     : (
       <ReviewChromeView
+        onAddFramePlacement={props.onAddFramePlacement}
         projection={props.projection}
+        requestAddFrame={runner.requestAddFrame}
         run={runner.run}
         runnableIds={runner.runnableIds}
         snapshotCapturing={runner.snapshotCapturing}

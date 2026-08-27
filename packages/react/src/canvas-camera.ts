@@ -144,6 +144,42 @@ const applyZoomStep = (
   )
 }
 
+type CameraFitBox = {
+  readonly x: number
+  readonly y: number
+  readonly width: number
+  readonly height: number
+}
+
+export const fitCameraToFrames = (
+  geometries: ReadonlyArray<CameraFitBox>,
+  viewport: { readonly width: number; readonly height: number }
+): CanvasCamera => {
+  if (geometries.length === 0 || viewport.width <= 0 || viewport.height <= 0) {
+    return CanvasCamera.make({ x: 0, y: 0, zoom: 1 })
+  }
+  const left = Math.min(...geometries.map((geometry) => geometry.x))
+  const top = Math.min(...geometries.map((geometry) => geometry.y))
+  const right = Math.max(
+    ...geometries.map((geometry) => geometry.x + geometry.width)
+  )
+  const bottom = Math.max(
+    ...geometries.map((geometry) => geometry.y + geometry.height)
+  )
+  const nextZoom = clampZoom(
+    Math.min(
+      1,
+      (viewport.width - 80) / Math.max(1, right - left),
+      (viewport.height - 80) / Math.max(1, bottom - top)
+    )
+  )
+  return CanvasCamera.make({
+    zoom: nextZoom,
+    x: (viewport.width - (right - left) * nextZoom) / 2 - left * nextZoom,
+    y: (viewport.height - (bottom - top) * nextZoom) / 2 - top * nextZoom
+  })
+}
+
 export const applyCanvasCameraIntent = (
   camera: CanvasCamera,
   intent: FrameInputIntent,

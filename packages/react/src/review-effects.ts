@@ -10,6 +10,7 @@ import type { ReviewClientEffect } from "./review-actions.js"
 
 export interface ReviewEffectContext {
   readonly frameElement: HTMLElement | null
+  readonly zoomToFit?: (() => void) | undefined
 }
 
 export const applyReviewEffect = (
@@ -31,6 +32,9 @@ export const applyReviewEffect = (
     },
     copy: ({ text }) => {
       void navigator.clipboard?.writeText(text)
+    },
+    zoomToFit: () => {
+      context.zoomToFit?.()
     }
   }))
 }
@@ -40,6 +44,7 @@ export const useReviewEffects = (args: {
   readonly frames: readonly Frame[]
   readonly onEffect?: (effect: ReviewClientEffect) => void
   readonly selectedFrameRef: RefObject<HTMLDivElement | null>
+  readonly zoomToFit?: () => void
 }) => {
   const [fullscreen, setFullscreen] = useState(false)
   const [offscreenFrames, setOffscreenFrames] = useState<ReadonlySet<string>>(
@@ -78,7 +83,8 @@ export const useReviewEffects = (args: {
       return
     }
     applyReviewEffect(effect, {
-      frameElement: args.selectedFrameRef.current
+      frameElement: args.selectedFrameRef.current,
+      zoomToFit: args.zoomToFit
     })
   }
 
