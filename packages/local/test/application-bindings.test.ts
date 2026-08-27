@@ -34,6 +34,7 @@ import {
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 
 import {
+  LocalApplicationAnnouncements,
   LocalProjectApplicationBindings,
   LocalProjectManifest
 } from "../src/index.js"
@@ -59,10 +60,26 @@ const initialize = () => Effect.gen(function*() {
   Effect.provide(NodeServices.layer)
 )
 
-const bindings = (value: string) => LocalProjectApplicationBindings.layer({
+const announcements = LocalApplicationAnnouncements.layer
+
+const bindings = (value?: string) => LocalProjectApplicationBindings.layer({
   root,
-  baseUrl: baseUrl(value)
-}).pipe(Layer.provide(NodeServices.layer))
+  ...(value === undefined ? {} : { baseUrl: baseUrl(value) })
+}).pipe(
+  Layer.provide(announcements),
+  Layer.provide(NodeServices.layer)
+)
+
+const bindingsWithAnnouncements = (value?: string) => {
+  const announcementsLayer = LocalApplicationAnnouncements.layer
+  return Layer.mergeAll(
+    LocalProjectApplicationBindings.layer({
+      root,
+      ...(value === undefined ? {} : { baseUrl: baseUrl(value) })
+    }).pipe(Layer.provide(announcementsLayer)),
+    announcementsLayer
+  ).pipe(Layer.provide(NodeServices.layer))
+}
 
 const inertArtifactStore = Layer.succeed(ArtifactStore, ArtifactStore.of({
   put: (input) => Effect.fail(new ArtifactStoreIoFailure({
@@ -120,7 +137,10 @@ describe("LocalProjectApplicationBindings", () => {
       const context = yield* Layer.build(LocalProjectApplicationBindings.layer({
         root,
         baseUrl: baseUrl("http://127.0.0.1:5173/")
-      }).pipe(Layer.provide(platform)))
+      }).pipe(
+        Layer.provide(LocalApplicationAnnouncements.layer),
+        Layer.provide(platform)
+      ))
       const lookup = Context.get(context, ApplicationBindings)
       yield* lookup.get(Id.application("application_first"))
       yield* lookup.get(Id.application("application_second"))
@@ -252,5 +272,73 @@ describe("LocalProjectApplicationBindings", () => {
       reason: "application-unbound",
       representation
     })
+  })
+
+  it("does not bind a project application to the Crit host without an origin", async() => {
+    const initialized = await Effect.runPromise(initialize())
+    const representation = ApplicationRouteRepresentation.make({
+      applicationId: initialized.manifest.applicationId,
+      route: "/",
+      state: null
+    })
+    const plan = await Effect.runPromise(Effect.gen(function*() {
+      const runtime = yield* RepresentationRuntime
+      return yield* runtime.resolve(representation)
+    }).pipe(Effect.provide(RepresentationRuntimeLive.pipe(
+      Layer.provideMerge(bindings()),
+      Layer.provideMerge(inertArtifactStore),
+      Layer.provideMerge(inertLiveContent),
+      Layer.provideMerge(NodeCrypto.layer)
+    ))))
+    expect(plan).toMatchObject({
+      _tag: "unavailable",
+      reason: "application-unbound",
+      representation
+    })
+    if (Predicate.isTagged(plan, "iframe") && "url" in plan) {
+      expect(plan.url).not.toContain("127.0.0.1:5173")
+    }
+  })
+
+  it("binds an announced origin for the project application", async() => {
+    const initialized = await Effect.runPromise(initialize())
+    const origin = baseUrl("http://127.0.0.1:5174/")
+    await Effect.runPromise(Effect.scoped(Effect.gen(function*() {
+      const context = yield* Layer.build(bindingsWithAnnouncements())
+      const lookup = Context.get(context, ApplicationBindings)
+      const announced = Context.get(context, LocalApplicationAnnouncements)
+      expect(Option.isNone(yield* lookup.get(initialized.manifest.applicationId))).toBe(true)
+      yield* announced.record(initialized.manifest.applicationId, origin)
+      expect(Option.getOrUndefined(yield* lookup.get(initialized.manifest.applicationId)))
+        .toBe(origin)
+    })))
+  })
+
+  it("ignores an announce for a different applicationId", async() => {
+    const initialized = await Effect.runPromise(initialize())
+    await Effect.runPromise(Effect.scoped(Effect.gen(function*() {
+      const context = yield* Layer.build(bindingsWithAnnouncements())
+      const lookup = Context.get(context, ApplicationBindings)
+      const announced = Context.get(context, LocalApplicationAnnouncements)
+      yield* announced.record(
+        Id.application("application_foreign"),
+        baseUrl("http://127.0.0.1:5174/")
+      )
+      expect(Option.isNone(yield* lookup.get(initialized.manifest.applicationId))).toBe(true)
+    })))
+  })
+
+  it("lets the flag origin win over an announce", async() => {
+    const initialized = await Effect.runPromise(initialize())
+    const flag = baseUrl("http://127.0.0.1:5174/")
+    const announcedOrigin = baseUrl("http://127.0.0.1:4173/")
+    await Effect.runPromise(Effect.scoped(Effect.gen(function*() {
+      const context = yield* Layer.build(bindingsWithAnnouncements(flag))
+      const lookup = Context.get(context, ApplicationBindings)
+      const announced = Context.get(context, LocalApplicationAnnouncements)
+      yield* announced.record(initialized.manifest.applicationId, announcedOrigin)
+      expect(Option.getOrUndefined(yield* lookup.get(initialized.manifest.applicationId)))
+        .toBe(flag)
+    })))
   })
 })
