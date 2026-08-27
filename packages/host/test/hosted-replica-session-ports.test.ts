@@ -1,7 +1,12 @@
 import {
+  AuthorityClockLive,
+  AuthorityModel,
   AuthorityView,
+  CanvasAuthority,
   CanvasNotFound,
-  ChangeRejected
+  ChangeRejected,
+  MemoryCanvasAuthority,
+  PersonInvocation
 } from "@crit/authority"
 import type {
   HostedReviewClientService,
@@ -16,14 +21,21 @@ import {
   PersonPrincipal,
   PersonSnapshot,
   decodeCanvasCommandBatch,
-  decodeCanvasProjection
+  decodeCanvasProjection,
+  proposeSetFrameStatus
 } from "@crit/domain"
 import { ProtocolFailure, SubmitChangeReceiptSchema } from "@crit/protocol"
+import {
+  CanvasReplica,
+  MemoryCanvasReplicaLive,
+  ReplicaChangeIds,
+  ReplicaModel
+} from "@crit/replica"
 import {
   ReplicaChangeRejected,
   ReplicaSessionUnavailable
 } from "@crit/react"
-import { Effect, Schema } from "effect"
+import { Context, Effect, Layer, Schema } from "effect"
 import { describe, expect, it, vi } from "vitest"
 
 import {
@@ -102,6 +114,43 @@ const authorityWithSubmit = (
   submit,
   changesAfter: () => Effect.die("unused")
 })
+
+const author = Schema.decodeUnknownSync(PersonInvocation)({
+  _tag: "person",
+  principal: {
+    _tag: "person",
+    subject: "access|ada@acme.com",
+    person: {
+      _tag: "person",
+      personId: "person_hosted_author",
+      displayName: "Ada Lovelace",
+      email: { _tag: "access", address: "ada@acme.com" }
+    }
+  }
+})
+
+const reviewerPrincipal = Schema.decodeUnknownSync(PersonPrincipal)({
+  _tag: "person",
+  subject: "access|grace@acme.com",
+  person: {
+    _tag: "person",
+    personId: "person_hosted_reviewer",
+    displayName: "Grace",
+    email: { _tag: "access", address: "grace@acme.com" }
+  }
+})
+
+const addFrame = decodeCanvasCommandBatch([{
+  _tag: "addFrame",
+  frameId: "frame_checkout",
+  title: "Checkout",
+  representation: {
+    _tag: "webUrl",
+    url: "https://example.com/checkout"
+  },
+  status: "in-progress",
+  geometry: { x: 40, y: 80, width: 320, height: 200 }
+}])
 
 describe("hostedReplicaSessionPorts.change", () => {
   it("submits the hosted principal and reopens with no pending changes", async() => {
@@ -251,4 +300,61 @@ describe("hostedReplicaSessionPorts.open", () => {
       reason: upgrade.message
     }))
   })
+})
+
+describe("hostedReplicaSessionPorts reviewer sync", () => {
+  it("lands a reviewer's status change on an author's replica", () =>
+    Effect.runPromise(Effect.scoped(Effect.gen(function*() {
+      const scope = yield* Effect.scope
+      const remoteContext = yield* Layer.buildWithScope(
+        MemoryCanvasAuthority.layer.pipe(Layer.provide(AuthorityClockLive)),
+        scope
+      )
+      const remote = Context.get(remoteContext, CanvasAuthority)
+      const reviewerCanvasId = Id.canvas("canvas_hosted_reviewer")
+      yield* remote.create(
+        AuthorityModel.createCanvas({ canvasId: reviewerCanvasId, title: "Shared" }),
+        author
+      )
+      const replicaContext = yield* Layer.buildWithScope(
+        MemoryCanvasReplicaLive.pipe(
+          Layer.provide(Layer.succeed(ReplicaChangeIds, {
+            next: Effect.succeed(Id.change("change_hosted_author_frame"))
+          })),
+          Layer.provide(Layer.succeed(CanvasAuthority, remote))
+        ),
+        scope
+      )
+      const replica = Context.get(replicaContext, CanvasReplica)
+      yield* replica.open(reviewerCanvasId)
+      yield* replica.change(ReplicaModel.change({
+        canvasId: reviewerCanvasId,
+        commands: addFrame
+      }), author)
+      yield* replica.sync(reviewerCanvasId)
+
+      const ports = hostedReplicaSessionPorts({
+        authority: remote,
+        principal: reviewerPrincipal,
+        pollIntervalMs: 60_000
+      })
+      const opened = yield* ports.open(reviewerCanvasId)
+      const [frame] = opened.projection.frames
+      if (frame === undefined) {
+        return yield* Effect.die("hosted open did not return the author's Frame")
+      }
+      expect(frame.status).toBe("in-progress")
+
+      const reviewed = yield* ports.change({
+        canvasId: reviewerCanvasId,
+        commands: [proposeSetFrameStatus(frame, "approved")]
+      })
+      expect(reviewed.projection.frames[0]?.status).toBe("approved")
+      expect(reviewed.pending).toEqual([])
+
+      const synced = yield* replica.sync(reviewerCanvasId)
+      expect(synced.pulled).toBe(1)
+      expect(synced.view.pending).toEqual([])
+      expect(synced.view.projection.frames[0]?.status).toBe("approved")
+    }))))
 })

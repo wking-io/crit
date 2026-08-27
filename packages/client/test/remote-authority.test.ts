@@ -51,6 +51,19 @@ const person = Schema.decodeUnknownSync(PersonInvocation)({
     }
   }
 })
+const reviewer = Schema.decodeUnknownSync(PersonInvocation)({
+  _tag: "person",
+  principal: {
+    _tag: "person",
+    subject: "access|grace@acme.com",
+    person: {
+      _tag: "person",
+      personId: "person_grace",
+      displayName: "Grace Hopper",
+      email: { _tag: "access", address: "grace@acme.com" }
+    }
+  }
+})
 
 const rename = decodeCanvasCommandBatch([{
   _tag: "renameCanvas",
@@ -260,6 +273,63 @@ describe("RemoteCanvasAuthority", () => {
       expect(synced.view.pending).toEqual([])
       expect(synced.view.projection.title).toBe("Review")
       expect(synced.pulled + synced.acknowledged).toBeGreaterThan(0)
+    }).pipe(Effect.provide(memoryAuthority))))
+  )
+
+  it("pulls a reviewer's accepted change through the remote ledger", () =>
+    Effect.runPromise(Effect.scoped(Effect.gen(function*() {
+      const memory = yield* CanvasAuthority
+      const served = yield* serveAuthority(memory)
+      const remote = yield* remoteFrom(served.origin)
+      const canvasId = Id.canvas("canvas_remote_reviewer")
+      yield* memory.create(
+        AuthorityModel.createCanvas({ canvasId, title: "Checkout" }),
+        person
+      )
+      const overlay = Layer.succeed(
+        CanvasAuthority,
+        overlayRemoteLedger(memory.create, remote)
+      )
+      const ids = Layer.succeed(ReplicaChangeIds, {
+        next: Effect.succeed(Id.change("change_remote_reviewer_author"))
+      })
+      const replica = yield* CanvasReplica.pipe(Effect.provide(
+        MemoryCanvasReplicaLive.pipe(Layer.provide(overlay), Layer.provide(ids))
+      ))
+      yield* replica.open(canvasId)
+      const added = yield* replica.change(ReplicaModel.change({
+        canvasId,
+        commands: decodeCanvasCommandBatch([{
+          _tag: "addFrame",
+          frameId: "frame_checkout",
+          title: "Checkout",
+          representation: {
+            _tag: "applicationRoute",
+            applicationId: "application_remote_reviewer",
+            route: "/",
+            state: {}
+          },
+          status: "in-progress",
+          geometry: { x: 0, y: 0, width: 800, height: 600 }
+        }])
+      }), person)
+      const pushed = yield* replica.sync(canvasId)
+      yield* memory.submit({
+        canvasId,
+        changeId: Id.change("change_remote_reviewer_approve"),
+        observedCursor: pushed.view.acknowledgedCursor,
+        commands: decodeCanvasCommandBatch([{
+          _tag: "setFrameStatus",
+          frameId: "frame_checkout",
+          expectedChangedByChangeId: added.changeId,
+          status: "approved"
+        }])
+      }, reviewer)
+      const synced = yield* replica.sync(canvasId)
+
+      expect(synced.pulled).toBe(1)
+      expect(synced.view.pending).toEqual([])
+      expect(synced.view.projection.frames[0]?.status).toBe("approved")
     }).pipe(Effect.provide(memoryAuthority))))
   )
 
