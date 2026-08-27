@@ -1,16 +1,24 @@
 import {
+  mkdirSync,
   mkdtempSync,
   readFileSync,
   readdirSync,
   rmSync,
   writeFileSync
 } from "node:fs"
+import { createServer as createHttpServer } from "node:http"
 import { tmpdir } from "node:os"
 import path from "node:path"
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import { build, createServer, preview } from "vite"
 
+import {
+  critApplicationIdentityPath,
+  localApplicationAnnouncePath,
+  readLocalDaemonAnnounceTarget,
+  readProjectApplicationId
+} from "../src/announce.js"
 import {
   FRAME_ROUTE_BRIDGE_HTML_MARKER,
   parseFrameBridgeParentOrigin
@@ -157,5 +165,120 @@ describe("Frame Bridge Vite plugin", () => {
     } finally {
       await ordinaryServer.close()
     }
+  })
+
+  it("serves the project application identity at /.well-known/crit.json", async() => {
+    const parentOrigin = parseFrameBridgeParentOrigin("http://127.0.0.1:5173")
+    if (parentOrigin === undefined) throw new Error("Expected a valid parent origin")
+    writeFileSync(path.join(root, "crit.manifest.json"), JSON.stringify({
+      schemaVersion: 2,
+      applicationId: "application_announce_identity"
+    }))
+    const server = await createServer({
+      root,
+      logLevel: "silent",
+      plugins: [frameRouteBridgeVitePlugin({ parentOrigin })],
+      server: { host: "127.0.0.1", port: 0 }
+    })
+    try {
+      await server.listen()
+      const origin = server.resolvedUrls?.local[0]
+      if (origin === undefined) throw new Error("Expected a local Vite origin")
+      const response = await fetch(new URL(critApplicationIdentityPath, origin))
+      expect(response.status).toBe(200)
+      expect(await response.json()).toEqual({
+        applicationId: "application_announce_identity"
+      })
+    } finally {
+      await server.close()
+    }
+  })
+
+  it("announces the matching application origin to the local daemon", async() => {
+    const parentOrigin = parseFrameBridgeParentOrigin("http://127.0.0.1:5173")
+    if (parentOrigin === undefined) throw new Error("Expected a valid parent origin")
+    const applicationId = "application_announce_local"
+    writeFileSync(path.join(root, "crit.manifest.json"), JSON.stringify({
+      schemaVersion: 2,
+      applicationId
+    }))
+    const announced: Array<unknown> = []
+    const daemon = createHttpServer((request, response) => {
+      if (request.url !== localApplicationAnnouncePath || request.method !== "POST") {
+        response.writeHead(404).end()
+        return
+      }
+      const chunks: Array<Buffer> = []
+      request.on("data", (chunk: Buffer) => {
+        chunks.push(chunk)
+      })
+      request.on("end", () => {
+        announced.push(JSON.parse(Buffer.concat(chunks).toString("utf8")))
+        response.writeHead(204).end()
+      })
+    })
+    await new Promise<void>((resolve, reject) => {
+      daemon.once("error", reject)
+      daemon.listen(0, "127.0.0.1", resolve)
+    })
+    try {
+      const address = daemon.address()
+      if (address === null || typeof address === "string") {
+        throw new Error("Expected a TCP daemon")
+      }
+      mkdirSync(path.join(root, ".crit", "v1"), { recursive: true })
+      writeFileSync(path.join(root, ".crit", "v1", "daemon.json"), JSON.stringify({
+        version: 1,
+        instance: "0123456789abcdef0123456789abcdef",
+        baseUrl: `http://127.0.0.1:${address.port}`,
+        apiVersion: "1",
+        installationId: "installation_announce"
+      }))
+      const server = await createServer({
+        root,
+        logLevel: "silent",
+        plugins: [frameRouteBridgeVitePlugin({ parentOrigin })],
+        server: { host: "127.0.0.1", port: 0 }
+      })
+      try {
+        await server.listen()
+        const origin = server.resolvedUrls?.local[0]
+        if (origin === undefined) throw new Error("Expected a local Vite origin")
+        await expect.poll(() => announced).toHaveLength(1)
+        expect(announced[0]).toEqual({
+          schemaVersion: 1,
+          applicationId,
+          origin: `${new URL(origin).origin}/`,
+          instance: "0123456789abcdef0123456789abcdef"
+        })
+      } finally {
+        await server.close()
+      }
+    } finally {
+      await new Promise<void>((resolve) => daemon.close(() => resolve()))
+    }
+  })
+
+  it("reads the project identity and walks to daemon.json", () => {
+    expect(readProjectApplicationId(root)).toBeUndefined()
+    writeFileSync(path.join(root, "crit.manifest.json"), JSON.stringify({
+      schemaVersion: 2,
+      applicationId: "application_walk_identity"
+    }))
+    expect(readProjectApplicationId(root)).toBe("application_walk_identity")
+    const nested = path.join(root, "apps", "web")
+    mkdirSync(nested, { recursive: true })
+    mkdirSync(path.join(root, ".crit", "v1"), { recursive: true })
+    writeFileSync(path.join(root, ".crit", "v1", "daemon.json"), JSON.stringify({
+      version: 1,
+      instance: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      baseUrl: "http://127.0.0.1:49876",
+      apiVersion: "1",
+      installationId: "installation_walk"
+    }))
+    expect(readLocalDaemonAnnounceTarget(nested)).toEqual({
+      instance: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      baseUrl: "http://127.0.0.1:49876"
+    })
   })
 })
