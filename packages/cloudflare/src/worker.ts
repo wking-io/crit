@@ -161,7 +161,9 @@ const shareCanvas = async (
   }
 
   const rejected = negotiateRequest(input, { kind: "share-canvas", schemaVersion: 2 })
-  if (rejected !== undefined) return rejected
+  if (rejected !== undefined) {
+    return respondWithCallerCookie(rejected, request, resolved)
+  }
 
   let share: ReturnType<typeof decodeShareCanvasWire>
   try {
