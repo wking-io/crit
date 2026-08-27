@@ -1,26 +1,33 @@
 import type { CanvasId, PresenceRoster } from "@crit/domain"
-import { useEffect, useState } from "react"
+import { useAtomValue } from "@effect/atom-react"
+import { Effect } from "effect"
+import { Atom } from "effect/unstable/reactivity"
 
 import type { ReplicaSessionPorts } from "./replica-session.js"
+
+export const canvasPresenceAtom = Atom.family((canvasId: CanvasId) =>
+  Atom.family((attend: ReplicaSessionPorts["attend"]) => {
+    const state = Atom.make<PresenceRoster | undefined>(undefined)
+    const lifecycle = Atom.make((get) =>
+      Effect.acquireRelease(
+        Effect.sync(() =>
+          attend(canvasId, (roster) => {
+            if (get.registry.get(state) === roster) return
+            get.registry.set(state, roster)
+          })
+        ),
+        (unsubscribe) => Effect.sync(unsubscribe)
+      ).pipe(Effect.andThen(Effect.never))
+    ).pipe(Atom.setIdleTTL(0))
+    return Atom.make((get) => {
+      get(lifecycle)
+      return get(state)
+    }).pipe(Atom.setIdleTTL(0))
+  })
+)
 
 export const useCanvasPresence = (args: {
   readonly canvasId: CanvasId
   readonly attend: ReplicaSessionPorts["attend"]
-}): PresenceRoster | undefined => {
-  const { attend, canvasId } = args
-  const [snapshot, setSnapshot] = useState<{
-    readonly canvasId: CanvasId
-    readonly roster: PresenceRoster
-  } | undefined>(undefined)
-
-  useEffect(() => {
-    return attend(canvasId, (roster) => {
-      setSnapshot((current) => {
-        if (current?.canvasId === canvasId && current.roster === roster) return current
-        return { canvasId, roster }
-      })
-    })
-  }, [attend, canvasId])
-
-  return snapshot?.canvasId === canvasId ? snapshot.roster : undefined
-}
+}): PresenceRoster | undefined =>
+  useAtomValue(canvasPresenceAtom(args.canvasId)(args.attend))

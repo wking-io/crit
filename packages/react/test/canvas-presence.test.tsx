@@ -5,6 +5,7 @@ import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 
 import { useCanvasPresence } from "../src/index.js"
+import { CritRegistry } from "./crit-registry.js"
 
 Object.defineProperty(globalThis, "IS_REACT_ACT_ENVIRONMENT", { value: true })
 
@@ -66,9 +67,11 @@ afterEach(async() => {
 describe("useCanvasPresence", () => {
   it("publishes the roster from attend and leaves on unmount", async() => {
     await act(async() => root.render(
-      <StrictMode>
-        <Probe canvasId={canvasId} roster={roster} />
-      </StrictMode>
+      <CritRegistry>
+        <StrictMode>
+          <Probe canvasId={canvasId} roster={roster} />
+        </StrictMode>
+      </CritRegistry>
     ))
 
     expect(latest).toEqual(roster)
@@ -81,16 +84,20 @@ describe("useCanvasPresence", () => {
 
   it("clears the previous roster when the Canvas changes", async() => {
     await act(async() => root.render(
-      <StrictMode>
-        <Probe canvasId={canvasId} roster={roster} />
-      </StrictMode>
+      <CritRegistry>
+        <StrictMode>
+          <Probe canvasId={canvasId} roster={roster} />
+        </StrictMode>
+      </CritRegistry>
     ))
     expect(latest).toEqual(roster)
 
     await act(async() => root.render(
-      <StrictMode>
-        <Probe canvasId={otherCanvas} roster={roster} />
-      </StrictMode>
+      <CritRegistry>
+        <StrictMode>
+          <Probe canvasId={otherCanvas} roster={roster} />
+        </StrictMode>
+      </CritRegistry>
     ))
     expect(latest).toEqual(roster)
     expect(unsubscribed).toBeGreaterThan(0)

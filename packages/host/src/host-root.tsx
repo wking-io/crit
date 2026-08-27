@@ -1,3 +1,4 @@
+import { scheduleCritRegistryTask } from "@crit/react"
 import { RegistryProvider } from "@effect/atom-react"
 import { type ReactElement } from "react"
 import type { RouterHistory } from "@tanstack/react-router"
@@ -5,16 +6,6 @@ import type { RouterHistory } from "@tanstack/react-router"
 import { HostRouter } from "./host-router.js"
 
 const registryIdleTtlMs = 400
-
-const scheduleHostRegistryTask = (task: () => void) => {
-  let cancelled = false
-  queueMicrotask(() => {
-    if (!cancelled) task()
-  })
-  return () => {
-    cancelled = true
-  }
-}
 
 export function HostRoot({ fragment, history, origin }: {
   readonly fragment: string
@@ -24,7 +15,7 @@ export function HostRoot({ fragment, history, origin }: {
   return (
     <RegistryProvider
       defaultIdleTTL={registryIdleTtlMs}
-      scheduleTask={scheduleHostRegistryTask}
+      scheduleTask={scheduleCritRegistryTask}
     >
       <HostRouter fragment={fragment} history={history} origin={origin} />
     </RegistryProvider>

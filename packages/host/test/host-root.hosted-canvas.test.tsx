@@ -9,7 +9,6 @@ import {
   IframeRenderPlan,
   RenderPlan
 } from "@crit/representations"
-import { notifyManager } from "@tanstack/react-query"
 import { createMemoryHistory } from "@tanstack/react-router"
 import { Schema } from "effect"
 import { StrictMode, act } from "react"
@@ -25,8 +24,6 @@ const fetchMock = vi.hoisted(() => {
 })
 
 Object.defineProperty(globalThis, "IS_REACT_ACT_ENVIRONMENT", { value: true })
-notifyManager.setNotifyFunction((callback) => act(callback))
-notifyManager.setScheduler(queueMicrotask)
 const IntersectionObserverStub = class {
   disconnect() {}
   observe() {}

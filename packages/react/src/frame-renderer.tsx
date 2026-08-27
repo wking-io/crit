@@ -15,8 +15,9 @@ import {
   type FrameInputIntent
 } from "@crit/protocol"
 import type { RenderPlan } from "@crit/representations"
-import { useQuery } from "@tanstack/react-query"
+import { useAtomValue } from "@effect/atom-react"
 import { Effect, Match, Option, Schema } from "effect"
+import { AsyncResult } from "effect/unstable/reactivity"
 import {
   useEffect,
   useRef,
@@ -24,6 +25,7 @@ import {
   type ReactElement
 } from "react"
 
+import { frameRenderPlanFor } from "./frame-render-plan.js"
 import { connectIframeContextMenu } from "./iframe-context-menu.js"
 import { UnsandboxedLiveReviewIframe } from "./unsandboxed-live-review-iframe.js"
 
@@ -45,17 +47,6 @@ export interface FrameRendererProps {
   readonly onInputIntent?: (intent: FrameInputIntent) => void
   readonly onRouteChange?: (route: string) => void
   readonly paused?: boolean
-}
-
-let nextResolverId = 0
-const resolverIds = new WeakMap<FrameRepresentationResolver, number>()
-
-const resolverId = (resolver: FrameRepresentationResolver) => {
-  const existing = resolverIds.get(resolver)
-  if (existing !== undefined) return existing
-  nextResolverId += 1
-  resolverIds.set(resolver, nextResolverId)
-  return nextResolverId
 }
 
 const unavailableCopy = (
@@ -279,6 +270,39 @@ const ResolvedFrame = ({
   </div>
 }))
 
+function ActiveFrameRenderer({
+  className,
+  frame,
+  onInputIntent,
+  onRouteChange,
+  resolver
+}: {
+  readonly className?: string | undefined
+  readonly frame: FrameRendererFrame
+  readonly resolver: FrameRepresentationResolver
+  readonly onInputIntent?: (intent: FrameInputIntent) => void
+  readonly onRouteChange?: (route: string) => void
+}): ReactElement {
+  const plan = useAtomValue(frameRenderPlanFor(resolver, frame))
+  return AsyncResult.match(plan, {
+    onInitial: () => (
+      <div className={className} role="status">Loading {frame.title}.</div>
+    ),
+    onFailure: () => (
+      <div className={className} role="alert">Could not load {frame.title}.</div>
+    ),
+    onSuccess: ({ value }) => (
+      <ResolvedFrame
+        className={className}
+        {...(onInputIntent === undefined ? {} : { onInputIntent })}
+        {...(onRouteChange === undefined ? {} : { onRouteChange })}
+        plan={value}
+        title={frame.title}
+      />
+    )
+  })
+}
+
 export function FrameRenderer({
   className,
   frame,
@@ -287,42 +311,16 @@ export function FrameRenderer({
   paused = false,
   resolver
 }: FrameRendererProps): ReactElement {
-  const query = useQuery({
-    queryKey: [
-      "crit",
-      "frame-render-plan",
-      resolverId(resolver),
-      frame.representationChangedByChangeId,
-      frame.representation
-    ],
-    queryFn: ({ signal }) => Effect.runPromise(
-      resolver.resolve(frame.representation),
-      { signal }
-    ),
-    enabled: !paused,
-    retry: false,
-    staleTime: Number.POSITIVE_INFINITY
-  })
-
   if (paused) {
     return <div className={className} role="status">{frame.title} is paused.</div>
   }
-
-  if (query.isPending) {
-    return <div className={className} role="status">Loading {frame.title}.</div>
-  }
-
-  if (query.isError) {
-    return <div className={className} role="alert">Could not load {frame.title}.</div>
-  }
-
   return (
-    <ResolvedFrame
-      className={className}
+    <ActiveFrameRenderer
+      {...(className === undefined ? {} : { className })}
+      frame={frame}
       {...(onInputIntent === undefined ? {} : { onInputIntent })}
       {...(onRouteChange === undefined ? {} : { onRouteChange })}
-      plan={query.data}
-      title={frame.title}
+      resolver={resolver}
     />
   )
 }

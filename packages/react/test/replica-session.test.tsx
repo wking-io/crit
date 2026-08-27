@@ -6,7 +6,8 @@ import {
 } from "@crit/domain"
 import type { CanvasId } from "@crit/domain"
 import { ReplicaView } from "@crit/replica"
-import { Effect, Layer, Result, Schema } from "effect"
+import { Effect, Match, Result, Schema } from "effect"
+import type { KeyValueStore } from "effect/unstable/persistence"
 import { StrictMode, act, type ReactElement } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
@@ -21,14 +22,14 @@ import {
   ReplicaSessionUnavailable,
   getCanvasCameraSession,
   getCanvasSelectionSession,
-  layerMemory,
+  layerStorage,
   setCanvasCameraSession,
   setCanvasSelectionSession,
   useReplicaSession,
   type ReplicaSessionHandle,
-  type ReplicaSessionPorts,
-  type ReplicaSessionRun
+  type ReplicaSessionPorts
 } from "../src/index.js"
+import { CritRegistry } from "./crit-registry.js"
 
 Object.defineProperty(globalThis, "IS_REACT_ACT_ENVIRONMENT", { value: true })
 
@@ -134,10 +135,10 @@ const rejectedFailure = Schema.decodeUnknownSync(CanvasChangeFailureSchema)({
   id: "frame_missing"
 })
 
-const makeRun = (): ReplicaSessionRun => {
-  const services = Effect.runSync(Effect.scoped(Layer.build(layerMemory)))
-  return (effect) => Effect.runPromise(Effect.provide(effect, services))
-}
+const sessionLayer = layerStorage(() => sessionStorage)
+const seedSession = <A, E>(
+  effect: Effect.Effect<A, E, KeyValueStore.KeyValueStore>
+) => Effect.runPromise(Effect.provide(effect, sessionLayer))
 
 const makeReplica = (initial: ReadonlyArray<ReplicaView>) => {
   const views = new Map(initial.map((view) => [view.canvasId, view]))
@@ -187,16 +188,20 @@ let latest: ReplicaSessionHandle | undefined
 const Probe = (props: {
   readonly canvasId: CanvasId
   readonly ports: ReplicaSessionPorts
-  readonly run: ReplicaSessionRun
 }): ReactElement => {
   latest = useReplicaSession(props)
-  return <output>{latest.session._tag}</output>
+  return <output>{Match.value(latest.session).pipe(Match.tagsExhaustive({
+    loading: () => "loading",
+    ready: () => "ready",
+    unavailable: () => "unavailable"
+  }))}</output>
 }
 
 let container: HTMLDivElement
 let root: Root
 
-const render = (element: ReactElement) => root.render(<StrictMode>{element}</StrictMode>)
+const render = (element: ReactElement) =>
+  root.render(<CritRegistry><StrictMode>{element}</StrictMode></CritRegistry>)
 const waitFor = (assertion: () => void | Promise<void>) =>
   act(async() => vi.waitFor(assertion))
 
@@ -210,6 +215,7 @@ afterEach(async() => {
   await act(async() => root.unmount())
   container.remove()
   latest = undefined
+  sessionStorage.clear()
   vi.restoreAllMocks()
 })
 
@@ -222,17 +228,49 @@ const defaultSelection = CanvasSelection.make([])
 const liveConnection = ReplicaConnection.live()
 
 describe("useReplicaSession", () => {
+  it("leaves loading after a successful open under HostRoot's microtask scheduler", async() => {
+    let release!: (view: typeof viewOne) => void
+    const gate = new Promise<typeof viewOne>((resolve) => {
+      release = resolve
+    })
+    const ports: ReplicaSessionPorts = {
+      open: () => Effect.promise(() => gate),
+      subscribe: () => () => undefined,
+      attend: () => () => undefined,
+      change: () => Effect.die("change must not run")
+    }
+
+    await act(async() => render(
+      <Probe canvasId={canvasA} ports={ports} />
+    ))
+    expect(container.querySelector("output")?.textContent).toBe("loading")
+    expect(latest?.session).toEqual({ _tag: "loading" })
+
+    await act(async() => release(viewOne))
+
+    await waitFor(() =>
+      expect(container.querySelector("output")?.textContent).toBe("ready")
+    )
+    expect(latest?.session).toEqual({
+      _tag: "ready",
+      view: viewOne,
+      camera: defaultCamera,
+      selection: defaultSelection,
+      connection: liveConnection,
+      notice: undefined
+    })
+  })
+
   it("restores a saved camera and selection when open succeeds", async() => {
-    const run = makeRun()
-    await run(setCanvasCameraSession({ camera: savedCamera, canvasId: canvasA }))
-    await run(setCanvasSelectionSession({
+    await seedSession(setCanvasCameraSession({ camera: savedCamera, canvasId: canvasA }))
+    await seedSession(setCanvasSelectionSession({
       canvasId: canvasA,
       selection: savedSelection
     }))
     const replica = makeReplica([viewOne])
 
     await act(async() => render(
-      <Probe canvasId={canvasA} ports={replica.ports} run={run} />
+      <Probe canvasId={canvasA} ports={replica.ports}  />
     ))
 
     await waitFor(() =>
@@ -251,7 +289,7 @@ describe("useReplicaSession", () => {
     const replica = makeReplica([viewOne])
 
     await act(async() => render(
-      <Probe canvasId={canvasA} ports={replica.ports} run={makeRun()} />
+      <Probe canvasId={canvasA} ports={replica.ports}  />
     ))
 
     await waitFor(() =>
@@ -270,7 +308,7 @@ describe("useReplicaSession", () => {
     const replica = makeReplica([])
 
     await act(async() => render(
-      <Probe canvasId={canvasA} ports={replica.ports} run={makeRun()} />
+      <Probe canvasId={canvasA} ports={replica.ports}  />
     ))
 
     await waitFor(() =>
@@ -285,7 +323,7 @@ describe("useReplicaSession", () => {
     const replica = makeReplica([])
 
     await act(async() => render(
-      <Probe canvasId={canvasA} ports={replica.ports} run={makeRun()} />
+      <Probe canvasId={canvasA} ports={replica.ports}  />
     ))
     await waitFor(() => expect(ReplicaSession.$is("unavailable")(latest?.session)).toBe(true))
 
@@ -305,16 +343,15 @@ describe("useReplicaSession", () => {
   })
 
   it("keeps the last ready view when a refresh open fails", async() => {
-    const run = makeRun()
-    await run(setCanvasCameraSession({ camera: savedCamera, canvasId: canvasA }))
-    await run(setCanvasSelectionSession({
+    await seedSession(setCanvasCameraSession({ camera: savedCamera, canvasId: canvasA }))
+    await seedSession(setCanvasSelectionSession({
       canvasId: canvasA,
       selection: savedSelection
     }))
     const replica = makeReplica([viewOne])
 
     await act(async() => render(
-      <Probe canvasId={canvasA} ports={replica.ports} run={run} />
+      <Probe canvasId={canvasA} ports={replica.ports}  />
     ))
     await waitFor(() => expect(ReplicaSession.$is("ready")(latest?.session)).toBe(true))
 
@@ -341,7 +378,7 @@ describe("useReplicaSession", () => {
     const replica = makeReplica([viewOne])
 
     await act(async() => render(
-      <Probe canvasId={canvasA} ports={replica.ports} run={makeRun()} />
+      <Probe canvasId={canvasA} ports={replica.ports}  />
     ))
     await waitFor(() => expect(ReplicaSession.$is("ready")(latest?.session)).toBe(true))
     const previous = latest?.session
@@ -371,7 +408,7 @@ describe("useReplicaSession", () => {
     const replica = makeReplica([viewOne])
 
     await act(async() => render(
-      <Probe canvasId={canvasA} ports={replica.ports} run={makeRun()} />
+      <Probe canvasId={canvasA} ports={replica.ports}  />
     ))
     await waitFor(() => expect(ReplicaSession.$is("ready")(latest?.session)).toBe(true))
     await act(async() => replica.notify(
@@ -395,16 +432,15 @@ describe("useReplicaSession", () => {
   })
 
   it("re-opens on change and replaces the view without moving the camera or selection", async() => {
-    const run = makeRun()
-    await run(setCanvasCameraSession({ camera: savedCamera, canvasId: canvasA }))
-    await run(setCanvasSelectionSession({
+    await seedSession(setCanvasCameraSession({ camera: savedCamera, canvasId: canvasA }))
+    await seedSession(setCanvasSelectionSession({
       canvasId: canvasA,
       selection: savedSelection
     }))
     const replica = makeReplica([viewOne])
 
     await act(async() => render(
-      <Probe canvasId={canvasA} ports={replica.ports} run={run} />
+      <Probe canvasId={canvasA} ports={replica.ports}  />
     ))
     await waitFor(() => expect(ReplicaSession.$is("ready")(latest?.session)).toBe(true))
 
@@ -424,12 +460,11 @@ describe("useReplicaSession", () => {
   })
 
   it("persists onCameraChange through the camera session", async() => {
-    const run = makeRun()
     const replica = makeReplica([viewOne])
     const moved = CanvasCamera.make({ x: 40, y: 40, zoom: 2 })
 
     await act(async() => render(
-      <Probe canvasId={canvasA} ports={replica.ports} run={run} />
+      <Probe canvasId={canvasA} ports={replica.ports}  />
     ))
     await waitFor(() => expect(ReplicaSession.$is("ready")(latest?.session)).toBe(true))
 
@@ -446,16 +481,15 @@ describe("useReplicaSession", () => {
       })
     )
     await waitFor(async() =>
-      expect(await run(getCanvasCameraSession({ canvasId: canvasA }))).toEqual(moved)
+      expect(await seedSession(getCanvasCameraSession({ canvasId: canvasA }))).toEqual(moved)
     )
   })
 
   it("persists onSelectionChange through the selection session", async() => {
-    const run = makeRun()
     const replica = makeReplica([viewOne])
 
     await act(async() => render(
-      <Probe canvasId={canvasA} ports={replica.ports} run={run} />
+      <Probe canvasId={canvasA} ports={replica.ports}  />
     ))
     await waitFor(() => expect(ReplicaSession.$is("ready")(latest?.session)).toBe(true))
 
@@ -472,24 +506,23 @@ describe("useReplicaSession", () => {
       })
     )
     await waitFor(async() =>
-      expect(await run(getCanvasSelectionSession({ canvasId: canvasA }))).toEqual(
+      expect(await seedSession(getCanvasSelectionSession({ canvasId: canvasA }))).toEqual(
         savedSelection
       )
     )
   })
 
   it("unsubscribes the previous canvas when canvasId changes", async() => {
-    const run = makeRun()
     const replica = makeReplica([viewOne, viewOther])
 
     await act(async() => render(
-      <Probe canvasId={canvasA} ports={replica.ports} run={run} />
+      <Probe canvasId={canvasA} ports={replica.ports}  />
     ))
     await waitFor(() => expect(ReplicaSession.$is("ready")(latest?.session)).toBe(true))
     expect(replica.activeSubscriptions(canvasA)).toBe(1)
 
     await act(async() => render(
-      <Probe canvasId={canvasB} ports={replica.ports} run={run} />
+      <Probe canvasId={canvasB} ports={replica.ports}  />
     ))
 
     expect(replica.activeSubscriptions(canvasA)).toBe(0)
@@ -507,16 +540,15 @@ describe("useReplicaSession", () => {
   })
 
   it("replaces the ready view from submit and keeps camera and selection", async() => {
-    const run = makeRun()
-    await run(setCanvasCameraSession({ camera: savedCamera, canvasId: canvasA }))
-    await run(setCanvasSelectionSession({
+    await seedSession(setCanvasCameraSession({ camera: savedCamera, canvasId: canvasA }))
+    await seedSession(setCanvasSelectionSession({
       canvasId: canvasA,
       selection: savedSelection
     }))
     const replica = makeReplica([viewOne])
 
     await act(async() => render(
-      <Probe canvasId={canvasA} ports={replica.ports} run={run} />
+      <Probe canvasId={canvasA} ports={replica.ports}  />
     ))
     await waitFor(() => expect(ReplicaSession.$is("ready")(latest?.session)).toBe(true))
 
@@ -538,9 +570,8 @@ describe("useReplicaSession", () => {
   })
 
   it("sets a rejection notice and clears it after the next successful submit", async() => {
-    const run = makeRun()
-    await run(setCanvasCameraSession({ camera: savedCamera, canvasId: canvasA }))
-    await run(setCanvasSelectionSession({
+    await seedSession(setCanvasCameraSession({ camera: savedCamera, canvasId: canvasA }))
+    await seedSession(setCanvasSelectionSession({
       canvasId: canvasA,
       selection: savedSelection
     }))
@@ -564,7 +595,7 @@ describe("useReplicaSession", () => {
     }
 
     await act(async() => render(
-      <Probe canvasId={canvasA} ports={ports} run={run} />
+      <Probe canvasId={canvasA} ports={ports}  />
     ))
     await waitFor(() => expect(ReplicaSession.$is("ready")(latest?.session)).toBe(true))
 
@@ -612,7 +643,7 @@ describe("useReplicaSession", () => {
     }
 
     await act(async() => render(
-      <Probe canvasId={canvasA} ports={ports} run={makeRun()} />
+      <Probe canvasId={canvasA} ports={ports}  />
     ))
     await waitFor(() => expect(ReplicaSession.$is("ready")(latest?.session)).toBe(true))
     await act(async() => {
@@ -632,11 +663,10 @@ describe("useReplicaSession", () => {
   })
 
   it("still replaces the view from a later subscribe notify after submit", async() => {
-    const run = makeRun()
     const replica = makeReplica([viewOne])
 
     await act(async() => render(
-      <Probe canvasId={canvasA} ports={replica.ports} run={run} />
+      <Probe canvasId={canvasA} ports={replica.ports}  />
     ))
     await waitFor(() => expect(ReplicaSession.$is("ready")(latest?.session)).toBe(true))
 
@@ -684,7 +714,7 @@ describe("useReplicaSession", () => {
     }
 
     await act(async() => render(
-      <Probe canvasId={canvasA} ports={ports} run={makeRun()} />
+      <Probe canvasId={canvasA} ports={ports}  />
     ))
     expect(latest?.session).toEqual({ _tag: "loading" })
 
@@ -711,7 +741,7 @@ describe("useReplicaSession", () => {
     }
 
     await act(async() => render(
-      <Probe canvasId={canvasA} ports={unavailablePorts} run={makeRun()} />
+      <Probe canvasId={canvasA} ports={unavailablePorts}  />
     ))
     await waitFor(() => expect(ReplicaSession.$is("unavailable")(latest?.session)).toBe(true))
 
@@ -740,17 +770,15 @@ describe("useReplicaSession", () => {
         ? Effect.promise(() => gate)
         : replica.ports.change({ canvasId, commands: addFrame })
     }
-    const run = makeRun()
-
     await act(async() => render(
-      <Probe canvasId={canvasA} ports={ports} run={run} />
+      <Probe canvasId={canvasA} ports={ports} />
     ))
     await waitFor(() => expect(ReplicaSession.$is("ready")(latest?.session)).toBe(true))
 
     let submitted: Awaited<ReturnType<ReplicaSessionHandle["submit"]>> | undefined
     const pending = latest?.submit(addFrame)
     await act(async() => render(
-      <Probe canvasId={canvasB} ports={ports} run={run} />
+      <Probe canvasId={canvasB} ports={ports}  />
     ))
     await waitFor(() =>
       expect(latest?.session).toEqual({

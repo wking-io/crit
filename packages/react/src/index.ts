@@ -10,6 +10,7 @@ export {
   layerMemory,
   layerSessionStorage,
   layerStorage,
+  sessionStoreLayer,
   removeSessionPreference,
   sessionPreferenceKey,
   setSessionPreference
@@ -82,6 +83,8 @@ export {
   setCanvasSelectionSession
 } from "./canvas-selection-session.js"
 export { FrameRenderer } from "./frame-renderer.js"
+export { frameRenderPlanFor } from "./frame-render-plan.js"
+export { scheduleCritRegistryTask } from "./registry-schedule.js"
 export type {
   FrameRendererFrame,
   FrameRendererProps,
@@ -93,19 +96,18 @@ export { FRAME_SIZE_PRESETS } from "./frame-breakpoints.js"
 export type { FrameSizePreset } from "./frame-breakpoints.js"
 export { ReplicaBoard } from "./replica-board.js"
 export type { ReplicaBoardProps } from "./replica-board.js"
-export { useCanvasPresence } from "./canvas-presence.js"
+export { canvasPresenceAtom, useCanvasPresence } from "./canvas-presence.js"
 export {
   ReplicaConnection,
   ReplicaChangeRejected,
   ReplicaSession,
   ReplicaSubscriptionEvent,
-  ReplicaSessionUnavailable,
-  useReplicaSession
+  ReplicaSessionUnavailable
 } from "./replica-session.js"
+export { replicaSessionAtoms, useReplicaSession } from "./replica-session-atoms.js"
 export type {
   ReplicaSessionHandle,
-  ReplicaSessionPorts,
-  ReplicaSessionRun
+  ReplicaSessionPorts
 } from "./replica-session.js"
 export { ReviewChrome } from "./review-chrome.js"
 export type { ReviewChromeProps } from "./review-chrome.js"
