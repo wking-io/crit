@@ -8,7 +8,6 @@ import type { LocalDaemonInstanceNonce } from "@crit/replica/http"
 import { Context, Crypto, Data, Effect, Encoding, Layer, Redacted, Ref, Schema } from "effect"
 
 export { BrowserOrigin }
-export type { BrowserOrigin }
 
 export const BrowserCapability = Schema.String.check(
   Schema.isPattern(/^[A-Za-z0-9_-]{86}$/)

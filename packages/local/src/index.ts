@@ -12,12 +12,7 @@ export {
   hostTokenHeader,
   mintIntegratedPlane
 } from "./browser-attachment.js"
-export type {
-  BrowserAttachment,
-  DevHostRequest,
-  HostToken,
-  IntegratedHostPlane
-} from "./browser-attachment.js"
+export type { IntegratedHostPlane } from "./browser-attachment.js"
 export { FileSystemArtifactStoreOpenFailure, LocalArtifactStore } from "./artifact-store.js"
 export {
   LocalApplicationAnnouncements,
@@ -82,8 +77,7 @@ export {
 } from "./login.js"
 export type {
   BindAccessPersonOptions,
-  LoginToInstallationOptions,
-  LoginResult
+  LoginToInstallationOptions
 } from "./login.js"
 export {
   CanvasShareSuccess,

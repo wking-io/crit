@@ -48,7 +48,7 @@ export const mintIntegratedPlane = (options: {
   Effect.gen(function*() {
     const crypto = yield* Crypto.Crypto
     const hostToken = Schema.decodeUnknownSync(HostToken)(
-      Encoding.encodeBase64Url(yield* crypto.randomBytes(64))
+      Encoding.encodeBase64Url(yield* crypto.randomBytes(64).pipe(Effect.orDie))
     )
     return {
       hostOrigin: options.hostOrigin,

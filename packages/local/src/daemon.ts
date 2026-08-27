@@ -58,6 +58,7 @@ import {
   localApplicationAnnouncePath
 } from "./application-bindings.js"
 import { AgentSessions, type AgentSessionsService } from "./agent-sessions.js"
+import { LocalDatabaseOpenFailure } from "./database.js"
 import {
   authorizeIntegrated,
   BrowserAttachment,
@@ -87,8 +88,8 @@ const reconcileEagerly = (replica: CanvasReplicaService) =>
   (canvasId: CanvasId): Effect.Effect<void> =>
     replica.sync(canvasId).pipe(
       Effect.catchTags({
-        ReplicaNotOpen: Effect.ignore,
-        ReplicaCanvasNotFound: Effect.ignore,
+        ReplicaNotOpen: () => Effect.void,
+        ReplicaCanvasNotFound: () => Effect.void,
         ReplicaDiverged: Effect.die,
         ReplicaInvariantFailure: Effect.die
       }),
@@ -817,7 +818,14 @@ const integratedRepresentationRoutes = (plane: IntegratedHostPlane) =>
 const daemonLayer = (
   options: LocalDaemonOptions,
   attachment: BrowserAttachment
-) => {
+): Layer.Layer<
+  import("effect/unstable/http/Etag").Generator |
+    import("effect/unstable/http/HttpPlatform").HttpPlatform |
+    import("effect/unstable/http/HttpServer").HttpServer |
+    import("@effect/platform-node/NodeServices").NodeServices,
+  LocalDatabaseOpenFailure | import("effect/unstable/http/HttpServerError").ServeError,
+  RepresentationRuntime
+> => {
     const sqliteAuthority = SqliteCanvasAuthority.layer({ path: options.databasePath }).pipe(
       Layer.provide(AuthorityClockLive)
     )
@@ -867,22 +875,22 @@ const daemonLayer = (
       bearerRepresentationRoutes(options),
       announceApplicationRoutes(options)
     )
-    const routeDefinitions = Match.value(attachment).pipe(Match.tagsExhaustive({
-      None: () => bearerApi,
-      Integrated: ({ plane }) => Layer.mergeAll(
-        bearerApi,
-        integratedCanvasRoutes(plane),
-        integratedNotificationRoutes(plane),
-        integratedRepresentationRoutes(plane)
-      ),
-      Standalone: ({ session }) => Layer.mergeAll(
-        bearerApi,
-        browserBootstrapRoutes,
-        browserCanvasRoutes,
-        browserNotificationRoutes,
-        browserRepresentationRoutes
-      ).pipe(Layer.provide(Layer.succeed(BrowserSession, session)))
-    }))
+    const routeDefinitions = attachment._tag === "None"
+      ? bearerApi
+      : attachment._tag === "Integrated"
+        ? Layer.mergeAll(
+          bearerApi,
+          integratedCanvasRoutes(attachment.plane),
+          integratedNotificationRoutes(attachment.plane),
+          integratedRepresentationRoutes(attachment.plane)
+        )
+        : Layer.mergeAll(
+          bearerApi,
+          browserBootstrapRoutes,
+          browserCanvasRoutes,
+          browserNotificationRoutes,
+          browserRepresentationRoutes
+        ).pipe(Layer.provide(Layer.succeed(BrowserSession, attachment.session)))
     const routes = routeDefinitions.pipe(Layer.provide(services), Layer.provide(sessions))
     return HttpRouter.serve(routes).pipe(
       Layer.provideMerge(NodeHttpServer.layer(createServer, {
