@@ -5,9 +5,8 @@ import type { Duplex } from "node:stream"
 import { fileURLToPath } from "node:url"
 import path from "node:path"
 
-import { IntegratedConnectionDocument } from "@crit/client"
 import { hostTokenHeader, type IntegratedHostPlane } from "@crit/local"
-import { Effect, Redacted, Schema } from "effect"
+import { Effect, Redacted, Schema, Scope } from "effect"
 import { createServer, type Plugin, type ViteDevServer } from "vite"
 
 export const HOST_PORT = 5173
@@ -120,9 +119,7 @@ const proxyUpgrade = (
 export const integratedHostPlugin = (plane: IntegratedHostPlane): Plugin => ({
   name: "crit-integrated-host",
   transformIndexHtml(html) {
-    const document = JSON.stringify(
-      IntegratedConnectionDocument.make({ kind: "integrated", apiBase: "/__crit/" })
-    )
+    const document = JSON.stringify({ kind: "integrated", apiBase: "/__crit/" })
     return html.replace(
       "<head>",
       `<head><script type="application/json" id="crit-host-runtime">${document}</script>`
@@ -137,9 +134,7 @@ export const integratedHostPlugin = (plane: IntegratedHostPlane): Plugin => ({
       ) {
         response.statusCode = 200
         response.setHeader("content-type", "application/json")
-        response.end(JSON.stringify(
-          IntegratedConnectionDocument.make({ kind: "integrated", apiBase: "/__crit/" })
-        ))
+        response.end(JSON.stringify({ kind: "integrated", apiBase: "/__crit/" }))
         return
       }
       if (url === "/__crit" || url.startsWith("/__crit/")) {
@@ -157,7 +152,9 @@ export const integratedHostPlugin = (plane: IntegratedHostPlane): Plugin => ({
   }
 })
 
-export const startIntegratedHost = (plane: IntegratedHostPlane) =>
+export const startIntegratedHost = (
+  plane: IntegratedHostPlane
+): Effect.Effect<ViteDevServer, HostAppFailure, Scope.Scope> =>
   Effect.acquireRelease(
     Effect.tryPromise({
       try: async() => {

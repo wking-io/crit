@@ -13,7 +13,10 @@ const TcpAddress = Schema.Struct({ port: Schema.Number })
 const InstallationSecret = Schema.Struct({ bearerSecret: Schema.String })
 
 afterEach(() => {
-  for (const child of children.splice(0)) child.kill("SIGKILL")
+  for (const child of children.splice(0)) {
+    child.kill("SIGKILL")
+    child.unref()
+  }
   for (const directory of directories.splice(0)) {
     rmSync(directory, { recursive: true, force: true })
   }
@@ -40,11 +43,15 @@ const start = (dataRoot: string) => new Promise<{
   }, 5_000)
   child.stdout.on("data", (chunk: Uint8Array) => {
     output += Buffer.from(chunk).toString("utf8")
-    const daemonMatch = /Crit daemon listening at (http:\/\/127\.0\.0\.1:\d+)/.exec(output)
     const browserMatch = /Open Crit in your browser: (http:\/\/127\.0\.0\.1:\d+\/browser\/[0-9a-f]{32}\/#[-_A-Za-z0-9]+)/.exec(output)
-    if (daemonMatch?.[1] === undefined || browserMatch?.[1] === undefined) return
+    if (browserMatch?.[1] === undefined) return
+    const descriptorPath = join(dataRoot, "daemon.json")
+    if (!existsSync(descriptorPath)) return
+    const descriptor = Schema.decodeUnknownSync(Schema.Struct({
+      baseUrl: Schema.String.check(Schema.isPattern(/^http:\/\/127\.0\.0\.1:[0-9]+$/))
+    }))(JSON.parse(readFileSync(descriptorPath, "utf8")))
     clearTimeout(timeout)
-    resolve({ child, baseUrl: daemonMatch[1], browserBootstrapUrl: browserMatch[1] })
+    resolve({ child, baseUrl: descriptor.baseUrl, browserBootstrapUrl: browserMatch[1] })
   })
   child.stderr.on("data", (chunk: Uint8Array) => {
     output += Buffer.from(chunk).toString("utf8")
@@ -245,60 +252,93 @@ const runAsync = (dataRoot: string, args: ReadonlyArray<string>, environment: No
     child.once("exit", (code) => resolve({ code, stdout, stderr }))
   })
 
+const startDefault = (dataRoot: string) => new Promise<{
+  readonly child: ReturnType<typeof spawn>
+  readonly output: string
+}>((resolve, reject) => {
+  const child = spawn(process.execPath, [
+    join(import.meta.dirname, "..", "dist", "main.js"),
+    "dev",
+    "--data-root",
+    dataRoot
+  ], { stdio: ["ignore", "pipe", "pipe"] })
+  children.push(child)
+  let output = ""
+  const timeout = setTimeout(() => {
+    child.kill("SIGKILL")
+    reject(new Error(`Timed out waiting for integrated host: ${output}`))
+  }, 20_000)
+  const settle = () => {
+    if (!output.includes("Crit is at http://127.0.0.1:5173")) return
+    clearTimeout(timeout)
+    setImmediate(() => resolve({ child, output }))
+  }
+  child.stdout.on("data", (chunk: Uint8Array) => {
+    output += Buffer.from(chunk).toString("utf8")
+    settle()
+  })
+  child.stderr.on("data", (chunk: Uint8Array) => {
+    output += Buffer.from(chunk).toString("utf8")
+  })
+  child.once("error", (cause) => {
+    clearTimeout(timeout)
+    reject(cause)
+  })
+})
+
 describe("built crit-target dev", () => {
-  it("starts the host and prints a browser bootstrap URL", async() => {
+  it("starts the host and prints the Crit origin", async() => {
     const directory = mkdtempSync(join(tmpdir(), "crit-cli-loop-"))
     directories.push(directory)
     const dataRoot = join(directory, ".crit", "v1")
-    const child = spawn(process.execPath, [
-      join(import.meta.dirname, "..", "dist", "main.js"),
-      "dev",
-      "--data-root",
-      dataRoot
-    ], { stdio: ["ignore", "pipe", "pipe"] })
-    children.push(child)
-    let output = ""
-    const started = await new Promise<{
-      readonly baseUrl: string
-      readonly browserBootstrapUrl: string
-    }>((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        child.kill("SIGKILL")
-        reject(new Error(`Timed out waiting for local loop: ${output}`))
-      }, 12_000)
-      child.stdout.on("data", (chunk: Uint8Array) => {
-        output += Buffer.from(chunk).toString("utf8")
-        const daemonMatch = /Crit daemon listening at (http:\/\/127\.0\.0\.1:\d+)/.exec(output)
-        const browserMatch = /Open Crit in your browser: (http:\/\/127\.0\.0\.1:\d+\/browser\/[0-9a-f]{32}\/#[-_A-Za-z0-9]+)/.exec(output)
-        if (daemonMatch?.[1] === undefined || browserMatch?.[1] === undefined) return
-        clearTimeout(timeout)
-        resolve({ baseUrl: daemonMatch[1], browserBootstrapUrl: browserMatch[1] })
-      })
-      child.stderr.on("data", (chunk: Uint8Array) => {
-        output += Buffer.from(chunk).toString("utf8")
-      })
-      child.once("error", (cause) => {
-        clearTimeout(timeout)
-        reject(cause)
-      })
-    })
+    const started = await startDefault(dataRoot)
+    expect(started.output).toContain("Crit is at http://127.0.0.1:5173")
+    expect(started.output).not.toMatch(/\/browser\/[0-9a-f]{32}\/#/)
+    expect(started.output).not.toContain("Open Crit in your browser")
     const page = await fetch("http://127.0.0.1:5173/")
     expect(page.status).toBe(200)
     expect(await page.text()).toContain("id=\"root\"")
     const canvasPage = await fetch("http://127.0.0.1:5173/canvas/canvas_shop")
     expect(canvasPage.status).toBe(200)
     expect(await canvasPage.text()).toContain("id=\"root\"")
+    const listed = await fetch("http://127.0.0.1:5173/__crit/api/v1/canvas", {
+      headers: { "x-crit-api-version": "1" }
+    })
+    expect(listed.status).toBe(200)
+    expect(Array.isArray(await listed.json())).toBe(true)
+    await stop(started.child)
+
+    const restarted = await startDefault(dataRoot)
+    expect(restarted.output).toContain("Crit is at http://127.0.0.1:5173")
+    expect(restarted.output).not.toMatch(/\/browser\/[0-9a-f]{32}\/#/)
+    const refreshed = await fetch("http://127.0.0.1:5173/")
+    expect(refreshed.status).toBe(200)
+    const relisted = await fetch("http://127.0.0.1:5173/__crit/api/v1/canvas", {
+      headers: { "x-crit-api-version": "1" }
+    })
+    expect(relisted.status).toBe(200)
+    await stop(restarted.child)
+  }, 45_000)
+
+  it("prints a browser bootstrap URL when --browser-origin is set", async() => {
+    const directory = mkdtempSync(join(tmpdir(), "crit-cli-standalone-"))
+    directories.push(directory)
+    const dataRoot = join(directory, ".crit", "v1")
+    const started = await start(dataRoot)
     expect(new URL(started.browserBootstrapUrl).origin).toBe("http://127.0.0.1:5173")
     expect(started.browserBootstrapUrl).not.toContain(started.baseUrl)
     const printed = new URL(started.browserBootstrapUrl)
     const capability = printed.hash.slice(1)
-    printed.hash = ""
-    const bootstrapPage = await fetch(printed)
+    const bootstrap = new URL(printed.pathname, started.baseUrl)
+    const bootstrapPage = await fetch(bootstrap)
     expect(bootstrapPage.status).toBe(200)
     expect(await bootstrapPage.text()).toContain("bootstrap.js")
-    const session = await fetch(new URL("session", printed), {
+    const session = await fetch(new URL("session", bootstrap), {
       method: "POST",
-      headers: { "content-type": "application/json", origin: printed.origin },
+      headers: {
+        "content-type": "application/json",
+        origin: printed.origin
+      },
       body: JSON.stringify({ capability })
     })
     expect(session.status).toBe(200)
@@ -308,15 +348,16 @@ describe("built crit-target dev", () => {
       await session.json()
     )
     expect(sessionBody.redirectTo).toContain("http://127.0.0.1:5173/#crit=")
-    const listed = await fetch(`${printed.origin}${printed.pathname}api/v1/canvas`, {
+    const listed = await fetch(new URL("api/v1/canvas", bootstrap), {
       headers: {
         cookie: cookie ?? "",
+        origin: printed.origin,
         "x-crit-api-version": "1"
       }
     })
     expect(listed.status).toBe(200)
     expect(Array.isArray(await listed.json())).toBe(true)
-    await stop(child)
+    await stop(started.child)
   })
 
   it("binds the initialized project application through the real transport", async () => {
@@ -572,8 +613,25 @@ describe("built crit-target dev", () => {
     const directory = mkdtempSync(join(tmpdir(), "crit-cli-dev-no-browser-"))
     directories.push(directory)
     const started = await startWithoutBrowser(join(directory, ".crit", "v1"))
+    expect(started.output).toContain("Crit daemon listening at http://127.0.0.1:")
     expect(started.output).not.toContain("Open Crit in your browser")
+    expect(started.output).not.toContain("Crit is at http://127.0.0.1:5173")
+    expect(started.output).not.toMatch(/\/browser\/[0-9a-f]{32}\/#/)
     await stop(started.child)
+  })
+
+  it("rejects --browser-origin combined with --no-host", () => {
+    const directory = mkdtempSync(join(tmpdir(), "crit-cli-dev-conflict-"))
+    directories.push(directory)
+    const result = run(join(directory, ".crit", "v1"), [
+      "dev",
+      "--no-host",
+      "--browser-origin",
+      "http://127.0.0.1:5173"
+    ])
+    expect(result.status).not.toBe(0)
+    expect(result.stderr).toContain("--browser-origin and --no-host cannot be combined")
+    expect(existsSync(join(directory, ".crit", "v1"))).toBe(false)
   })
 
   it("releases its stable port and descriptor on interrupt", async () => {

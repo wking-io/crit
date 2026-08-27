@@ -64,8 +64,8 @@ import {
   frameBridgeSkillSource
 } from "./frame-bridge-skill.js"
 import { formatPendingConflicts } from "./sync-result.js"
-import { CliOperationalFailure } from "./dev-host-request.js"
-import { HOST_ORIGIN, resolveHostRoot, startHostApp } from "./host-app.js"
+import { CliOperationalFailure, parseDevHostRequest } from "./dev-host-request.js"
+import { resolveHostRoot, startIntegratedHost } from "./host-app.js"
 import { CanvasLayout, canvasLayout, formatCanvasLayout } from "./layout.js"
 import { PROJECT_SKILL_RELATIVE_PATH, projectSkillSource } from "./project-skill.js"
 import {
@@ -234,57 +234,55 @@ const dev = Command.make(
       Flag.withDescription("Do not start the Crit browser application")
     )
   },
-  Effect.fn(function*({ applicationOrigin, browserOrigin, dataRoot: root, noHost, root: projectRoot }) {
-    const application = yield* Option.match(applicationOrigin, {
-      onNone: () => Effect.succeed({ root: projectRoot }),
-      onSome: (origin) => decode(ApplicationBaseUrl, origin, "application origin").pipe(
-        Effect.map((baseUrl) => ({ root: projectRoot, baseUrl }))
-      )
-    })
-    yield* Effect.scoped(Effect.gen(function*() {
-      const applicationOptions = { application }
-      const managedHostRoot = yield* Option.match(browserOrigin, {
-        onSome: () => Effect.succeed(Option.none<string>()),
-        onNone: () => noHost
-          ? Effect.succeed(Option.none<string>())
-          : Effect.gen(function*() {
-            const hostRoot = resolveHostRoot()
-            if (hostRoot === undefined) {
-              return yield* Effect.fail(new CliOperationalFailure({
-                message: "Unable to find the Crit browser application"
-              }))
-            }
-            return Option.some(hostRoot)
-          })
-      })
-      const resolvedBrowserOrigin = Option.match(browserOrigin, {
-        onSome: (origin) => Option.some(origin),
-        onNone: () => noHost ? Option.none<string>() : Option.some(HOST_ORIGIN)
-      })
-      const developmentLayer = Option.match(resolvedBrowserOrigin, {
-        onNone: () => LocalDevelopment.layer({ dataRoot: root, ...applicationOptions }),
-        onSome: (origin) => LocalDevelopment.layer({
-          dataRoot: root,
-          ...applicationOptions,
-          browserOrigin: origin
-        })
-      })
-      const services = yield* Layer.buildWithScope(developmentLayer, yield* Effect.scope)
-      const development = Context.get(services, LocalDevelopment)
-      yield* Option.match(managedHostRoot, {
-        onNone: () => Effect.void,
-        onSome: (hostRoot) => startHostApp(hostRoot, development.descriptor.baseUrl).pipe(
-          Effect.mapError((failure) => new CliOperationalFailure({ message: failure.message }))
+  ({ applicationOrigin, browserOrigin, dataRoot: root, noHost, root: projectRoot }) =>
+    Effect.gen(function*() {
+      const application = yield* Option.match(applicationOrigin, {
+        onNone: () => Effect.succeed({ root: projectRoot }),
+        onSome: (origin) => decode(ApplicationBaseUrl, origin, "application origin").pipe(
+          Effect.map((baseUrl) => ({ root: projectRoot, baseUrl }))
         )
       })
-      yield* Console.log(`Crit daemon listening at ${development.descriptor.baseUrl}`)
-      yield* Option.match(development.browserBootstrapUrl, {
-        onNone: () => Effect.void,
-        onSome: (url) => Console.log(`Open Crit in your browser: ${Redacted.value(url)}`)
-      })
-      return yield* Effect.never
-    }))
-  })
+      const request = parseDevHostRequest({ browserOrigin, noHost })
+      if (Result.isFailure(request)) {
+        return yield* request.failure
+      }
+      if (
+        request.success._tag === "Integrated" &&
+        resolveHostRoot() === undefined
+      ) {
+        return yield* new CliOperationalFailure({
+          message: "Unable to find the Crit browser application"
+        })
+      }
+      yield* Effect.scoped(Effect.gen(function*() {
+        const applicationOptions = { application }
+        const services = yield* Layer.buildWithScope(
+          LocalDevelopment.layer({
+            dataRoot: root,
+            attachment: request.success,
+            ...applicationOptions
+          }),
+          yield* Effect.scope
+        )
+        const development = Context.get(services, LocalDevelopment)
+        if (development.attachment._tag === "Integrated") {
+          const { plane } = development.attachment
+          yield* startIntegratedHost(plane).pipe(
+            Effect.mapError((failure) => new CliOperationalFailure({
+              message: failure.message
+            }))
+          )
+          yield* Console.log(`Crit is at ${plane.hostOrigin}`)
+        } else if (development.attachment._tag === "Standalone") {
+          yield* Console.log(
+            `Open Crit in your browser: ${Redacted.value(development.attachment.session.bootstrapUrl)}`
+          )
+        } else {
+          yield* Console.log(`Crit daemon listening at ${development.descriptor.baseUrl}`)
+        }
+        return yield* Effect.never
+      }))
+    })
 ).pipe(Command.withDescription("Run the project-local Crit daemon and browser application"))
 
 type LoginFailure =
