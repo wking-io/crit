@@ -13,7 +13,7 @@ import {
 import { Id, WebUrlRepresentation, decodeCanvasCommandBatch } from "@crit/domain"
 import { ReplicaModel } from "@crit/replica"
 import { localApiVersionHeader } from "@crit/replica/http"
-import { Context, Effect, Fiber, Layer, Option, Redacted, Result, Schema, Scope, Stream } from "effect"
+import { Context, Effect, Fiber, Layer, Option, Predicate, Redacted, Result, Schema, Scope, Stream } from "effect"
 import { FetchHttpClient } from "effect/unstable/http"
 import * as Socket from "effect/unstable/socket/Socket"
 import { describe, expect, it } from "vitest"
@@ -59,7 +59,7 @@ const bootstrap = async (development: Context.Tag.Service<LocalDevelopment>) => 
 }
 
 const proxiedDaemonUrl = (input: RequestInfo | URL, daemonBaseUrl: string) => {
-  const raw = typeof input === "string" || input instanceof URL ? String(input) : input.url
+  const raw = Predicate.isString(input) || input instanceof URL ? String(input) : input.url
   const url = new URL(raw)
   const daemon = new URL(daemonBaseUrl)
   url.protocol = daemon.protocol
