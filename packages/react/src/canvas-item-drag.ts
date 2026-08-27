@@ -11,12 +11,17 @@ import {
 } from "react"
 
 import type { CanvasCamera } from "./canvas-camera.js"
+import {
+  resizeGeometry,
+  type ResizeHandlePosition
+} from "./review-selection-chrome.js"
 
 type DragMode = "move" | "resize"
 
 type CanvasDrag = {
   readonly frame: Frame
   readonly mode: DragMode
+  readonly handle: ResizeHandlePosition | undefined
   readonly pointerId: number
   readonly startClientX: number
   readonly startClientY: number
@@ -35,18 +40,14 @@ const dragGeometry = (
 ): Geometry => {
   const deltaX = (clientX - drag.startClientX) / zoom
   const deltaY = (clientY - drag.startClientY) / zoom
-  if (drag.mode === "move") {
+  if (drag.mode === "move" || drag.handle === undefined) {
     return {
       ...drag.frame.geometry,
       x: drag.frame.geometry.x + deltaX,
       y: drag.frame.geometry.y + deltaY
     }
   }
-  return {
-    ...drag.frame.geometry,
-    width: Math.max(1, drag.frame.geometry.width + deltaX),
-    height: Math.max(1, drag.frame.geometry.height + deltaY)
-  }
+  return resizeGeometry(drag.frame.geometry, drag.handle, deltaX, deltaY)
 }
 
 const sameGeometry = (left: Geometry, right: Geometry): boolean =>
@@ -65,7 +66,8 @@ export const useCanvasItemDrag = (args: {
   const begin = (
     frame: Frame,
     mode: DragMode,
-    event: ReactPointerEvent<HTMLElement>
+    event: ReactPointerEvent<HTMLElement>,
+    handle?: ResizeHandlePosition
   ) => {
     if (args.onSubmit === undefined) return
     event.preventDefault()
@@ -73,6 +75,7 @@ export const useCanvasItemDrag = (args: {
     dragRef.current = {
       frame,
       mode,
+      handle,
       pointerId: event.pointerId,
       startClientX: event.clientX,
       startClientY: event.clientY

@@ -486,6 +486,14 @@ export const reviewActionPolicies = [
 
 export type ReviewActionId = (typeof reviewActionPolicies)[number]["id"]
 
+export const reviewActionPolicy = (
+  id: ReviewActionId
+): ReviewActionPolicy<ReviewActionId> => {
+  const policy = reviewActionPolicies.find((entry) => entry.id === id)
+  if (policy === undefined) throw new Error(`Missing review policy: ${id}`)
+  return policy
+}
+
 export const availableReviewActions = (
   context: Pick<ReviewActionContext, "projection" | "selection">
 ): readonly ReviewActionPolicy<ReviewActionId>[] =>

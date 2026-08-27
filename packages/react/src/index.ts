@@ -1,3 +1,9 @@
+export { Button } from "@base-ui/react/button"
+export { ContextMenu } from "@base-ui/react/context-menu"
+export { Dialog } from "@base-ui/react/dialog"
+export { Input } from "@base-ui/react/input"
+export { Menu } from "@base-ui/react/menu"
+export { Toolbar } from "@base-ui/react/toolbar"
 export {
   SessionStorageUnavailable,
   getSessionPreference,
@@ -17,7 +23,36 @@ export {
 export { CanvasBoard } from "./canvas-board.js"
 export type { CanvasBoardProps } from "./canvas-board.js"
 export { critStyles } from "./crit-styles.js"
-export { frameStatus, frameStatusChrome, reviewStatusLabel } from "./frame-status-chrome.js"
+export {
+  FRAME_STATUSES,
+  calculateStatusFanLayout,
+  frameStatus,
+  frameStatusChrome,
+  frameStatusMenuOptions,
+  reviewStatusLabel,
+  shortIdForIndex,
+  statusPillMotionPath
+} from "./frame-status-chrome.js"
+export { Glyph, GlyphProvider, glyphNames } from "./glyph.js"
+export type { GlyphName } from "./glyph.js"
+export {
+  CritContextActions,
+  CritMenuSpecimen,
+  ReviewMenuItem
+} from "./canvas-context-menu.js"
+export {
+  CritOverlayProvider,
+  useCritOverlayContainer
+} from "./overlay-container.js"
+export {
+  TOOLBAR_OVERLAY_GAP,
+  toolbarOverlayAnchor,
+  toolbarOverlayAnchorFor,
+  toolbarOverlayAnchorRect,
+  toolbarOverlayPositionerProps
+} from "./canvas-toolbar-overlay.js"
+export { ReviewSelectionChrome, resizeGeometry } from "./review-selection-chrome.js"
+export type { ResizeHandlePosition } from "./review-selection-chrome.js"
 export {
   CanvasAlignment,
   CanvasArrangement,
@@ -66,6 +101,7 @@ export type {
 } from "./replica-session.js"
 export { ReviewChrome } from "./review-chrome.js"
 export type { ReviewChromeProps } from "./review-chrome.js"
+export { ReviewFrame, canvasUiScale } from "./review-frame.js"
 export {
   ReviewAction,
   ReviewActionInput,
@@ -73,7 +109,8 @@ export {
   ReviewSelection,
   availableReviewActions,
   resolveReviewAction,
-  reviewActionPolicies
+  reviewActionPolicies,
+  reviewActionPolicy
 } from "./review-actions.js"
 export type {
   ReviewActionContext,
