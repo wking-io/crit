@@ -25,10 +25,10 @@ import {
   Encoding,
   FileSystem,
   Layer,
+  Match,
   Option,
   Path,
   Predicate,
-  Redacted,
   Schema
 } from "effect"
 import { FetchHttpClient, HttpServer } from "effect/unstable/http"
@@ -40,6 +40,11 @@ import {
   LocalProjectApplicationBindings,
   type LocalProjectApplicationBindingsOptions
 } from "./application-bindings.js"
+import {
+  BrowserAttachment,
+  DevHostRequest,
+  mintIntegratedPlane
+} from "./browser-attachment.js"
 import { BrowserOrigin, BrowserSession } from "./browser-session.js"
 import { decodeStored, encodeStored } from "./stored-json.js"
 
@@ -111,14 +116,14 @@ export class LocalDaemonOwnershipFailure extends Schema.TaggedError<LocalDaemonO
 export interface LocalDevelopmentOptions {
   readonly dataRoot: string
   readonly allowedOrigins?: ReadonlySet<string>
-  readonly browserOrigin?: string
+  readonly attachment: DevHostRequest
   readonly application?: LocalProjectApplicationBindingsOptions
 }
 
 export interface LocalDevelopmentService {
   readonly descriptor: LocalDaemonDescriptor
   readonly installationId: InstallationId
-  readonly browserBootstrapUrl: Option.Option<Redacted.Redacted<string>>
+  readonly attachment: BrowserAttachment
 }
 
 const AddressInUseFailure = Schema.Struct({
@@ -281,25 +286,40 @@ export class LocalDevelopment extends Context.Service<
         ))
       )
       const invocation = AuthorityModel.personInvocation({ principal: installation.principal })
-      const browserOrigin = yield* options.browserOrigin === undefined
-        ? Effect.succeed(Option.none())
-        : Effect.try({
-          try: () => Option.some(Schema.decodeUnknownSync(BrowserOrigin)(options.browserOrigin)),
-          catch: (cause) => fail("validate browser origin", "browserOrigin", String(cause))
+      const daemonOrigin = Schema.decodeUnknownSync(LocalDaemonDescriptor.fields.baseUrl)(
+        `http://127.0.0.1:${installation.port}`
+      )
+      const attachment = yield* Match.value(options.attachment).pipe(Match.tagsExhaustive({
+        None: () => Effect.succeed(BrowserAttachment.None()),
+        Integrated: ({ hostOrigin }) => Effect.gen(function*() {
+          const origin = yield* Effect.try({
+            try: () => Schema.decodeUnknownSync(BrowserOrigin)(hostOrigin),
+            catch: (cause) => fail("validate browser origin", "hostOrigin", String(cause))
+          })
+          const plane = yield* mintIntegratedPlane({
+            hostOrigin: origin,
+            daemonOrigin,
+            instance,
+            invocation
+          })
+          return BrowserAttachment.Integrated({ plane })
+        }),
+        Standalone: ({ browserOrigin }) => Effect.gen(function*() {
+          const origin = yield* Effect.try({
+            try: () => Schema.decodeUnknownSync(BrowserOrigin)(browserOrigin),
+            catch: (cause) => fail("validate browser origin", "browserOrigin", String(cause))
+          })
+          const session = yield* Layer.buildWithScope(BrowserSession.layer({
+            daemonOrigin: Schema.decodeUnknownSync(BrowserOrigin)(daemonOrigin),
+            instance,
+            browserOrigin: origin,
+            invocation
+          }), daemonScope).pipe(
+            Effect.map((context) => Context.get(context, BrowserSession))
+          )
+          return BrowserAttachment.Standalone({ session })
         })
-      const browser = yield* Option.match(browserOrigin, {
-        onNone: () => Effect.succeed(Option.none()),
-        onSome: (origin) => Layer.buildWithScope(BrowserSession.layer({
-          daemonOrigin: Schema.decodeUnknownSync(BrowserOrigin)(
-            `http://127.0.0.1:${installation.port}`
-          ),
-          instance,
-          browserOrigin: origin,
-          invocation
-        }), daemonScope).pipe(
-          Effect.map((context) => Option.some(Context.get(context, BrowserSession)))
-        )
-      })
+      }))
       const daemonOptions = {
         databasePath,
         token: localApiToken(installation.bearerSecret),
@@ -310,10 +330,9 @@ export class LocalDevelopment extends Context.Service<
         installationId: installation.installationId,
         dataRoot: options.dataRoot
       }
-      const daemonLayer = Option.match(browser, {
-        onNone: () => LocalDaemon.layer(daemonOptions),
-        onSome: (session) => localDaemonWithBrowser(daemonOptions, session)
-      })
+      const daemonLayer = BrowserAttachment.$is("None")(attachment)
+        ? LocalDaemon.layer(daemonOptions)
+        : localDaemonWithBrowser(daemonOptions, attachment)
       const representationRuntime = RepresentationRuntimeLive.pipe(
         Layer.provide(LocalArtifactStore.layer({ directory: options.dataRoot })),
         Layer.provide(Layer.succeed(ApplicationBindings, applicationBindings)),
@@ -377,7 +396,7 @@ export class LocalDevelopment extends Context.Service<
       return LocalDevelopment.of({
         descriptor,
         installationId: installation.installationId,
-        browserBootstrapUrl: Option.map(browser, (session) => session.bootstrapUrl)
+        attachment
       })
     })
   )

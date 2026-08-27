@@ -28,6 +28,7 @@ import { describe, expect, it } from "vitest"
 
 import {
   bindAccessPerson,
+  DevHostRequest,
   importIdForCanvas,
   LocalDevelopment,
   LocalShares,
@@ -53,7 +54,10 @@ const temporaryRoot = Effect.acquireRelease(
 
 const mintInstallation = (dataRoot: string) => Effect.scoped(Effect.gen(function*() {
   yield* Layer.buildWithScope(
-    LocalDevelopment.layer({ dataRoot }).pipe(Layer.provide(NodeServices.layer)),
+    LocalDevelopment.layer({
+      dataRoot,
+      attachment: DevHostRequest.None()
+    }).pipe(Layer.provide(NodeServices.layer)),
     yield* Effect.scope
   )
 }))

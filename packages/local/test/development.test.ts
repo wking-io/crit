@@ -18,11 +18,11 @@ import { AuthorityModel } from "@crit/authority"
 import { LocalCanvasClient } from "@crit/client"
 import { Id } from "@crit/domain"
 import { localApiToken, type LocalApiToken } from "@crit/replica/http"
-import { Context, Effect, Exit, Layer, Option, Predicate, Result, Scope } from "effect"
+import { Context, Effect, Exit, Layer, Predicate, Redacted, Result, Scope } from "effect"
 import { FetchHttpClient } from "effect/unstable/http"
 import { describe, expect, it } from "vitest"
 
-import { inspectLocalDaemon, LocalDevelopment } from "../src/index.js"
+import { DevHostRequest, inspectLocalDaemon, LocalDevelopment } from "../src/index.js"
 import { LocalInstallation, type LocalDevelopmentOptions } from "../src/development.js"
 import { decodeStored } from "../src/stored-json.js"
 
@@ -36,7 +36,11 @@ const buildWith = (
   scope: Scope.Scope,
   extras: Omit<LocalDevelopmentOptions, "dataRoot"> = {}
 ) => Layer.buildWithScope(
-  LocalDevelopment.layer({ dataRoot, ...extras }).pipe(Layer.provide(NodeServices.layer)),
+  LocalDevelopment.layer({
+    dataRoot,
+    attachment: DevHostRequest.None(),
+    ...extras
+  }).pipe(Layer.provide(NodeServices.layer)),
   scope
 )
 
@@ -182,7 +186,7 @@ describe("LocalDevelopment", () => {
       yield* Effect.scoped(Effect.gen(function*() {
         const context = yield* build(dataRoot, yield* Effect.scope)
         const development = Context.get(context, LocalDevelopment)
-        expect(Option.isNone(development.browserBootstrapUrl)).toBe(true)
+        expect(development.attachment._tag).toBe("None")
         installationId = development.installationId
         const descriptor = readFileSync(join(dataRoot, "daemon.json"), "utf8")
         expect(descriptor).not.toContain("bearerSecret")
@@ -284,7 +288,9 @@ describe("LocalDevelopment", () => {
       const result = yield* Effect.result(Layer.buildWithScope(
         LocalDevelopment.layer({
           dataRoot: join(directory, ".crit", "v1"),
-          browserOrigin: "http://localhost:5173"
+          attachment: DevHostRequest.Standalone({
+            browserOrigin: "http://localhost:5173"
+          })
         }).pipe(Layer.provide(NodeServices.layer)),
         yield* Effect.scope
       ))
@@ -371,5 +377,40 @@ describe("LocalDevelopment", () => {
       const marked = readFileSync(installationPath, "utf8")
       yield* build(dataRoot, yield* Effect.scope)
       expect(readFileSync(installationPath, "utf8")).toBe(marked)
+    }))))
+
+  it("serves the browser API for an integrated plane without bootstrap HTML", () =>
+    Effect.runPromise(Effect.scoped(Effect.gen(function*() {
+      const directory = yield* temporaryRoot
+      const dataRoot = join(directory, ".crit", "v1")
+      const development = Context.get(yield* buildWith(dataRoot, yield* Effect.scope, {
+        attachment: DevHostRequest.Integrated({
+          hostOrigin: "http://127.0.0.1:5173"
+        })
+      }), LocalDevelopment)
+      expect(development.attachment._tag).toBe("Integrated")
+      if (development.attachment._tag !== "Integrated") return
+      const { plane } = development.attachment
+      const canvasUrl = `${development.descriptor.baseUrl}/browser/${plane.instance}/api/v1/canvas`
+      const listed = yield* Effect.promise(() => fetch(canvasUrl, {
+        headers: {
+          origin: plane.hostOrigin,
+          "x-crit-api-version": "1",
+          "x-crit-host-token": Redacted.value(plane.hostToken)
+        }
+      }))
+      expect(listed.status).toBe(200)
+      expect(Array.isArray(yield* Effect.promise(() => listed.json()))).toBe(true)
+      const unauthenticated = yield* Effect.promise(() => fetch(canvasUrl, {
+        headers: {
+          origin: plane.hostOrigin,
+          "x-crit-api-version": "1"
+        }
+      }))
+      expect(unauthenticated.status).toBe(401)
+      const bootstrap = yield* Effect.promise(() =>
+        fetch(`${development.descriptor.baseUrl}/browser/${plane.instance}/`)
+      )
+      expect(bootstrap.status).toBe(404)
     }))))
 })

@@ -19,7 +19,7 @@ import * as Socket from "effect/unstable/socket/Socket"
 import { describe, expect, it } from "vitest"
 import { WebSocket } from "ws"
 
-import { LocalDevelopment } from "../src/index.js"
+import { DevHostRequest, LocalDevelopment } from "../src/index.js"
 import { LocalInstallation } from "../src/development.js"
 import { decodeStored } from "../src/stored-json.js"
 
@@ -32,17 +32,17 @@ const temporaryRoot = Effect.acquireRelease(
 )
 
 const start = (dataRoot: string, scope: Scope.Scope) => Layer.buildWithScope(
-  LocalDevelopment.layer({ dataRoot, browserOrigin }).pipe(Layer.provide(NodeServices.layer)),
+  LocalDevelopment.layer({
+    dataRoot,
+    attachment: DevHostRequest.Standalone({ browserOrigin })
+  }).pipe(Layer.provide(NodeServices.layer)),
   scope
 ).pipe(Effect.map((context) => Context.get(context, LocalDevelopment)))
 
-const bootstrapUrlOf = (development: Context.Tag.Service<LocalDevelopment>) => Option.match(
-  development.browserBootstrapUrl,
-  {
-    onNone: () => "",
-    onSome: Redacted.value
-  }
-)
+const bootstrapUrlOf = (development: Context.Tag.Service<LocalDevelopment>) =>
+  development.attachment._tag === "Standalone"
+    ? Redacted.value(development.attachment.session.bootstrapUrl)
+    : ""
 
 const bootstrap = async (development: Context.Tag.Service<LocalDevelopment>) => {
   const printed = new URL(bootstrapUrlOf(development))
