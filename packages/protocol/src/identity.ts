@@ -1,6 +1,9 @@
 import { EmailAddress, PersonId } from "@crit/domain"
 import { Schema } from "effect"
 
+export const critPersonCookieName = "crit_person"
+export const critPersonIdHeader = "Crit-Person-Id"
+
 export const AccessAuthenticatedPersonWire = Schema.Struct({
   kind: Schema.Literal("access-authenticated-person"),
   schemaVersion: Schema.Literal(1),

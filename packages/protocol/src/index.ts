@@ -25,6 +25,8 @@ export {
   AccessAuthenticatedPersonWire,
   AnonymousPersonWire,
   InstallationPersonWire,
+  critPersonCookieName,
+  critPersonIdHeader,
   decodeAccessAuthenticatedPersonWire,
   decodeAnonymousPersonWire,
   decodeInstallationPersonWire,

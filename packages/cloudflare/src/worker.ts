@@ -24,7 +24,8 @@ import { Effect, Exit, Option, Schema } from "effect"
 import {
   authSubjectForCaller,
   CallerIdentity,
-  resolveCallerIdentity
+  resolveCallerIdentity,
+  respondWithCallerCookie
 } from "./caller.js"
 import { handleArtifactRequest } from "./artifact-http.js"
 import {
@@ -144,18 +145,20 @@ const shareMatchesCaller = (
     ? share.person.email._tag === "access"
       && share.person.email.address === caller.address
     : share.person.email._tag === "unspecified"
+      && share.person.personId === caller.personId
 
 const shareCanvas = async (
   request: Request,
   env: Cloudflare.Env
 ): Promise<Response> => {
-  const caller = resolveCallerIdentity(request)
+  const resolved = resolveCallerIdentity(request)
+  const caller = resolved.caller
 
   let input: unknown
   try {
     input = await request.json()
   } catch {
-    return emptyResponse(400)
+    return respondWithCallerCookie(emptyResponse(400), request, resolved)
   }
 
   let share: ReturnType<typeof decodeShareCanvasWire>
@@ -170,12 +173,14 @@ const shareCanvas = async (
       const mismatched = caller._tag === "access"
         ? probe.value.person.email._tag !== "access"
         : probe.value.person.email._tag === "access"
-      if (mismatched) return emptyResponse(401)
+      if (mismatched) {
+        return respondWithCallerCookie(emptyResponse(401), request, resolved)
+      }
     }
-    return emptyResponse(400)
+    return respondWithCallerCookie(emptyResponse(400), request, resolved)
   }
   if (!shareMatchesCaller(caller, share)) {
-    return emptyResponse(401)
+    return respondWithCallerCookie(emptyResponse(401), request, resolved)
   }
 
   const requested = ShareReceiptRequest.make({
@@ -188,7 +193,11 @@ const shareCanvas = async (
   })
   const existing = await lookupShareReceipt(env, share.shareId)
   if (existing !== undefined) {
-    return comparedShareResponse(compareShareReceipt(existing, requested))
+    return respondWithCallerCookie(
+      comparedShareResponse(compareShareReceipt(existing, requested)),
+      request,
+      resolved
+    )
   }
 
   const person = PersonSnapshot.make({
@@ -200,10 +209,14 @@ const shareCanvas = async (
     subject: authSubjectForCaller(caller),
     person
   })
-  return openOrCreateRemoteCanvas(
-    env,
-    requested,
-    AuthorityModel.personInvocation({ principal })
+  return respondWithCallerCookie(
+    await openOrCreateRemoteCanvas(
+      env,
+      requested,
+      AuthorityModel.personInvocation({ principal })
+    ),
+    request,
+    resolved
   )
 }
 
@@ -251,20 +264,21 @@ const readCanvasDirectory = async (
   env: Cloudflare.Env
 ): Promise<Response> => {
   if (request.method !== "GET") return emptyResponse(405)
-  resolveCallerIdentity(request)
-  return new Response(JSON.stringify(encodeCanvasDirectoryWire({
+  const resolved = resolveCallerIdentity(request)
+  return respondWithCallerCookie(new Response(JSON.stringify(encodeCanvasDirectoryWire({
     kind: "canvas-directory",
     schemaVersion: 1,
     canvases: await listCanvasDirectory(env)
   })), {
     status: 200,
     headers: { "content-type": "application/json" }
-  })
+  }), request, resolved)
 }
 
 const readIdentity = (request: Request): Response => {
   if (request.method !== "GET") return emptyResponse(405)
-  const caller = resolveCallerIdentity(request)
+  const resolved = resolveCallerIdentity(request)
+  const caller = resolved.caller
   const body = caller._tag === "access"
     ? encodeAccessAuthenticatedPersonWire({
       kind: "access-authenticated-person",
@@ -276,9 +290,9 @@ const readIdentity = (request: Request): Response => {
       schemaVersion: 1,
       personId: caller.personId
     })
-  return new Response(JSON.stringify(body), {
+  return respondWithCallerCookie(new Response(JSON.stringify(body), {
     headers: { "content-type": "application/json" }
-  })
+  }), request, resolved)
 }
 
 const cancelTestClock = async (requestId: string): Promise<Response> => {

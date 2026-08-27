@@ -125,19 +125,41 @@ describe("Worker Canvas share route", () => {
   })
 
   it("accepts an anonymous share without Access", async() => {
+    const personId = Id.person("person_share_anonymous")
     const input = JSON.parse(body("canvas_worker_share_anonymous"))
+    input.person.personId = personId
     input.person.email = { _tag: "unspecified" }
     const response = await SELF.fetch("https://crit.example/canvas", {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: {
+        "content-type": "application/json",
+        "Crit-Person-Id": personId
+      },
       body: JSON.stringify(input)
     })
     const receipt: unknown = await response.json()
 
     expect(response.status).toBe(200)
     expect(decodeCanvasSharedWire(receipt)).toMatchObject({
-      canvasId: "canvas_worker_share_anonymous"
+      canvasId: "canvas_worker_share_anonymous",
+      personId
     })
+  })
+
+  it("rejects an anonymous share when the Person id does not match", async() => {
+    const input = JSON.parse(body("canvas_worker_share_anonymous_mismatch"))
+    input.person.email = { _tag: "unspecified" }
+    const response = await SELF.fetch("https://crit.example/canvas", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "Crit-Person-Id": Id.person("person_other_visitor")
+      },
+      body: JSON.stringify(input)
+    })
+
+    expect(response.status).toBe(401)
+    expect(await response.text()).toBe("")
   })
 
   it("rejects an access share body from an anonymous caller", async() => {

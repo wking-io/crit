@@ -16,9 +16,9 @@ Crit supports two installation modes:
 | Mode | When | Who people are |
 |---|---|---|
 | Access-backed | Cloudflare Access protects the Crit URL | Named company people from Access |
-| Anonymous | No Access on the Crit URL | One shared anonymous person |
+| Anonymous | No Access on the Crit URL | One anonymous person per visitor |
 
-When Access is not set up, Crit does not reject human requests. `/identity` returns an anonymous person. Share, review, and sync still work, but attribution is anonymous.
+When Access is not set up, Crit does not reject human requests. `/identity` returns a unique anonymous person id for each visitor. Browsers keep that id in a cookie; the CLI sends `Crit-Person-Id`. Share, review, and sync still work, but attribution is anonymous until Access is added.
 
 When Access is set up later, requests that arrive with a valid Access email use that person instead.
 

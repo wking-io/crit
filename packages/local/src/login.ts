@@ -1,11 +1,14 @@
 import {
   AccessPersonEmail,
+  AuthSubject,
   EmailAddress,
   PersonId,
   PersonPrincipal,
-  PersonSnapshot
+  PersonSnapshot,
+  UnspecifiedPersonEmail
 } from "@crit/domain"
 import {
+  critPersonIdHeader,
   decodeInstallationPersonWire
 } from "@crit/protocol"
 import { Effect, FileSystem, Path, Schema } from "effect"
@@ -74,6 +77,11 @@ export class AccessPersonRequestFailed extends Schema.TaggedError<AccessPersonRe
   "AccessPersonRequestFailed",
   {}
 ) {}
+
+export interface BindAnonymousPersonOptions {
+  readonly dataRoot: string
+  readonly personId: PersonId
+}
 
 export interface BindAccessPersonOptions {
   readonly dataRoot: string
@@ -216,6 +224,84 @@ export const bindAccessPerson = (options: BindAccessPersonOptions) => Effect.gen
   return bound(rewritten.principal.person.personId, options.email)
 })
 
+export const bindAnonymousPerson = (
+  options: BindAnonymousPersonOptions
+) => Effect.gen(function*() {
+  const fs = yield* FileSystem.FileSystem
+  const path = yield* Path.Path
+  const installationPath = path.join(options.dataRoot, "installation.json")
+  const stateUnreadable = (reason: string) => new LocalDaemonStateUnreadable({
+    state: "installation",
+    path: installationPath,
+    reason
+  })
+
+  const exists = yield* fs.exists(installationPath).pipe(
+    Effect.mapError(() => stateUnreadable("Unable to inspect installation state"))
+  )
+  if (!exists) {
+    return yield* new LocalDaemonStateMissing({
+      state: "installation",
+      path: installationPath
+    })
+  }
+
+  const contents = yield* fs.readFileString(installationPath).pipe(
+    Effect.mapError(() => stateUnreadable("Unable to read installation state"))
+  )
+  const installation = yield* Effect.try({
+    try: () => decodeStored(LocalInstallation, contents),
+    catch: () => new LocalDaemonStateMalformed({
+      state: "installation",
+      path: installationPath,
+      reason: "Stored JSON does not match the required schema"
+    })
+  })
+  const subject = Schema.decodeUnknownSync(AuthSubject)(
+    `anonymous|${options.personId}`
+  )
+  const person = PersonSnapshot.make({
+    ...installation.principal.person,
+    personId: options.personId,
+    email: UnspecifiedPersonEmail.make({})
+  })
+  if (
+    installation.principal.person.personId === options.personId &&
+    installation.principal.subject === subject &&
+    installation.principal.person.email._tag === "unspecified"
+  ) {
+    return AnonymousInstallationBound.make({ personId: options.personId })
+  }
+
+  const rewritten = LocalInstallation.make({
+    ...installation,
+    principal: PersonPrincipal.make({
+      subject,
+      person
+    })
+  })
+  const temporaryPath = path.join(
+    options.dataRoot,
+    `.installation-login-${installation.installationId}.tmp`
+  )
+  yield* Effect.scoped(Effect.gen(function*() {
+    const file = yield* fs.open(temporaryPath, { flag: "wx", mode: 0o600 })
+    yield* file.writeAll(new TextEncoder().encode(
+      encodeStored(LocalInstallation, rewritten)
+    ))
+    yield* file.sync
+    yield* fs.rename(temporaryPath, installationPath)
+  })).pipe(
+    Effect.ensuring(fs.remove(temporaryPath, { force: true }).pipe(Effect.ignore)),
+    Effect.mapError(() => stateUnreadable("Unable to update installation state"))
+  )
+  yield* fs.chmod(installationPath, 0o600).pipe(
+    Effect.mapError(() => stateUnreadable("Unable to secure installation state"))
+  )
+
+  return AnonymousInstallationBound.make({ personId: options.personId })
+})
+
 const installationEndpoint = (
   installationUrl: string
 ): Effect.Effect<{
@@ -238,7 +324,10 @@ const installationEndpoint = (
 
 const readInstallationPerson = (
   dataRoot: string
-): Effect.Effect<PersonId, LocalDaemonStateMissing | LocalDaemonStateUnreadable | LocalDaemonStateMalformed> =>
+): Effect.Effect<
+  { readonly personId: PersonId, readonly email: PersonSnapshot["email"] },
+  LocalDaemonStateMissing | LocalDaemonStateUnreadable | LocalDaemonStateMalformed
+> =>
   Effect.gen(function*() {
     const fs = yield* FileSystem.FileSystem
     const path = yield* Path.Path
@@ -268,15 +357,27 @@ const readInstallationPerson = (
         reason: "Stored JSON does not match the required schema"
       })
     })
-    return installation.principal.person.personId
+    return {
+      personId: installation.principal.person.personId,
+      email: installation.principal.person.email
+    }
   })
 
 export const loginToInstallation = (
   options: LoginToInstallationOptions
 ) => Effect.gen(function*() {
   const endpoint = yield* installationEndpoint(options.installationUrl)
+  const localPerson = yield* readInstallationPerson(options.dataRoot)
   const http = yield* HttpClient.HttpClient
-  const response = yield* http.execute(HttpClientRequest.get(endpoint.identityUrl)).pipe(
+  let request = HttpClientRequest.get(endpoint.identityUrl)
+  if (localPerson.email._tag === "unspecified") {
+    request = HttpClientRequest.setHeader(
+      request,
+      critPersonIdHeader,
+      localPerson.personId
+    )
+  }
+  const response = yield* http.execute(request).pipe(
     Effect.mapError(() => new AccessPersonRequestFailed({}))
   )
   if (response.status === 401) {
@@ -301,6 +402,8 @@ export const loginToInstallation = (
       })
     })
   }
-  const personId = yield* readInstallationPerson(options.dataRoot)
-  return AnonymousInstallationBound.make({ personId })
+  return yield* bindAnonymousPerson({
+    dataRoot: options.dataRoot,
+    personId: wire.personId
+  })
 }).pipe(Effect.provide(FetchHttpClient.layer))

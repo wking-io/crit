@@ -7,7 +7,7 @@ import {
 } from "@crit/protocol"
 import { Effect, Schema } from "effect"
 
-import { resolveCallerIdentity } from "./caller.js"
+import { resolveCallerIdentity, respondWithCallerCookie } from "./caller.js"
 import { R2ArtifactStore } from "./r2-artifact-store.js"
 
 const emptyResponse = (status: number) => new Response(null, { status })
@@ -26,13 +26,15 @@ export const handleArtifactRequest = async (
   env: Cloudflare.Env,
   artifactId: ArtifactId
 ): Promise<Response> => {
-  resolveCallerIdentity(request)
+  const resolved = resolveCallerIdentity(request)
+  const respond = (response: Response) =>
+    respondWithCallerCookie(response, request, resolved)
   const store = R2ArtifactStore.make(env.ARTIFACTS)
   if (request.method === "PUT") {
     const bytes = new Uint8Array(await request.arrayBuffer())
     const outcome = await Effect.runPromise(Effect.result(store.put({ artifactId, bytes })))
     if (outcome._tag === "Success") {
-      return new Response(JSON.stringify(encodeArtifactStoredWire({
+      return respond(new Response(JSON.stringify(encodeArtifactStoredWire({
         kind: "artifact-stored",
         schemaVersion: 1,
         artifactId: outcome.success.artifactId,
@@ -40,40 +42,40 @@ export const handleArtifactRequest = async (
       })), {
         status: 200,
         headers: { "content-type": "application/json" }
-      })
+      }))
     }
     if (outcome.failure._tag === "ArtifactConflict") {
-      return encodedJson(409, ArtifactDigestConflict, ArtifactDigestConflict.make({
+      return respond(encodedJson(409, ArtifactDigestConflict, ArtifactDigestConflict.make({
         artifactId: outcome.failure.artifactId,
         storedDigest: outcome.failure.storedDigest,
         suppliedDigest: outcome.failure.suppliedDigest
-      }))
+      })))
     }
-    return emptyResponse(500)
+    return respond(emptyResponse(500))
   }
   if (request.method === "GET") {
     const digest = parseArtifactDigestSearch(new URL(request.url).search)
-    if (digest === undefined) return emptyResponse(400)
+    if (digest === undefined) return respond(emptyResponse(400))
     const artifact = ArtifactRepresentation.make({ artifactId, digest })
     const outcome = await Effect.runPromise(Effect.result(store.read(artifact)))
     if (outcome._tag === "Success") {
-      return new Response(outcome.success, {
+      return respond(new Response(outcome.success, {
         status: 200,
         headers: {
           "content-type": "application/octet-stream",
           "cache-control": "private, max-age=31536000, immutable"
         }
-      })
+      }))
     }
-    if (outcome.failure._tag === "ArtifactNotFound") return emptyResponse(404)
+    if (outcome.failure._tag === "ArtifactNotFound") return respond(emptyResponse(404))
     if (outcome.failure._tag === "ArtifactCorrupt") {
-      return encodedJson(409, ArtifactContentCorrupt, ArtifactContentCorrupt.make({
+      return respond(encodedJson(409, ArtifactContentCorrupt, ArtifactContentCorrupt.make({
         artifactId: outcome.failure.artifact.artifactId,
         expectedDigest: outcome.failure.artifact.digest,
         actualDigest: outcome.failure.actualDigest
-      }))
+      })))
     }
-    return emptyResponse(500)
+    return respond(emptyResponse(500))
   }
-  return emptyResponse(405)
+  return respond(emptyResponse(405))
 }

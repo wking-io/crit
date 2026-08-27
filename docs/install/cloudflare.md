@@ -6,7 +6,7 @@ Authors keep working locally with `crit dev`. After they share a Canvas, teammat
 
 This guide covers the Crit installation only. If you need to wire up live app previews inside Frames, use the [`install-crit-frame-bridge`](../../skills/install-crit-frame-bridge/SKILL.md) skill separately.
 
-Agents deploying Crit should use the [`install-crit-cloudflare`](../../skills/install-crit-cloudflare/SKILL.md) skill. Cloudflare Access is optional. Without Access, Crit treats everyone as one anonymous person.
+Agents deploying Crit should use the [`install-crit-cloudflare`](../../skills/install-crit-cloudflare/SKILL.md) skill. Cloudflare Access is optional. Without Access, each visitor gets their own anonymous person.
 
 ## What you are setting up
 
@@ -152,7 +152,7 @@ Add Cloudflare Access when the team needs named people on shared work.
 
 Create an Access application for your Crit hostname. Add every author and reviewer who needs to share or review work. Crit uses the signed-in Access email for those requests.
 
-Skip Access for a try-out install on `workers.dev`. Crit still works. Everyone appears as one anonymous person. You can add Access later without redeploying the Worker.
+Skip Access for a try-out install on `workers.dev`. Crit still works. Each visitor gets a unique anonymous person id. You can add Access later without redeploying the Worker.
 
 Preview registration from CI still uses the `CRIT_DEPLOY_TOKEN` bearer token on `POST /deployments`, not a person's login.
 
@@ -162,7 +162,7 @@ Authors connect with:
 npx crit login https://crit.acme.internal
 ```
 
-With Access, that command binds the local Person to the signed-in company email. Without Access, it records the Crit URL and keeps the local Person anonymous.
+With Access, that command binds the local Person to the signed-in company email. Without Access, it records the Crit URL and binds the local Person to the anonymous person id returned by the installation.
 
 ## 7. Check that it works
 
@@ -185,7 +185,7 @@ Without Access:
 curl -sS https://crit.acme.internal/identity
 ```
 
-You should get `200` and an anonymous person id.
+You should get `200` and a unique anonymous person id. Repeat the request with the `crit_person` cookie or `Crit-Person-Id` header to get the same id back.
 
 ### Review website
 

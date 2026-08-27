@@ -38,7 +38,7 @@ Use `skills/crit-register-deployment/SKILL.md` when GitHub Actions should regist
 
 ## Cloudflare installation
 
-Use `skills/install-crit-cloudflare/SKILL.md` when the user wants to deploy Crit in a Cloudflare account. Access is optional. Without Access, Crit uses one anonymous person for hosted work.
+Use `skills/install-crit-cloudflare/SKILL.md` when the user wants to deploy Crit in a Cloudflare account. Access is optional. Without Access, each visitor gets their own anonymous person for hosted work.
 
 ## Workspaces
 

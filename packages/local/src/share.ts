@@ -11,6 +11,7 @@ import {
 } from "@crit/domain"
 import {
   decodeCanvasSharedWire,
+  critPersonIdHeader,
   encodeShareCanvasWire,
   remoteCanvasCollectionPath,
   ShareDigestMismatch as ShareDigestMismatchWire
@@ -256,7 +257,7 @@ export const shareCanvas = (
   const shareId = shareIdForCanvas(options.projection.canvasId)
   const importId = importIdForCanvas(options.projection.canvasId)
   const digest = projectionDigest(options.projection)
-  const request = encodeShareCanvasWire({
+  const payload = encodeShareCanvasWire({
     kind: "share-canvas",
     schemaVersion: 2,
     canvasId: options.projection.canvasId,
@@ -270,10 +271,18 @@ export const shareCanvas = (
     }
   })
   const http = yield* HttpClient.HttpClient
-  const response = yield* http.execute(HttpClientRequest.bodyJsonUnsafe(
+  let request = HttpClientRequest.bodyJsonUnsafe(
     HttpClientRequest.post(`${installationOrigin}${remoteCanvasCollectionPath}`),
-    request
-  )).pipe(
+    payload
+  )
+  if (email._tag === "unspecified") {
+    request = HttpClientRequest.setHeader(
+      request,
+      critPersonIdHeader,
+      installation.principal.person.personId
+    )
+  }
+  const response = yield* http.execute(request).pipe(
     Effect.mapError(() => new ShareRequestFailed({}))
   )
   if (response.status === 401) {

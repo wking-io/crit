@@ -24,7 +24,7 @@ Local-only work records a Person with unspecified email. Git name and email do n
 3. Keep `personId` as the durable id.
 4. Share and later sync use that bound Person.
 
-When Access is not set up, `crit login` still records the Crit URL. The local Person stays anonymous and share uses that anonymous identity.
+When Access is not set up, `crit login` still records the Crit URL and binds the local Person to the anonymous person id returned by the installation. Share sends that id in `Crit-Person-Id`. Hosted review keeps the same id in a browser cookie.
 
 Share does not invent a second join. Hosted reviewers sign in with Access on their own when Access exists.
 

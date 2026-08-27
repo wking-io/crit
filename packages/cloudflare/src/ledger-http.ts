@@ -16,7 +16,11 @@ import {
 } from "@crit/protocol"
 import { Result, Schema } from "effect"
 
-import { callerMatchesInvocation, resolveCallerIdentity } from "./caller.js"
+import {
+  callerMatchesInvocation,
+  resolveCallerIdentity,
+  respondWithCallerCookie
+} from "./caller.js"
 
 const emptyResponse = (status: number) => new Response(null, { status })
 
@@ -96,31 +100,44 @@ const pullChanges = async (
 const pushChange = async (
   request: Request,
   env: Cloudflare.Env,
-  canvasId: CanvasId
+  canvasId: CanvasId,
+  resolved: ReturnType<typeof resolveCallerIdentity>
 ): Promise<Response> => {
-  const caller = resolveCallerIdentity(request)
+  const caller = resolved.caller
   const input = await readJsonBody(request)
-  if (input === undefined) return emptyResponse(400)
+  if (input === undefined) {
+    return respondWithCallerCookie(emptyResponse(400), request, resolved)
+  }
   const decoded = decodeSubmitCanvasChangeWire(input)
   if (Result.isFailure(decoded)) {
-    return decoded.failure._tag === "envelopeInvalid"
-      ? emptyResponse(400)
-      : jsonResponse(400, JSON.stringify(ChangeProtocol.failure.encode(decoded.failure)))
+    return respondWithCallerCookie(
+      decoded.failure._tag === "envelopeInvalid"
+        ? emptyResponse(400)
+        : jsonResponse(400, JSON.stringify(ChangeProtocol.failure.encode(decoded.failure))),
+      request,
+      resolved
+    )
   }
-  if (decoded.success.proposal.canvasId !== canvasId) return emptyResponse(400)
+  if (decoded.success.proposal.canvasId !== canvasId) {
+    return respondWithCallerCookie(emptyResponse(400), request, resolved)
+  }
   if (!callerMatchesInvocation(caller, decoded.success.invocation)) {
-    return emptyResponse(401)
+    return respondWithCallerCookie(emptyResponse(401), request, resolved)
   }
   const { canvasId: _canvasId, ...proposal } = decoded.success.proposal
   const stub = env.CANVASES.get(env.CANVASES.idFromName(canvasId))
   const submitted = await stub.submit(proposal, decoded.success.invocation)
   if (submitted._tag === "success") {
-    return jsonResponse(200, JSON.stringify(ChangeProtocol.receipt.encode(submitted.value)))
+    return respondWithCallerCookie(
+      jsonResponse(200, JSON.stringify(ChangeProtocol.receipt.encode(submitted.value))),
+      request,
+      resolved
+    )
   }
   if (submitted._tag === "failure") {
-    return encodeSubmitFailure(submitted.error)
+    return respondWithCallerCookie(encodeSubmitFailure(submitted.error), request, resolved)
   }
-  return emptyResponse(500)
+  return respondWithCallerCookie(emptyResponse(500), request, resolved)
 }
 
 export const handleLedgerRequest = async (
@@ -128,11 +145,22 @@ export const handleLedgerRequest = async (
   env: Cloudflare.Env,
   route: RemoteAuthorityRoute
 ): Promise<Response> => {
-  resolveCallerIdentity(request)
+  const resolved = resolveCallerIdentity(request)
   if (route._tag === "canvas") {
-    return request.method === "GET" ? openCanvas(env, route.canvasId) : emptyResponse(405)
+    const response = request.method === "GET"
+      ? await openCanvas(env, route.canvasId)
+      : emptyResponse(405)
+    return respondWithCallerCookie(response, request, resolved)
   }
-  if (request.method === "GET") return pullChanges(request, env, route.canvasId)
-  if (request.method === "POST") return pushChange(request, env, route.canvasId)
-  return emptyResponse(405)
+  if (request.method === "GET") {
+    return respondWithCallerCookie(
+      await pullChanges(request, env, route.canvasId),
+      request,
+      resolved
+    )
+  }
+  if (request.method === "POST") {
+    return pushChange(request, env, route.canvasId, resolved)
+  }
+  return respondWithCallerCookie(emptyResponse(405), request, resolved)
 }
