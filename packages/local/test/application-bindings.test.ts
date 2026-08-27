@@ -62,10 +62,9 @@ const initialize = () => Effect.gen(function*() {
 
 const announcements = LocalApplicationAnnouncements.layer
 
-const bindings = (value?: string) => LocalProjectApplicationBindings.layer({
-  root,
-  ...(value === undefined ? {} : { baseUrl: baseUrl(value) })
-}).pipe(
+const bindings = (value?: string) => LocalProjectApplicationBindings.layer(
+  value === undefined ? { root } : { root, baseUrl: baseUrl(value) }
+).pipe(
   Layer.provide(announcements),
   Layer.provide(NodeServices.layer)
 )
@@ -73,10 +72,9 @@ const bindings = (value?: string) => LocalProjectApplicationBindings.layer({
 const bindingsWithAnnouncements = (value?: string) => {
   const announcementsLayer = LocalApplicationAnnouncements.layer
   return Layer.mergeAll(
-    LocalProjectApplicationBindings.layer({
-      root,
-      ...(value === undefined ? {} : { baseUrl: baseUrl(value) })
-    }).pipe(Layer.provide(announcementsLayer)),
+    LocalProjectApplicationBindings.layer(
+      value === undefined ? { root } : { root, baseUrl: baseUrl(value) }
+    ).pipe(Layer.provide(announcementsLayer)),
     announcementsLayer
   ).pipe(Layer.provide(NodeServices.layer))
 }

@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs"
 import path from "node:path"
 
 import { decodeCritProjectManifestV2 } from "@crit/protocol"
+import { Option, Schema } from "effect"
 
 export const critApplicationIdentityPath = "/.well-known/crit.json"
 export const localApplicationAnnouncePath = "/api/v1/applications/announce"
@@ -18,25 +19,24 @@ export const readProjectApplicationId = (root: string): string | undefined => {
   }
 }
 
+const DaemonAnnounceTarget = Schema.Struct({
+  version: Schema.Literal(1),
+  instance: Schema.String.check(Schema.isPattern(/^[0-9a-f]{32}$/)),
+  baseUrl: Schema.String.check(Schema.isPattern(/^http:\/\/127\.0\.0\.1:[0-9]+$/))
+})
+
 const parseDaemonAnnounceTarget = (
   contents: string
 ): { readonly instance: string; readonly baseUrl: string } | undefined => {
-  const parsed: unknown = JSON.parse(contents)
-  if (
-    parsed !== null
-    && typeof parsed === "object"
-    && "version" in parsed
-    && parsed.version === 1
-    && "instance" in parsed
-    && typeof parsed.instance === "string"
-    && /^[0-9a-f]{32}$/.test(parsed.instance)
-    && "baseUrl" in parsed
-    && typeof parsed.baseUrl === "string"
-    && /^http:\/\/127\.0\.0\.1:[0-9]+$/.test(parsed.baseUrl)
-  ) {
+  try {
+    const parsed = Option.getOrUndefined(
+      Schema.decodeUnknownOption(DaemonAnnounceTarget)(JSON.parse(contents))
+    )
+    if (parsed === undefined) return undefined
     return { instance: parsed.instance, baseUrl: parsed.baseUrl }
+  } catch {
+    return undefined
   }
-  return undefined
 }
 
 export const readLocalDaemonAnnounceTarget = (

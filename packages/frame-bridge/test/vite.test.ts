@@ -10,6 +10,7 @@ import { createServer as createHttpServer } from "node:http"
 import { tmpdir } from "node:os"
 import path from "node:path"
 
+import { Option, Schema } from "effect"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import { build, createServer, preview } from "vite"
 
@@ -27,6 +28,8 @@ import {
   frameAncestorsPreviewVitePlugin,
   frameRouteBridgeVitePlugin
 } from "../src/vite.js"
+
+const TcpAddress = Schema.Struct({ port: Schema.Number })
 
 const sourceHtml = "<!doctype html><html><head></head><body>Fixture</body></html>"
 
@@ -222,15 +225,15 @@ describe("Frame Bridge Vite plugin", () => {
       daemon.listen(0, "127.0.0.1", resolve)
     })
     try {
-      const address = daemon.address()
-      if (address === null || typeof address === "string") {
+      const address = Schema.decodeUnknownOption(TcpAddress)(daemon.address())
+      if (Option.isNone(address)) {
         throw new Error("Expected a TCP daemon")
       }
       mkdirSync(path.join(root, ".crit", "v1"), { recursive: true })
       writeFileSync(path.join(root, ".crit", "v1", "daemon.json"), JSON.stringify({
         version: 1,
         instance: "0123456789abcdef0123456789abcdef",
-        baseUrl: `http://127.0.0.1:${address.port}`,
+        baseUrl: `http://127.0.0.1:${address.value.port}`,
         apiVersion: "1",
         installationId: "installation_announce"
       }))

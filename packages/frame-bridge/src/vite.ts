@@ -1,4 +1,5 @@
 import type { FrameBridgeOrigin } from "@crit/protocol"
+import { Option, Schema } from "effect"
 import type { Plugin, ViteDevServer } from "vite"
 
 import {
@@ -13,6 +14,11 @@ import {
   FRAME_ROUTE_BRIDGE_HTML_MARKER,
   critFrameRouteBridgeScript
 } from "./route.js"
+
+const ListeningAddress = Schema.Struct({
+  address: Schema.String,
+  port: Schema.Number
+})
 
 const identityRequestPath = (url: string | undefined): string => {
   if (url === undefined) return ""
@@ -34,14 +40,12 @@ const applicationOriginFromServer = (server: ViteDevServer): string | undefined 
   if (preferred !== undefined) {
     return applicationOriginFromHref(preferred)
   }
-  const address = server.httpServer?.address()
-  if (address === null || address === undefined || typeof address === "string") {
-    return undefined
-  }
-  const host = address.address === "::" || address.address === "0.0.0.0"
+  const address = Schema.decodeUnknownOption(ListeningAddress)(server.httpServer?.address())
+  if (Option.isNone(address)) return undefined
+  const host = address.value.address === "::" || address.value.address === "0.0.0.0"
     ? "127.0.0.1"
-    : address.address
-  return applicationOriginFromHref(`http://${host}:${address.port}/`)
+    : address.value.address
+  return applicationOriginFromHref(`http://${host}:${address.value.port}/`)
 }
 
 export const frameRouteBridgeVitePlugin = (input: {
