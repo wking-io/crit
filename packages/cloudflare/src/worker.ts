@@ -37,6 +37,7 @@ import { registerControlDeployment } from "./deployments.js"
 import { handleHostedApplicationResolve } from "./hosted-representation.js"
 import { handleLedgerRequest } from "./ledger-http.js"
 import { negotiateRequest, readJsonRequest } from "./protocol-http.js"
+import { handlePresenceRequest } from "./presence-http.js"
 import { isDocumentRequest, isHostDocumentPath, serveShell } from "./shell.js"
 import {
   compareShareReceipt,
@@ -363,7 +364,12 @@ const worker: ExportedHandler<Cloudflare.Env> = {
         : emptyResponse(405)
     }
     const ledger = parseRemoteAuthorityPath(url.pathname)
-    if (ledger !== undefined) return handleLedgerRequest(request, env, ledger)
+    if (ledger !== undefined) {
+      if (ledger._tag === "presence") {
+        return handlePresenceRequest(request, env, ledger.canvasId)
+      }
+      return handleLedgerRequest(request, env, ledger)
+    }
     const artifactId = parseArtifactPath(url.pathname)
     if (artifactId !== undefined) return handleArtifactRequest(request, env, artifactId)
     if (

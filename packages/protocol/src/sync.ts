@@ -62,6 +62,7 @@ export type SubmitCanvasChangeDecodeFailure =
 export type RemoteAuthorityRoute = Data.TaggedEnum<{
   readonly canvas: { readonly canvasId: CanvasId }
   readonly changes: { readonly canvasId: CanvasId }
+  readonly presence: { readonly canvasId: CanvasId }
 }>
 export const RemoteAuthorityRoute = Data.taggedEnum<RemoteAuthorityRoute>()
 
@@ -87,13 +88,13 @@ const canvasIdFromPath = (raw: string): CanvasId | undefined => {
 export const parseRemoteAuthorityPath = (
   pathname: string
 ): RemoteAuthorityRoute | undefined => {
-  const match = /^\/canvas\/([^/]+)(?:\/(changes))?$/.exec(pathname)
+  const match = /^\/canvas\/([^/]+)(?:\/(changes|presence))?$/.exec(pathname)
   if (match === null) return undefined
   const canvasId = canvasIdFromPath(match[1] ?? "")
   if (canvasId === undefined) return undefined
-  return match[2] === "changes"
-    ? RemoteAuthorityRoute.changes({ canvasId })
-    : RemoteAuthorityRoute.canvas({ canvasId })
+  if (match[2] === "changes") return RemoteAuthorityRoute.changes({ canvasId })
+  if (match[2] === "presence") return RemoteAuthorityRoute.presence({ canvasId })
+  return RemoteAuthorityRoute.canvas({ canvasId })
 }
 
 export const remoteCanvasPath = (canvasId: CanvasId): string =>
@@ -101,6 +102,9 @@ export const remoteCanvasPath = (canvasId: CanvasId): string =>
 
 export const remoteCanvasChangesPath = (canvasId: CanvasId): string =>
   `${remoteCanvasPath(canvasId)}/changes`
+
+export const remoteCanvasPresencePath = (canvasId: CanvasId): string =>
+  `${remoteCanvasPath(canvasId)}/presence`
 
 export const parseChangesAfterSearch = (
   search: string

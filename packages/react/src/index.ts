@@ -48,6 +48,7 @@ export { FRAME_SIZE_PRESETS } from "./frame-breakpoints.js"
 export type { FrameSizePreset } from "./frame-breakpoints.js"
 export { ReplicaBoard } from "./replica-board.js"
 export type { ReplicaBoardProps } from "./replica-board.js"
+export { useCanvasPresence } from "./canvas-presence.js"
 export {
   ReplicaConnection,
   ReplicaChangeRejected,

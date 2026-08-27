@@ -34,6 +34,8 @@ export {
   AgentAttribution,
   AgentPrincipal,
   AgentSnapshot,
+  accessPersonId,
+  accessPersonSnapshot,
   actorFromAttribution,
   actorFromPrincipal,
   EmailAddress,
@@ -57,7 +59,9 @@ export {
   ConnectedPerson,
   PresenceKey,
   PresenceRoster,
+  accessConnectedPerson,
   decodePresenceRoster,
+  occupancyRoster,
   presenceKey
 } from "./presence.js"
 

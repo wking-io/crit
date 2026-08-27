@@ -189,7 +189,11 @@ export const hostScreenAtom = Atom.family((fragment: string) =>
               ))
             return {
               canvasId,
-              ports: hostedReplicaSessionPorts({ authority, principal }),
+              ports: hostedReplicaSessionPorts({
+                authority,
+                principal,
+                attend: (id) => client.attend(id)
+              }),
               resolver: frames.resolver,
               snapshotter: frames.snapshotter,
               run

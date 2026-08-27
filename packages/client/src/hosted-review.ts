@@ -1,4 +1,4 @@
-import type { ApplicationRouteRepresentation } from "@crit/domain"
+import type { ApplicationRouteRepresentation, CanvasId, PresenceRoster } from "@crit/domain"
 import {
   decodeInstallationPersonWire,
   decodeCanvasDirectoryWire,
@@ -6,18 +6,21 @@ import {
   encodeHostedApplicationResolveRequest,
   hostedApplicationResolvePath,
   negotiateWire,
+  PresenceChangedSchema,
+  remoteCanvasPresencePath,
   type InstallationPersonWire,
   type ProtocolFailure
 } from "@crit/protocol"
 import { CanvasListing } from "@crit/replica/http"
 import { RenderPlan } from "@crit/representations"
-import { Context, Data, Effect, Layer, Option, Result, Schema } from "effect"
+import { Context, Data, Effect, Exit, Layer, Option, Queue, Result, Schema, Stream, type Scope, type Take } from "effect"
 import {
   FetchHttpClient,
   HttpClient,
   HttpClientRequest,
   type HttpClientResponse
 } from "effect/unstable/http"
+import * as Socket from "effect/unstable/socket/Socket"
 
 import { failProtocolResponse } from "./protocol-error.js"
 
@@ -41,6 +44,11 @@ export interface HostedReviewClientService {
   readonly resolveApplicationRoute: (
     representation: ApplicationRouteRepresentation
   ) => Effect.Effect<RenderPlan, HostedReviewFailure>
+  readonly attend: (canvasId: CanvasId) => Effect.Effect<
+    Stream.Stream<PresenceRoster, HostedReviewFailure>,
+    HostedReviewFailure,
+    Socket.WebSocketConstructor | Scope.Scope
+  >
 }
 
 const rootUrl = (baseUrl: string): string => baseUrl.replace(/\/$/, "")
@@ -128,6 +136,44 @@ const decodeHostedWire = <A>(
   }).pipe(Effect.mapError((error): HostedReviewFailure => error))
 }
 
+const presenceUrl = (baseUrl: string, canvasId: CanvasId): string => {
+  const httpUrl = `${rootUrl(baseUrl)}${remoteCanvasPresencePath(canvasId)}`
+  return httpUrl.startsWith("https://")
+    ? `wss://${httpUrl.slice("https://".length)}`
+    : `ws://${httpUrl.slice("http://".length)}`
+}
+
+const attend = (
+  baseUrl: string,
+  canvasId: CanvasId
+): Effect.Effect<
+  Stream.Stream<PresenceRoster, HostedReviewFailure>,
+  HostedReviewFailure,
+  Socket.WebSocketConstructor | Scope.Scope
+> => Effect.gen(function*() {
+  const socket = yield* Socket.makeWebSocket(presenceUrl(baseUrl, canvasId), {
+    closeCodeIsError: (code) => code !== 1000
+  }).pipe(Effect.mapError(() => unavailable("presence")))
+  const messages = yield* Queue.sliding<Take.Take<PresenceRoster, HostedReviewFailure>>(1)
+  const decode = Schema.decodeUnknownEffect(Schema.fromJsonString(PresenceChangedSchema))
+  const write = yield* socket.writer
+  yield* socket.runString<unknown, HostedReviewFailure>((message) =>
+    decode(message).pipe(
+      Effect.mapError(() => unavailable("presence")),
+      Effect.flatMap((frame) => Queue.offer(messages, [frame.roster]))
+    )
+  ).pipe(
+    Effect.mapError(() => unavailable("presence")),
+    Effect.matchEffect({
+      onFailure: (failure) => Queue.offer(messages, Exit.fail(failure)),
+      onSuccess: () => Queue.offer(messages, Exit.void)
+    }),
+    Effect.forkScoped
+  )
+  yield* write("attend").pipe(Effect.mapError(() => unavailable("presence")))
+  return Stream.fromQueue(messages).pipe(Stream.flattenTake)
+})
+
 export class HostedReviewClient extends Context.Service<
   HostedReviewClient,
   HostedReviewClientService
@@ -213,7 +259,8 @@ export class HostedReviewClient extends Context.Service<
       return HostedReviewClient.of({
         identity,
         directory,
-        resolveApplicationRoute
+        resolveApplicationRoute,
+        attend: (canvasId) => attend(options.baseUrl, canvasId)
       })
     })
   ).pipe(Layer.provide(FetchHttpClient.layer))

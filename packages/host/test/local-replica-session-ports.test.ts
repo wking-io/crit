@@ -153,6 +153,20 @@ describe("localReplicaSessionPorts.subscribe", () => {
   })
 })
 
+describe("localReplicaSessionPorts.attend", () => {
+  it("does not publish occupancy", () => {
+    const ports = localReplicaSessionPorts(unusedClient(() => Effect.die("unused")))
+    const rosters: Array<unknown> = []
+
+    const leave = ports.attend(canvasId, (roster) => {
+      rosters.push(roster)
+    })
+    leave()
+
+    expect(rosters).toEqual([])
+  })
+})
+
 describe("localReplicaSessionPorts.change", () => {
   it("returns the receipt view from a replicaChange payload", async() => {
     const calls: Array<Parameters<LocalCanvasClientService["change"]>[0]> = []

@@ -103,6 +103,7 @@ export {
   remoteCanvasChangesPath,
   remoteCanvasCollectionPath,
   remoteCanvasPath,
+  remoteCanvasPresencePath,
   remoteChangesPageLimit,
   RemoteAuthorityRoute,
   SubmitCanvasChangeWire

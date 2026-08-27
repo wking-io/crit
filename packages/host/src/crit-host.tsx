@@ -1,6 +1,7 @@
 import type { CanvasId } from "@crit/domain"
 import {
   ReplicaBoard,
+  useCanvasPresence,
   useReplicaSession,
   type FrameRepresentationResolver,
   type FrameSnapshotter,
@@ -19,6 +20,8 @@ export interface CritHostProps {
   readonly run: ReplicaSessionRun
 }
 
+const idleAttend: ReplicaSessionPorts["attend"] = () => () => undefined
+
 function CritHostSession({
   canvasId,
   ports,
@@ -30,6 +33,10 @@ function CritHostSession({
     canvasId,
     ports,
     run
+  })
+  const presence = useCanvasPresence({
+    attend: session._tag === "ready" ? ports.attend : idleAttend,
+    canvasId
   })
   return Match.value(session).pipe(Match.tagsExhaustive({
     loading: () => <p role="status">Connecting to Crit…</p>,
@@ -43,6 +50,7 @@ function CritHostSession({
         onSubmit={(commands) => {
           void submit(commands)
         }}
+        presence={presence}
         resolver={resolver}
         selection={selection}
         snapshotter={snapshotter}

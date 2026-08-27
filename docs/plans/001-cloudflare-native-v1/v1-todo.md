@@ -8,8 +8,6 @@ This file is the current inventory. Phase docs own the prove. [Decision record](
 
 ## Next
 
-- [ ] Presence of Access-authenticated people viewing a shared Canvas. Local review does not attend.
-
 ## Remaining
 
 ### Local review
@@ -31,7 +29,7 @@ Plan: [phase 6](phase-06-cloudflare-platform.md), [phase 7](phase-07-sync-and-sh
 - [x] Hosted review UI served from the Worker.
 - [x] Teammate signs in with Access, views Frames and shared previews, and sets review status. No Crit install. The hosted UI iframes the registered preview.
 - [x] Shared review preview is frameable by the Crit host. `frame-ancestors` names the Crit origin. Access on the preview, if any, has `allow_iframe`. Ordinary production does not name Crit. The Frame Bridge skill performs that setup.
-- [ ] Presence of Access-authenticated people viewing a shared Canvas. Local review does not attend.
+- [x] Presence of Access-authenticated people viewing a shared Canvas. Local review does not attend.
 - [x] Author's local replica receives the reviewer's accepted changes.
 
 ### Agents
@@ -97,6 +95,7 @@ Local Frames authoring on one machine.
 - The published npm pack omits alpha `src/`, compiled `dist/`, playground, and www. `npm run check:package` rejects those paths. The repo still keeps the alpha as a behavior reference.
 - Published SDK packages for domain, client, React, Frame Bridge, and testing. `npm run check:sdk-package` packs them and imports those entry points.
 - Protocol negotiation rejects mismatched schema versions with a 426 `protocol-failure`. The error names the requested and supported versions and tells the user to upgrade Crit. Local daemon API, remote JSON, share, login, register-deployment, and hosted review all surface that copy.
+- Presence of Access-authenticated people viewing a shared Canvas. Local review does not attend.
 
 ## Out of v1
 
