@@ -67,10 +67,19 @@ export interface RemoteCanvasAuthorityService {
   >
 }
 
-const absorbProtocolFailure = <A, E extends { readonly _tag: string }>(
+const absorbProtocolFailure = <A, E>(
   effect: Effect.Effect<A, E>
 ): Effect.Effect<A, Exclude<E, ProtocolFailure>> =>
-  effect.pipe(Effect.catchIf(isProtocolFailure, (failure) => Effect.die(failure)))
+  effect.pipe(
+    Effect.catchIf(
+      (error) =>
+        typeof error === "object"
+        && error !== null
+        && "_tag" in error
+        && isProtocolFailure(error as { readonly _tag: string }),
+      (failure) => Effect.die(failure)
+    )
+  ) as Effect.Effect<A, Exclude<E, ProtocolFailure>>
 
 const rootUrl = (baseUrl: string): string => baseUrl.replace(/\/$/, "")
 

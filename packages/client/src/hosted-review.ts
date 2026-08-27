@@ -73,11 +73,12 @@ const responseJson = (
   if (response.status === 401) return Effect.fail(new HostedAccessDenied())
   return response.text.pipe(
     Effect.mapError(() => unavailable(operation)),
-    Effect.flatMap((contents) => Effect.try({
-      try: () => Schema.decodeUnknownSync(Schema.Json)(JSON.parse(contents)),
-      catch: () => unavailable(operation)
-    })),
-    Effect.flatMap((body) => {
+    Effect.flatMap((contents) =>
+      Effect.try({
+        try: () => Schema.decodeUnknownSync(Schema.Json)(JSON.parse(contents)),
+        catch: () => unavailable(operation)
+      }).pipe(Effect.mapError((error): HostedReviewFailure => error))),
+    Effect.flatMap((body): Effect.Effect<Schema.Json, HostedReviewFailure> => {
       const protocol = failProtocolResponse(response, body)
       if (protocol !== undefined) return protocol
       if (response.status !== 200) return Effect.fail(unavailable(operation))
@@ -124,7 +125,7 @@ const decodeHostedWire = <A>(
   return Effect.try({
     try: () => decode(body),
     catch: () => unavailable(operation)
-  })
+  }).pipe(Effect.mapError((error): HostedReviewFailure => error))
 }
 
 export class HostedReviewClient extends Context.Service<
@@ -151,13 +152,13 @@ export class HostedReviewClient extends Context.Service<
           response,
           "identity"
         )),
-        Effect.flatMap((body) => {
+        Effect.flatMap((body): Effect.Effect<InstallationPersonWire, HostedReviewFailure> => {
           const failed = negotiateInstallationPerson(body)
           if (Option.isSome(failed)) return Effect.fail(failed.value)
           return Effect.try({
             try: () => decodeInstallationPersonWire(body),
             catch: () => unavailable("identity")
-          })
+          }).pipe(Effect.mapError((error): HostedReviewFailure => error))
         })
       )
       const directory = () => execute(

@@ -7,7 +7,11 @@ export {
   protocolFailureHttpStatus,
   readProtocolFailure
 } from "./negotiate.js"
-export { ProtocolFailure, ProtocolFailureSchema } from "./failure.js"
+export {
+  ProtocolFailure,
+  ProtocolFailureSchema,
+  type DecodeResult
+} from "./failure.js"
 export {
   AcceptedCanvasChangeSchema,
   ChangeValue,
@@ -109,7 +113,6 @@ export type {
   SubmitCanvasChangeDecodeFailure,
   SubmitInvocation
 } from "./sync.js"
-export type { DecodeResult, ProtocolFailure } from "./failure.js"
 export {
   FRAME_INPUT_BRIDGE_SCHEMA_VERSION,
   FRAME_INPUT_BRIDGE_SOURCE,
