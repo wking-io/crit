@@ -33,6 +33,11 @@ describe("Frame Bridge skill", () => {
     expect(frameBridgeSkillSource).toContain("renderFrameRouteBridgeTag")
     expect(frameBridgeSkillSource).toContain("@crit/frame-bridge/vite")
     expect(frameBridgeSkillSource).toContain("frameRouteBridgeVitePlugin")
+    expect(frameBridgeSkillSource).toContain("frameAncestorsPreviewVitePlugin")
+    expect(frameBridgeSkillSource).toContain("@crit/frame-bridge/headers")
+    expect(frameBridgeSkillSource).toContain("renderFrameAncestorsResponseHeaders")
+    expect(frameBridgeSkillSource).toContain("renderCloudflarePagesHeadersFile")
+    expect(frameBridgeSkillSource).toContain("frameAncestorsNamesOrigin")
     expect(frameBridgeSkillSource).toContain(
       "loadEnv(mode, process.cwd(), \"CRIT_\")"
     )
