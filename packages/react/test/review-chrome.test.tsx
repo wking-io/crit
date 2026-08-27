@@ -142,8 +142,29 @@ afterEach(async() => {
   vi.restoreAllMocks()
 })
 
+const queryUi = (selector: string) =>
+  container.querySelector(selector) ?? document.querySelector(selector)
+
+const openRenameDialog = async() => {
+  await act(async() => button("Canvas options").click())
+  const item = await vi.waitFor(() => {
+    const match = [...document.querySelectorAll("[role='menuitem']")]
+      .find((entry) => entry.textContent?.includes("Rename canvas"))
+    if (!(match instanceof HTMLElement)) {
+      throw new Error("Rename canvas menu item missing")
+    }
+    return match
+  })
+  await act(async() => item.click())
+  await vi.waitFor(() => {
+    if (!(queryUi("[aria-label='Canvas title']") instanceof HTMLInputElement)) {
+      throw new Error("Canvas title input missing")
+    }
+  })
+}
+
 describe("ReviewChrome", () => {
-  it("submits a captured artifact Frame from the Snapshot button and S", async() => {
+  it("submits a captured artifact Frame from S", async() => {
     const onSubmit = vi.fn()
     const snapshotter = frameSnapshotter()
     await act(async() => render(
@@ -155,19 +176,8 @@ describe("ReviewChrome", () => {
       />
     ))
 
-    await act(async() => button("Snapshot").click())
-    await act(async() => vi.waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1)))
-    expect(onSubmit).toHaveBeenLastCalledWith([{
-      _tag: "addFrame",
-      frameId: expect.stringMatching(/^frame_[0-9a-f]{32}$/),
-      title: "Checkout",
-      representation: capturedArtifact,
-      status: "in-progress",
-      geometry: { x: -320, y: 80, width: 320, height: 200 }
-    }])
-
     await act(async() => press("S"))
-    await act(async() => vi.waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(2)))
+    await act(async() => vi.waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1)))
     expect(onSubmit).toHaveBeenLastCalledWith([{
       _tag: "addFrame",
       frameId: expect.stringMatching(/^frame_[0-9a-f]{32}$/),
@@ -209,8 +219,7 @@ describe("ReviewChrome", () => {
       />
     ))
 
-    await act(async() => button("Snapshot").click())
-    expect(button("Snapshot").disabled).toBe(true)
+    await act(async() => press("S"))
     expect(container.querySelector("[role='status']")?.textContent)
       .toBe("Capturing snapshot.")
     await act(async() => press("S"))
@@ -232,7 +241,7 @@ describe("ReviewChrome", () => {
       />
     ))
 
-    await act(async() => button("Snapshot").click())
+    await act(async() => press("S"))
     await act(async() => vi.waitFor(() => expect(
       container.querySelector("[role='alert']")?.textContent
     ).toBe("Snapshot failed.")))
@@ -249,7 +258,7 @@ describe("ReviewChrome", () => {
       />
     ))
 
-    await act(async() => button("Set status to approved").click())
+    await act(async() => press("4"))
     expect(onSubmit).toHaveBeenLastCalledWith([{
       _tag: "setFrameStatus",
       frameId: "frame_checkout",
@@ -257,24 +266,18 @@ describe("ReviewChrome", () => {
       status: "approved"
     }])
 
-    await act(async() => button("Bring to front").click())
-    expect(onSubmit).toHaveBeenLastCalledWith([{
-      _tag: "placeCanvasItem",
-      item: { _tag: "frame", frameId: "frame_checkout" },
-      after: null,
-      expectedStackChangeId: "change_1"
-    }])
-
-    await act(async() => button("Remove").click())
+    await act(async() => press("Delete"))
     expect(onSubmit).toHaveBeenLastCalledWith([{
       _tag: "removeFrame",
       frameId: "frame_checkout",
       expectedUpdatedByChangeId: "change_1"
     }])
 
-    expect(container.querySelector("[aria-label='Enter fullscreen']"))
+    expect(container.querySelector("[aria-label='Canvas toolbar']"))
+      .toBeInstanceOf(HTMLElement)
+    expect(container.querySelector("[aria-label='Align and distribute']"))
       .toBeInstanceOf(HTMLButtonElement)
-    expect(container.querySelector("[aria-label='Exit fullscreen']")).toBeNull()
+    expect(container.querySelector("[aria-label='Add frame']")).toBeNull()
   })
 
   it("does not offer Add frame in the review UI", async() => {
@@ -322,10 +325,12 @@ describe("ReviewChrome", () => {
     ))
 
     await act(async() => {
-      button("Remove").dispatchEvent(new Event("pointerover", { bubbles: true }))
+      button("Align and distribute").dispatchEvent(
+        new Event("pointerover", { bubbles: true })
+      )
     })
 
-    expect(helpPanel().textContent).toContain(removePolicy.description)
+    expect(helpPanel().textContent).toContain("Align, distribute, or arrange")
   })
 
   it("submits remove from Delete and Backspace when a Frame is selected", async() => {
@@ -363,7 +368,8 @@ describe("ReviewChrome", () => {
         selection={selectedFrame}
       />
     ))
-    const input = container.querySelector("[aria-label='Canvas title']")
+    await openRenameDialog()
+    const input = queryUi("[aria-label='Canvas title']")
     if (!(input instanceof HTMLInputElement)) {
       throw new Error("Canvas title input missing")
     }
@@ -422,8 +428,9 @@ describe("ReviewChrome", () => {
         selection={selectedFrame}
       />
     ))
-    const input = container.querySelector("[aria-label='Canvas title']")
-    const form = container.querySelector("form[aria-label='Rename canvas']")
+    await openRenameDialog()
+    const input = queryUi("[aria-label='Canvas title']")
+    const form = queryUi("form[aria-label='Rename canvas']")
     if (!(input instanceof HTMLInputElement) || !(form instanceof HTMLFormElement)) {
       throw new Error("Rename canvas form missing")
     }

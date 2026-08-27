@@ -1,33 +1,15 @@
 import type { CanvasCommandBatch, CanvasProjection } from "@crit/domain"
-import { useHotkeys } from "@tanstack/react-hotkeys"
-import { Effect, Match } from "effect"
-import {
-  useState,
-  type FormEvent,
-  type ReactElement
-} from "react"
+import { type ReactElement } from "react"
 
+import { GlyphProvider } from "./glyph.js"
+import { CritOverlayProvider, useCritOverlayContainer } from "./overlay-container.js"
+import type { ReviewClientEffect, ReviewSelection } from "./review-actions.js"
+import { ReviewChromeView } from "./review-chrome-view.js"
 import {
-  ReviewActionInput,
-  availableReviewActions,
-  resolveReviewAction,
-  reviewActionPolicies,
-  type ReviewAction,
-  type ReviewActionId,
-  type ReviewActionInput as ReviewActionInputValue,
-  type ReviewClientEffect,
-  type ReviewSelection
-} from "./review-actions.js"
-import {
-  SnapshotRunState,
-  useSnapshotRunner,
-  type FrameSnapshotter
-} from "./frame-snapshot.js"
-import {
-  ReviewHelpPanel,
-  ReviewHelpSurface,
-  reviewActionHelpTarget
-} from "./review-help.js"
+  ReviewRunnerProvider,
+  useOptionalReviewRunner
+} from "./review-runner.js"
+import type { FrameSnapshotter } from "./frame-snapshot.js"
 
 export interface ReviewChromeProps {
   readonly projection: CanvasProjection
@@ -38,196 +20,37 @@ export interface ReviewChromeProps {
   readonly fullscreen?: boolean
 }
 
-const formActions = [
-  {
-    id: "rename-canvas",
-    inputLabel: "Canvas title"
-  },
-  {
-    id: "set-frame-title",
-    inputLabel: "Frame title"
-  }
-] as const satisfies readonly {
-  readonly id: ReviewActionId
-  readonly inputLabel: string
-}[]
-
-const formPolicies = formActions.map((entry) => {
-  const policy = reviewActionPolicies.find((candidate) => candidate.id === entry.id)
-  if (policy === undefined) {
-    throw new Error(`Missing form policy: ${entry.id}`)
-  }
-  return { ...entry, policy }
-})
-
-const formActionIds = new Set<string>(formPolicies.map(({ id }) => id))
-const unavailableSnapshotter = {
-  capture: () => Effect.die("Snapshotter unavailable")
-} satisfies FrameSnapshotter
-
-const dispatchReviewAction = (
-  action: ReviewAction,
-  onSubmit: ReviewChromeProps["onSubmit"],
-  onEffect: ReviewChromeProps["onEffect"],
-  beginSnapshot: ReturnType<typeof useSnapshotRunner>["begin"]
-): void => Match.value(action).pipe(Match.tagsExhaustive({
-  batch: ({ commands }) => onSubmit(commands),
-  effect: ({ effect }) => {
-    onEffect?.(effect)
-  },
-  snapshot: ({ request }) => beginSnapshot(request)
-}))
-
-function ReviewActionForm({
-  inputLabel,
-  onRun,
-  policy
-}: {
-  readonly inputLabel: string
-  readonly onRun: (
-    id: ReviewActionId,
-    input: ReviewActionInputValue
-  ) => boolean
-  readonly policy: (typeof reviewActionPolicies)[number]
-}): ReactElement {
-  const [value, setValue] = useState("")
-  const submit = (event: FormEvent) => {
-    event.preventDefault()
-    if (onRun(policy.id, ReviewActionInput.text({ text: value }))) setValue("")
-  }
-  return (
-    <form
-      aria-label={policy.label}
-      {...reviewActionHelpTarget(policy)}
-      onSubmit={submit}
-    >
-      <label>
-        {inputLabel}
-        <input
-          aria-label={inputLabel}
-          type="text"
-          value={value}
-          onChange={(event) => setValue(event.currentTarget.value)}
-        />
-      </label>
-      <button type="submit">{policy.label}</button>
-    </form>
-  )
-}
-
-export function ReviewChrome({
-  fullscreen = false,
-  onEffect,
-  onSubmit,
-  projection,
-  selection,
-  snapshotter
-}: ReviewChromeProps): ReactElement {
-  const snapshot = useSnapshotRunner({
-    onSubmit,
-    snapshotter: snapshotter ?? unavailableSnapshotter
-  })
-  const snapshotCapturing = SnapshotRunState.$is("capturing")(snapshot.state)
-  const context = {
-    projection,
-    selection,
-    input: ReviewActionInput.none(),
-    fullscreen
-  }
-  const available = availableReviewActions(context)
-  const runnable = available.filter((entry) =>
-    (entry.id !== "snapshot" || snapshotter !== undefined) &&
-      resolveReviewAction(entry.id, context) !== null
-  )
-  const runnableIds = new Set<string>(runnable.flatMap(({ id }) =>
-    id === "snapshot" && snapshotCapturing ? [] : [id]
-  ))
-  const toolbarActions = runnable.filter((entry) => !formActionIds.has(entry.id))
-  const visibleForms = formPolicies.filter(({ policy }) =>
-    policy.available(selection, projection)
-  )
-  const run = (
-    id: ReviewActionId,
-    input: ReviewActionInputValue = ReviewActionInput.none()
-  ): boolean => {
-    if (
-      id === "snapshot" &&
-      (snapshotter === undefined || snapshotCapturing)
-    ) return false
-    const action = resolveReviewAction(id, {
-      projection,
-      selection,
-      input,
-      fullscreen
-    })
-    if (action === null) return false
-    dispatchReviewAction(action, onSubmit, onEffect, snapshot.begin)
-    return true
-  }
-
-  useHotkeys(
-    reviewActionPolicies.flatMap((policy) =>
-      policy.shortcuts.map((hotkey) => ({
-        hotkey,
-        callback: () => {
-          run(policy.id)
-        },
-        options: {
-          enabled: runnableIds.has(policy.id),
-          ignoreInputs: hotkey !== "Escape"
-        }
-      }))
+export function ReviewChrome(props: ReviewChromeProps): ReactElement {
+  const overlay = useCritOverlayContainer()
+  const runner = useOptionalReviewRunner()
+  const view = runner === null
+    ? (
+      <ReviewRunnerProvider
+        fullscreen={props.fullscreen ?? false}
+        onEffect={props.onEffect}
+        onSubmit={props.onSubmit}
+        projection={props.projection}
+        selection={props.selection}
+        snapshotter={props.snapshotter}
+      >
+        <ReviewChrome {...props} />
+      </ReviewRunnerProvider>
     )
-  )
-
+    : (
+      <ReviewChromeView
+        projection={props.projection}
+        run={runner.run}
+        runnableIds={runner.runnableIds}
+        snapshotCapturing={runner.snapshotCapturing}
+        snapshotFailed={runner.snapshotFailed}
+      />
+    )
+  if (overlay !== undefined) return view
   return (
-    <aside
-      aria-label="Review controls"
-      className="crit-review-chrome"
-      onPointerDown={(event) => event.stopPropagation()}
-    >
-      <ReviewHelpSurface className="crit-overlay-container">
-        <div className="crit-toolbar">
-          <span className="crit-toolbar__title">
-            <span>{projection.title}</span>
-          </span>
-          <span className="crit-toolbar__divider" />
-          <div
-            aria-label="Review actions"
-            className="crit-toolbar__group"
-            role="toolbar"
-          >
-            {toolbarActions.map((entry) => (
-              <button
-                aria-label={entry.label}
-                className="crit-toolbar__action"
-                disabled={entry.id === "snapshot" && snapshotCapturing}
-                key={entry.id}
-                type="button"
-                {...reviewActionHelpTarget(entry)}
-                onClick={() => run(entry.id)}
-              >
-                {entry.label}
-              </button>
-            ))}
-          </div>
-          {visibleForms.map((entry) => (
-            <ReviewActionForm
-              inputLabel={entry.inputLabel}
-              key={entry.id}
-              onRun={run}
-              policy={entry.policy}
-            />
-          ))}
-          {snapshotCapturing
-            ? <p role="status">Capturing snapshot.</p>
-            : null}
-          {SnapshotRunState.$is("failed")(snapshot.state)
-            ? <p role="alert">Snapshot failed.</p>
-            : null}
-        </div>
-        <ReviewHelpPanel />
-      </ReviewHelpSurface>
-    </aside>
+    <GlyphProvider>
+      <CritOverlayProvider>
+        {view}
+      </CritOverlayProvider>
+    </GlyphProvider>
   )
 }

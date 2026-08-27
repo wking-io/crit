@@ -35,10 +35,14 @@ import {
 } from "./frame-renderer.js"
 import type { FrameSnapshotter } from "./frame-snapshot.js"
 import { framesById } from "./projection-index.js"
+import { GlyphProvider } from "./glyph.js"
+import { CritOverlayProvider } from "./overlay-container.js"
+import { shortIdForIndex } from "./frame-status-chrome.js"
 import { ReviewChrome } from "./review-chrome.js"
 import { ReviewFrame, canvasUiScale } from "./review-frame.js"
 import { ReviewSelection, type ReviewClientEffect } from "./review-actions.js"
 import { useReviewEffects } from "./review-effects.js"
+import { ReviewRunnerProvider } from "./review-runner.js"
 
 interface CanvasBoardBaseProps {
   readonly projection: CanvasProjection
@@ -193,12 +197,14 @@ export function CanvasBoard({
           key={frame.frameId}
           selected={CanvasSelection.has(selection, item)}
           selectedLabel={ariaSelected(selection, item)}
+          shortId={shortIdForIndex(zIndex)}
+          topZIndex={Math.max(0, frameEntries.length - 1)}
           uiScale={canvasUiScale(camera.zoom)}
           zIndex={zIndex}
           onMove={(event) => itemDrag.begin(frame, "move", event)}
           onResize={onSubmit === undefined
             ? undefined
-            : (event) => itemDrag.begin(frame, "resize", event)}
+            : (event, handle) => itemDrag.begin(frame, "resize", event, handle)}
           onSelect={(event) => selectFrame(item, event)}
         >
           <FrameRenderer
@@ -239,25 +245,46 @@ export function CanvasBoard({
       onPointerUp={itemDrag.finish}
     >
       <style data-crit-styles="">{critStyles}</style>
-      {onSubmit === undefined
-        ? null
-        : (
-          <ReviewChrome
-            fullscreen={reviewEffects.fullscreen}
-            onEffect={reviewEffects.handle}
-            onSubmit={onSubmit}
-            projection={projection}
-            selection={ReviewSelection.items({ items: selection })}
-            snapshotter={snapshotter}
-          />
-        )}
-      {hasItems
-        ? (
-          <div className="crit-canvas__plane" style={canvasCameraStyle(camera)}>
-            {items}
-          </div>
-        )
-        : items}
+      <GlyphProvider>
+        <CritOverlayProvider>
+          {onSubmit === undefined
+            ? (
+              hasItems
+                ? (
+                  <div className="crit-canvas__plane" style={canvasCameraStyle(camera)}>
+                    {items}
+                  </div>
+                )
+                : items
+            )
+            : (
+              <ReviewRunnerProvider
+                fullscreen={reviewEffects.fullscreen}
+                onEffect={reviewEffects.handle}
+                onSubmit={onSubmit}
+                projection={projection}
+                selection={ReviewSelection.items({ items: selection })}
+                snapshotter={snapshotter}
+              >
+                <ReviewChrome
+                  fullscreen={reviewEffects.fullscreen}
+                  onEffect={reviewEffects.handle}
+                  onSubmit={onSubmit}
+                  projection={projection}
+                  selection={ReviewSelection.items({ items: selection })}
+                  snapshotter={snapshotter}
+                />
+                {hasItems
+                  ? (
+                    <div className="crit-canvas__plane" style={canvasCameraStyle(camera)}>
+                      {items}
+                    </div>
+                  )
+                  : items}
+              </ReviewRunnerProvider>
+            )}
+        </CritOverlayProvider>
+      </GlyphProvider>
     </section>
   )
 }

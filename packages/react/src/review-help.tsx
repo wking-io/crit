@@ -66,6 +66,13 @@ export const reviewActionHelpTarget = (
   policy: ReviewActionPolicy
 ): ReviewHelpAttributes => helpTarget(reviewHelpForPolicy(policy))
 
+export const reviewInformationalHelpTarget = (
+  input: {
+    readonly name: string
+    readonly description: string
+  }
+): ReviewHelpAttributes => helpTarget(ReviewHelpDetails.informational(input))
+
 const detailsFromTarget = (
   target: EventTarget | null
 ): ReviewHelpDetails | null => {

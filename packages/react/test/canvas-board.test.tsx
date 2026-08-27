@@ -143,6 +143,8 @@ describe("CanvasBoard", () => {
     expect(container.querySelector(".crit-frame__viewport")).not.toBeNull()
     expect(container.querySelector("[aria-label='Check the price by Ada']")).toBeNull()
     expect(container.querySelector("iframe")?.getAttribute("src")).toBe(url)
+    expect(container.querySelector("[data-crit-glyph-sheet]")).not.toBeNull()
+    expect(container.querySelector(".crit-frame__mark svg")).not.toBeNull()
   })
 
   it("captures unselected Frames but leaves the sole selected Frame interactive", async() => {
@@ -361,7 +363,10 @@ describe("CanvasBoard", () => {
     const openButton = container.querySelector(
       "[aria-label='Open in new tab']"
     )
-    if (!(openButton instanceof HTMLButtonElement)) {
+    if (
+      !(openButton instanceof HTMLButtonElement) &&
+      !(openButton instanceof HTMLAnchorElement)
+    ) {
       throw new Error("Open URL action missing")
     }
 
@@ -418,5 +423,100 @@ describe("CanvasBoard", () => {
 
     expect(container.querySelector("iframe")).toBeNull()
     expect(container.textContent).toContain("Checkout is paused.")
+  })
+
+  it("paints rewrite corner handles and status chrome on a selected Frame", async() => {
+    const onSubmit = vi.fn()
+    const resolver: FrameRepresentationResolver = {
+      resolve: () => Effect.succeed(IframeRenderPlan.make({
+        representation: projection.frames[0]!.representation,
+        url
+      }) satisfies RenderPlan)
+    }
+    await act(async() => render(
+      <CanvasBoard
+        {...requiredBoard}
+        onSubmit={onSubmit}
+        projection={projection}
+        resolver={resolver}
+        snapshotter={snapshotter}
+        selection={CanvasSelection.make([{
+          _tag: "frame",
+          frameId: "frame_checkout"
+        }])}
+      />
+    ))
+
+    const handles = [...container.querySelectorAll("[data-resize-handle]")]
+    expect(handles.map((handle) => handle.getAttribute("data-resize-handle")))
+      .toEqual(["north-west", "north-east", "south-east", "south-west"])
+    expect(container.querySelectorAll(".crit-selection__handle-shape")).toHaveLength(4)
+    expect(container.querySelector("[data-handle-style='corners']")).not.toBeNull()
+    expect(container.querySelector("[aria-label='Status: In progress. Change status']"))
+      .toBeInstanceOf(HTMLButtonElement)
+    expect(container.querySelector("[aria-label='Snapshot']"))
+      .toBeInstanceOf(HTMLButtonElement)
+    expect(container.querySelector("[aria-label='Canvas toolbar']")).not.toBeNull()
+    expect(container.querySelector("[aria-label='Align and distribute']"))
+      .toBeInstanceOf(HTMLButtonElement)
+    expect(container.querySelector("[aria-label='Add frame']")).toBeNull()
+    expect(container.querySelector("[aria-label='Undo']")).toBeNull()
+    expect(container.querySelector("[aria-label='Add note']")).toBeNull()
+  })
+
+  it("opens the status fan and frame context menu from rewrite chrome", async() => {
+    const onSubmit = vi.fn()
+    const resolver: FrameRepresentationResolver = {
+      resolve: () => Effect.succeed(IframeRenderPlan.make({
+        representation: projection.frames[0]!.representation,
+        url
+      }) satisfies RenderPlan)
+    }
+    await act(async() => render(
+      <CanvasBoard
+        {...requiredBoard}
+        onSubmit={onSubmit}
+        projection={projection}
+        resolver={resolver}
+        snapshotter={snapshotter}
+        selection={CanvasSelection.make([{
+          _tag: "frame",
+          frameId: "frame_checkout"
+        }])}
+      />
+    ))
+
+    const status = container.querySelector(
+      "[aria-label='Status: In progress. Change status']"
+    )
+    if (!(status instanceof HTMLButtonElement)) {
+      throw new Error("Status mark missing")
+    }
+    await act(async() => status.click())
+    await waitFor(() => {
+      const fan = document.querySelector("[aria-label='Set status for Checkout']")
+      expect(fan).not.toBeNull()
+      expect(fan?.textContent).toContain("Approved")
+      expect(document.querySelector("[aria-label='Set status to approved']"))
+        .toBeInstanceOf(HTMLElement)
+    })
+
+    const frame = container.querySelector("[aria-label='Checkout']")
+    if (!(frame instanceof HTMLElement)) throw new Error("Review Frame missing")
+    await act(async() => {
+      frame.dispatchEvent(new MouseEvent("contextmenu", {
+        bubbles: true,
+        button: 2,
+        clientX: 80,
+        clientY: 120
+      }))
+    })
+    await waitFor(() => {
+      const menu = document.querySelector("[aria-label='Actions for Checkout']")
+      expect(menu).not.toBeNull()
+      expect(menu?.textContent).toContain("Remove")
+      expect(menu?.textContent).toContain("Bring to front")
+      expect(menu?.textContent).toContain("Resize to")
+    })
   })
 })
