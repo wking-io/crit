@@ -63,10 +63,12 @@ const connect = async (canvasId: string, email: string) => {
   })
   const socket = response.webSocket
   if (socket === null || socket === undefined) {
-    return { response, socket: undefined }
+    return { response, socket: undefined, roster: undefined }
   }
+  const roster = nextRoster(socket)
   socket.accept()
-  return { response, socket }
+  socket.send("attend")
+  return { response, socket, roster }
 }
 
 const nextRoster = (socket: WebSocket): Promise<PresenceRoster> =>
@@ -96,13 +98,15 @@ describe("Worker shared Canvas occupancy", () => {
     await share(canvasId)
     const ada = await connect(canvasId, "ada@acme.com")
     expect(ada.response.status).toBe(101)
-    if (ada.socket === undefined) throw new Error("Ada websocket missing")
-    const adaFirst = await nextRoster(ada.socket)
+    if (ada.socket === undefined || ada.roster === undefined) {
+      throw new Error("Ada websocket missing")
+    }
+    const adaFirst = await ada.roster
     expect(adaFirst).toMatchObject({
       canvasId,
       people: [{
         person: {
-          displayName: "Ada",
+          displayName: "ada",
           email: { _tag: "access", address: "ada@acme.com" }
         }
       }]
@@ -110,21 +114,23 @@ describe("Worker shared Canvas occupancy", () => {
 
     const will = await connect(canvasId, "will@acme.com")
     expect(will.response.status).toBe(101)
-    if (will.socket === undefined) throw new Error("Will websocket missing")
+    if (will.socket === undefined || will.roster === undefined) {
+      throw new Error("Will websocket missing")
+    }
     const adaBoth = await nextRoster(ada.socket)
-    const willBoth = await nextRoster(will.socket)
+    const willBoth = await will.roster
     expect(adaBoth).toEqual(willBoth)
     expect(adaBoth).toMatchObject({
       people: [
-        { person: { displayName: "Ada" } },
-        { person: { displayName: "Will" } }
+        { person: { displayName: "ada" } },
+        { person: { displayName: "will" } }
       ]
     })
 
     const willAfterAda = nextRoster(will.socket)
     ada.socket.close()
     expect(await willAfterAda).toMatchObject({
-      people: [{ person: { displayName: "Will" } }]
+      people: [{ person: { displayName: "will" } }]
     })
   })
 
@@ -132,18 +138,23 @@ describe("Worker shared Canvas occupancy", () => {
     const canvasId = "canvas_presence_seats"
     await share(canvasId)
     const first = await connect(canvasId, "ada@acme.com")
-    const second = await connect(canvasId, "ada@acme.com")
-    if (first.socket === undefined || second.socket === undefined) {
+    if (first.socket === undefined || first.roster === undefined) {
       throw new Error("websocket missing")
     }
-    await nextRoster(first.socket)
-    const roster = await nextRoster(second.socket)
+    await first.roster
+    const secondJoin = nextRoster(first.socket)
+    const second = await connect(canvasId, "ada@acme.com")
+    if (second.socket === undefined || second.roster === undefined) {
+      throw new Error("websocket missing")
+    }
+    const roster = await second.roster
+    await secondJoin
     expect(roster.people).toHaveLength(1)
     expect(roster).toMatchObject({
       people: [{
         person: {
           personId: "person_154e1e0a1872533ddf397a16e5a65dcf",
-          displayName: "Ada"
+          displayName: "ada"
         }
       }]
     })

@@ -121,7 +121,7 @@ describe("accessConnectedPerson", () => {
       person: {
         _tag: "person",
         personId: "person_154e1e0a1872533ddf397a16e5a65dcf",
-        displayName: "Ada",
+        displayName: "ada",
         email: { _tag: "access", address }
       }
     })
