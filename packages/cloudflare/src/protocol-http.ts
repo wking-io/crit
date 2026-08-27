@@ -4,7 +4,7 @@ import {
   protocolFailureHttpStatus,
   type ProtocolFailure
 } from "@crit/protocol"
-import { Result } from "effect"
+import { Result, Schema } from "effect"
 
 export const protocolFailureResponse = (failure: ProtocolFailure): Response =>
   new Response(JSON.stringify(ChangeProtocol.failure.encode(failure)), {
@@ -12,8 +12,16 @@ export const protocolFailureResponse = (failure: ProtocolFailure): Response =>
     headers: { "content-type": "application/json" }
   })
 
+export const readJsonRequest = async (request: Request): Promise<Schema.Json | undefined> => {
+  try {
+    return Schema.decodeUnknownSync(Schema.Json)(await request.json())
+  } catch {
+    return undefined
+  }
+}
+
 export const negotiateRequest = (
-  input: unknown,
+  input: Schema.Json,
   expected: { readonly kind: string; readonly schemaVersion: number }
 ): Response | undefined => {
   const negotiated = negotiateWire(input, expected)

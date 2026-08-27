@@ -18,7 +18,7 @@ import { Crypto, Effect, Layer, Schema } from "effect"
 
 import { resolveCallerIdentity, respondWithCallerCookie } from "./caller.js"
 import { listControlDeployments } from "./deployments.js"
-import { negotiateRequest } from "./protocol-http.js"
+import { negotiateRequest, readJsonRequest } from "./protocol-http.js"
 
 const review = Schema.decodeUnknownSync(DeploymentChannel)("review")
 
@@ -53,18 +53,14 @@ export const handleHostedApplicationResolve = async (
     respondWithCallerCookie(response, request, resolved)
   if (request.method !== "POST") return respond(emptyResponse(405))
 
-  let input: unknown
-  try {
-    input = await request.json()
-  } catch {
-    return respond(emptyResponse(400))
-  }
+  const input = await readJsonRequest(request)
+  if (input === undefined) return respond(emptyResponse(400))
 
   const rejected = negotiateRequest(input, {
     kind: "resolveApplicationRoute",
     schemaVersion: 1
   })
-  if (rejected !== undefined) return rejected
+  if (rejected !== undefined) return respond(rejected)
 
   let decoded: ReturnType<typeof decodeHostedApplicationResolveRequest>
   try {

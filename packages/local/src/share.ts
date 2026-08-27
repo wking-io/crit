@@ -15,7 +15,8 @@ import {
   encodeShareCanvasWire,
   negotiateWire,
   readProtocolFailure,
-  remoteCanvasCollectionPath
+  remoteCanvasCollectionPath,
+  ShareDigestMismatch as ShareDigestMismatchWire
 } from "@crit/protocol"
 import { Effect, FileSystem, Option, Path, Result, Schema } from "effect"
 import {
@@ -211,7 +212,7 @@ const writeShare = (
 
 const rejectedShare = (status: number, body: string) => {
   try {
-    const parsed: unknown = JSON.parse(body)
+    const parsed = Schema.decodeUnknownSync(Schema.Json)(JSON.parse(body))
     const protocol = readProtocolFailure(parsed)
     if (Option.isSome(protocol)) return protocol.value
   } catch {
@@ -303,7 +304,7 @@ export const shareCanvas = (
     return yield* Effect.fail(rejectedShare(response.status, contents))
   }
   const parsed = yield* Effect.try({
-    try: (): unknown => JSON.parse(contents),
+    try: () => Schema.decodeUnknownSync(Schema.Json)(JSON.parse(contents)),
     catch: () => new ShareResponseInvalid({})
   })
   const negotiated = negotiateWire(parsed, {

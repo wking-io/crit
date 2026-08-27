@@ -74,7 +74,7 @@ interface MockInstallation {
 
 const installationServer = (
   shareStatus = 200,
-  shareBody?: unknown
+  shareBody?: Schema.Json
 ) => Effect.acquireRelease(
   Effect.promise(() => new Promise<{
     readonly server: ReturnType<typeof createServer>

@@ -11,7 +11,6 @@ import { join } from "node:path"
 
 import { NodeServices } from "@effect/platform-node"
 import { AccessPersonEmail, EmailAddress } from "@crit/domain"
-import { encodeAccessAuthenticatedPersonWire } from "@crit/protocol"
 import { Effect, Layer, Schema } from "effect"
 import { describe, expect, it } from "vitest"
 

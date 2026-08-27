@@ -67,7 +67,7 @@ export interface RemoteCanvasAuthorityService {
   >
 }
 
-const absorbProtocolFailure = <A, E>(
+const absorbProtocolFailure = <A, E extends { readonly _tag: string }>(
   effect: Effect.Effect<A, E>
 ): Effect.Effect<A, Exclude<E, ProtocolFailure>> =>
   effect.pipe(Effect.catchIf(isProtocolFailure, (failure) => Effect.die(failure)))
@@ -88,7 +88,7 @@ const withAccess = (
 const readJson = (response: HttpClientResponse.HttpClientResponse) =>
   response.text.pipe(
     Effect.flatMap((contents) => Effect.try({
-      try: () => JSON.parse(contents),
+      try: () => Schema.decodeUnknownSync(Schema.Json)(JSON.parse(contents)),
       catch: (cause) => cause
     })),
     Effect.orDie
@@ -108,7 +108,7 @@ const failEncoded = <E>(
 
 const failRemoteBody = (
   response: HttpClientResponse.HttpClientResponse,
-  body: unknown
+  body: Schema.Json
 ): Effect.Effect<never, ProtocolFailure> => {
   const protocol = failProtocolResponse(response, body)
   return protocol ?? Effect.die(body)

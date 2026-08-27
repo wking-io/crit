@@ -124,7 +124,7 @@ export const registerDeployment = (
     Effect.mapError(() => new DeploymentRegistrationResponseInvalid({}))
   )
   const parsed = yield* Effect.try({
-    try: (): unknown => JSON.parse(contents),
+    try: () => Schema.decodeUnknownSync(Schema.Json)(JSON.parse(contents)),
     catch: () => new DeploymentRegistrationResponseInvalid({})
   })
   const protocol = readProtocolFailure(parsed)
