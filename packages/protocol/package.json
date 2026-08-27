@@ -1,10 +1,21 @@
 {
   "name": "@crit/protocol",
   "version": "0.0.0",
-  "private": true,
+  "description": "Wire schemas for Crit changes, sync, and the Frame Bridge.",
+  "license": "MIT",
+  "homepage": "https://github.com/wking-io/crit#readme",
+  "bugs": {
+    "url": "https://github.com/wking-io/crit/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/wking-io/crit.git",
+    "directory": "packages/protocol"
+  },
   "type": "module",
   "sideEffects": false,
   "scripts": {
+    "prepack": "tsc -b",
     "test": "vitest run --config vitest.config.ts"
   },
   "exports": {
@@ -15,10 +26,13 @@
   },
   "files": ["dist"],
   "dependencies": {
-    "@crit/domain": "*",
+    "@crit/domain": "0.0.0",
     "effect": "4.0.0-rc.109"
   },
   "devDependencies": {
     "vitest": "4.1.0"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

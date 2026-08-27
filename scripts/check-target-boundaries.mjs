@@ -26,6 +26,16 @@ const allowedDependencies = new Map([
 
 const targetNames = new Set(allowedDependencies.keys())
 const expectedNames = [...targetNames].sort()
+const publishedPackages = new Set([
+  "authority",
+  "client",
+  "domain",
+  "frame-bridge",
+  "protocol",
+  "react",
+  "replica",
+  "representations"
+])
 const errors = []
 const isString = Schema.is(Schema.String)
 const isProjectReference = Schema.is(Schema.Struct({ path: Schema.String }))
@@ -156,7 +166,17 @@ for (const name of expectedNames) {
   if (manifest.name !== `@crit/${name}`) {
     errors.push(`packages/${name} must be named @crit/${name}`)
   }
-  if (manifest.private !== true) {
+  if (publishedPackages.has(name)) {
+    if (manifest.private === true) {
+      errors.push(`@crit/${name} must be publishable`)
+    }
+    if (manifest.license !== "MIT") {
+      errors.push(`@crit/${name} must declare the MIT license`)
+    }
+    if (manifest.publishConfig?.access !== "public") {
+      errors.push(`@crit/${name} must publish with public access`)
+    }
+  } else if (manifest.private !== true) {
     errors.push(`@crit/${name} must remain private`)
   }
 

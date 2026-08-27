@@ -1,7 +1,17 @@
 {
   "name": "@crit/client",
   "version": "0.0.0",
-  "private": true,
+  "description": "HTTP and WebSocket clients for local and hosted Crit.",
+  "license": "MIT",
+  "homepage": "https://github.com/wking-io/crit#readme",
+  "bugs": {
+    "url": "https://github.com/wking-io/crit/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/wking-io/crit.git",
+    "directory": "packages/client"
+  },
   "type": "module",
   "sideEffects": false,
   "exports": {
@@ -12,17 +22,21 @@
   },
   "files": ["dist"],
   "scripts": {
+    "prepack": "tsc -b",
     "test": "vitest run --config vitest.config.ts"
   },
   "dependencies": {
-    "@crit/authority": "*",
-    "@crit/domain": "*",
-    "@crit/protocol": "*",
-    "@crit/replica": "*",
-    "@crit/representations": "*",
+    "@crit/authority": "0.0.0",
+    "@crit/domain": "0.0.0",
+    "@crit/protocol": "0.0.0",
+    "@crit/replica": "0.0.0",
+    "@crit/representations": "0.0.0",
     "effect": "4.0.0-rc.109"
   },
   "devDependencies": {
     "vitest": "4.1.0"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

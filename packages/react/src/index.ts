@@ -57,11 +57,9 @@ export {
   useReplicaSession
 } from "./replica-session.js"
 export type {
-  ReplicaConnection,
   ReplicaSessionHandle,
   ReplicaSessionPorts,
-  ReplicaSessionRun,
-  ReplicaSubscriptionEvent
+  ReplicaSessionRun
 } from "./replica-session.js"
 export { ReviewChrome } from "./review-chrome.js"
 export type { ReviewChromeProps } from "./review-chrome.js"
