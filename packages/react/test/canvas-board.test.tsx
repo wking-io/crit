@@ -494,8 +494,9 @@ describe("CanvasBoard", () => {
     }
     await act(async() => status.click())
     await waitFor(() => {
-      expect(document.querySelector("[aria-label='Set status for Checkout']"))
-        .not.toBeNull()
+      const fan = document.querySelector("[aria-label='Set status for Checkout']")
+      expect(fan).not.toBeNull()
+      expect(fan?.textContent).toContain("Approved")
       expect(document.querySelector("[aria-label='Set status to approved']"))
         .toBeInstanceOf(HTMLElement)
     })

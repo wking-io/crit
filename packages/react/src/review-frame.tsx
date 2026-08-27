@@ -170,6 +170,7 @@ function StatusPillOption({
 
   return (
     <Menu.Item
+      aria-label={label}
       className="crit-status-option"
       disabled={disabled}
       {...helpTarget}
