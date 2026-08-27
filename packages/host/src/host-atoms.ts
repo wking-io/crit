@@ -14,10 +14,8 @@ import {
 import { type CanvasId } from "@crit/domain"
 import { formatProtocolFailure, isProtocolFailure } from "@crit/protocol"
 import type { CanvasListing } from "@crit/replica/http"
-import { layerMemory, layerStorage, type ReplicaSessionRun } from "@crit/react"
 import { Cause, Data, Effect, Layer, Match, Result } from "effect"
 import { FetchHttpClient } from "effect/unstable/http"
-import { KeyValueStore } from "effect/unstable/persistence"
 import { Atom, AsyncResult } from "effect/unstable/reactivity"
 
 import type { CritHostProps } from "./crit-host.js"
@@ -45,22 +43,12 @@ export type HostIndexScreen = Data.TaggedEnum<{
 }>
 export const HostIndexScreen = Data.taggedEnum<HostIndexScreen>()
 
-const sessionStore = () => {
-  try {
-    const storage = globalThis.document?.defaultView?.sessionStorage
-    return storage === undefined ? layerMemory : layerStorage(() => storage)
-  } catch {
-    return layerMemory
-  }
-}
-
 const localLayer = (descriptor: LocalBrowserConnectionDescriptor) => {
   const options = LocalBrowserConnection.options(descriptor)
-  const clients = Layer.merge(
+  return Layer.merge(
     LocalCanvasClient.layer(options),
     LocalRepresentationClient.layer(options)
   ).pipe(Layer.provide(FetchHttpClient.layer))
-  return Layer.merge(clients, sessionStore())
 }
 
 const hostedHttpLayer = Layer.mergeAll(
@@ -71,8 +59,7 @@ const hostedHttpLayer = Layer.mergeAll(
 const hostedLayer = () => Layer.mergeAll(
   HostedReviewClient.layer({ baseUrl: "" }),
   RemoteCanvasAuthority.layer(RemoteAuthorityOptions.make({ baseUrl: "" })),
-  HttpArtifactStore.layer({ baseUrl: "" }),
-  sessionStore()
+  HttpArtifactStore.layer({ baseUrl: "" })
 ).pipe(Layer.provide(hostedHttpLayer))
 
 const connectingScreen = HostScreen.connecting()
@@ -156,19 +143,11 @@ export const hostScreenAtom = Atom.family((fragment: string) =>
           const boot = runtime.atom(Effect.gen(function*() {
             const client = yield* LocalCanvasClient
             const representations = yield* LocalRepresentationClient
-            const store = yield* KeyValueStore.KeyValueStore
-            const run: ReplicaSessionRun = (effect) =>
-              Effect.runPromise(Effect.provideService(
-                effect,
-                KeyValueStore.KeyValueStore,
-                store
-              ))
             return {
               canvasId,
               ports: localReplicaSessionPorts(client),
               resolver: representations,
-              snapshotter: representations,
-              run
+              snapshotter: representations
             }
           }))
           return Atom.map(boot, screenFromBoot)
@@ -180,13 +159,6 @@ export const hostScreenAtom = Atom.family((fragment: string) =>
             const authority = yield* RemoteCanvasAuthority
             const principal = yield* hostedPersonPrincipal(client)
             const frames = yield* hostedFramePorts(client)
-            const store = yield* KeyValueStore.KeyValueStore
-            const run: ReplicaSessionRun = (effect) =>
-              Effect.runPromise(Effect.provideService(
-                effect,
-                KeyValueStore.KeyValueStore,
-                store
-              ))
             return {
               canvasId,
               ports: hostedReplicaSessionPorts({
@@ -195,8 +167,7 @@ export const hostScreenAtom = Atom.family((fragment: string) =>
                 attend: (id) => client.attend(id)
               }),
               resolver: frames.resolver,
-              snapshotter: frames.snapshotter,
-              run
+              snapshotter: frames.snapshotter
             }
           }))
           return Atom.map(boot, hostedScreenFromBoot)

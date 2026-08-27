@@ -18,11 +18,6 @@ import {
   IframeRenderPlan,
   type RenderPlan
 } from "@crit/representations"
-import {
-  notifyManager,
-  QueryClient,
-  QueryClientProvider
-} from "@tanstack/react-query"
 import { Effect, Match } from "effect"
 import { StrictMode, act, type ReactElement } from "react"
 import { flushSync } from "react-dom"
@@ -34,10 +29,9 @@ import {
   type FrameRendererFrame,
   type FrameRepresentationResolver
 } from "../src/index.js"
+import { CritRegistry } from "./crit-registry.js"
 
 Object.defineProperty(globalThis, "IS_REACT_ACT_ENVIRONMENT", { value: true })
-notifyManager.setNotifyFunction((callback) => act(callback))
-notifyManager.setScheduler(queueMicrotask)
 
 const representation = WebUrlRepresentation.make({ url: "https://example.com/checkout" })
 const frame = (
@@ -54,11 +48,10 @@ const iframePlan = (url: string): RenderPlan => IframeRenderPlan.make({
 })
 
 let container: HTMLDivElement
-let queryClient: QueryClient
 let root: Root
 
 const render = (element: ReactElement) => root.render(
-  <QueryClientProvider client={queryClient}>{element}</QueryClientProvider>
+  <CritRegistry>{element}</CritRegistry>
 )
 const waitFor = (assertion: () => void) => act(async() => vi.waitFor(assertion))
 const prepareFrameDocument = (iframe: HTMLIFrameElement) => {
@@ -74,14 +67,10 @@ beforeEach(() => {
   container = document.createElement("div")
   document.body.append(container)
   root = createRoot(container)
-  queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false } }
-  })
 })
 
 afterEach(async() => {
   await act(async() => root.unmount())
-  queryClient.clear()
   container.remove()
   vi.restoreAllMocks()
 })

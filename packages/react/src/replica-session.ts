@@ -1,19 +1,12 @@
 import type { CanvasChangeFailure, CanvasCommandBatch, CanvasId, PresenceRoster } from "@crit/domain"
 import type { ReplicaView } from "@crit/replica"
-import { Data, Effect, Match, Result } from "effect"
+import { Data, Effect, Result } from "effect"
 import type { KeyValueStore } from "effect/unstable/persistence"
-import { useCallback, useEffect, useRef, useState } from "react"
 
 import { CanvasCamera } from "./canvas-camera.js"
-import {
-  getCanvasCameraSession,
-  setCanvasCameraSession
-} from "./canvas-camera-session.js"
+import { getCanvasCameraSession } from "./canvas-camera-session.js"
 import { CanvasSelection } from "./canvas-selection.js"
-import {
-  getCanvasSelectionSession,
-  setCanvasSelectionSession
-} from "./canvas-selection-session.js"
+import { getCanvasSelectionSession } from "./canvas-selection-session.js"
 
 export class ReplicaSessionUnavailable extends Data.TaggedError("ReplicaSessionUnavailable")<{
   readonly canvasId: CanvasId
@@ -67,10 +60,6 @@ export type ReplicaSession = Data.TaggedEnum<{
 }>
 export const ReplicaSession = Data.taggedEnum<ReplicaSession>()
 
-export type ReplicaSessionRun = <A, E>(
-  effect: Effect.Effect<A, E, KeyValueStore.KeyValueStore>
-) => Promise<A>
-
 export interface ReplicaSessionHandle {
   readonly session: ReplicaSession
   readonly onCameraChange: (camera: CanvasCamera) => void
@@ -80,13 +69,13 @@ export interface ReplicaSessionHandle {
   ) => Promise<Result.Result<ReplicaView, ReplicaSessionUnavailable | ReplicaChangeRejected>>
 }
 
-const loading = ReplicaSession.loading()
+export const loadingReplicaSession = ReplicaSession.loading()
 
-const defaultCamera = CanvasCamera.make({ x: 0, y: 0, zoom: 1 })
-const defaultSelection = CanvasSelection.make([])
-const liveConnection = ReplicaConnection.live()
+export const defaultReplicaCamera = CanvasCamera.make({ x: 0, y: 0, zoom: 1 })
+export const defaultReplicaSelection = CanvasSelection.make([])
+export const liveReplicaConnection = ReplicaConnection.live()
 
-const patchReady = (
+export const patchReadyReplicaSession = (
   previous: ReplicaSession,
   patch: {
     readonly view?: ReplicaView
@@ -106,7 +95,7 @@ const patchReady = (
   })
 }
 
-const applyOpened = (
+export const applyOpenedReplicaSession = (
   previous: ReplicaSession,
   opened: Result.Result<ReplicaView, ReplicaSessionUnavailable>,
   chrome: {
@@ -123,12 +112,14 @@ const applyOpened = (
     view: opened.success,
     camera: chrome.camera,
     selection: chrome.selection,
-    connection: ReplicaSession.$is("ready")(previous) ? previous.connection : liveConnection,
+    connection: ReplicaSession.$is("ready")(previous)
+      ? previous.connection
+      : liveReplicaConnection,
     notice: ReplicaSession.$is("ready")(previous) ? previous.notice : undefined
   })
 }
 
-const applyRefresh = (
+export const applyRefreshReplicaSession = (
   previous: ReplicaSession,
   opened: Result.Result<ReplicaView, ReplicaSessionUnavailable>
 ): ReplicaSession => {
@@ -138,35 +129,35 @@ const applyRefresh = (
       : ReplicaSession.unavailable({ reason: opened.failure.reason })
   }
   return ReplicaSession.$is("ready")(previous)
-    ? patchReady(previous, { view: opened.success })
+    ? patchReadyReplicaSession(previous, { view: opened.success })
     : ReplicaSession.ready({
       view: opened.success,
-      camera: defaultCamera,
-      selection: defaultSelection,
-      connection: liveConnection,
+      camera: defaultReplicaCamera,
+      selection: defaultReplicaSelection,
+      connection: liveReplicaConnection,
       notice: undefined
     })
 }
 
-const applySubmitted = (
+export const applySubmittedReplicaSession = (
   previous: ReplicaSession,
   result: Result.Result<ReplicaView, ReplicaChangeRejected | ReplicaSessionUnavailable>
 ): ReplicaSession => {
   if (Result.isFailure(result)) {
-    return patchReady(previous, { notice: result.failure })
+    return patchReadyReplicaSession(previous, { notice: result.failure })
   }
   return ReplicaSession.$is("ready")(previous)
-    ? patchReady(previous, { view: result.success, notice: undefined })
+    ? patchReadyReplicaSession(previous, { view: result.success, notice: undefined })
     : ReplicaSession.ready({
       view: result.success,
-      camera: defaultCamera,
-      selection: defaultSelection,
-      connection: liveConnection,
+      camera: defaultReplicaCamera,
+      selection: defaultReplicaSelection,
+      connection: liveReplicaConnection,
       notice: undefined
     })
 }
 
-const openedSession = (args: {
+export const openedReplicaSession = (args: {
   readonly canvasId: CanvasId
   readonly ports: ReplicaSessionPorts
 }): Effect.Effect<{
@@ -177,7 +168,11 @@ const openedSession = (args: {
   Effect.gen(function*() {
     const opened = yield* Effect.result(args.ports.open(args.canvasId))
     if (Result.isFailure(opened)) {
-      return { opened, camera: defaultCamera, selection: defaultSelection }
+      return {
+        opened,
+        camera: defaultReplicaCamera,
+        selection: defaultReplicaSelection
+      }
     }
     const savedCamera = yield* getCanvasCameraSession({ canvasId: args.canvasId })
     const savedSelection = yield* getCanvasSelectionSession({
@@ -185,87 +180,7 @@ const openedSession = (args: {
     })
     return {
       opened,
-      camera: savedCamera ?? defaultCamera,
-      selection: savedSelection ?? defaultSelection
+      camera: savedCamera ?? defaultReplicaCamera,
+      selection: savedSelection ?? defaultReplicaSelection
     }
   })
-
-export const useReplicaSession = (args: {
-  readonly canvasId: CanvasId
-  readonly ports: ReplicaSessionPorts
-  readonly run: ReplicaSessionRun
-}): ReplicaSessionHandle => {
-  const { canvasId, ports, run } = args
-  const [session, setSession] = useState<ReplicaSession>(loading)
-  const generationRef = useRef(0)
-
-  useEffect(() => {
-    const generation = generationRef.current + 1
-    generationRef.current = generation
-    const isCurrent = () => generationRef.current === generation
-    setSession(loading)
-    let refreshOnConnect = false
-    const refresh = () => {
-      void run(Effect.result(ports.open(canvasId))).then((opened) => {
-        if (isCurrent()) setSession((previous) => applyRefresh(previous, opened))
-      })
-    }
-    const unsubscribe = ports.subscribe(canvasId, (event) => {
-      if (!isCurrent()) return
-      Match.value(event).pipe(Match.tagsExhaustive({
-        changed: () => {
-          refresh()
-        },
-        connected: () => {
-          setSession((previous) => patchReady(previous, { connection: liveConnection }))
-          if (refreshOnConnect) refresh()
-        },
-        lost: ({ reason }) => {
-          refreshOnConnect = true
-          setSession((previous) => patchReady(previous, {
-            connection: ReplicaConnection.lost({ reason })
-          }))
-        }
-      }))
-    })
-    void run(openedSession({ canvasId, ports })).then((opened) => {
-      if (isCurrent()) {
-        setSession((previous) => applyOpened(previous, opened.opened, opened))
-      }
-    })
-    return () => {
-      generationRef.current = generation + 1
-      unsubscribe()
-    }
-  }, [canvasId, ports, run])
-
-  const onCameraChange = useCallback((camera: CanvasCamera) => {
-    if (!ReplicaSession.$is("ready")(session)) return
-    setSession((previous) => patchReady(previous, { camera }))
-    void run(Effect.ignore(setCanvasCameraSession({ camera, canvasId })))
-  }, [canvasId, run, session])
-
-  const onSelectionChange = useCallback((selection: CanvasSelection) => {
-    if (!ReplicaSession.$is("ready")(session)) return
-    setSession((previous) => patchReady(previous, { selection }))
-    void run(Effect.ignore(setCanvasSelectionSession({ canvasId, selection })))
-  }, [canvasId, run, session])
-
-  const submit = useCallback((commands: CanvasCommandBatch) => {
-    if (!ReplicaSession.$is("ready")(session)) {
-      return Promise.resolve(Result.fail(new ReplicaSessionUnavailable({
-        canvasId,
-        reason: "The replica is not ready."
-      })))
-    }
-    const generation = generationRef.current
-    return run(Effect.result(ports.change({ canvasId, commands }))).then((changed) => {
-      if (generationRef.current === generation) {
-        setSession((previous) => applySubmitted(previous, changed))
-      }
-      return changed
-    })
-  }, [canvasId, ports, run, session])
-
-  return { session, onCameraChange, onSelectionChange, submit }
-}

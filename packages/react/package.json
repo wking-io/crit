@@ -35,8 +35,8 @@
     "@crit/protocol": "0.0.0",
     "@crit/replica": "0.0.0",
     "@crit/representations": "0.0.0",
+    "@effect/atom-react": "4.0.0-rc.109",
     "@tanstack/react-hotkeys": "^0.10.0",
-    "@tanstack/react-query": "^5.102.1",
     "effect": "4.0.0-rc.109",
     "motion": "^13.1.1"
   },

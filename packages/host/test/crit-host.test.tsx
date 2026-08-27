@@ -8,15 +8,14 @@ import {
   ReplicaChangeRejected,
   ReplicaSessionUnavailable,
   ReplicaSubscriptionEvent,
-  layerMemory,
+  scheduleCritRegistryTask,
   type FrameRepresentationResolver,
   type FrameSnapshotter,
-  type ReplicaSessionPorts,
-  type ReplicaSessionRun
+  type ReplicaSessionPorts
 } from "@crit/react"
 import { ReplicaView } from "@crit/replica"
-import { notifyManager } from "@tanstack/react-query"
-import { Effect, Layer, Schema } from "effect"
+import { RegistryProvider } from "@effect/atom-react"
+import { Effect, Schema } from "effect"
 import { StrictMode, act, type ReactElement } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
@@ -24,8 +23,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { CritHost } from "../src/index.js"
 
 Object.defineProperty(globalThis, "IS_REACT_ACT_ENVIRONMENT", { value: true })
-notifyManager.setNotifyFunction((callback) => act(callback))
-notifyManager.setScheduler(queueMicrotask)
 
 const canvasId = Id.canvas("canvas_review")
 
@@ -64,15 +61,14 @@ const representations: FrameRepresentationResolver & FrameSnapshotter = {
   resolve: () => Effect.fail("unresolved")
 }
 
-const makeRun = (): ReplicaSessionRun => {
-  const services = Effect.runSync(Effect.scoped(Layer.build(layerMemory)))
-  return (effect) => Effect.runPromise(Effect.provide(effect, services))
-}
-
 let container: HTMLDivElement
 let root: Root
 
-const render = (element: ReactElement) => root.render(<StrictMode>{element}</StrictMode>)
+const render = (element: ReactElement) => root.render(
+  <RegistryProvider scheduleTask={scheduleCritRegistryTask}>
+    <StrictMode>{element}</StrictMode>
+  </RegistryProvider>
+)
 const waitFor = (assertion: () => void) => act(async() => vi.waitFor(assertion))
 const setInputValue = (input: HTMLInputElement, value: string) => {
   const setValue = Object.getOwnPropertyDescriptor(
@@ -101,7 +97,7 @@ afterEach(async() => {
 })
 
 describe("CritHost", () => {
-  it("shows the connecting copy, then the board once the replica opens", async() => {
+  it("leaves loading after a successful open under HostRoot's microtask scheduler", async() => {
     let release!: () => void
     const gate = new Promise<void>((resolve) => {
       release = resolve
@@ -118,7 +114,6 @@ describe("CritHost", () => {
         canvasId={canvasId}
         ports={ports}
         resolver={representations}
-        run={makeRun()}
         snapshotter={representations}
       />
     ))
@@ -154,7 +149,6 @@ describe("CritHost", () => {
         canvasId={canvasId}
         ports={ports}
         resolver={representations}
-        run={makeRun()}
         snapshotter={representations}
       />
     ))
@@ -188,7 +182,6 @@ describe("CritHost", () => {
         canvasId={canvasId}
         ports={ports}
         resolver={representations}
-        run={makeRun()}
         snapshotter={representations}
       />
     ))
@@ -196,9 +189,29 @@ describe("CritHost", () => {
       expect(container.querySelector("[aria-label='Review controls']"))
         .toBeInstanceOf(HTMLElement)
     )
-    const input = container.querySelector("[aria-label='Canvas title']")
-    const form = container.querySelector("form[aria-label='Rename canvas']")
-    if (!(input instanceof HTMLInputElement) || !(form instanceof HTMLFormElement)) {
+    const options = container.querySelector("[aria-label='Canvas options']")
+    if (!(options instanceof HTMLButtonElement)) {
+      throw new Error("Canvas options missing")
+    }
+    await act(async() => options.click())
+    const renameItem = await vi.waitFor(() => {
+      const match = [...document.querySelectorAll("[role='menuitem']")]
+        .find((entry) => entry.textContent?.includes("Rename canvas"))
+      if (!(match instanceof HTMLElement)) {
+        throw new Error("Rename canvas menu item missing")
+      }
+      return match
+    })
+    await act(async() => renameItem.click())
+    const input = await vi.waitFor(() => {
+      const match = document.querySelector("[aria-label='Canvas title']")
+      if (!(match instanceof HTMLInputElement)) {
+        throw new Error("Canvas title input missing")
+      }
+      return match
+    })
+    const form = document.querySelector("form[aria-label='Rename canvas']")
+    if (!(form instanceof HTMLFormElement)) {
       throw new Error("Rename canvas form missing")
     }
 
@@ -246,7 +259,6 @@ describe("CritHost", () => {
         canvasId={canvasId}
         ports={ports}
         resolver={representations}
-        run={makeRun()}
         snapshotter={representations}
       />
     ))
@@ -272,7 +284,6 @@ describe("CritHost", () => {
         canvasId={canvasId}
         ports={ports}
         resolver={representations}
-        run={makeRun()}
         snapshotter={representations}
       />
     ))

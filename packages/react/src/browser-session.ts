@@ -35,6 +35,15 @@ export const layerMemory = KeyValueStore.layerMemory
 
 export const layerStorage = KeyValueStore.layerStorage
 
+export const sessionStoreLayer = () => {
+  try {
+    const storage = globalThis.document?.defaultView?.sessionStorage
+    return storage === undefined ? layerMemory : layerStorage(() => storage)
+  } catch {
+    return layerMemory
+  }
+}
+
 const readSessionStorage = Effect.try({
   try: () => globalThis.document?.defaultView?.sessionStorage,
   catch: () => new SessionStorageUnavailable({ reason: "blocked" })
