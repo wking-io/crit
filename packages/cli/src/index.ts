@@ -64,6 +64,7 @@ import {
   frameBridgeSkillSource
 } from "./frame-bridge-skill.js"
 import { formatPendingConflicts } from "./sync-result.js"
+import { CliOperationalFailure } from "./dev-host-request.js"
 import { HOST_ORIGIN, resolveHostRoot, startHostApp } from "./host-app.js"
 import { CanvasLayout, canvasLayout, formatCanvasLayout } from "./layout.js"
 import { PROJECT_SKILL_RELATIVE_PATH, projectSkillSource } from "./project-skill.js"
@@ -71,11 +72,6 @@ import {
   REGISTER_DEPLOYMENT_SKILL_RELATIVE_PATH,
   registerDeploymentSkillSource
 } from "./register-deployment-skill.js"
-
-class CliOperationalFailure extends Schema.TaggedError<CliOperationalFailure>()(
-  "CliOperationalFailure",
-  { message: Schema.String }
-) {}
 
 const dataRoot = Flag.string("data-root").pipe(
   Flag.withDescription("Directory for Crit installation and daemon state"),

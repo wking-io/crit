@@ -4,6 +4,20 @@ export { SqliteCanvasReplica } from "./sqlite-replica.js"
 export type { SqliteCanvasReplicaOptions } from "./sqlite-replica.js"
 export { LocalDaemon } from "./daemon.js"
 export type { LocalDaemonOptions } from "./daemon.js"
+export {
+  authorizeIntegrated,
+  BrowserAttachment,
+  DevHostRequest,
+  HostToken,
+  hostTokenHeader,
+  mintIntegratedPlane
+} from "./browser-attachment.js"
+export type {
+  BrowserAttachment,
+  DevHostRequest,
+  HostToken,
+  IntegratedHostPlane
+} from "./browser-attachment.js"
 export { FileSystemArtifactStoreOpenFailure, LocalArtifactStore } from "./artifact-store.js"
 export {
   LocalApplicationAnnouncements,
