@@ -282,7 +282,9 @@ export class LocalDevelopment extends Context.Service<
       const browser = yield* Option.match(browserOrigin, {
         onNone: () => Effect.succeed(Option.none()),
         onSome: (origin) => Layer.buildWithScope(BrowserSession.layer({
-          baseUrl: `http://127.0.0.1:${installation.port}`,
+          daemonOrigin: Schema.decodeUnknownSync(BrowserOrigin)(
+            `http://127.0.0.1:${installation.port}`
+          ),
           instance,
           browserOrigin: origin,
           invocation

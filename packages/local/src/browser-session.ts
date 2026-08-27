@@ -39,7 +39,7 @@ type BrowserExchange = Data.TaggedEnum<{
 const BrowserExchange = Data.taggedEnum<BrowserExchange>()
 
 export interface BrowserSessionOptions {
-  readonly baseUrl: string
+  readonly daemonOrigin: BrowserOrigin
   readonly instance: LocalDaemonInstanceNonce
   readonly browserOrigin: BrowserOrigin
   readonly invocation: VerifiedInvocation
@@ -81,19 +81,19 @@ export class BrowserSession extends Context.Service<BrowserSession, BrowserSessi
         })
       )
       const connection = LocalBrowserConnection.make({
-        baseUrl: options.baseUrl,
+        baseUrl: options.browserOrigin,
         instance: options.instance
       })
-      const url = new URL(connection.baseUrl)
+      const daemonUrl = new URL(options.daemonOrigin)
       const path = connection.browserPath
       const cookieName = `crit_session_${options.instance}`
 
       return BrowserSession.of({
-        bootstrapUrl: Redacted.make(`${connection.baseUrl}${path}#${capability}`),
+        bootstrapUrl: Redacted.make(`${options.browserOrigin}${path}#${capability}`),
         connection,
         browserOrigin: options.browserOrigin,
-        daemonOrigin: url.origin,
-        host: url.host,
+        daemonOrigin: daemonUrl.origin,
+        host: daemonUrl.host,
         path,
         cookieName,
         invocation: options.invocation,

@@ -247,8 +247,8 @@ const dev = Command.make(
     })
     yield* Effect.scoped(Effect.gen(function*() {
       const applicationOptions = application === undefined ? {} : { application }
-      const resolvedBrowserOrigin = yield* Option.match(browserOrigin, {
-        onSome: (origin) => Effect.succeed(Option.some(origin)),
+      const managedHostRoot = yield* Option.match(browserOrigin, {
+        onSome: () => Effect.succeed(Option.none<string>()),
         onNone: () => noHost
           ? Effect.succeed(Option.none<string>())
           : Effect.gen(function*() {
@@ -258,11 +258,12 @@ const dev = Command.make(
                 message: "Unable to find the Crit browser application"
               }))
             }
-            yield* startHostApp(hostRoot).pipe(
-              Effect.mapError((failure) => new CliOperationalFailure({ message: failure.message }))
-            )
-            return Option.some(HOST_ORIGIN)
+            return Option.some(hostRoot)
           })
+      })
+      const resolvedBrowserOrigin = Option.match(browserOrigin, {
+        onSome: (origin) => Option.some(origin),
+        onNone: () => noHost ? Option.none<string>() : Option.some(HOST_ORIGIN)
       })
       const developmentLayer = Option.match(resolvedBrowserOrigin, {
         onNone: () => LocalDevelopment.layer({ dataRoot: root, ...applicationOptions }),
@@ -274,6 +275,12 @@ const dev = Command.make(
       })
       const services = yield* Layer.buildWithScope(developmentLayer, yield* Effect.scope)
       const development = Context.get(services, LocalDevelopment)
+      yield* Option.match(managedHostRoot, {
+        onNone: () => Effect.void,
+        onSome: (hostRoot) => startHostApp(hostRoot, development.descriptor.baseUrl).pipe(
+          Effect.mapError((failure) => new CliOperationalFailure({ message: failure.message }))
+        )
+      })
       yield* Console.log(`Crit daemon listening at ${development.descriptor.baseUrl}`)
       yield* Option.match(development.browserBootstrapUrl, {
         onNone: () => Effect.void,

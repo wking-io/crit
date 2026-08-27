@@ -210,7 +210,34 @@ describe("built crit-target dev", () => {
     const canvasPage = await fetch("http://127.0.0.1:5173/canvas/canvas_shop")
     expect(canvasPage.status).toBe(200)
     expect(await canvasPage.text()).toContain("id=\"root\"")
-    expect(started.browserBootstrapUrl).toContain(started.baseUrl)
+    expect(new URL(started.browserBootstrapUrl).origin).toBe("http://127.0.0.1:5173")
+    expect(started.browserBootstrapUrl).not.toContain(started.baseUrl)
+    const printed = new URL(started.browserBootstrapUrl)
+    const capability = printed.hash.slice(1)
+    printed.hash = ""
+    const bootstrapPage = await fetch(printed)
+    expect(bootstrapPage.status).toBe(200)
+    expect(await bootstrapPage.text()).toContain("bootstrap.js")
+    const session = await fetch(new URL("session", printed), {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: printed.origin },
+      body: JSON.stringify({ capability })
+    })
+    expect(session.status).toBe(200)
+    const cookie = session.headers.get("set-cookie")?.split(";", 1)[0]
+    expect(cookie).toBeDefined()
+    const sessionBody = Schema.decodeUnknownSync(Schema.Struct({ redirectTo: Schema.String }))(
+      await session.json()
+    )
+    expect(sessionBody.redirectTo).toContain("http://127.0.0.1:5173/#crit=")
+    const listed = await fetch(`${printed.origin}${printed.pathname}api/v1/canvas`, {
+      headers: {
+        cookie: cookie ?? "",
+        "x-crit-api-version": "1"
+      }
+    })
+    expect(listed.status).toBe(200)
+    expect(Array.isArray(await listed.json())).toBe(true)
     await stop(child)
   })
 

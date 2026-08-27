@@ -646,7 +646,7 @@ const browserBootstrapRoutes = HttpRouter.use(Effect.fn(function*(router) {
       }))
       : Effect.succeed(HttpServerResponse.empty({ status: 403 })))
   yield* router.add("POST", sessionPath, (request) => Effect.gen(function*() {
-    if (browserRequestAuthority(request, browser, browser.daemonOrigin, true) !== undefined) {
+    if (browserRequestAuthority(request, browser, browser.browserOrigin, true) !== undefined) {
       return HttpServerResponse.empty({ status: 403 })
     }
     const contentLength = Number(request.headers["content-length"] ?? "0")
