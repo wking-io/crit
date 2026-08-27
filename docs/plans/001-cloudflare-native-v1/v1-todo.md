@@ -90,7 +90,7 @@ Local Frames authoring on one machine.
 - A remote content collision keeps the losing change conflicted and its dependents blocked. Independent pending work still lands. `crit sync` prints those leftover counts.
 - The hosted Worker serves the canvas list at `/`, lists shared canvases from D1 at `GET /canvas`, and stores immutable artifacts in R2. Ledger JSON stays on `/canvas/:id` when the request is not a document.
 - The Worker serves the host document at `/` and `/canvas/:id`. A public HTTPS origin with no `#crit=` boots hosted ports over directory, ledger, artifacts, and `POST /representations/application-route`. Local `#crit=` still talks to the daemon. Deploy copies `packages/host/dist-web` into Worker assets.
-- [`docs/install/cloudflare.md`](../../install/cloudflare.md) documents customer Cloudflare install: build hosted assets, create D1 and R2, configure Wrangler and Access, deploy, verify routes, and connect authors.
+- [`docs/install/cloudflare.md`](../../install/cloudflare.md) documents customer Cloudflare install: build the review website, create Cloudflare resources, configure Wrangler and Access, deploy, verify, and connect authors.
 
 ## Out of v1
 
