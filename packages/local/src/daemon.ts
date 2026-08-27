@@ -618,7 +618,7 @@ const browserScript = `
 const capability = location.hash.slice(1); history.replaceState(null, "", location.pathname);
 fetch("session", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json" }, body: JSON.stringify({ capability }) })
   .then((response) => { if (!response.ok) throw new Error("Crit browser session rejected"); return response.json() })
-  .then(({ redirectTo }) => location.replace(redirectTo))
+  .then(({ redirectTo }) => { const next = new URL(redirectTo); location.replace(next.origin === location.origin ? "/" + next.hash : next.href) })
   .catch(() => { document.querySelector("#crit").textContent = "Unable to connect to Crit" });
 `
 
@@ -664,7 +664,7 @@ const browserBootstrapRoutes = HttpRouter.use(Effect.fn(function*(router) {
     }
     return yield* HttpServerResponse.setCookie(
       HttpServerResponse.jsonUnsafe({
-        redirectTo: `${browser.browserOrigin}${LocalBrowserConnection.encode(browser.connection)}`
+        redirectTo: `${browser.browserOrigin}/${LocalBrowserConnection.encode(browser.connection)}`
       }),
       browser.cookieName,
       exchange.session,

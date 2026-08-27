@@ -1,6 +1,7 @@
 import { mkdtempSync, readFileSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import { runInNewContext } from "node:vm"
 
 import { NodeServices } from "@effect/platform-node"
 import { AuthorityModel } from "@crit/authority"
@@ -58,6 +59,52 @@ const bootstrap = async (bootstrapUrl: string) => {
 }
 
 const cookiePair = (response: Response) => response.headers.get("set-cookie")?.split(";", 1)[0]
+
+const runBootstrapScript = (
+  script: string,
+  currentOrigin: string,
+  currentPath: string,
+  currentHash: string,
+  sessionOk: boolean,
+  sessionBody: string
+) => {
+  let replaced = ""
+  let statusText = "Connecting to Crit…"
+  let settled: (value: undefined) => void
+  const done = new Promise<undefined>((resolve) => {
+    settled = resolve
+  })
+  runInNewContext(script, {
+    Error,
+    JSON,
+    URL,
+    document: {
+      querySelector: () => ({
+        set textContent(value: string) {
+          statusText = value
+          settled(undefined)
+        }
+      })
+    },
+    fetch: async() => ({
+      ok: sessionOk,
+      json: async() => JSON.parse(sessionBody)
+    }),
+    history: {
+      replaceState: () => undefined
+    },
+    location: {
+      hash: currentHash,
+      origin: currentOrigin,
+      pathname: currentPath,
+      replace: (href: string) => {
+        replaced = href
+        settled(undefined)
+      }
+    }
+  })
+  return done.then(() => ({ replaced, statusText }))
+}
 
 const rejectedSocketStatus = (url: string, cookie: string, origin?: string) => new Promise<number | undefined>((resolve, reject) => {
   const headers = origin === undefined ? { cookie } : { cookie, origin }
@@ -155,7 +202,9 @@ describe("browser session HTTP protocol", () => {
       )
       const redirect = new URL(redirectTo)
       expect(redirect.origin).toBe(browserOrigin)
+      expect(redirect.pathname).toBe("/")
       expect(redirect.search).toBe("")
+      expect(redirectTo).toContain(`${browserOrigin}/#crit=`)
       expect(redirectTo).not.toContain(result.capability)
       const cookie = cookiePair(result.response)
       expect(cookie).toBeDefined()
@@ -317,6 +366,38 @@ describe("browser session HTTP protocol", () => {
         body: JSON.stringify({ capability: result.capability })
       }))
       expect(replay.status).toBe(401)
+    }))))
+
+  it("moves a same-origin bootstrap off /browser/<instance>/ after session", () =>
+    Effect.runPromise(Effect.scoped(Effect.gen(function*() {
+      const directory = yield* temporaryRoot
+      const development = yield* start(join(directory, ".crit", "v1"), yield* Effect.scope)
+      const result = yield* Effect.promise(() => bootstrap(bootstrapUrlOf(development)))
+      const { redirectTo } = Schema.decodeUnknownSync(BrowserSessionResponse)(
+        yield* Effect.promise(() => result.response.json())
+      )
+      expect(redirectTo).toContain(`${browserOrigin}/#crit=`)
+      const script = yield* Effect.promise(() =>
+        fetch(new URL("bootstrap.js", result.url)).then((response) => response.text())
+      )
+      const currentPath = `/browser/${development.descriptor.instance}/`
+      const pathless = `${browserOrigin}${new URL(redirectTo).hash}`
+      const navigation = yield* Effect.promise(() => runBootstrapScript(
+        script,
+        browserOrigin,
+        currentPath,
+        `#${result.capability}`,
+        true,
+        JSON.stringify({ redirectTo: pathless })
+      ))
+      expect(navigation.statusText).toBe("Connecting to Crit…")
+      expect(navigation.replaced).toContain("/#crit=")
+      expect(navigation.replaced).not.toBe(pathless)
+      const landed = new URL(navigation.replaced, `${browserOrigin}${currentPath}`)
+      expect(landed.origin).toBe(browserOrigin)
+      expect(landed.pathname).toBe("/")
+      expect(landed.pathname).not.toBe(currentPath)
+      expect(landed.hash.startsWith("#crit=")).toBe(true)
     }))))
 
   it("includes CORS on browser canvas list success and unauthorized responses", () =>
