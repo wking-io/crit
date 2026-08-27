@@ -8,12 +8,19 @@ export const useCanvasPresence = (args: {
   readonly attend: ReplicaSessionPorts["attend"]
 }): PresenceRoster | undefined => {
   const { attend, canvasId } = args
-  const [roster, setRoster] = useState<PresenceRoster | undefined>(undefined)
+  const [snapshot, setSnapshot] = useState<{
+    readonly canvasId: CanvasId
+    readonly roster: PresenceRoster
+  } | undefined>(undefined)
 
   useEffect(() => {
-    setRoster(undefined)
-    return attend(canvasId, setRoster)
+    return attend(canvasId, (roster) => {
+      setSnapshot((current) => {
+        if (current?.canvasId === canvasId && current.roster === roster) return current
+        return { canvasId, roster }
+      })
+    })
   }, [attend, canvasId])
 
-  return roster
+  return snapshot?.canvasId === canvasId ? snapshot.roster : undefined
 }
