@@ -79,6 +79,41 @@ const rename = decodeCanvasCommandBatch([{
   title: "Review"
 }])
 
+const addFrame = decodeCanvasCommandBatch([{
+  _tag: "addFrame",
+  frameId: "frame_checkout",
+  title: "Checkout",
+  representation: {
+    _tag: "webUrl",
+    url: "https://example.com/checkout"
+  },
+  status: "ready-for-review",
+  geometry: { x: 0, y: 0, width: 320, height: 200 }
+}])
+
+const teammateInvocation = async(email: string): Promise<PersonInvocation> => {
+  const bytes = new Uint8Array(
+    await crypto.subtle.digest("SHA-256", new TextEncoder().encode(email))
+  )
+  const digest = Array.from(
+    bytes,
+    (byte) => byte.toString(16).padStart(2, "0")
+  ).join("")
+  return Schema.decodeUnknownSync(PersonInvocation)({
+    _tag: "person",
+    principal: {
+      _tag: "person",
+      subject: `access|${email}`,
+      person: {
+        _tag: "person",
+        personId: `person_${digest.slice(0, 32)}`,
+        displayName: email.slice(0, email.indexOf("@")),
+        email: { _tag: "access", address: email }
+      }
+    }
+  })
+}
+
 describe("Worker canvas ledger routes", () => {
   it("pushes by change ID and pulls after the cursor", async() => {
     const canvasId = Id.canvas("canvas_worker_ledger")
@@ -135,6 +170,89 @@ describe("Worker canvas ledger routes", () => {
     const empty = ChangeProtocol.page.decode(await tail.json())
     expect(tail.status).toBe(200)
     expect(Result.isSuccess(empty) && empty.success.changes).toEqual([])
+  })
+
+  it("lands a teammate setFrameStatus under the teammate Access identity", async() => {
+    const canvasId = Id.canvas("canvas_worker_teammate_status")
+    const addedChangeId = Id.change("change_worker_add_frame")
+    const teammateChangeId = Id.change("change_worker_teammate_status")
+    const teammateEmail = "grace@acme.com"
+    const teammateHeaders = {
+      "content-type": "application/json",
+      "Cf-Access-Authenticated-User-Email": teammateEmail
+    }
+    const shared = await share(canvasId)
+    const authorOpened = await SELF.fetch(
+      `https://crit.example${remoteCanvasPath(canvasId)}`,
+      { headers: accessHeaders }
+    )
+    const authorView = Schema.decodeUnknownSync(AuthorityView)(await authorOpened.json())
+    const added = await SELF.fetch(
+      `https://crit.example${remoteCanvasChangesPath(canvasId)}`,
+      {
+        method: "POST",
+        headers: accessHeaders,
+        body: JSON.stringify(encodeSubmitCanvasChangeWire({
+          invocation: person,
+          proposal: {
+            changeId: addedChangeId,
+            canvasId,
+            observedCursor: authorView.cursor,
+            commands: addFrame
+          }
+        }))
+      }
+    )
+    const teammateOpened = await SELF.fetch(
+      `https://crit.example${remoteCanvasPath(canvasId)}`,
+      { headers: teammateHeaders }
+    )
+    const teammateView = Schema.decodeUnknownSync(AuthorityView)(
+      await teammateOpened.json()
+    )
+    const frame = teammateView.projection.frames.find(
+      ({ frameId }) => frameId === "frame_checkout"
+    )
+    if (frame === undefined) throw new Error("Shared Frame missing")
+    const commands = decodeCanvasCommandBatch([{
+      _tag: "setFrameStatus",
+      frameId: frame.frameId,
+      expectedChangedByChangeId: frame.statusChangedByChangeId,
+      status: "changes-requested"
+    }])
+    const changed = await SELF.fetch(
+      `https://crit.example${remoteCanvasChangesPath(canvasId)}`,
+      {
+        method: "POST",
+        headers: teammateHeaders,
+        body: JSON.stringify(encodeSubmitCanvasChangeWire({
+          invocation: await teammateInvocation(teammateEmail),
+          proposal: {
+            changeId: teammateChangeId,
+            canvasId,
+            observedCursor: teammateView.cursor,
+            commands
+          }
+        }))
+      }
+    )
+    const receipt = ChangeProtocol.receipt.decode(await changed.json())
+    const reopened = await SELF.fetch(
+      `https://crit.example${remoteCanvasPath(canvasId)}`,
+      { headers: teammateHeaders }
+    )
+    const reopenedView = Schema.decodeUnknownSync(AuthorityView)(await reopened.json())
+    const changedFrame = reopenedView.projection.frames.find(
+      ({ frameId }) => frameId === frame.frameId
+    )
+
+    expect(shared.status).toBe(200)
+    expect(added.status).toBe(200)
+    expect(teammateOpened.status).toBe(200)
+    expect(changed.status).toBe(200)
+    expect(Result.isSuccess(receipt) && receipt.success.disposition).toBe("first-acceptance")
+    expect(changedFrame?.status).toBe("changes-requested")
+    expect(changedFrame?.statusChangedByChangeId).toBe(teammateChangeId)
   })
 
   it("rejects a missing Access identity", async() => {

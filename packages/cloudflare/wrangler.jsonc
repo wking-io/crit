@@ -36,5 +36,36 @@
     "directory": "./assets",
     "binding": "ASSETS",
     "run_worker_first": true
+  },
+  "env": {
+    "production": {
+      "name": "crit-cloudflare",
+      "d1_databases": [
+        {
+          "binding": "CONTROL",
+          "database_name": "crit-control",
+          "database_id": "00000000-0000-0000-0000-000000000001"
+        }
+      ],
+      "durable_objects": {
+        "bindings": [
+          {
+            "name": "CANVASES",
+            "class_name": "CanvasDurableObject"
+          }
+        ]
+      },
+      "r2_buckets": [
+        {
+          "binding": "ARTIFACTS",
+          "bucket_name": "crit-artifacts"
+        }
+      ],
+      "assets": {
+        "directory": "./dist-assets",
+        "binding": "ASSETS",
+        "run_worker_first": true
+      }
+    }
   }
 }

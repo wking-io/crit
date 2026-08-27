@@ -1,6 +1,7 @@
 node_modules/
 dist/
 packages/host/dist-web/
+packages/cloudflare/dist-assets/
 coverage/
 *.tgz
 .DS_Store
