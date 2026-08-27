@@ -57,14 +57,10 @@ export type DurableObjectResult<A, E> = Data.TaggedEnum<{
 const durableObjectResult = Data.taggedEnum<DurableObjectResult<unknown, unknown>>()
 
 export const DurableObjectResult = {
-  success: <A, E = never>(value: A): DurableObjectResult<A, E> => {
-    // SAFETY: TaggedEnum constructors are invariant in the payload type parameters.
-    return durableObjectResult.success({ value }) as DurableObjectResult<A, E>
-  },
-  failure: <A = never, E = never>(error: E): DurableObjectResult<A, E> => {
-    // SAFETY: TaggedEnum constructors are invariant in the payload type parameters.
-    return durableObjectResult.failure({ error }) as DurableObjectResult<A, E>
-  },
+  success: <A, E = never>(value: A): DurableObjectResult<A, E> =>
+    durableObjectResult.success({ value }) as DurableObjectResult<A, E>,
+  failure: <A = never, E = never>(error: E): DurableObjectResult<A, E> =>
+    durableObjectResult.failure({ error }) as DurableObjectResult<A, E>,
   defect: (message: string): DurableObjectResult<never, never> =>
     durableObjectResult.defect({ message }),
   interrupted: (): DurableObjectResult<never, never> =>

@@ -471,9 +471,6 @@ describe("crit Vite plugin", () => {
   })
 
   it("pushes Canvas change hints to the served editor over the HMR WebSocket", async () => {
-    // Mirror the served editor: attach Vite's HMR socket to the page origin,
-    // read the endpoint the plugin injects into the editor HTML, and connect
-    // the way the editor bundle does.
     await createCanvas("homepage")
     httpServer = createHttpServer()
     server = await createServer({

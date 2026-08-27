@@ -114,12 +114,6 @@ export type CaptureFailure =
   | CaptureSourceUnavailable
   | LiveContentUnreachable
 
-// TODO: A canvas health report if a caller needs Frame status without artifact bytes.
-// `crit layout` lists kind only. `resolve` already answers whether a Frame can render
-// and for artifacts ships the full payload. The extras that would earn a method are a
-// JSON-safe binding and integrity table for handoff, and `actualDigest` on corrupt so
-// you can tell a stale Frame digest from an overwritten store. Web URLs add nothing.
-// This is not Frame Bridge authorized inspection. Do not rebuild from a sketch alone.
 export interface RepresentationRuntimeService {
   readonly capture: (
     representation: LiveRepresentation

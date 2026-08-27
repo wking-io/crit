@@ -401,7 +401,6 @@ describe("CanvasBoard", () => {
     if (callback === undefined || observed === undefined) {
       throw new Error("Frame observer missing")
     }
-    // SAFETY: The observer callback only reads isIntersecting and target.
     await act(async() => callback(
       [{ isIntersecting: false, target: observed } as IntersectionObserverEntry],
       {} as IntersectionObserver

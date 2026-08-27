@@ -1,4 +1,3 @@
-/** @vitest-environment node */
 import type { AddressInfo } from "node:net"
 import { createServer } from "vite"
 import { fileURLToPath } from "node:url"

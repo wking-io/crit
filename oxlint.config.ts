@@ -22,6 +22,7 @@ export default defineConfig({
   ],
   rules: {
     "anti-slop/no-chained-type-assertions": "error",
+    "anti-slop/no-comments": "error",
     "anti-slop/no-conditional-empty-object-spread": "error",
     "anti-slop/no-kebab-case-keys": "error",
     "anti-slop/no-kebab-case-tags": "error",
@@ -37,7 +38,6 @@ export default defineConfig({
     "anti-slop/no-unknown-type-aliases": "error",
     "anti-slop/no-unsafe-dictionary-type": "error",
     "anti-slop/no-widen-then-assert": "error",
-    "anti-slop/require-safety-comment-for-type-assertion": "error",
     "anti-slop-effect/no-service-constructor-imports": "error",
     "eslint/complexity": "error"
   },
@@ -45,7 +45,14 @@ export default defineConfig({
     {
       files: ["src/**", "playground/**"],
       rules: {
+        "anti-slop/no-comments": "off",
         "eslint/complexity": "off"
+      }
+    },
+    {
+      files: ["scripts/**"],
+      rules: {
+        "anti-slop/no-comments": "off"
       }
     }
   ]

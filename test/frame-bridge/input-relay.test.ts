@@ -20,25 +20,15 @@ const wheel = {
   deltaY: 8
 }
 
-const canvasInputWindow = (target: EventTarget): Window => {
-  // SAFETY: This fixture supplies every Window member read by connectCanvasInput
-  // and inherits the real EventTarget listener implementation.
-  return target as Window
-}
+const canvasInputWindow = (target: EventTarget): Window => target as Window
 
-const canvasInputRoot = (target: EventTarget): HTMLElement => {
-  // SAFETY: This fixture supplies getBoundingClientRect, the only HTMLElement
-  // member read by connectCanvasInput, and inherits real event dispatch.
-  return target as HTMLElement
-}
+const canvasInputRoot = (target: EventTarget): HTMLElement => target as HTMLElement
 
 const bridgedInputFrame = (contentWindow: Window): HTMLIFrameElement => {
   const frame = {
     contentWindow,
     getBoundingClientRect: () => ({ left: 100, top: 200 })
   }
-  // SAFETY: This fixture supplies every HTMLIFrameElement member read by the
-  // bridged input adapter.
   return frame as HTMLIFrameElement
 }
 

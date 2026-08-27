@@ -96,9 +96,6 @@ describe("SnapshotService", () => {
         )
       )
     let artifactOnDiskDuringCommit = false
-    // A real archive captures to disk; the Frame's URL changes between capture
-    // and commit, so the AddSnapshotFrame command is rejected with
-    // snapshot-source-changed.
     const archiveLayer = Layer.effect(
       SnapshotArchive,
       Effect.gen(function*() {

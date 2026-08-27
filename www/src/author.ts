@@ -23,6 +23,6 @@ export const writeLaunchAuthor = (author: Author) => {
       JSON.stringify(author)
     )
   } catch {
-    // Private browsing can reject localStorage writes.
+    return
   }
 }
