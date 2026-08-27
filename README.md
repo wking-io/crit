@@ -53,6 +53,8 @@ Crit runs in the customer's Cloudflare account:
 
 One Installation is one tenant. Crit v1 has no Organization model.
 
+To deploy the Installation Worker in your account, follow [`docs/install/cloudflare.md`](docs/install/cloudflare.md).
+
 ## Live pages
 
 A Frame stores a logical Representation, not an environment URL. An Application Route can resolve to localhost for a developer and a registered preview for a teammate. An immutable Artifact resolves to the same digest everywhere.
