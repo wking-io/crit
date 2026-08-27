@@ -3,9 +3,15 @@ import { Id } from "@crit/domain"
 import { LocalDaemonInstanceNonce } from "@crit/replica/http"
 import { Schema } from "effect"
 import { AtomRegistry } from "effect/unstable/reactivity"
-import { describe, expect, it } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { HostIndexScreen, hostIndexAtom, HostScreen, hostScreenAtom } from "../src/host-atoms.js"
+
+const fetchMock = vi.hoisted(() => {
+  const mock = vi.fn<typeof globalThis.fetch>(() => new Promise(() => {}))
+  vi.stubGlobal("fetch", mock)
+  return mock
+})
 
 const instance = Schema.decodeUnknownSync(LocalDaemonInstanceNonce)(
   "0123456789abcdef0123456789abcdef"
@@ -14,6 +20,11 @@ const instance = Schema.decodeUnknownSync(LocalDaemonInstanceNonce)(
 const shopCanvasId = Id.canvas("canvas_shop")
 const reviewCanvasId = Id.canvas("canvas_review")
 const localOrigin = "http://127.0.0.1:5173"
+
+afterEach(() => {
+  fetchMock.mockReset()
+  fetchMock.mockImplementation(() => new Promise(() => {}))
+})
 
 describe("hostScreenAtom", () => {
   it("is invalid for a bad fragment and can be read after the registry is replaced", () => {
@@ -113,6 +124,37 @@ describe("hostIndexAtom", () => {
     expect(HostIndexScreen.$is("connecting")(registry.get(
       hostIndexAtom(LocalBrowserConnection.encode(descriptor))(localOrigin)
     ))).toBe(true)
+    registry.dispose()
+  })
+
+  it("becomes ready after a successful local list", async() => {
+    const descriptor = LocalBrowserConnection.make({
+      baseUrl: "http://127.0.0.1:5173",
+      instance
+    })
+    fetchMock.mockImplementation(async() => new Response(JSON.stringify([{
+      canvasId: "canvas_launch_lab",
+      title: "Launch lab"
+    }]), {
+      status: 200,
+      headers: { "content-type": "application/json" }
+    }))
+    const registry = AtomRegistry.make()
+    const atom = hostIndexAtom(LocalBrowserConnection.encode(descriptor))(localOrigin)
+    const keep = registry.mount(atom)
+    expect(HostIndexScreen.$is("connecting")(registry.get(atom))).toBe(true)
+    await vi.waitFor(() => {
+      expect(HostIndexScreen.$is("ready")(registry.get(atom))).toBe(true)
+    })
+    const screen = registry.get(atom)
+    expect(HostIndexScreen.$is("ready")(screen)).toBe(true)
+    if (HostIndexScreen.$is("ready")(screen)) {
+      expect(screen.listings).toEqual([{
+        canvasId: "canvas_launch_lab",
+        title: "Launch lab"
+      }])
+    }
+    keep()
     registry.dispose()
   })
 })
