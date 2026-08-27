@@ -8,7 +8,7 @@ import {
   WebUrlRepresentation,
   type ApplicationId
 } from "@crit/domain"
-import { Crypto, Data, Effect, Layer, Option, Schema } from "effect"
+import { Crypto, Data, Effect, Layer, Match, Option, Predicate, Result, Schema } from "effect"
 
 import {
   ApplicationBaseUrl,
@@ -57,7 +57,7 @@ export const artifactStoreConformanceScenarios = (): readonly ArtifactStoreConfo
     const repeated = yield* store.put({ artifactId, bytes: bytes(4, 5, 6) })
     yield* requireFact(first.digest === repeated.digest, "identical put changed its representation")
     const conflict = yield* store.put({ artifactId, bytes: bytes(6, 5, 4) }).pipe(Effect.result)
-    yield* requireFact(conflict._tag === "Failure" && conflict.failure._tag === "ArtifactConflict", "conflicting put replaced immutable content")
+    yield* requireFact(Result.isFailure(conflict) && Predicate.isTagged(conflict.failure, "ArtifactConflict"), "conflicting put replaced immutable content")
     const retained = yield* store.read(first)
     yield* requireFact(retained[0] === 4, "conflicting put changed stored bytes")
   })
@@ -72,7 +72,7 @@ export const artifactStoreConformanceScenarios = (): readonly ArtifactStoreConfo
       digest: Schema.decodeUnknownSync(Sha256Digest)(`sha256:${"0".repeat(64)}`)
     })
     const corruptRead = yield* store.read(wrong).pipe(Effect.result)
-    yield* requireFact(corruptRead._tag === "Failure" && corruptRead.failure._tag === "ArtifactCorrupt", "read accepted a mismatched digest")
+    yield* requireFact(Result.isFailure(corruptRead) && Predicate.isTagged(corruptRead.failure, "ArtifactCorrupt"), "read accepted a mismatched digest")
   })
 }]
 
@@ -136,19 +136,23 @@ export const representationRuntimeConformanceScenarios = (
     })
     const encoded = JSON.stringify(representation)
     const plan = yield* runtime.resolve(representation)
-    yield* requireRuntimeFact(plan._tag === "iframe", "a bound application route did not produce an iframe")
-    if (plan._tag !== "iframe") return
+    yield* requireRuntimeFact(Predicate.isTagged(plan, "iframe"), "a bound application route did not produce an iframe")
+    const iframe = Match.value(plan).pipe(
+      Match.tag("iframe", (plan) => plan),
+      Match.option
+    )
+    if (Option.isNone(iframe)) return
     yield* requireRuntimeFact(
-      plan.url === expected.renderedUrl,
+      iframe.value.url === expected.renderedUrl,
       "application route composition changed the rooted route"
     )
     yield* requireRuntimeFact(
-      plan.representation !== representation && JSON.stringify(plan.representation) === encoded,
+      iframe.value.representation !== representation && JSON.stringify(iframe.value.representation) === encoded,
       "application iframe did not detach an equal representation"
     )
     state.selection.artifact = "artifact_changed"
     yield* requireRuntimeFact(
-      JSON.stringify(plan.representation) === encoded,
+      JSON.stringify(iframe.value.representation) === encoded,
       "application iframe retained caller-owned state"
     )
   })
@@ -160,12 +164,16 @@ export const representationRuntimeConformanceScenarios = (
       url: Schema.decodeUnknownSync(HttpUrl)("https://web.example/review?mode=wide")
     })
     const plan = yield* runtime.resolve(representation)
-    yield* requireRuntimeFact(plan._tag === "iframe", "a web URL did not produce an iframe")
-    if (plan._tag !== "iframe") return
-    yield* requireRuntimeFact(plan.url === representation.url, "web iframe changed its URL")
+    yield* requireRuntimeFact(Predicate.isTagged(plan, "iframe"), "a web URL did not produce an iframe")
+    const iframe = Match.value(plan).pipe(
+      Match.tag("iframe", (plan) => plan),
+      Match.option
+    )
+    if (Option.isNone(iframe)) return
+    yield* requireRuntimeFact(iframe.value.url === representation.url, "web iframe changed its URL")
     yield* requireRuntimeFact(
-      plan.representation !== representation &&
-        JSON.stringify(plan.representation) === JSON.stringify(representation),
+      iframe.value.representation !== representation &&
+        JSON.stringify(iframe.value.representation) === JSON.stringify(representation),
       "web iframe did not detach an equal representation"
     )
   })
@@ -179,14 +187,18 @@ export const representationRuntimeConformanceScenarios = (
       bytes: bytes(2, 7, 1)
     })
     const plan = yield* runtime.resolve(artifact)
-    yield* requireRuntimeFact(plan._tag === "artifactBytes", "a stored artifact did not produce bytes")
-    if (plan._tag !== "artifactBytes") return
+    yield* requireRuntimeFact(Predicate.isTagged(plan, "artifactBytes"), "a stored artifact did not produce bytes")
+    const artifactBytes = Match.value(plan).pipe(
+      Match.tag("artifactBytes", (plan) => plan),
+      Match.option
+    )
+    if (Option.isNone(artifactBytes)) return
     yield* requireRuntimeFact(
-      plan.representation !== artifact &&
-        JSON.stringify(plan.representation) === JSON.stringify(artifact),
+      artifactBytes.value.representation !== artifact &&
+        JSON.stringify(artifactBytes.value.representation) === JSON.stringify(artifact),
       "artifact plan did not detach an equal representation"
     )
-    plan.bytes[0] = 9
+    artifactBytes.value.bytes[0] = 9
     const retained = yield* store.read(artifact)
     yield* requireRuntimeFact(retained[0] === 2, "artifact plan exposed store-owned bytes")
   })
@@ -200,10 +212,13 @@ export const representationRuntimeConformanceScenarios = (
     })
     const plan = yield* runtime.resolve(representation)
     yield* requireRuntimeFact(
-      plan._tag === "unavailable" &&
-        plan.reason === "application-unbound" &&
-        plan.representation !== representation &&
-        JSON.stringify(plan.representation) === JSON.stringify(representation),
+      Match.value(plan).pipe(
+        Match.tag("unavailable", (plan) =>
+          plan.reason === "application-unbound" &&
+          plan.representation !== representation &&
+          JSON.stringify(plan.representation) === JSON.stringify(representation)),
+        Match.orElse(() => false)
+      ),
       "an unbound application did not retain its legal unavailable representation"
     )
   })
@@ -218,10 +233,13 @@ export const representationRuntimeConformanceScenarios = (
     })
     const missingPlan = yield* runtime.resolve(missing)
     yield* requireRuntimeFact(
-      missingPlan._tag === "unavailable" &&
-        missingPlan.reason === "artifact-not-found" &&
-        missingPlan.representation !== missing &&
-        JSON.stringify(missingPlan.representation) === JSON.stringify(missing),
+      Match.value(missingPlan).pipe(
+        Match.tag("unavailable", (plan) =>
+          plan.reason === "artifact-not-found" &&
+          plan.representation !== missing &&
+          JSON.stringify(plan.representation) === JSON.stringify(missing)),
+        Match.orElse(() => false)
+      ),
       "a missing artifact did not retain its legal unavailable representation"
     )
 
@@ -235,10 +253,13 @@ export const representationRuntimeConformanceScenarios = (
     })
     const corruptPlan = yield* runtime.resolve(corrupt)
     yield* requireRuntimeFact(
-      corruptPlan._tag === "unavailable" &&
-        corruptPlan.reason === "artifact-corrupt" &&
-        corruptPlan.representation !== corrupt &&
-        JSON.stringify(corruptPlan.representation) === JSON.stringify(corrupt),
+      Match.value(corruptPlan).pipe(
+        Match.tag("unavailable", (plan) =>
+          plan.reason === "artifact-corrupt" &&
+          plan.representation !== corrupt &&
+          JSON.stringify(plan.representation) === JSON.stringify(corrupt)),
+        Match.orElse(() => false)
+      ),
       "a corrupt artifact did not retain its legal unavailable representation"
     )
   })

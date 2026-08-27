@@ -3,6 +3,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
 
+import { Predicate } from "effect"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 
 const executable = path.join(import.meta.dirname, "..", "dist", "main.js")
@@ -53,7 +54,7 @@ describe("built crit-target init", () => {
     const created = run()
     expect(created.status, created.stderr).toBe(0)
     const first = JSON.parse(created.stdout)
-    expect(first._tag).toBe("created")
+    expect(Predicate.isTagged(first, "created")).toBe(true)
     expect(first.manifest).toMatchObject({
       schemaVersion: 2,
       applicationId: expect.stringMatching(/^application_/)
@@ -63,7 +64,7 @@ describe("built crit-target init", () => {
     const unchanged = run()
     expect(unchanged.status, unchanged.stderr).toBe(0)
     const second = JSON.parse(unchanged.stdout)
-    expect(second._tag).toBe("unchanged")
+    expect(Predicate.isTagged(second, "unchanged")).toBe(true)
     expect(second.manifest).toEqual(first.manifest)
     expect(readFileSync(path.join(root, "crit.manifest.json"), "utf8")).toBe(firstBytes)
     const skillPath = path.join(root, ".agents", "skills", "crit", "SKILL.md")
@@ -111,7 +112,7 @@ describe("built crit-target init", () => {
     const results = await Promise.all(Array.from({ length: 8 }, runAsync))
     expect(results.every((result) => result.status === 0), results.map((result) => result.stderr).join("\n")).toBe(true)
     const outputs = results.map((result) => JSON.parse(result.stdout))
-    expect(outputs.filter((result) => result._tag === "created")).toHaveLength(1)
+    expect(outputs.filter(Predicate.isTagged("created"))).toHaveLength(1)
     expect(new Set(outputs.map((result) => result.manifest.applicationId)).size).toBe(1)
     expect(JSON.parse(readFileSync(path.join(root, "crit.manifest.json"), "utf8"))).toEqual(outputs[0]?.manifest)
   })

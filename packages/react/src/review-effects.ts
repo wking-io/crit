@@ -1,4 +1,5 @@
 import type { Frame } from "@crit/domain"
+import { Match } from "effect"
 import {
   useEffect,
   useState,
@@ -15,22 +16,23 @@ export const applyReviewEffect = (
   effect: ReviewClientEffect,
   context: ReviewEffectContext
 ): void => {
-  switch (effect._tag) {
-    case "openUrl":
-      window.open(effect.url, "_blank", "noopener,noreferrer")
-      return
-    case "fullscreen":
-      if (effect.target === "exit") {
+  Match.value(effect).pipe(Match.tagsExhaustive({
+    openUrl: ({ url }) => {
+      window.open(url, "_blank", "noopener,noreferrer")
+    },
+    fullscreen: ({ target }) => {
+      if (target === "exit") {
         void document.exitFullscreen()
         return
       }
       if (context.frameElement !== null) {
         void context.frameElement.requestFullscreen()
       }
-      return
-    case "copy":
-      void navigator.clipboard?.writeText(effect.text)
-  }
+    },
+    copy: ({ text }) => {
+      void navigator.clipboard?.writeText(text)
+    }
+  }))
 }
 
 export const useReviewEffects = (args: {

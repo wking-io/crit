@@ -12,7 +12,7 @@ import {
 } from "@crit/authority"
 import { authorityConformanceScenarios } from "@crit/authority/testing"
 import { CanvasEngine, DomainValue, Id, IsoTimestamp, decodeCanvasCommandBatch, emptyCanvasProjection } from "@crit/domain"
-import { Context, Deferred, Effect, Exit, Fiber, Layer, Schema } from "effect"
+import { Context, Deferred, Effect, Exit, Fiber, Layer, Match, Predicate, Result, Schema } from "effect"
 import { describe, expect, it } from "vitest"
 
 import { LocalCanvasCatalog, SqliteCanvasAuthority } from "../src/index.js"
@@ -110,7 +110,7 @@ describe("SQLite CanvasAuthority", () => {
         ...rejectedProposal,
         commands: decodeCanvasCommandBatch([{ _tag: "renameCanvas", expectedTitle: "Review", title: "Other" }])
       }, person))
-      expect(changedRetry._tag === "Failure" && changedRetry.failure._tag).toBe("changeIdReused")
+      expect(Result.isFailure(changedRetry) && Predicate.isTagged(changedRetry.failure, "changeIdReused")).toBe(true)
       const next = yield* authority.submit({
         canvasId, changeId: Id.change("change_restart_next"), observedCursor: null,
         commands: decodeCanvasCommandBatch([{ _tag: "renameCanvas", expectedTitle: "Review", title: "Final" }])
@@ -123,7 +123,10 @@ describe("SQLite CanvasAuthority", () => {
       const replay = CanvasEngine.replay(emptyCanvasProjection(canvasId, "Authority"), page.changes)
       expect(view.projection.title).toBe("Final")
       expect(page.changes).toHaveLength(2)
-      expect(replay._tag === "replayed" && replay.projection).toEqual(view.projection)
+      Match.value(replay).pipe(
+        Match.tag("replayed", ({ projection }) => { expect(projection).toEqual(view.projection) }),
+        Match.orElse(() => { throw new Error("expected replayed") })
+      )
       }))
     })))
   })
@@ -293,10 +296,12 @@ describe("SQLite CanvasAuthority", () => {
     database.exec("PRAGMA user_version = 2")
     database.close()
     const result = yield* Effect.result(Effect.scoped(buildSqliteAuthority({ path })))
-    expect(result._tag).toBe("Failure")
-    if (result._tag === "Failure") {
-      expect(result.failure._tag).toBe("LocalDatabaseOpenFailure")
-      expect(result.failure.reason).toContain("newer than")
+    expect(Result.isFailure(result)).toBe(true)
+    if (Result.isFailure(result)) {
+      expect(Predicate.isTagged(result.failure, "LocalDatabaseOpenFailure")).toBe(true)
+      if (Predicate.isTagged(result.failure, "LocalDatabaseOpenFailure") && "reason" in result.failure) {
+        expect(result.failure.reason).toContain("newer than")
+      }
     }
     })))
   })

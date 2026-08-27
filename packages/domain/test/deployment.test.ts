@@ -1,4 +1,4 @@
-import { Result, Schema } from "effect"
+import { Predicate, Result, Schema } from "effect"
 import { describe, expect, it } from "vitest"
 
 import {
@@ -144,7 +144,7 @@ describe("Deployment", () => {
       )
     })
 
-    expect(deployment._tag).toBe("deployment")
+    expect(Predicate.isTagged(deployment, "deployment")).toBe(true)
     expect(deployment.deploymentId).toBe("deployment_checkout_make")
   })
 })

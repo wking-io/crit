@@ -3,7 +3,7 @@ import { tmpdir } from "node:os"
 import path from "node:path"
 
 import { NodeCrypto, NodeFileSystem, NodePath, NodeServices } from "@effect/platform-node"
-import { Crypto, Effect, FileSystem, Layer, Result } from "effect"
+import { Crypto, Effect, FileSystem, Layer, Predicate, Result } from "effect"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 
 import {
@@ -43,13 +43,13 @@ const initializeEffect = () => Effect.gen(function*() {
 describe("LocalProjectManifest", () => {
   it("creates once and byte-preserves an existing manifest", async() => {
     const created = await initialize()
-    expect(created._tag).toBe("created")
+    expect(Predicate.isTagged(created, "created")).toBe(true)
     expect(created.manifest.schemaVersion).toBe(2)
     expect(created.manifest.applicationId).toMatch(/^application_/)
     const firstBytes = await readFile(manifestPath())
     expect(JSON.parse(firstBytes.toString("utf8"))).toEqual(created.manifest)
     const unchanged = await initialize()
-    expect(unchanged._tag).toBe("unchanged")
+    expect(Predicate.isTagged(unchanged, "unchanged")).toBe(true)
     expect(unchanged.manifest).toEqual(created.manifest)
     expect(await readFile(manifestPath())).toEqual(firstBytes)
     expect((await readdir(root)).filter((name) => name.startsWith(".crit-manifest-"))).toEqual([])
@@ -60,7 +60,7 @@ describe("LocalProjectManifest", () => {
       Array.from({ length: 16 }, initializeEffect),
       { concurrency: "unbounded" }
     ).pipe(Effect.provide(NodeServices.layer)))
-    expect(results.filter((result) => result._tag === "created")).toHaveLength(1)
+    expect(results.filter(Predicate.isTagged("created"))).toHaveLength(1)
     expect(new Set(results.map((result) => result.manifest.applicationId)).size).toBe(1)
     const stored = JSON.parse(await readFile(manifestPath(), "utf8"))
     expect(stored).toEqual(results[0]?.manifest)
@@ -79,8 +79,8 @@ describe("LocalProjectManifest", () => {
     }))
     expect(Result.isFailure(result)).toBe(true)
     if (Result.isFailure(result)) {
-      expect(result.failure._tag).toBe("ProjectManifestInvalid")
-      if (result.failure._tag === "ProjectManifestInvalid") {
+      expect(Predicate.isTagged(result.failure, "ProjectManifestInvalid")).toBe(true)
+      if (Predicate.isTagged(result.failure, "ProjectManifestInvalid") && "reason" in result.failure) {
         expect(result.failure.reason).toBe("Manifest does not match schema version 2")
         expect(result.failure.reason).not.toContain(source)
       }
@@ -96,8 +96,8 @@ describe("LocalProjectManifest", () => {
     }))
     expect(Result.isFailure(result)).toBe(true)
     if (Result.isFailure(result)) {
-      expect(result.failure._tag).toBe("ProjectManifestInvalid")
-      if (result.failure._tag === "ProjectManifestInvalid") {
+      expect(Predicate.isTagged(result.failure, "ProjectManifestInvalid")).toBe(true)
+      if (Predicate.isTagged(result.failure, "ProjectManifestInvalid") && "reason" in result.failure) {
         expect(result.failure.reason).toBe("Manifest target must be a regular file")
       }
     }
@@ -117,8 +117,8 @@ describe("LocalProjectManifest", () => {
     }))
     expect(Result.isFailure(result)).toBe(true)
     if (Result.isFailure(result)) {
-      expect(result.failure._tag).toBe("ProjectManifestInvalid")
-      if (result.failure._tag === "ProjectManifestInvalid") {
+      expect(Predicate.isTagged(result.failure, "ProjectManifestInvalid")).toBe(true)
+      if (Predicate.isTagged(result.failure, "ProjectManifestInvalid") && "reason" in result.failure) {
         expect(result.failure.reason).toBe("Manifest target must be a regular file")
       }
     }
@@ -144,8 +144,12 @@ describe("LocalProjectManifest", () => {
     ))
     expect(Result.isFailure(result)).toBe(true)
     if (Result.isFailure(result)) {
-      expect(result.failure._tag).toBe("ProjectManifestIoFailure")
-      if (result.failure._tag === "ProjectManifestIoFailure") {
+      expect(Predicate.isTagged(result.failure, "ProjectManifestIoFailure")).toBe(true)
+      if (
+        Predicate.isTagged(result.failure, "ProjectManifestIoFailure") &&
+        "operation" in result.failure &&
+        "reason" in result.failure
+      ) {
         expect(result.failure.operation).toBe("stage")
         expect(result.failure.reason).toBe("AlreadyExists")
       }
@@ -162,8 +166,8 @@ describe("LocalProjectManifest", () => {
     }))
     expect(Result.isFailure(result)).toBe(true)
     if (Result.isFailure(result)) {
-      expect(result.failure._tag).toBe("ProjectManifestInvalid")
-      if (result.failure._tag === "ProjectManifestInvalid") {
+      expect(Predicate.isTagged(result.failure, "ProjectManifestInvalid")).toBe(true)
+      if (Predicate.isTagged(result.failure, "ProjectManifestInvalid") && "reason" in result.failure) {
         expect(result.failure.reason).toBe("Manifest exceeds the 1024-byte limit")
       }
     }
@@ -212,7 +216,7 @@ describe("LocalProjectManifest", () => {
     ))
     expect(Result.isSuccess(result)).toBe(true)
     if (Result.isSuccess(result)) {
-      expect(result.success._tag).toBe("unchanged")
+      expect(Predicate.isTagged(result.success, "unchanged")).toBe(true)
       expect(result.success.manifest.applicationId).toBe("application_short_reads")
     }
     expect(requested.length).toBeGreaterThan(1)
@@ -252,8 +256,8 @@ describe("LocalProjectManifest", () => {
     ))
     expect(Result.isFailure(result)).toBe(true)
     if (Result.isFailure(result)) {
-      expect(result.failure._tag).toBe("ProjectManifestInvalid")
-      if (result.failure._tag === "ProjectManifestInvalid") {
+      expect(Predicate.isTagged(result.failure, "ProjectManifestInvalid")).toBe(true)
+      if (Predicate.isTagged(result.failure, "ProjectManifestInvalid") && "reason" in result.failure) {
         expect(result.failure.reason).toBe("Manifest target must be a regular file")
       }
     }

@@ -16,10 +16,11 @@ import {
   parseArtifactPath,
   parseRemoteAuthorityPath,
   remoteCanvasCollectionPath,
+  RemoteAuthorityRoute,
   ShareDigestMismatch,
   type RegisterDeploymentWire
 } from "@crit/protocol"
-import { Effect, Exit, Option, Schema } from "effect"
+import { Effect, Exit, Match, Option, Predicate, Schema } from "effect"
 
 import {
   authSubjectForCaller,
@@ -101,13 +102,13 @@ const canvasSharedResponse = (receipt: ShareReceiptRow) => new Response(
 
 const comparedShareResponse = (
   compared: ComparedShareReceipt
-) => {
-  if (compared._tag === "match") return canvasSharedResponse(compared.receipt)
-  if (compared._tag === "digestMismatch") {
-    return encodedJson(409, ShareDigestMismatch, compared.mismatch)
-  }
-  return encodedJson(409, ShareReceiptMismatch, compared.mismatch)
-}
+) => Match.value(compared).pipe(
+  Match.tagsExhaustive({
+    match: ({ receipt }) => canvasSharedResponse(receipt),
+    digestMismatch: ({ mismatch }) => encodedJson(409, ShareDigestMismatch, mismatch),
+    receiptMismatch: ({ mismatch }) => encodedJson(409, ShareReceiptMismatch, mismatch)
+  })
+)
 
 const openOrCreateRemoteCanvas = async (
   env: Cloudflare.Env,
@@ -120,14 +121,15 @@ const openOrCreateRemoteCanvas = async (
     title: requested.title
   }), invocation)
   if (
-    created._tag === "failure" &&
-    created.error._tag !== "canvasAlreadyExists"
+    Predicate.isTagged(created, "failure") &&
+    "error" in created &&
+    !Predicate.isTagged(created.error, "canvasAlreadyExists")
   ) {
     return emptyResponse(500)
   }
-  if (created._tag !== "success") {
+  if (!Predicate.isTagged(created, "success")) {
     const opened = await stub.open()
-    if (opened._tag !== "success") return emptyResponse(500)
+    if (!Predicate.isTagged(opened, "success")) return emptyResponse(500)
   }
   try {
     return canvasSharedResponse(await insertShareReceipt(env, requested))
@@ -143,10 +145,10 @@ const shareMatchesCaller = (
   caller: CallerIdentity,
   share: ReturnType<typeof decodeShareCanvasWire>
 ): boolean =>
-  caller._tag === "access"
-    ? share.person.email._tag === "access"
+  CallerIdentity.$is("access")(caller)
+    ? Predicate.isTagged(share.person.email, "access") && "address" in share.person.email
       && share.person.email.address === caller.address
-    : share.person.email._tag === "unspecified"
+    : Predicate.isTagged(share.person.email, "unspecified")
       && share.person.personId === caller.personId
 
 const shareCanvas = async (
@@ -175,9 +177,9 @@ const shareCanvas = async (
       { onExcessProperty: "ignore" }
     )(input)
     if (Option.isSome(probe)) {
-      const mismatched = caller._tag === "access"
-        ? probe.value.person.email._tag !== "access"
-        : probe.value.person.email._tag === "access"
+      const mismatched = CallerIdentity.$is("access")(caller)
+        ? !Predicate.isTagged(probe.value.person.email, "access")
+        : Predicate.isTagged(probe.value.person.email, "access")
       if (mismatched) {
         return respondWithCallerCookie(emptyResponse(401), request, resolved)
       }
@@ -291,7 +293,7 @@ const readIdentity = (request: Request): Response => {
   if (request.method !== "GET") return emptyResponse(405)
   const resolved = resolveCallerIdentity(request)
   const caller = resolved.caller
-  const body = caller._tag === "access"
+  const body = CallerIdentity.$is("access")(caller)
     ? encodeAccessAuthenticatedPersonWire({
       kind: "access-authenticated-person",
       schemaVersion: 1,
@@ -365,7 +367,7 @@ const worker: ExportedHandler<Cloudflare.Env> = {
     }
     const ledger = parseRemoteAuthorityPath(url.pathname)
     if (ledger !== undefined) {
-      if (ledger._tag === "presence") {
+      if (RemoteAuthorityRoute.$is("presence")(ledger)) {
         return handlePresenceRequest(request, env, ledger.canvasId)
       }
       return handleLedgerRequest(request, env, ledger)

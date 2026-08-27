@@ -26,11 +26,7 @@ type NativeGestureEvent = Event & {
 
 const nativeGestureListener = (
   listener: (event: NativeGestureEvent) => void
-): EventListener => {
-  // SAFETY: WebKit dispatches gesture events as Event instances with these
-  // optional coordinates and scale fields, but lib.dom does not declare them.
-  return listener as EventListener
-}
+): EventListener => listener as EventListener
 
 const touchPoints = (event: TouchEvent) =>
   Array.from(event.touches, (touch) => ({ x: touch.clientX, y: touch.clientY }))

@@ -72,20 +72,30 @@ const jsonEquals = (left: Schema.Json | undefined, right: Schema.Json | undefine
   return leftEntries.length === rightEntries.length &&
     leftEntries.every(([key, value], index) => rightEntries[index]?.[0] === key && jsonEquals(value, rightEntries[index]?.[1]))
 }
-const representationEquals = (left: RepresentationRef, right: RepresentationRef): boolean => {
-  if (left._tag !== right._tag) return false
-  switch (left._tag) {
-    case "applicationRoute":
-      return right._tag === "applicationRoute" &&
-        left.applicationId === right.applicationId &&
-        left.route === right.route &&
-        jsonEquals(left.state, right.state)
-    case "webUrl":
-      return right._tag === "webUrl" && left.url === right.url
-    case "artifact":
-      return right._tag === "artifact" && left.artifactId === right.artifactId && left.digest === right.digest
-  }
-}
+const representationEquals = (left: RepresentationRef, right: RepresentationRef): boolean =>
+  Match.value(left).pipe(Match.tagsExhaustive({
+    applicationRoute: (leftValue) => Match.value(right).pipe(
+      Match.tag(
+        "applicationRoute",
+        (rightValue) =>
+          leftValue.applicationId === rightValue.applicationId &&
+          leftValue.route === rightValue.route &&
+          jsonEquals(leftValue.state, rightValue.state)
+      ),
+      Match.orElse(() => false)
+    ),
+    webUrl: (leftValue) => Match.value(right).pipe(
+      Match.tag("webUrl", (rightValue) => leftValue.url === rightValue.url),
+      Match.orElse(() => false)
+    ),
+    artifact: (leftValue) => Match.value(right).pipe(
+      Match.tag(
+        "artifact",
+        (rightValue) => leftValue.artifactId === rightValue.artifactId && leftValue.digest === rightValue.digest
+      ),
+      Match.orElse(() => false)
+    )
+  }))
 const stackEquals = (left: readonly CanvasItemRef[], right: readonly CanvasItemRef[]): boolean =>
   left.length === right.length && left.every((item, index) => right[index] !== undefined && itemKey(item) === itemKey(right[index]!))
 
@@ -126,17 +136,14 @@ type FrameAggregateCommand = Data.TaggedEnum<{
 type StackAggregateCommand = Extract<CanvasCommand, { readonly _tag: "placeCanvasItem" }>
 
 const applyCanvasCommand = (p: CanvasProjection, c: CanvasAggregateCommand, commandIndex: number): CanvasChangeResult => {
-  switch (c._tag) {
-    case "renameCanvas":
-      if (p.title !== c.expectedTitle) {
-        return reject(CanvasTitleMismatch.make({
-          commandIndex,
-          expectedTitle: c.expectedTitle,
-          actualTitle: p.title
-        }, trusted))
-      }
-      return applied(p.title === c.title ? p : { ...p, title: c.title })
+  if (p.title !== c.expectedTitle) {
+    return reject(CanvasTitleMismatch.make({
+      commandIndex,
+      expectedTitle: c.expectedTitle,
+      actualTitle: p.title
+    }, trusted))
   }
+  return applied(p.title === c.title ? p : { ...p, title: c.title })
 }
 
 const applyAddFrame = (
@@ -282,28 +289,24 @@ const applyStackCommand = (
   commandIndex: number,
   changeId: ChangeId
 ): CanvasChangeResult => {
-  switch (c._tag) {
-    case "placeCanvasItem": {
-      if (p.stackChangedByChangeId !== c.expectedStackChangeId) {
-        return precondition(commandIndex, "stackChangedByChangeId", c.expectedStackChangeId, p.stackChangedByChangeId)
-      }
-      const key = itemKey(c.item)
-      if (!p.stack.some((item) => itemKey(item) === key)) {
-        return reject(InvalidReference.make({ commandIndex, field: "item", id: key }, trusted))
-      }
-      const without = p.stack.filter((item) => itemKey(item) !== key)
-      let index = 0
-      if (c.after !== null) {
-        const afterKey = itemKey(c.after)
-        if (afterKey === key) return reject(InvalidReference.make({ commandIndex, field: "after", id: afterKey }, trusted))
-        const afterIndex = without.findIndex((item) => itemKey(item) === afterKey)
-        if (afterIndex < 0) return reject(InvalidReference.make({ commandIndex, field: "after", id: afterKey }, trusted))
-        index = afterIndex + 1
-      }
-      const stack = [...without.slice(0, index), c.item, ...without.slice(index)]
-      return applied(stackEquals(stack, p.stack) ? p : { ...p, stack, stackChangedByChangeId: changeId })
-    }
+  if (p.stackChangedByChangeId !== c.expectedStackChangeId) {
+    return precondition(commandIndex, "stackChangedByChangeId", c.expectedStackChangeId, p.stackChangedByChangeId)
   }
+  const key = itemKey(c.item)
+  if (!p.stack.some((item) => itemKey(item) === key)) {
+    return reject(InvalidReference.make({ commandIndex, field: "item", id: key }, trusted))
+  }
+  const without = p.stack.filter((item) => itemKey(item) !== key)
+  let index = 0
+  if (c.after !== null) {
+    const afterKey = itemKey(c.after)
+    if (afterKey === key) return reject(InvalidReference.make({ commandIndex, field: "after", id: afterKey }, trusted))
+    const afterIndex = without.findIndex((item) => itemKey(item) === afterKey)
+    if (afterIndex < 0) return reject(InvalidReference.make({ commandIndex, field: "after", id: afterKey }, trusted))
+    index = afterIndex + 1
+  }
+  const stack = [...without.slice(0, index), c.item, ...without.slice(index)]
+  return applied(stackEquals(stack, p.stack) ? p : { ...p, stack, stackChangedByChangeId: changeId })
 }
 
 const applyCommand = (
@@ -311,21 +314,17 @@ const applyCommand = (
   c: CanvasCommand,
   commandIndex: number,
   changeId: ChangeId
-): CanvasChangeResult => {
-  switch (c._tag) {
-    case "renameCanvas":
-      return applyCanvasCommand(p, c, commandIndex)
-    case "addFrame":
-    case "setFrameTitle":
-    case "setFrameRepresentation":
-    case "setFrameStatus":
-    case "setFrameGeometry":
-    case "removeFrame":
-      return applyFrameCommand(p, c, commandIndex, changeId)
-    case "placeCanvasItem":
-      return applyStackCommand(p, c, commandIndex, changeId)
-  }
-}
+): CanvasChangeResult =>
+  Match.value(c).pipe(Match.tagsExhaustive({
+    renameCanvas: (command) => applyCanvasCommand(p, command, commandIndex),
+    addFrame: (command) => applyFrameCommand(p, command, commandIndex, changeId),
+    setFrameTitle: (command) => applyFrameCommand(p, command, commandIndex, changeId),
+    setFrameRepresentation: (command) => applyFrameCommand(p, command, commandIndex, changeId),
+    setFrameStatus: (command) => applyFrameCommand(p, command, commandIndex, changeId),
+    setFrameGeometry: (command) => applyFrameCommand(p, command, commandIndex, changeId),
+    removeFrame: (command) => applyFrameCommand(p, command, commandIndex, changeId),
+    placeCanvasItem: (command) => applyStackCommand(p, command, commandIndex, changeId)
+  }))
 
 const applyCommands = (
   initial: CanvasProjection,
@@ -335,7 +334,7 @@ const applyCommands = (
   let projection = initial
   for (const [commandIndex, command] of commands.entries()) {
     const result = applyCommand(projection, command, commandIndex, changeId)
-    if (result._tag === "rejected") return result
+    if (Predicate.isTagged(result, "rejected")) return result
     projection = result.projection
   }
   return applied(projection)
@@ -360,17 +359,21 @@ const replay = (initial: CanvasProjection, changes: readonly CanvasChange[]): Ca
       }, trusted)
     }
     const result = apply(projection, change)
-    if (result._tag === "rejected") {
+    const step = Match.value(result).pipe(Match.tagsExhaustive({
+      rejected: ({ failure }) => ({ ok: false as const, failure }),
+      applied: ({ projection: next }) => ({ ok: true as const, projection: next })
+    }))
+    if (!step.ok) {
       return ReplayFailed.make({
         failure: ChangeRejected.make({
           changeIndex,
           changeId: change.changeId,
-          failure: result.failure
+          failure: step.failure
         }, trusted)
       }, trusted)
     }
     seen.set(change.changeId, changeIndex)
-    projection = result.projection
+    projection = step.projection
   }
   return Replayed.make({ projection }, trusted)
 }

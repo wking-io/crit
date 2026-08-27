@@ -37,7 +37,7 @@ import {
   LocalRepresentationResolveFailure,
   RepresentationRuntimeLive
 } from "@crit/representations"
-import { Context, Crypto, Effect, Fiber, Layer, Option, Redacted, Schema, Stream, Tracer } from "effect"
+import { Context, Crypto, Effect, Fiber, Layer, Option, Predicate, Redacted, Schema, Stream, Tracer } from "effect"
 import { FetchHttpClient, HttpClient, HttpClientRequest, HttpServer } from "effect/unstable/http"
 import * as Socket from "effect/unstable/socket/Socket"
 import { describe, expect, it } from "vitest"
@@ -112,7 +112,9 @@ const clientFor = (options: {
     installationId
   }).pipe(Layer.provide(representationRuntime)), scope)
   const server = Context.get(serverContext, HttpServer.HttpServer)
-  if (server.address._tag !== "TcpAddress") return yield* Effect.die("expected TCP daemon")
+  if (!Predicate.isTagged(server.address, "TcpAddress") || !("port" in server.address)) {
+    return yield* Effect.die("expected TCP daemon")
+  }
   const clientContext = yield* Layer.buildWithScope(
     Layer.merge(
       LocalCanvasClient.layer({
@@ -190,7 +192,9 @@ describe("LocalDaemon", () => {
       })
       const rendered = yield* representations.resolve(artifact)
       expect(rendered).toMatchObject({ _tag: "artifactBytes", representation: artifact })
-      if (rendered._tag === "artifactBytes") expect(rendered.bytes).toEqual(artifactBytes)
+      if (Predicate.isTagged(rendered, "artifactBytes") && "bytes" in rendered) {
+        expect(rendered.bytes).toEqual(artifactBytes)
+      }
     })))
   })
 
@@ -275,7 +279,9 @@ describe("LocalDaemon", () => {
         installationId
       }).pipe(Layer.provide(failingRuntime)), scope)
       const server = Context.get(serverContext, HttpServer.HttpServer)
-      if (server.address._tag !== "TcpAddress") return yield* Effect.die("expected TCP daemon")
+      if (!Predicate.isTagged(server.address, "TcpAddress") || !("port" in server.address)) {
+        return yield* Effect.die("expected TCP daemon")
+      }
       const baseUrl = `http://127.0.0.1:${server.address.port}`
       const clientContext = yield* Layer.buildWithScope(
         LocalRepresentationClient.layer({ _tag: "bearer", baseUrl, token: localApiToken(token) }).pipe(
@@ -528,7 +534,7 @@ describe("LocalDaemon", () => {
 
       expect(receipt.view.pending).toHaveLength(1)
       const synchronized = yield* Fiber.join(drained)
-      expect(synchronized._tag).toBe("Some")
+      expect(Option.isSome(synchronized)).toBe(true)
       if (Option.isSome(synchronized)) expect(synchronized.value.pending).toHaveLength(0)
     }))))
 

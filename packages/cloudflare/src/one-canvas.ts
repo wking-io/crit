@@ -10,7 +10,8 @@ import {
 } from "@crit/authority"
 import {
   AuthorityPolicy,
-  type FreshEvaluation,
+  FreshEvaluation,
+  RetryEvaluation,
   type RetryRecord,
   type SubmitDecision
 } from "@crit/authority/adapter"
@@ -214,7 +215,7 @@ const bindDatabase = (args: {
       invocation,
       prior: yield* readRetry(proposal)
     })
-    if (retry._tag === "decided") return Evaluation.decision({ decision: retry.decision })
+    if (RetryEvaluation.$is("decided")(retry)) return Evaluation.decision({ decision: retry.decision })
     const canvas = yield* readCanvas()
     if (canvas === undefined) throw new Error("one-canvas database is missing its Canvas")
     let observedCursorKnown = proposal.observedCursor === null || proposal.observedCursor === canvas.genesisCursor
@@ -230,7 +231,7 @@ const bindDatabase = (args: {
       projection: canvas.view.projection,
       observedCursorKnown
     })
-    if (fresh._tag === "decided") return Evaluation.decision({ decision: fresh.decision })
+    if (FreshEvaluation.$is("decided")(fresh)) return Evaluation.decision({ decision: fresh.decision })
     return Evaluation.fresh({ canvas, evaluation: fresh })
   })
 
@@ -250,18 +251,18 @@ const bindDatabase = (args: {
     }
     return Effect.gen(function*() {
       const preflight = yield* evaluate(boundProposal, ownedInvocation).pipe(Effect.orDie)
-      if (preflight._tag === "decision") {
+      if (Evaluation.$is("decision")(preflight)) {
         return yield* AuthorityPolicy.decisionEffect(preflight.decision)
       }
-      const acceptedAt = preflight.evaluation._tag === "acceptance"
+      const acceptedAt = FreshEvaluation.$is("acceptance")(preflight.evaluation)
         ? yield* args.clock.now
         : undefined
       const decision = yield* args.sqlite.transact(Effect.gen(function*() {
         const durable = yield* evaluate(boundProposal, ownedInvocation)
-        if (durable._tag === "decision") return durable.decision
-        if (durable.evaluation._tag === "rejected") {
+        if (Evaluation.$is("decision")(durable)) return durable.decision
+        if (FreshEvaluation.$is("rejected")(durable.evaluation)) {
           const rejected = durable.evaluation.retry.outcome
-          if (rejected._tag === "Success") {
+          if (Result.isSuccess(rejected)) {
             throw new Error("rejected retry contains an accepted change")
           }
           const failure = rejected.failure

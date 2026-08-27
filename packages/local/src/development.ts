@@ -27,6 +27,7 @@ import {
   Layer,
   Option,
   Path,
+  Predicate,
   Redacted,
   Schema
 } from "effect"
@@ -327,7 +328,7 @@ export class LocalDevelopment extends Context.Service<
         })
       )
       const server = Context.get(daemonContext, HttpServer.HttpServer)
-      if (server.address._tag !== "TcpAddress") {
+      if (!Predicate.isTagged(server.address, "TcpAddress") || !("port" in server.address)) {
         return yield* Effect.fail(fail("bind daemon", descriptorPath, "Expected a TCP address"))
       }
       const descriptor = Schema.decodeUnknownSync(LocalDaemonDescriptor)({

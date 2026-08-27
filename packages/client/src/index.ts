@@ -47,7 +47,7 @@ import {
   localReplicaSocketCloseCode,
   type CanvasListing
 } from "@crit/replica/http"
-import { Context, Deferred, Effect, Exit, flow, Layer, Queue, Redacted, Ref, Schema, Scope, Stream, type Take } from "effect"
+import { Context, Deferred, Effect, Exit, flow, Layer, Match, Queue, Redacted, Ref, Schema, Scope, Stream, type Take } from "effect"
 import { FetchHttpClient, HttpClient, HttpClientError, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { HttpApiClient, HttpApiMiddleware } from "effect/unstable/httpapi"
 import * as Socket from "effect/unstable/socket/Socket"
@@ -148,9 +148,10 @@ export interface LocalRepresentationClientService {
   ) => Effect.Effect<RenderPlan, LocalRepresentationClientFailure>
 }
 
-const localPath = (options: LocalClientOptions, path: `/${string}`) => options._tag === "bearer"
-  ? path
-  : `${options.browserPath}${path.slice(1)}`
+const localPath = (options: LocalClientOptions, path: `/${string}`) =>
+  LocalClientOptions.$is("bearer")(options)
+    ? path
+    : `${options.browserPath}${path.slice(1)}`
 
 const localUrl = (options: LocalClientOptions, path: `/${string}`) =>
   `${options.baseUrl.replace(/\/$/, "")}${localPath(options, path)}`
@@ -158,7 +159,7 @@ const localUrl = (options: LocalClientOptions, path: `/${string}`) =>
 const withBrowserCredentials = <A, E, R>(
   options: LocalClientOptions,
   effect: Effect.Effect<A, E, R>
-) => options._tag === "browserSession"
+) => LocalClientOptions.$is("browserSession")(options)
   ? Effect.provideService(effect, FetchHttpClient.RequestInit, { credentials: "include" })
   : effect
 
@@ -168,8 +169,10 @@ const representationRequest = (
 ) => {
   return HttpClientRequest.post(localUrl(options, path)).pipe(
     HttpClientRequest.setHeader(localApiVersionHeader, localApiVersion),
-    options._tag === "bearer" ? HttpClientRequest.bearerToken(options.token) : (request) => request,
-    options._tag === "bearer" && options.origin !== undefined
+    LocalClientOptions.$is("bearer")(options)
+      ? HttpClientRequest.bearerToken(options.token)
+      : (request) => request,
+    LocalClientOptions.$is("bearer")(options) && options.origin !== undefined
       ? HttpClientRequest.setHeader("origin", options.origin)
       : (request) => request
   )
@@ -282,14 +285,19 @@ const notificationUrl = (options: LocalClientOptions, canvasId: CanvasId) => {
     : `ws://${httpUrl.slice("http://".length)}`
 }
 
-const mapSocketFailure = (canvasId: CanvasId, failure: Socket.SocketError) => {
-  if (failure.reason._tag !== "SocketCloseError") return failure
-  if (failure.reason.code === localReplicaSocketCloseCode.unauthorized) {
-    return new LocalApiUnauthorized({ message: "Missing or invalid bearer token" })
-  }
-  if (failure.reason.code === localReplicaSocketCloseCode.replicaNotOpen) return new ReplicaNotOpen({ canvasId })
-  return failure
-}
+const mapSocketFailure = (canvasId: CanvasId, failure: Socket.SocketError) =>
+  Match.value(failure.reason).pipe(
+    Match.tag("SocketCloseError", (reason) => {
+      if (reason.code === localReplicaSocketCloseCode.unauthorized) {
+        return new LocalApiUnauthorized({ message: "Missing or invalid bearer token" })
+      }
+      if (reason.code === localReplicaSocketCloseCode.replicaNotOpen) {
+        return new ReplicaNotOpen({ canvasId })
+      }
+      return failure
+    }),
+    Match.orElse(() => failure)
+  )
 
 const subscribe = (
   options: LocalClientOptions,
@@ -306,7 +314,7 @@ const subscribe = (
   const messages = yield* Queue.sliding<Take.Take<ReplicaChanged, SubscriptionFailure>>(1)
   const ready = yield* Ref.make(false)
   const decode = Schema.decodeUnknownEffect(Schema.fromJsonString(LocalReplicaSocketServerFrame))
-  if (options._tag === "bearer") {
+  if (LocalClientOptions.$is("bearer")(options)) {
     const write = yield* socket.writer
     const hello = JSON.stringify(LocalReplicaSocketHello.make({
       kind: "authenticate",
@@ -353,7 +361,7 @@ export class LocalCanvasClient extends Context.Service<
   LocalCanvasClientService
 >()("@crit/client/LocalCanvasClient") {
   static readonly layer = (options: LocalClientOptions) => {
-    const origin = options._tag === "bearer" ? options.origin : undefined
+    const origin = LocalClientOptions.$is("bearer")(options) ? options.origin : undefined
     return Layer.effect(LocalCanvasClient, Effect.gen(function*() {
       const transformClient = HttpClient.mapRequest(flow(
         HttpClientRequest.prependUrl(localUrl(options, "/").replace(/\/$/, "")),
@@ -377,7 +385,7 @@ export class LocalCanvasClient extends Context.Service<
     })).pipe(
       Layer.provide(HttpApiMiddleware.layerClient(
         LocalApiAuthorization,
-        ({ next, request }) => next(options._tag === "bearer"
+        ({ next, request }) => next(LocalClientOptions.$is("bearer")(options)
           ? HttpClientRequest.bearerToken(request, options.token)
           : request)
       ))

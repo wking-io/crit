@@ -123,10 +123,9 @@ describe("FileSystemCanvasRepository", () => {
         Canvas.export(Canvas.create({ id: "wedged", title: "Wedged", owner: { id: "git:test", name: "Test Author" } }))
       )
 
-      // A short-lived child process yields a PID that is guaranteed dead.
-      const child = spawnSync(process.execPath, ["-e", ""])
+      const deadChild = spawnSync(process.execPath, ["-e", ""])
       const lock = path.join(root, ".crit", "canvases", "wedged.json.lock")
-      yield* Effect.promise(() => writeFile(lock, `${child.pid}\n`, { mode: 0o600 }))
+      yield* Effect.promise(() => writeFile(lock, `${deadChild.pid}\n`, { mode: 0o600 }))
 
       const { document } = yield* store.apply("wedged", [
         CanvasCommand.addNote({

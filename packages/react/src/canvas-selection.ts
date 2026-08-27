@@ -3,7 +3,7 @@ import {
   type CanvasItemRef,
   type FrameId
 } from "@crit/domain"
-import { Data, Schema } from "effect"
+import { Data, Match, Schema } from "effect"
 
 const itemKey = (item: CanvasItemRef): string => `frame:${item.frameId}`
 
@@ -48,10 +48,9 @@ const applyCanvasSelectionCommand = (
   current: CanvasSelection | undefined,
   command: CanvasSelectionCommand
 ): CanvasSelection => {
-  switch (command._tag) {
-    case "clear":
-      return makeCanvasSelection([])
-    case "item": {
+  return Match.value(command).pipe(Match.tagsExhaustive({
+    clear: () => makeCanvasSelection([]),
+    item: (command) => {
       if (!command.additive) return makeCanvasSelection([command.item])
       const selection = current ?? makeCanvasSelection([])
       if (!hasCanvasItem(selection, command.item)) {
@@ -62,7 +61,7 @@ const applyCanvasSelectionCommand = (
         selection.filter((selected) => itemKey(selected) !== key)
       )
     }
-  }
+  }))
 }
 
 export const CanvasSelection = {

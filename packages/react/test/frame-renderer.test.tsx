@@ -23,7 +23,7 @@ import {
   QueryClient,
   QueryClientProvider
 } from "@tanstack/react-query"
-import { Effect } from "effect"
+import { Effect, Match } from "effect"
 import { StrictMode, act, type ReactElement } from "react"
 import { flushSync } from "react-dom"
 import { createRoot, type Root } from "react-dom/client"
@@ -303,9 +303,12 @@ describe("FrameRenderer", () => {
     const resolver: FrameRepresentationResolver = {
       resolve: (input) => Effect.uninterruptible(Effect.callback<RenderPlan, unknown>((resume) => {
         resolves += 1
-        if (input._tag === "webUrl") {
-          completions.set(input.url, (plan) => resume(Effect.succeed(plan)))
-        }
+        Match.value(input).pipe(
+          Match.tag("webUrl", (input) => {
+            completions.set(input.url, (plan) => resume(Effect.succeed(plan)))
+          }),
+          Match.orElse(() => {})
+        )
       }))
     }
     const first = frame(

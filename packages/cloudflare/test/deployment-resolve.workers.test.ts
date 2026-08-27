@@ -9,7 +9,7 @@ import {
   hostedApplicationResolvePath
 } from "@crit/protocol"
 import { SELF } from "cloudflare:test"
-import { Result } from "effect"
+import { Predicate, Result } from "effect"
 import { describe, expect, it } from "vitest"
 
 const checkout = ApplicationRouteRepresentation.make({
@@ -64,7 +64,7 @@ describe("Worker hosted application route resolve", () => {
 
     expect(registered.status).toBe(200)
     expect(response.status).toBe(200)
-    expect(plan._tag).toBe("iframe")
+    expect(Predicate.isTagged(plan, "iframe")).toBe(true)
   })
 
   it("resolves a registered review deployment into an iframe URL", async() => {
@@ -74,8 +74,8 @@ describe("Worker hosted application route resolve", () => {
 
     expect(registered.status).toBe(200)
     expect(response.status).toBe(200)
-    expect(plan._tag).toBe("iframe")
-    if (plan._tag !== "iframe") return
+    expect(Predicate.isTagged(plan, "iframe")).toBe(true)
+    if (!Predicate.isTagged(plan, "iframe") || !("url" in plan)) return
     expect(plan.url).toBe("https://preview.example/checkout")
   })
 
@@ -104,7 +104,7 @@ describe("Worker hosted application route resolve", () => {
     const response = await resolve(representation)
     const plan = decodeHostedApplicationResolveResponse(await response.json())
 
-    expect(plan._tag).toBe("unavailable")
+    expect(Predicate.isTagged(plan, "unavailable")).toBe(true)
   })
 
   it("rejects an unsupported resolve schema version with an upgrade error", async() => {
@@ -126,6 +126,6 @@ describe("Worker hosted application route resolve", () => {
     const failure = ChangeProtocol.failure.decode(await response.json())
 
     expect(response.status).toBe(426)
-    expect(Result.isSuccess(failure) && failure.success._tag).toBe("unsupportedVersion")
+    expect(Result.isSuccess(failure) && Predicate.isTagged(failure.success, "unsupportedVersion")).toBe(true)
   })
 })

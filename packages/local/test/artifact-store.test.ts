@@ -12,7 +12,7 @@ import {
   artifactStoreConformanceScenarios,
   runRepresentationRuntimeConformance
 } from "@crit/representations/testing"
-import { Effect, Layer, Option, Schema } from "effect"
+import { Effect, Layer, Option, Predicate, Result, Schema } from "effect"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 
 import { LocalArtifactStore } from "../src/artifact-store.js"
@@ -77,8 +77,8 @@ describe("LocalArtifactStore", () => {
     }))
     expect([...loaded]).toEqual([1, 3, 5])
     const conflict = await run(put(artifactId, Uint8Array.from([5, 3, 1])).pipe(Effect.result))
-    expect(conflict._tag).toBe("Failure")
-    if (conflict._tag === "Failure") expect(conflict.failure._tag).toBe("ArtifactConflict")
+    expect(Result.isFailure(conflict)).toBe(true)
+    if (Result.isFailure(conflict)) expect(Predicate.isTagged(conflict.failure, "ArtifactConflict")).toBe(true)
   })
 
   it("owns input bytes when put is called", async() => {
@@ -119,11 +119,11 @@ describe("LocalArtifactStore", () => {
       run(put(artifactId, Uint8Array.from([1])).pipe(Effect.result)),
       run(put(artifactId, Uint8Array.from([2])).pipe(Effect.result))
     ])
-    const successes = results.filter((result) => result._tag === "Success")
-    const failures = results.filter((result) => result._tag === "Failure")
+    const successes = results.filter(Result.isSuccess)
+    const failures = results.filter(Result.isFailure)
     expect(successes).toHaveLength(1)
     expect(failures).toHaveLength(1)
-    expect(failures[0]?.failure._tag).toBe("ArtifactConflict")
+    expect(Predicate.isTagged(failures[0]?.failure, "ArtifactConflict")).toBe(true)
     const winner = successes[0]?.success
     if (winner === undefined) throw new Error("concurrent publication did not produce a winner")
     const loaded = await run(Effect.gen(function*() {
@@ -142,8 +142,8 @@ describe("LocalArtifactStore", () => {
       const store = yield* ArtifactStore
       return yield* store.read(stored).pipe(Effect.result)
     }))
-    expect(result._tag).toBe("Failure")
-    if (result._tag === "Failure") expect(result.failure._tag).toBe("ArtifactCorrupt")
+    expect(Result.isFailure(result)).toBe(true)
+    if (Result.isFailure(result)) expect(Predicate.isTagged(result.failure, "ArtifactCorrupt")).toBe(true)
     expect([...await readFile(storedPath)]).toEqual([4, 4, 4])
   })
 
@@ -163,10 +163,15 @@ describe("LocalArtifactStore", () => {
       Effect.provide(LocalArtifactStore.layer({ directory })),
       Effect.result
     ))
-    expect(result._tag).toBe("Failure")
-    if (result._tag === "Failure") {
-      expect(result.failure._tag).toBe("FileSystemArtifactStoreOpenFailure")
-      expect(result.failure.reason).toBe("BadResource")
+    expect(Result.isFailure(result)).toBe(true)
+    if (Result.isFailure(result)) {
+      expect(Predicate.isTagged(result.failure, "FileSystemArtifactStoreOpenFailure")).toBe(true)
+      if (
+        Predicate.isTagged(result.failure, "FileSystemArtifactStoreOpenFailure") &&
+        "reason" in result.failure
+      ) {
+        expect(result.failure.reason).toBe("BadResource")
+      }
     }
   })
 
@@ -175,10 +180,12 @@ describe("LocalArtifactStore", () => {
     const artifactId = Id.artifact("artifact_publication_failure")
     await mkdir(path.join(artifactsDirectory(), artifactId))
     const result = await run(put(artifactId, Uint8Array.from([7])).pipe(Effect.result))
-    expect(result._tag).toBe("Failure")
-    if (result._tag === "Failure") {
-      expect(result.failure._tag).toBe("ArtifactStoreIoFailure")
-      expect(result.failure.reason).toBe("BadResource")
+    expect(Result.isFailure(result)).toBe(true)
+    if (Result.isFailure(result)) {
+      expect(Predicate.isTagged(result.failure, "ArtifactStoreIoFailure")).toBe(true)
+      if (Predicate.isTagged(result.failure, "ArtifactStoreIoFailure") && "reason" in result.failure) {
+        expect(result.failure.reason).toBe("BadResource")
+      }
     }
     expect(await readdir(stagingDirectory())).toEqual([])
   })
@@ -192,10 +199,12 @@ describe("LocalArtifactStore", () => {
       const store = yield* ArtifactStore
       return yield* store.read(artifact).pipe(Effect.result)
     }))
-    expect(result._tag).toBe("Failure")
-    if (result._tag === "Failure") {
-      expect(result.failure._tag).toBe("ArtifactNotFound")
-      if (result.failure._tag === "ArtifactNotFound") expect(result.failure.artifact).toEqual(artifact)
+    expect(Result.isFailure(result)).toBe(true)
+    if (Result.isFailure(result)) {
+      expect(Predicate.isTagged(result.failure, "ArtifactNotFound")).toBe(true)
+      if (Predicate.isTagged(result.failure, "ArtifactNotFound") && "artifact" in result.failure) {
+        expect(result.failure.artifact).toEqual(artifact)
+      }
     }
   })
 })

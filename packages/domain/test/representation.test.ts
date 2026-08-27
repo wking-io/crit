@@ -1,4 +1,4 @@
-import { Schema } from "effect"
+import { Predicate, Schema } from "effect"
 import { describe, expect, it } from "vitest"
 
 import {
@@ -54,20 +54,20 @@ describe("RepresentationRef", () => {
       applicationId: Id.application("application_storefront"),
       route: Schema.decodeUnknownSync(RootedRoute)("/checkout")
     }
-    expect(representation._tag).toBe("applicationRoute")
+    expect(Predicate.isTagged(representation, "applicationRoute")).toBe(true)
   })
 
   it("accepts live representations and rejects artifacts", () => {
     const decodeLive = Schema.decodeUnknownSync(LiveRepresentation)
-    expect(decodeLive({
+    expect(Predicate.isTagged(decodeLive({
       _tag: "webUrl",
       url: "https://example.com/review"
-    })._tag).toBe("webUrl")
-    expect(decodeLive({
+    }), "webUrl")).toBe(true)
+    expect(Predicate.isTagged(decodeLive({
       _tag: "applicationRoute",
       applicationId: "application_storefront",
       route: "/checkout"
-    })._tag).toBe("applicationRoute")
+    }), "applicationRoute")).toBe(true)
     expect(() => decodeLive({
       _tag: "artifact",
       artifactId: "artifact_checkout",

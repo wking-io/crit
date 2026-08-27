@@ -1,5 +1,5 @@
 import * as SqliteClient from "@effect/sql-sqlite-node/SqliteClient"
-import { Cause, Context, Data, Effect, Layer, Schedule } from "effect"
+import { Cause, Context, Data, Effect, Layer, Predicate, Schedule } from "effect"
 import * as Reactivity from "effect/unstable/reactivity/Reactivity"
 import { isSqlError, type SqlError } from "effect/unstable/sql/SqlError"
 
@@ -20,7 +20,7 @@ const retryTransaction = <A, E, R>(
   body: Effect.Effect<A, E, R>
 ): Effect.Effect<A, E | SqlError, R> => sql.withTransaction(body).pipe(Effect.retry({
   schedule: Schedule.spaced("2 millis"),
-  while: (error) => isSqlError(error) && error.reason._tag === "LockTimeoutError"
+  while: (error) => isSqlError(error) && Predicate.isTagged(error.reason, "LockTimeoutError")
 }))
 
 export const makeDatabase = (options: CloudflareDatabaseOptions) => Effect.gen(function*() {
@@ -35,7 +35,8 @@ export const makeDatabase = (options: CloudflareDatabaseOptions) => Effect.gen(f
   yield* applyAuthoritySchema(sqlite).pipe(
     Effect.retry({
       schedule: Schedule.spaced("2 millis"),
-      while: (error) => error._tag === "SqlError" && error.reason._tag === "LockTimeoutError"
+      while: (error) => Predicate.isTagged(error, "SqlError") && "reason" in error
+        && Predicate.isTagged(error.reason, "LockTimeoutError")
     })
   )
   return sqlite

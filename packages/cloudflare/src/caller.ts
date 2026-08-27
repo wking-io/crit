@@ -4,7 +4,7 @@ import {
   critPersonIdHeader,
   type SubmitInvocation
 } from "@crit/protocol"
-import { Data, Option, Schema } from "effect"
+import { Data, Match, Option, Predicate, Schema } from "effect"
 
 import { readAccessEmail } from "./access.js"
 
@@ -98,21 +98,25 @@ export const respondWithCallerCookie = (
 ): Response => applyAnonymousPersonCookie(response, request, resolved)
 
 export const authSubjectForCaller = (caller: CallerIdentity): AuthSubject =>
-  caller._tag === "access"
+  CallerIdentity.$is("access")(caller)
     ? Schema.decodeUnknownSync(AuthSubject)(`access|${caller.address}`)
     : Schema.decodeUnknownSync(AuthSubject)(`anonymous|${caller.personId}`)
 
 const invocationPerson = (invocation: SubmitInvocation) =>
-  invocation._tag === "person"
-    ? invocation.principal.person
-    : invocation.principal.delegatedBy
+  Match.value(invocation).pipe(
+    Match.tagsExhaustive({
+      person: ({ principal }) => principal.person,
+      agent: ({ principal }) => principal.delegatedBy
+    })
+  )
 
 export const callerMatchesInvocation = (
   caller: CallerIdentity,
   invocation: SubmitInvocation
 ): boolean => {
   const person = invocationPerson(invocation)
-  return caller._tag === "access"
-    ? person.email._tag === "access" && person.email.address === caller.address
-    : person.email._tag === "unspecified" && person.personId === caller.personId
+  return CallerIdentity.$is("access")(caller)
+    ? Predicate.isTagged(person.email, "access") && "address" in person.email
+      && person.email.address === caller.address
+    : Predicate.isTagged(person.email, "unspecified") && person.personId === caller.personId
 }

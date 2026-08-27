@@ -12,9 +12,9 @@ import {
   ChangeProtocol,
   decodeSubmitCanvasChangeWire,
   parseChangesAfterSearch,
-  type RemoteAuthorityRoute
+  RemoteAuthorityRoute
 } from "@crit/protocol"
-import { Result, Schema } from "effect"
+import { Match, Result, Schema } from "effect"
 
 import {
   callerMatchesInvocation,
@@ -36,18 +36,13 @@ const encodedJson = <A>(
   value: A
 ) => jsonResponse(status, JSON.stringify(Schema.encodeSync(schema)(value)))
 
-const encodeSubmitFailure = (error: SubmitCanvasChangeFailure) => {
-  switch (error._tag) {
-    case "canvasNotFound":
-      return encodedJson(404, CanvasNotFound, error)
-    case "cursorNotFound":
-      return encodedJson(404, CursorNotFound, error)
-    case "changeIdReused":
-      return encodedJson(409, ChangeIdReused, error)
-    case "changeRejected":
-      return encodedJson(409, ChangeRejected, error)
-  }
-}
+const encodeSubmitFailure = (error: SubmitCanvasChangeFailure) =>
+  Match.value(error).pipe(Match.tagsExhaustive({
+    canvasNotFound: (notFound) => encodedJson(404, CanvasNotFound, notFound),
+    cursorNotFound: (notFound) => encodedJson(404, CursorNotFound, notFound),
+    changeIdReused: (reused) => encodedJson(409, ChangeIdReused, reused),
+    changeRejected: (rejected) => encodedJson(409, ChangeRejected, rejected)
+  }))
 
 const readJsonBody = async (request: Request): Promise<Schema.Json | undefined> => {
   try {
@@ -63,13 +58,11 @@ const openCanvas = async (
 ): Promise<Response> => {
   const stub = env.CANVASES.get(env.CANVASES.idFromName(canvasId))
   const opened = await stub.open()
-  if (opened._tag === "success") {
-    return encodedJson(200, AuthorityView, opened.value)
-  }
-  if (opened._tag === "failure") {
-    return encodedJson(404, CanvasNotFound, opened.error)
-  }
-  return emptyResponse(500)
+  return Match.value(opened).pipe(
+    Match.tag("success", ({ value }) => encodedJson(200, AuthorityView, value)),
+    Match.tag("failure", ({ error }) => encodedJson(404, CanvasNotFound, error)),
+    Match.orElse(() => emptyResponse(500))
+  )
 }
 
 const pullChanges = async (
@@ -86,16 +79,15 @@ const pullChanges = async (
     limit: AuthorityModel.pageLimit(query.limit)
   })
   const page = await stub.changesAfter(oneCanvasQuery)
-  if (page._tag === "success") {
-    return jsonResponse(200, JSON.stringify(ChangeProtocol.page.encode(page.value)))
-  }
-  if (page._tag === "failure" && page.error._tag === "canvasNotFound") {
-    return encodedJson(404, CanvasNotFound, page.error)
-  }
-  if (page._tag === "failure") {
-    return encodedJson(404, CursorNotFound, page.error)
-  }
-  return emptyResponse(500)
+  return Match.value(page).pipe(
+    Match.tag("success", ({ value }) =>
+      jsonResponse(200, JSON.stringify(ChangeProtocol.page.encode(value)))),
+    Match.tag("failure", ({ error }) => Match.value(error).pipe(
+      Match.tag("canvasNotFound", (notFound) => encodedJson(404, CanvasNotFound, notFound)),
+      Match.orElse((notFound) => encodedJson(404, CursorNotFound, notFound))
+    )),
+    Match.orElse(() => emptyResponse(500))
+  )
 }
 
 const pushChange = async (
@@ -112,9 +104,10 @@ const pushChange = async (
   const decoded = decodeSubmitCanvasChangeWire(input)
   if (Result.isFailure(decoded)) {
     return respondWithCallerCookie(
-      decoded.failure._tag === "envelopeInvalid"
-        ? emptyResponse(400)
-        : protocolFailureResponse(decoded.failure),
+      Match.value(decoded.failure).pipe(
+        Match.tag("envelopeInvalid", () => emptyResponse(400)),
+        Match.orElse((failure) => protocolFailureResponse(failure))
+      ),
       request,
       resolved
     )
@@ -128,17 +121,16 @@ const pushChange = async (
   const { canvasId: _canvasId, ...proposal } = decoded.success.proposal
   const stub = env.CANVASES.get(env.CANVASES.idFromName(canvasId))
   const submitted = await stub.submit(proposal, decoded.success.invocation)
-  if (submitted._tag === "success") {
-    return respondWithCallerCookie(
-      jsonResponse(200, JSON.stringify(ChangeProtocol.receipt.encode(submitted.value))),
+  return Match.value(submitted).pipe(
+    Match.tag("success", ({ value }) => respondWithCallerCookie(
+      jsonResponse(200, JSON.stringify(ChangeProtocol.receipt.encode(value))),
       request,
       resolved
-    )
-  }
-  if (submitted._tag === "failure") {
-    return respondWithCallerCookie(encodeSubmitFailure(submitted.error), request, resolved)
-  }
-  return respondWithCallerCookie(emptyResponse(500), request, resolved)
+    )),
+    Match.tag("failure", ({ error }) =>
+      respondWithCallerCookie(encodeSubmitFailure(error), request, resolved)),
+    Match.orElse(() => respondWithCallerCookie(emptyResponse(500), request, resolved))
+  )
 }
 
 export const handleLedgerRequest = async (
@@ -147,7 +139,7 @@ export const handleLedgerRequest = async (
   route: RemoteAuthorityRoute
 ): Promise<Response> => {
   const resolved = resolveCallerIdentity(request)
-  if (route._tag === "canvas") {
+  if (RemoteAuthorityRoute.$is("canvas")(route)) {
     const response = request.method === "GET"
       ? await openCanvas(env, route.canvasId)
       : emptyResponse(405)

@@ -11,7 +11,7 @@ import { join } from "node:path"
 
 import { NodeServices } from "@effect/platform-node"
 import { AccessPersonEmail, EmailAddress } from "@crit/domain"
-import { Effect, Layer, Schema } from "effect"
+import { Effect, Layer, Predicate, Schema } from "effect"
 import { describe, expect, it } from "vitest"
 
 import {
@@ -153,7 +153,7 @@ describe("Access Person login", () => {
         email: accessEmail("ada@acme.com")
       }).pipe(Effect.flip)
 
-      expect(failure._tag).toBe("LocalDaemonStateMissing")
+      expect(Predicate.isTagged(failure, "LocalDaemonStateMissing")).toBe(true)
     })).pipe(Effect.provide(NodeServices.layer))))
 
   it("rejects malformed installation state without exposing its contents", () =>
@@ -171,7 +171,7 @@ describe("Access Person login", () => {
         email: accessEmail("ada@acme.com")
       }).pipe(Effect.flip)
 
-      expect(failure._tag).toBe("LocalDaemonStateMalformed")
+      expect(Predicate.isTagged(failure, "LocalDaemonStateMalformed")).toBe(true)
       expect(String(failure)).not.toContain("do-not-report")
     })).pipe(Effect.provide(NodeServices.layer))))
 
@@ -254,7 +254,7 @@ describe("Access Person login", () => {
         installationUrl: serverOrigin(server)
       }).pipe(Effect.flip)
 
-      expect(failure._tag).toBe("AccessPersonUnauthenticated")
+      expect(Predicate.isTagged(failure, "AccessPersonUnauthenticated")).toBe(true)
       expect(installationFrom(dataRoot).principal.person.email).toEqual({
         _tag: "unspecified"
       })
@@ -278,11 +278,9 @@ describe("Access Person login", () => {
       expect(failure).toMatchObject({
         _tag: "unsupportedVersion",
         requestedVersion: 2,
-        supportedVersion: 1
+        supportedVersion: 1,
+        message: expect.stringContaining("Upgrade Crit so the client and installation match.")
       })
-      expect(failure._tag === "unsupportedVersion" && failure.message).toContain(
-        "Upgrade Crit so the client and installation match."
-      )
       expect(readFileSync(installationPath, "utf8")).toBe(first)
     })).pipe(Effect.provide(NodeServices.layer))))
 })

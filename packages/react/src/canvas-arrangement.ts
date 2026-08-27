@@ -1,4 +1,4 @@
-import { Effect, Match, Schema } from "effect"
+import { Effect, Match, Predicate, Schema } from "effect"
 
 const GRID_GAP = 40
 
@@ -245,7 +245,7 @@ const arrangeGrid = (
 }
 
 const requiredItemCount = (operation: CanvasArrangementOperation) =>
-  operation._tag === "Distribute" ? 3 : 2
+  Predicate.isTagged(operation, "Distribute") ? 3 : 2
 
 const makePlan = (
   request: CanvasArrangementRequest

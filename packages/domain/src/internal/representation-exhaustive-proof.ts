@@ -1,16 +1,10 @@
+import { Match } from "effect"
+
 import type { RepresentationRef } from "../representation.js"
 
-export const representationKind = (representation: RepresentationRef) => {
-  switch (representation._tag) {
-    case "applicationRoute":
-      return representation._tag
-    case "webUrl":
-      return representation._tag
-    case "artifact":
-      return representation._tag
-    default: {
-      const exhaustive: never = representation
-      return exhaustive
-    }
-  }
-}
+export const representationKind = (representation: RepresentationRef) =>
+  Match.value(representation).pipe(Match.tagsExhaustive({
+    applicationRoute: () => "applicationRoute",
+    webUrl: () => "webUrl",
+    artifact: () => "artifact"
+  }))

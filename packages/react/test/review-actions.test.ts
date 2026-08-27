@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest"
 
 import { CanvasSelection } from "../src/canvas-selection.js"
 import {
+  ReviewAction,
   ReviewActionInput,
   ReviewSelection,
   availableReviewActions,
@@ -83,7 +84,7 @@ const commandsFor = (
   actionContext: ReviewActionContext
 ) => {
   const action = resolveReviewAction(id, actionContext)
-  if (action?._tag !== "batch") throw new Error(`Expected ${id} batch`)
+  if (!ReviewAction.$is("batch")(action)) throw new Error(`Expected ${id} batch`)
   return action.commands
 }
 
@@ -162,7 +163,7 @@ describe("review actions", () => {
         representation: { _tag: "webUrl", url: "https://example.com/a" }
       }]
     })
-    expect(resolveReviewAction("snapshot", context(mixed))?._tag).not.toBe("batch")
+    expect(ReviewAction.$is("batch")(resolveReviewAction("snapshot", context(mixed)))).toBe(false)
   })
 
   it("binds review shortcuts from the table", () => {

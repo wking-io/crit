@@ -1,4 +1,4 @@
-import { Option, Result, Schema, SchemaAST } from "effect"
+import { Option, Predicate, Result, Schema, SchemaAST } from "effect"
 
 import {
   ProtocolFailure,
@@ -27,7 +27,7 @@ export const formatProtocolFailure = (failure: ProtocolFailureValue): string => 
 
 export const protocolFailureHttpStatus = (
   failure: ProtocolFailureValue
-): 400 | 426 => failure._tag === "unsupportedVersion" ? 426 : 400
+): 400 | 426 => Predicate.isTagged(failure, "unsupportedVersion") ? 426 : 400
 
 export const isProtocolFailure = (
   value: { readonly _tag: string }

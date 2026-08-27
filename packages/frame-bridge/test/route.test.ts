@@ -20,16 +20,11 @@ const parentOrigin = Schema.decodeUnknownSync(FrameBridgeOrigin)(
   "https://app.example"
 )
 
-const frameWindow = (target: EventTarget): Window => {
-  // SAFETY: Route tests only use the EventTarget as MessageEvent.source.
-  return target as Window
-}
+const frameWindow = (target: EventTarget): Window => target as Window
 
 const bridgedFrame = (contentWindow: Window): HTMLIFrameElement => {
   const target = new EventTarget()
   Object.defineProperty(target, "contentWindow", { value: contentWindow })
-  // SAFETY: The fixture supplies contentWindow and EventTarget listeners, which
-  // are every HTMLIFrameElement member connectLiveFrameRoute reads.
   return target as HTMLIFrameElement
 }
 

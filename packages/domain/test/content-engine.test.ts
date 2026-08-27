@@ -1,4 +1,5 @@
-import { assert, describe, expect, it } from "vitest"
+import { Match, Predicate } from "effect"
+import { describe, expect, it } from "vitest"
 
 import { CanvasEngine, decodeCanvasChange, decodeCanvasProjection } from "../src/index.js"
 
@@ -21,7 +22,7 @@ const apply = (
   commands: readonly unknown[]
 ) => {
   const result = CanvasEngine.apply(projection, change(changeId, commands))
-  assert(result._tag === "applied")
+  if (Predicate.isTagged(result, "rejected")) throw new Error("expected applied")
   return result.projection
 }
 
@@ -163,8 +164,12 @@ describe("Canvas content", () => {
         { _tag: "setFrameTitle", frameId: "frame_a", expectedChangedByChangeId: "change_create", title: "Edited" }
       ])
     ]
-    const first = CanvasEngine.replay(empty(), changes)
-    assert(first._tag === "replayed")
+    const first = Match.value(CanvasEngine.replay(empty(), changes)).pipe(
+      Match.tag("replayed", (value) => value),
+      Match.orElse(() => {
+        throw new Error("expected replayed")
+      })
+    )
     expect(first.projection.frames[0]?.title).toBe("Edited")
     expect(CanvasEngine.replay(empty(), changes)).toEqual(first)
   })
@@ -197,7 +202,8 @@ describe("Canvas content", () => {
       representation: equivalentRepresentation
     }]))
     expect(result).toEqual({ _tag: "applied", projection: created })
-    if (result._tag === "applied") expect(result.projection).toBe(created)
+    if (Predicate.isTagged(result, "rejected")) return
+    expect(result.projection).toBe(created)
     expect(created.frames[0]).toMatchObject({
       representationChangedByChangeId: "change_create",
       updatedByChangeId: "change_create"

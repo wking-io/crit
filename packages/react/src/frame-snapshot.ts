@@ -76,7 +76,7 @@ export const useSnapshotRunner = ({
   const stateRef = useRef<SnapshotRunState>(idleState)
 
   const begin = (request: SnapshotRequest): void => {
-    if (stateRef.current._tag === "capturing") return
+    if (SnapshotRunState.$is("capturing")(stateRef.current)) return
     stateRef.current = capturingState
     setState(capturingState)
     void Effect.runPromise(

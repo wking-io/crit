@@ -1,7 +1,7 @@
 import { AgentInvocation, AuthorityView, PersonInvocation } from "@crit/authority"
 import { Id, PersonAttribution, decodeCanvasCommandBatch, emptyCanvasProjection } from "@crit/domain"
 import { ProtocolValue, type AcceptedCanvasChange, type ChangePage } from "@crit/protocol"
-import { Effect, Result, Schema } from "effect"
+import { Effect, Predicate, Result, Schema } from "effect"
 import { describe, expect, it } from "vitest"
 
 import { ReplicaModel } from "../src/index.js"
@@ -123,7 +123,7 @@ describe("ReplicaPolicy reconciliation", () => {
     const receipt = { disposition: "first-acceptance" as const, change: accepted }
     const unconfirmed = Result.getOrThrow(ReplicaPolicy.receipt(enqueued(), receipt))
     expect(unconfirmed.acknowledgedCursor).toBe(genesisCursor)
-    expect(unconfirmed.pending[0]?.state._tag).toBe("acceptedUnconfirmed")
+    expect(Predicate.isTagged(unconfirmed.pending[0]?.state, "acceptedUnconfirmed")).toBe(true)
     const duplicate = Result.getOrThrow(ReplicaPolicy.receipt(unconfirmed, receipt))
     expect(duplicate.pending).toHaveLength(1)
     const pulled = Result.getOrThrow(ReplicaPolicy.incorporatePage(duplicate, page))

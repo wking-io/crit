@@ -10,7 +10,8 @@ import {
 } from "@crit/authority"
 import {
   AuthorityPolicy,
-  type FreshEvaluation,
+  FreshEvaluation,
+  RetryEvaluation,
   type RetryRecord,
   type SubmitDecision
 } from "@crit/authority/adapter"
@@ -190,7 +191,7 @@ const make = () => Effect.gen(function*() {
       invocation,
       prior: yield* readRetry(proposal)
     })
-    if (retry._tag === "decided") return Evaluation.decision({ decision: retry.decision })
+    if (RetryEvaluation.$is("decided")(retry)) return Evaluation.decision({ decision: retry.decision })
     const canvas = yield* readCanvas(proposal.canvasId)
     if (canvas === undefined) return Evaluation.decision({ decision: Result.fail(
       AuthorityFailure.canvasNotFound({ canvasId: proposal.canvasId })
@@ -208,7 +209,7 @@ const make = () => Effect.gen(function*() {
       projection: canvas.view.projection,
       observedCursorKnown
     })
-    if (fresh._tag === "decided") return Evaluation.decision({ decision: fresh.decision })
+    if (FreshEvaluation.$is("decided")(fresh)) return Evaluation.decision({ decision: fresh.decision })
     return Evaluation.fresh({ canvas, evaluation: fresh })
   })
 
@@ -235,7 +236,7 @@ const make = () => Effect.gen(function*() {
             ${view.cursor}, ${view.cursor}, 0, ${encodeStored(CanvasProjection, view.projection)})`
         return Result.succeed(view)
       })).pipe(Effect.orDie)
-      return yield* decision._tag === "Success" ? Effect.succeed(decision.success) : Effect.fail(decision.failure)
+      return yield* Result.isSuccess(decision) ? Effect.succeed(decision.success) : Effect.fail(decision.failure)
     })
   })
 
@@ -251,16 +252,16 @@ const make = () => Effect.gen(function*() {
     const ownedInvocation = DomainValue.detach(invocation)
     return Effect.gen(function*() {
       const preflight = yield* evaluate(ownedProposal, ownedInvocation).pipe(Effect.orDie)
-      if (preflight._tag === "decision") {
+      if (Evaluation.$is("decision")(preflight)) {
         return yield* AuthorityPolicy.decisionEffect(preflight.decision)
       }
-      const acceptedAt = preflight.evaluation._tag === "acceptance" ? yield* clock.now : undefined
+      const acceptedAt = FreshEvaluation.$is("acceptance")(preflight.evaluation) ? yield* clock.now : undefined
       const decision = yield* transaction(Effect.gen(function*() {
         const durable = yield* evaluate(ownedProposal, ownedInvocation)
-        if (durable._tag === "decision") return durable.decision
-        if (durable.evaluation._tag === "rejected") {
+        if (Evaluation.$is("decision")(durable)) return durable.decision
+        if (FreshEvaluation.$is("rejected")(durable.evaluation)) {
           const rejected = durable.evaluation.retry.outcome
-          if (rejected._tag === "Success") throw new Error("rejected retry contains an accepted change")
+          if (Result.isSuccess(rejected)) throw new Error("rejected retry contains an accepted change")
           const failure = rejected.failure
           yield* sql`INSERT INTO retry_reservations
             (canvas_id, change_id, proposal_json, authorization_subject, accepted_sequence, rejected_failure_json)

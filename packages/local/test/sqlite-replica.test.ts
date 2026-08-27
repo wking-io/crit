@@ -16,7 +16,7 @@ import { ProtocolValue } from "@crit/protocol"
 import { ReplicaPolicy, ReplicaStateSchema, ReplicaStore } from "@crit/replica/adapter"
 import { ReplicaStoreConformance } from "@crit/replica/testing"
 import { CanvasReplica, ReplicaChangeIds, ReplicaModel } from "@crit/replica"
-import { Context, Data, Effect, Exit, Layer, Result, Schema } from "effect"
+import { Context, Data, Effect, Exit, Layer, Predicate, Result, Schema } from "effect"
 import { describe, expect, it } from "vitest"
 
 import { authorityTableSql } from "../src/migrations.js"
@@ -145,7 +145,7 @@ describe("SQLite ReplicaStore", () => {
     yield* Effect.scoped(Effect.gen(function*() {
       const replicaContext = yield* Layer.buildWithScope(secondLayer, yield* Effect.scope)
       const replica = Context.get(replicaContext, CanvasReplica)
-      expect((yield* replica.current(canvasId)).pending[0]?.state._tag).toBe("acceptedUnconfirmed")
+      expect(Predicate.isTagged((yield* replica.current(canvasId)).pending[0]?.state, "acceptedUnconfirmed")).toBe(true)
       const synced = yield* replica.sync(canvasId)
       expect(synced.view.pending).toEqual([])
       expect(synced.view.projection.title).toBe("After")

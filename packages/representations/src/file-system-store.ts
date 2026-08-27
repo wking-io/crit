@@ -1,5 +1,5 @@
 import { ArtifactRepresentation, Sha256Digest, type ArtifactId } from "@crit/domain"
-import { Crypto, Data, Effect, FileSystem, Layer, Path, PlatformError, Schema } from "effect"
+import { Crypto, Data, Effect, FileSystem, Layer, Path, PlatformError, Predicate, Result, Schema } from "effect"
 
 import {
   ArtifactConflict,
@@ -23,7 +23,7 @@ const hex = (input: Uint8Array) => Array.from(input, (value) => value.toString(1
 const platformReason = (failure: PlatformError.PlatformError) => failure.reason._tag
 
 const isReason = (failure: PlatformError.PlatformError, tag: PlatformError.SystemErrorTag) =>
-  failure.reason._tag === tag
+  Predicate.isTagged(failure.reason, tag)
 
 const ensureDirectory = (fs: FileSystem.FileSystem, directory: string) => fs.makeDirectory(directory, {
   recursive: true
@@ -91,7 +91,7 @@ const makeStore = (options: FileSystemArtifactStoreOptions) => Effect.gen(functi
             Effect.mapError((failure) => ioFailure(input.artifactId, "put", platformReason(failure)))
           )
           const published = yield* fs.link(temporary, artifactPath(input.artifactId)).pipe(Effect.result)
-          if (published._tag === "Success") return artifact
+          if (Result.isSuccess(published)) return artifact
           if (!isReason(published.failure, "AlreadyExists")) {
             return yield* Effect.fail(ioFailure(input.artifactId, "put", platformReason(published.failure)))
           }

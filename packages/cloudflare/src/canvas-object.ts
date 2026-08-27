@@ -29,7 +29,7 @@ import {
   type SubmitChangeReceipt
 } from "@crit/protocol"
 import { DurableObject } from "cloudflare:workers"
-import { Cause, Data, Effect, Exit, Option, Result, Schema } from "effect"
+import { Cause, Data, Effect, Exit, Option, Predicate, Result, Schema } from "effect"
 
 import { readAccessEmail } from "./access.js"
 import { DurableSqliteStorage } from "./durable-sqlite.js"
@@ -57,14 +57,10 @@ export type DurableObjectResult<A, E> = Data.TaggedEnum<{
 const durableObjectResult = Data.taggedEnum<DurableObjectResult<unknown, unknown>>()
 
 export const DurableObjectResult = {
-  success: <A, E = never>(value: A): DurableObjectResult<A, E> => {
-    // SAFETY: TaggedEnum constructors are invariant in the payload type parameters.
-    return durableObjectResult.success({ value }) as DurableObjectResult<A, E>
-  },
-  failure: <A = never, E = never>(error: E): DurableObjectResult<A, E> => {
-    // SAFETY: TaggedEnum constructors are invariant in the payload type parameters.
-    return durableObjectResult.failure({ error }) as DurableObjectResult<A, E>
-  },
+  success: <A, E = never>(value: A): DurableObjectResult<A, E> =>
+    durableObjectResult.success({ value }) as DurableObjectResult<A, E>,
+  failure: <A = never, E = never>(error: E): DurableObjectResult<A, E> =>
+    durableObjectResult.failure({ error }) as DurableObjectResult<A, E>,
   defect: (message: string): DurableObjectResult<never, never> =>
     durableObjectResult.defect({ message }),
   interrupted: (): DurableObjectResult<never, never> =>
@@ -280,8 +276,8 @@ export class CanvasDurableObject extends DurableObject {
     if (Option.isNone(address)) return new Response(null, { status: 401 })
     const person = await Effect.runPromise(accessConnectedPerson(address.value))
     const opened = await this.open()
-    if (opened._tag === "failure") return new Response(null, { status: 404 })
-    if (opened._tag !== "success") return new Response(null, { status: 500 })
+    if (Predicate.isTagged(opened, "failure")) return new Response(null, { status: 404 })
+    if (!Predicate.isTagged(opened, "success")) return new Response(null, { status: 500 })
     const pair = new WebSocketPair()
     this.ctx.acceptWebSocket(pair[1])
     pair[1].serializeAttachment(DomainValue.detach(person))

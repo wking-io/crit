@@ -24,7 +24,7 @@ import {
   RepresentationRuntime,
   RepresentationRuntimeLive
 } from "@crit/representations"
-import { Context, Effect, FileSystem, Layer, Option, Result, Schema } from "effect"
+import { Context, Effect, FileSystem, Layer, Option, Predicate, Result, Schema } from "effect"
 import {
   HttpClient,
   HttpRouter,
@@ -135,7 +135,7 @@ describe("LocalProjectApplicationBindings", () => {
     ))
     expect(Result.isFailure(missing)).toBe(true)
     if (Result.isFailure(missing)) {
-      expect(missing.failure._tag).toBe("ProjectManifestIoFailure")
+      expect(Predicate.isTagged(missing.failure, "ProjectManifestIoFailure")).toBe(true)
     }
     await writeFile(path.join(root, "crit.manifest.json"), JSON.stringify({
       schemaVersion: 2,
@@ -147,7 +147,7 @@ describe("LocalProjectApplicationBindings", () => {
     ))
     expect(Result.isFailure(invalid)).toBe(true)
     if (Result.isFailure(invalid)) {
-      expect(invalid.failure._tag).toBe("ProjectManifestInvalid")
+      expect(Predicate.isTagged(invalid.failure, "ProjectManifestInvalid")).toBe(true)
     }
   })
 
@@ -175,8 +175,8 @@ describe("LocalProjectApplicationBindings", () => {
         Layer.provideMerge(inertLiveContent),
         Layer.provideMerge(NodeCrypto.layer)
       )))
-      expect(plan._tag).toBe("iframe")
-      if (plan._tag !== "iframe") return
+      expect(Predicate.isTagged(plan, "iframe")).toBe(true)
+      if (!Predicate.isTagged(plan, "iframe") || !("url" in plan)) return
       expect(plan.url).toBe(Schema.decodeUnknownSync(HttpUrl)(
         `${origin}products/%E2%9C%93?view=grid`
       ))
@@ -210,9 +210,12 @@ describe("LocalProjectApplicationBindings", () => {
     )))
     const local = await Effect.runPromise(resolve("http://127.0.0.1:5173/"))
     const preview = await Effect.runPromise(resolve("https://preview.example/"))
-    expect(local._tag).toBe("iframe")
-    expect(preview._tag).toBe("iframe")
-    if (local._tag === "iframe" && preview._tag === "iframe") {
+    expect(Predicate.isTagged(local, "iframe")).toBe(true)
+    expect(Predicate.isTagged(preview, "iframe")).toBe(true)
+    if (
+      Predicate.isTagged(local, "iframe") && "url" in local && "representation" in local &&
+      Predicate.isTagged(preview, "iframe") && "url" in preview && "representation" in preview
+    ) {
       expect(local.url).toBe(Schema.decodeUnknownSync(HttpUrl)(
         "http://127.0.0.1:5173/products/%E2%9C%93?view=grid"
       ))

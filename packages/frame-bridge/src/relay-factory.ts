@@ -5,12 +5,6 @@ export type FrameWheelDecision = {
   readonly intent?: Extract<FrameInputIntent, { readonly type: "wheel" }>
 }
 
-/**
- * Owns the stateful routing shared by the Canvas, same-origin Frame, and
- * injected cross-origin bridge adapters. This factory must stay free of
- * runtime imports and module closures so the injected adapter can serialize
- * it with Function.prototype.toString.
- */
 export function createFrameInputRelay() {
   let gestureScale = 1
   let gestureActive = false

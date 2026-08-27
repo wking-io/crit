@@ -4,7 +4,7 @@ import {
   protocolFailureHttpStatus,
   type ProtocolFailure
 } from "@crit/protocol"
-import { Result, Schema } from "effect"
+import { Predicate, Result, Schema } from "effect"
 
 export const protocolFailureResponse = (failure: ProtocolFailure): Response =>
   new Response(JSON.stringify(ChangeProtocol.failure.encode(failure)), {
@@ -28,8 +28,8 @@ export const negotiateRequest = (
   if (
     Result.isFailure(negotiated)
     && (
-      negotiated.failure._tag === "unsupportedVersion"
-      || negotiated.failure._tag === "messageKindMismatch"
+      Predicate.isTagged(negotiated.failure, "unsupportedVersion")
+      || Predicate.isTagged(negotiated.failure, "messageKindMismatch")
     )
   ) {
     return protocolFailureResponse(negotiated.failure)

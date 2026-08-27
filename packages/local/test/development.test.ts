@@ -18,7 +18,7 @@ import { AuthorityModel } from "@crit/authority"
 import { LocalCanvasClient } from "@crit/client"
 import { Id } from "@crit/domain"
 import { localApiToken, type LocalApiToken } from "@crit/replica/http"
-import { Context, Effect, Exit, Layer, Option, Result, Scope } from "effect"
+import { Context, Effect, Exit, Layer, Option, Predicate, Result, Scope } from "effect"
 import { FetchHttpClient } from "effect/unstable/http"
 import { describe, expect, it } from "vitest"
 
@@ -119,8 +119,10 @@ describe("LocalDevelopment", () => {
         instance: "ffffffffffffffffffffffffffffffff"
       }))
       const failure = yield* inspectLocalDaemon({ dataRoot }).pipe(Effect.flip)
-      expect(failure._tag).toBe("LocalDaemonIdentityMismatch")
-      if (failure._tag === "LocalDaemonIdentityMismatch") expect(failure.source).toBe("daemon")
+      expect(Predicate.isTagged(failure, "LocalDaemonIdentityMismatch")).toBe(true)
+      if (Predicate.isTagged(failure, "LocalDaemonIdentityMismatch") && "source" in failure) {
+        expect(failure.source).toBe("daemon")
+      }
     })).pipe(Effect.provide(NodeServices.layer))))
 
   it("reports an HTTP responder with an invalid status body as a protocol failure", () =>
@@ -137,7 +139,7 @@ describe("LocalDevelopment", () => {
       yield* malformedStatusServer(port)
       writeFileSync(join(dataRoot, "daemon.json"), descriptor)
       const failure = yield* inspectLocalDaemon({ dataRoot }).pipe(Effect.flip)
-      expect(failure._tag).toBe("LocalDaemonProtocolFailure")
+      expect(Predicate.isTagged(failure, "LocalDaemonProtocolFailure")).toBe(true)
     })).pipe(Effect.provide(NodeServices.layer))))
 
   it("reports malformed installation state without exposing its contents", () =>
@@ -147,7 +149,7 @@ describe("LocalDevelopment", () => {
       mkdirSync(dataRoot, { recursive: true })
       writeFileSync(join(dataRoot, "installation.json"), '{"bearerSecret":"do-not-report"}')
       const failure = yield* inspectLocalDaemon({ dataRoot }).pipe(Effect.flip)
-      expect(failure._tag).toBe("LocalDaemonStateMalformed")
+      expect(Predicate.isTagged(failure, "LocalDaemonStateMalformed")).toBe(true)
       expect(String(failure)).not.toContain("do-not-report")
     })).pipe(Effect.provide(NodeServices.layer))))
 
@@ -209,7 +211,7 @@ describe("LocalDevelopment", () => {
     const failures = results.filter(Result.isFailure)
     expect(successes).toHaveLength(1)
     expect(failures).toHaveLength(1)
-    expect(failures[0]?.failure._tag).toBe("LocalDaemonOwnershipFailure")
+    expect(Predicate.isTagged(failures[0]?.failure, "LocalDaemonOwnershipFailure")).toBe(true)
   }))))
 
   it("rejects a foreign process occupying the configured port", () =>
@@ -231,7 +233,9 @@ describe("LocalDevelopment", () => {
       expect(server.listening).toBe(true)
       const result = yield* Effect.result(build(dataRoot, yield* Effect.scope))
       expect(Result.isFailure(result)).toBe(true)
-      if (Result.isFailure(result)) expect(result.failure._tag).toBe("LocalDaemonOwnershipFailure")
+      if (Result.isFailure(result)) {
+        expect(Predicate.isTagged(result.failure, "LocalDaemonOwnershipFailure")).toBe(true)
+      }
     }))))
 
   it("does not remove a descriptor published by another instance", () =>
@@ -286,8 +290,8 @@ describe("LocalDevelopment", () => {
       ))
       expect(Result.isFailure(result)).toBe(true)
       if (Result.isFailure(result)) {
-        expect(result.failure._tag).toBe("LocalDevelopmentFailure")
-        if (result.failure._tag === "LocalDevelopmentFailure") {
+        expect(Predicate.isTagged(result.failure, "LocalDevelopmentFailure")).toBe(true)
+        if (Predicate.isTagged(result.failure, "LocalDevelopmentFailure") && "operation" in result.failure) {
           expect(result.failure.operation).toBe("validate browser origin")
         }
       }
@@ -305,8 +309,8 @@ describe("LocalDevelopment", () => {
       const result = yield* Effect.result(build(dataRoot, yield* Effect.scope))
       expect(Result.isFailure(result)).toBe(true)
       if (Result.isFailure(result)) {
-        expect(result.failure._tag).toBe("LocalDevelopmentFailure")
-        if (result.failure._tag === "LocalDevelopmentFailure") {
+        expect(Predicate.isTagged(result.failure, "LocalDevelopmentFailure")).toBe(true)
+        if (Predicate.isTagged(result.failure, "LocalDevelopmentFailure") && "operation" in result.failure) {
           expect(result.failure.operation).toBe("open local database")
         }
       }

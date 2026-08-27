@@ -5,7 +5,7 @@ import { Schema } from "effect"
 import { AtomRegistry } from "effect/unstable/reactivity"
 import { describe, expect, it } from "vitest"
 
-import { hostIndexAtom, hostScreenAtom } from "../src/host-atoms.js"
+import { HostIndexScreen, hostIndexAtom, HostScreen, hostScreenAtom } from "../src/host-atoms.js"
 
 const instance = Schema.decodeUnknownSync(LocalDaemonInstanceNonce)(
   "0123456789abcdef0123456789abcdef"
@@ -54,8 +54,8 @@ describe("hostScreenAtom", () => {
         shopCanvasId
       )
     )
-    expect(screen._tag).toBe("ready")
-    if (screen._tag === "ready") {
+    expect(HostScreen.$is("ready")(screen)).toBe(true)
+    if (HostScreen.$is("ready")(screen)) {
       expect(screen.props.canvasId).toBe(shopCanvasId)
     }
     registry.dispose()
@@ -73,12 +73,12 @@ describe("hostScreenAtom", () => {
     const registry = AtomRegistry.make()
     const shopScreen = registry.get(shop)
     const reviewScreen = registry.get(review)
-    expect(shopScreen._tag).toBe("ready")
-    expect(reviewScreen._tag).toBe("ready")
-    if (shopScreen._tag === "ready") {
+    expect(HostScreen.$is("ready")(shopScreen)).toBe(true)
+    expect(HostScreen.$is("ready")(reviewScreen)).toBe(true)
+    if (HostScreen.$is("ready")(shopScreen)) {
       expect(shopScreen.props.canvasId).toBe(shopCanvasId)
     }
-    if (reviewScreen._tag === "ready") {
+    if (HostScreen.$is("ready")(reviewScreen)) {
       expect(reviewScreen.props.canvasId).toBe(reviewCanvasId)
     }
     registry.dispose()
@@ -110,10 +110,9 @@ describe("hostIndexAtom", () => {
       instance
     })
     const registry = AtomRegistry.make()
-    expect(registry.get(
+    expect(HostIndexScreen.$is("connecting")(registry.get(
       hostIndexAtom(LocalBrowserConnection.encode(descriptor))(localOrigin)
-    )._tag)
-      .toBe("connecting")
+    ))).toBe(true)
     registry.dispose()
   })
 })

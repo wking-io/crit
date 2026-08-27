@@ -17,7 +17,7 @@ import {
 } from "@crit/protocol"
 import { AuthorityView, PersonInvocation } from "@crit/authority"
 import { SELF } from "cloudflare:test"
-import { Result, Schema } from "effect"
+import { Predicate, Result, Schema } from "effect"
 import { describe, expect, it } from "vitest"
 
 const accessEmail = "ada@acme.com"
@@ -354,7 +354,7 @@ describe("Worker canvas ledger routes", () => {
 
     expect(response.status).toBe(400)
     expect(Result.isFailure(decodeSubmitCanvasChangeWire(forged))).toBe(true)
-    expect(Result.isSuccess(failure) && failure.success._tag).toBe("trustedField")
+    expect(Result.isSuccess(failure) && Predicate.isTagged(failure.success, "trustedField")).toBe(true)
   })
 
   it("rejects an unsupported submit envelope version with an upgrade error", async() => {

@@ -11,7 +11,7 @@ import {
   readProtocolFailure,
   type ProtocolFailure
 } from "@crit/protocol"
-import { Effect, Option, Redacted, Result, Schema } from "effect"
+import { Effect, Option, Predicate, Redacted, Result, Schema } from "effect"
 import {
   FetchHttpClient,
   HttpClient,
@@ -143,8 +143,8 @@ export const registerDeployment = (
   if (
     Result.isFailure(negotiated)
     && (
-      negotiated.failure._tag === "unsupportedVersion"
-      || negotiated.failure._tag === "messageKindMismatch"
+      Predicate.isTagged(negotiated.failure, "unsupportedVersion")
+      || Predicate.isTagged(negotiated.failure, "messageKindMismatch")
     )
   ) {
     return yield* Effect.fail(negotiated.failure)

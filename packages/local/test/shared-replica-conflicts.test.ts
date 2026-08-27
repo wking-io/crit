@@ -12,7 +12,7 @@ import {
 import { routeSharedCanvases } from "@crit/client"
 import { Id, decodeCanvasCommandBatch } from "@crit/domain"
 import { CanvasReplica, ReplicaChangeIds, ReplicaModel } from "@crit/replica"
-import { Context, Effect, Layer, Schema } from "effect"
+import { Context, Effect, Layer, Predicate, Schema } from "effect"
 import { describe, expect, it } from "vitest"
 
 import { SqliteCanvasReplica } from "../src/index.js"
@@ -60,7 +60,7 @@ const changeIds = (prefix: string) => {
 const pendingState = (
   view: { readonly pending: ReadonlyArray<{ readonly proposal: { readonly changeId: string }; readonly state: { readonly _tag: string } }> },
   changeId: string
-) => view.pending.find((item) => item.proposal.changeId === changeId)?.state._tag
+) => view.pending.find((item) => item.proposal.changeId === changeId)?.state
 
 const frameIds = (view: { readonly projection: { readonly frames: ReadonlyArray<{ readonly frameId: string }> } }) =>
   view.projection.frames.map((frame) => frame.frameId).sort()
@@ -145,8 +145,8 @@ describe("shared replica conflicts", () => {
 
         expect(leftSynced.conflicted).toBe(1)
         expect(leftSynced.blocked).toBe(1)
-        expect(pendingState(leftSynced.view, parent.changeId)).toBe("conflicted")
-        expect(pendingState(leftSynced.view, child.changeId)).toBe("blocked")
+        expect(Predicate.isTagged(pendingState(leftSynced.view, parent.changeId), "conflicted")).toBe(true)
+        expect(Predicate.isTagged(pendingState(leftSynced.view, child.changeId), "blocked")).toBe(true)
         expect(pendingState(leftSynced.view, independent.changeId)).toBeUndefined()
         expect(leftSynced.view.projection.title).toBe("Also left")
         expect(leftSynced.view.projection.frames[0]?.title).toBe("Right")
@@ -166,8 +166,8 @@ describe("shared replica conflicts", () => {
       )
       const restored = Context.get(restoredContext, CanvasReplica)
       const current = yield* restored.current(canvasId)
-      expect(pendingState(current, parentChangeId)).toBe("conflicted")
-      expect(pendingState(current, childChangeId)).toBe("blocked")
+      expect(Predicate.isTagged(pendingState(current, parentChangeId), "conflicted")).toBe(true)
+      expect(Predicate.isTagged(pendingState(current, childChangeId), "blocked")).toBe(true)
       expect(current.pending).toHaveLength(2)
       expect(current.projection.title).toBe("Also left")
     }))))

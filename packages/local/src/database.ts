@@ -1,6 +1,6 @@
 import * as SqliteClient from "@effect/sql-sqlite-node/SqliteClient"
 import * as SqliteMigrator from "@effect/sql-sqlite-node/SqliteMigrator"
-import { Cause, Data, Effect, Layer, Schedule, Schema } from "effect"
+import { Cause, Data, Effect, Layer, Predicate, Schedule, Schema } from "effect"
 import * as Reactivity from "effect/unstable/reactivity/Reactivity"
 import * as SqlClient from "effect/unstable/sql/SqlClient"
 import * as SqlError from "effect/unstable/sql/SqlError"
@@ -95,7 +95,7 @@ export const retryTransaction = <A, E, R>(
   body: Effect.Effect<A, E, R>
 ): Effect.Effect<A, E | SqlError.SqlError, R> => sql.withTransaction(body).pipe(Effect.retry({
   schedule: Schedule.spaced("2 millis"),
-  while: (error) => SqlError.isSqlError(error) && error.reason._tag === "LockTimeoutError"
+  while: (error) => SqlError.isSqlError(error) && Predicate.isTagged(error.reason, "LockTimeoutError")
 }))
 
 export const makeDatabase = (options: SqliteLocalOptions) => Effect.gen(function*() {
@@ -108,7 +108,8 @@ export const makeDatabase = (options: SqliteLocalOptions) => Effect.gen(function
     Effect.provideService(SqlClient.SqlClient, sql),
     Effect.retry({
       schedule: Schedule.spaced("2 millis"),
-      while: (error) => error._tag === "SqlError" && error.reason._tag === "LockTimeoutError"
+      while: (error) => Predicate.isTagged(error, "SqlError") && "reason" in error
+        && Predicate.isTagged(error.reason, "LockTimeoutError")
     })
   )
   return sql

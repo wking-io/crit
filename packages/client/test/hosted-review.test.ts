@@ -3,7 +3,7 @@ import {
   Id
 } from "@crit/domain"
 import { formatProtocolFailure } from "@crit/protocol"
-import { Effect } from "effect"
+import { Effect, Match, Predicate } from "effect"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import {
@@ -117,17 +117,23 @@ describe("HostedReviewClient protocol negotiation", () => {
       withClient((client) => client.directory().pipe(Effect.flip))
     )
 
-    expect(failure._tag).toBe("unsupportedVersion")
-    if (failure._tag !== "unsupportedVersion") return
-    expect(failure).toEqual({
-      _tag: "unsupportedVersion",
-      location: "message",
-      requestedVersion: 2,
-      supportedVersion: 1,
-      message: "Schema version 2 is unsupported. This installation speaks version 1. Upgrade Crit so the client and installation match."
-    })
-    expect(formatProtocolFailure(failure)).toBe(
-      "Schema version 2 is unsupported. This installation speaks version 1. Upgrade Crit so the client and installation match."
+    expect(Predicate.isTagged(failure, "unsupportedVersion")).toBe(true)
+    Match.value(failure).pipe(
+      Match.tag("unsupportedVersion", (unsupported) => {
+        expect(unsupported).toEqual({
+          _tag: "unsupportedVersion",
+          location: "message",
+          requestedVersion: 2,
+          supportedVersion: 1,
+          message: "Schema version 2 is unsupported. This installation speaks version 1. Upgrade Crit so the client and installation match."
+        })
+        expect(formatProtocolFailure(unsupported)).toBe(
+          "Schema version 2 is unsupported. This installation speaks version 1. Upgrade Crit so the client and installation match."
+        )
+      }),
+      Match.orElse(() => {
+        throw new Error("expected unsupportedVersion")
+      })
     )
   })
 
@@ -158,10 +164,16 @@ describe("HostedReviewClient protocol negotiation", () => {
       ))
     )
 
-    expect(failure._tag).toBe("unsupportedVersion")
-    if (failure._tag !== "unsupportedVersion") return
-    expect(formatProtocolFailure(failure)).toBe(
-      "Schema version 2 is unsupported. This installation speaks version 1. Upgrade Crit so the client and installation match."
+    expect(Predicate.isTagged(failure, "unsupportedVersion")).toBe(true)
+    Match.value(failure).pipe(
+      Match.tag("unsupportedVersion", (unsupported) => {
+        expect(formatProtocolFailure(unsupported)).toBe(
+          "Schema version 2 is unsupported. This installation speaks version 1. Upgrade Crit so the client and installation match."
+        )
+      }),
+      Match.orElse(() => {
+        throw new Error("expected unsupportedVersion")
+      })
     )
   })
 })

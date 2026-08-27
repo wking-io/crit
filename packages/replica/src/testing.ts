@@ -1,7 +1,7 @@
 import { AuthorityModel, AuthorityView, CanvasAuthority, PersonInvocation } from "@crit/authority"
 import { Id, IsoTimestamp, PersonAttribution, decodeCanvasCommandBatch, emptyCanvasProjection } from "@crit/domain"
 import { ProtocolValue, type AcceptedCanvasChange, type ChangePage } from "@crit/protocol"
-import { Data, Effect, Result, Schema } from "effect"
+import { Data, Effect, Predicate, Result, Schema } from "effect"
 
 import { ReplicaModel } from "./model.js"
 import { ReplicaPolicy } from "./policy.js"
@@ -85,8 +85,8 @@ export const ReplicaConformance = {
     }, person)
     const synced = yield* replica.sync(canvasId)
     yield* requireFact(synced.view.projection.title === "Independent", "independent work did not survive")
-    yield* requireFact(synced.view.pending.find((item) => item.proposal.changeId === parent.changeId)?.state._tag === "conflicted", "parent did not conflict")
-    yield* requireFact(synced.view.pending.find((item) => item.proposal.changeId === child.changeId)?.state._tag === "blocked", "child was not blocked")
+    yield* requireFact(Predicate.isTagged(synced.view.pending.find((item) => item.proposal.changeId === parent.changeId)?.state, "conflicted"), "parent did not conflict")
+    yield* requireFact(Predicate.isTagged(synced.view.pending.find((item) => item.proposal.changeId === child.changeId)?.state, "blocked"), "child was not blocked")
     yield* requireFact(!synced.view.pending.some((item) => item.proposal.changeId === independent.changeId), "independent work stayed pending")
   }),
   receiptAndPageIdempotency: Effect.gen(function*() {
@@ -105,7 +105,7 @@ export const ReplicaConformance = {
     const pendingResult = ReplicaPolicy.enqueue(
       state, ReplicaModel.change({ canvasId, commands }), person, changeId
     )
-    if (pendingResult._tag === "Failure") throw pendingResult.failure
+    if (Result.isFailure(pendingResult)) throw pendingResult.failure
     const pending = pendingResult.success
     const accepted: AcceptedCanvasChange = {
       canvasId, changeId, observedCursor: genesisCursor, commands,
@@ -115,19 +115,19 @@ export const ReplicaConformance = {
     }
     const receipt = { disposition: "first-acceptance" as const, change: accepted }
     const firstReceiptResult = ReplicaPolicy.receipt(pending, receipt)
-    if (firstReceiptResult._tag === "Failure") throw firstReceiptResult.failure
+    if (Result.isFailure(firstReceiptResult)) throw firstReceiptResult.failure
     const duplicateReceiptResult = ReplicaPolicy.receipt(firstReceiptResult.success, receipt)
-    if (duplicateReceiptResult._tag === "Failure") throw duplicateReceiptResult.failure
+    if (Result.isFailure(duplicateReceiptResult)) throw duplicateReceiptResult.failure
     const duplicateReceipt = duplicateReceiptResult.success
     yield* requireFact(duplicateReceipt.acknowledgedCursor === genesisCursor, "receipt advanced acknowledged cursor")
-    yield* requireFact(duplicateReceipt.pending[0]?.state._tag === "acceptedUnconfirmed", "receipt was not retained unconfirmed")
+    yield* requireFact(Predicate.isTagged(duplicateReceipt.pending[0]?.state, "acceptedUnconfirmed"), "receipt was not retained unconfirmed")
     const page: ChangePage = { canvasId, after: genesisCursor, changes: [accepted], cursor: acceptedCursor, hasMore: false }
     const pulledResult = ReplicaPolicy.incorporatePage(duplicateReceipt, page)
-    if (pulledResult._tag === "Failure") throw pulledResult.failure
+    if (Result.isFailure(pulledResult)) throw pulledResult.failure
     const delayedReceiptResult = ReplicaPolicy.receipt(pulledResult.success.state, receipt)
-    if (delayedReceiptResult._tag === "Failure") throw delayedReceiptResult.failure
+    if (Result.isFailure(delayedReceiptResult)) throw delayedReceiptResult.failure
     const duplicatePageResult = ReplicaPolicy.incorporatePage(delayedReceiptResult.success, page)
-    if (duplicatePageResult._tag === "Failure") throw duplicatePageResult.failure
+    if (Result.isFailure(duplicatePageResult)) throw duplicatePageResult.failure
     const duplicatePage = duplicatePageResult.success
     yield* requireFact(duplicatePage.pulled === 0, "duplicate page appended accepted history")
     yield* requireFact(duplicatePage.state.pending.length === 0, "self-acceptance did not clear pending work")

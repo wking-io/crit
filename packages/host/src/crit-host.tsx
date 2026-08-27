@@ -1,6 +1,7 @@
 import type { CanvasId } from "@crit/domain"
 import {
   ReplicaBoard,
+  ReplicaSession,
   useCanvasPresence,
   useReplicaSession,
   type FrameRepresentationResolver,
@@ -35,7 +36,7 @@ function CritHostSession({
     run
   })
   const presence = useCanvasPresence({
-    attend: session._tag === "ready" ? ports.attend : idleAttend,
+    attend: ReplicaSession.$is("ready")(session) ? ports.attend : idleAttend,
     canvasId
   })
   return Match.value(session).pipe(Match.tagsExhaustive({

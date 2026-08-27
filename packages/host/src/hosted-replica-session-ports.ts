@@ -25,7 +25,7 @@ import {
   ReplicaSubscriptionEvent,
   type ReplicaSessionPorts
 } from "@crit/react"
-import { Cause, Effect, Fiber, Result, Stream, type Scope } from "effect"
+import { Cause, Effect, Fiber, Match, Predicate, Result, Stream, type Scope } from "effect"
 import * as Socket from "effect/unstable/socket/Socket"
 
 export interface HostedReplicaSessionDeps {
@@ -68,7 +68,7 @@ export const hostedReplicaSessionPorts = (
       Effect.matchCauseEffect({
         onFailure: (cause) => {
           const found = Cause.findError(cause)
-          if (Result.isSuccess(found) && found.success._tag === "canvasNotFound") {
+          if (Result.isSuccess(found) && Predicate.isTagged(found.success, "canvasNotFound")) {
             return Effect.fail(unavailable(canvasId, "The canvas does not exist."))
           }
           if (Result.isSuccess(found) && isProtocolFailure(found.success)) {
@@ -195,17 +195,24 @@ export const hostedReplicaSessionPorts = (
         ReplicaSessionUnavailable | ReplicaChangeRejected
       > => {
         const found = Cause.findError(cause)
-        if (Result.isSuccess(found) && found.success._tag === "changeRejected") {
-          return Effect.fail(new ReplicaChangeRejected({
-            canvasId,
-            failure: found.success.failure
-          }))
-        }
-        if (Result.isSuccess(found) && found.success._tag === "canvasNotFound") {
-          return Effect.fail(unavailable(canvasId, "The canvas does not exist."))
-        }
-        if (Result.isSuccess(found) && isProtocolFailure(found.success)) {
-          return Effect.fail(unavailable(canvasId, formatProtocolFailure(found.success)))
+        if (Result.isSuccess(found)) {
+          if (isProtocolFailure(found.success)) {
+            return Effect.fail(unavailable(canvasId, formatProtocolFailure(found.success)))
+          }
+          return Match.value(found.success).pipe(
+            Match.tag("changeRejected", (failure) =>
+              Effect.fail(new ReplicaChangeRejected({
+                canvasId,
+                failure: failure.failure
+              }))),
+            Match.orElse((failure) =>
+              Effect.fail(unavailable(
+                canvasId,
+                Predicate.isTagged(failure, "canvasNotFound")
+                  ? "The canvas does not exist."
+                  : "The hosted service is unreachable."
+              )))
+          )
         }
         return Effect.fail(unavailable(canvasId, "The hosted service is unreachable."))
       },

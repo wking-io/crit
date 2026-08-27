@@ -1528,8 +1528,6 @@ describe("Crit", () => {
             sizeBytes: 512
           }
         }),
-        // Server rendering has a zero-sized viewport, so pull the archived
-        // Frame back inside the iframe mount margin.
         CanvasCommand.moveFrame({ id: "snapshot-artifact", x: 0, y: 0 })
       )
     )
@@ -1608,8 +1606,6 @@ describe("Crit", () => {
             sizeBytes: 512
           }
         }),
-        // Server rendering has a zero-sized viewport, so pull the archived
-        // Frame back inside the iframe mount margin.
         CanvasCommand.moveFrame({ id: "snapshot-artifact", x: 0, y: 0 })
       )
     )

@@ -14,6 +14,7 @@ import {
   Option,
   Path,
   PlatformError,
+  Predicate,
   Result,
   Schema
 } from "effect"
@@ -96,7 +97,7 @@ export class LocalProjectManifest extends Context.Service<
       }
       const pathStat = yield* fs.stat(manifestPath).pipe(Effect.result)
       if (Result.isFailure(pathStat)) {
-        return pathStat.failure.reason._tag === "NotFound"
+        return Predicate.isTagged(pathStat.failure.reason, "NotFound")
           ? Option.none()
           : yield* Effect.fail(ioFailure("inspect", manifestPath, platformReason(pathStat.failure)))
       }
@@ -105,7 +106,7 @@ export class LocalProjectManifest extends Context.Service<
       }
       const opened = yield* fs.open(manifestPath, { flag: "r" }).pipe(Effect.result)
       if (Result.isFailure(opened)) {
-        return opened.failure.reason._tag === "NotFound"
+        return Predicate.isTagged(opened.failure.reason, "NotFound")
           ? Option.none()
           : yield* Effect.fail(ioFailure("inspect", manifestPath, platformReason(opened.failure)))
       }
@@ -177,7 +178,7 @@ export class LocalProjectManifest extends Context.Service<
               }))
               : Effect.fail(invalid("Published manifest did not match generated identity")))
           )),
-          Match.when({ _tag: "Failure" }, ({ failure }) => failure.reason._tag === "AlreadyExists"
+          Match.when({ _tag: "Failure" }, ({ failure }) => Predicate.isTagged(failure.reason, "AlreadyExists")
             ? read.pipe(Effect.map((winner) => ProjectManifestUnchanged.make({
               path: manifestPath,
               manifest: winner

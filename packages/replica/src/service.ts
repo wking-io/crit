@@ -2,7 +2,7 @@ import { AuthorityModel, CanvasAuthority } from "@crit/authority"
 import type { VerifiedInvocation } from "@crit/authority"
 import { DomainValue, type CanvasId } from "@crit/domain"
 import { ReplicaChangedSchema, type ReplicaChanged } from "@crit/protocol"
-import { Context, Effect, Layer, PubSub, Result, Scope, Semaphore, Stream, SynchronizedRef } from "effect"
+import { Context, Effect, Layer, Match, Option, Predicate, PubSub, Result, Scope, Semaphore, Stream, SynchronizedRef } from "effect"
 
 import {
   ReplicaCanvasNotFound,
@@ -75,7 +75,7 @@ const makeCanvasReplica = Effect.gen(function*() {
     : Effect.succeed(state)))
   const render = (state: ReplicaState) => {
     const result = ReplicaPolicy.view(state)
-    return result._tag === "Success" ? Effect.succeed(DomainValue.detach(result.success)) : Effect.fail(result.failure)
+    return Result.isSuccess(result) ? Effect.succeed(DomainValue.detach(result.success)) : Effect.fail(result.failure)
   }
   const current: CanvasReplicaService["current"] = (canvasId) => requireState(canvasId).pipe(
     Effect.flatMap(render),
@@ -111,7 +111,7 @@ const makeCanvasReplica = Effect.gen(function*() {
       const state = yield* modify<ReplicaState, ReplicaChangeFailure>(ownedInput.canvasId, (current): Result.Result<readonly [ReplicaState, ReplicaState], ReplicaChangeFailure> => {
         if (current === undefined) return Result.fail(new ReplicaNotOpen({ canvasId: ownedInput.canvasId }))
         const result = ReplicaPolicy.enqueue(current, ownedInput, ownedInvocation, changeId)
-        return result._tag === "Success"
+        return Result.isSuccess(result)
           ? Result.succeed([result.success, result.success] as const)
           : Result.fail(result.failure)
       })
@@ -130,7 +130,7 @@ const makeCanvasReplica = Effect.gen(function*() {
         canvasId,
         after: state.acknowledgedCursor,
         limit: pageLimit
-      })).pipe(Effect.mapError((failure) => failure._tag === "canvasNotFound"
+      })).pipe(Effect.mapError((failure) => Predicate.isTagged(failure, "canvasNotFound")
         ? new ReplicaCanvasNotFound({ canvasId })
         : new ReplicaDiverged({ canvasId, reason: `authority rejected acknowledged cursor: ${failure.cursor}` })))
       if (page.hasMore && page.cursor === state.acknowledgedCursor) {
@@ -142,7 +142,7 @@ const makeCanvasReplica = Effect.gen(function*() {
       const counts = yield* modify<{ readonly pulled: number; readonly acknowledged: number }, ReplicaSyncFailure>(canvasId, (current): Result.Result<readonly [{ readonly pulled: number; readonly acknowledged: number }, ReplicaState], ReplicaSyncFailure> => {
         if (current === undefined) return Result.fail(new ReplicaNotOpen({ canvasId }))
         const result = ReplicaPolicy.incorporatePage(current, page)
-        return result._tag === "Success"
+        return Result.isSuccess(result)
           ? Result.succeed([{ pulled: result.success.pulled, acknowledged: result.success.acknowledged }, result.success.state] as const)
           : Result.fail(result.failure)
       })
@@ -162,28 +162,32 @@ const makeCanvasReplica = Effect.gen(function*() {
     acknowledged += result.acknowledged
     for (;;) {
       const state = yield* requireState(canvasId)
-      const eligible = state.pending.find((record) => record.state._tag === "ready")
+      const eligible = state.pending.find((record) => Predicate.isTagged(record.state, "ready"))
       if (eligible === undefined) break
       const submitted = yield* authority.submit(eligible.proposal, eligible.invocation).pipe(Effect.result)
-      if (submitted._tag === "Failure") {
+      if (Result.isFailure(submitted)) {
         const failure = submitted.failure
-        if (failure._tag === "changeRejected") {
+        const rejected = Match.value(failure).pipe(
+          Match.tag("changeRejected", (failure) => failure),
+          Match.option
+        )
+        if (Option.isSome(rejected)) {
           yield* modify<undefined, ReplicaSyncFailure>(canvasId, (current): Result.Result<readonly [undefined, ReplicaState], ReplicaSyncFailure> => {
             if (current === undefined) return Result.fail(new ReplicaNotOpen({ canvasId }))
-            const next = ReplicaPolicy.rejection(current, failure)
-            return next._tag === "Success"
+            const next = ReplicaPolicy.rejection(current, rejected.value)
+            return Result.isSuccess(next)
               ? Result.succeed([undefined, next.success] as const)
               : Result.fail(next.failure)
           })
           continue
         }
-        if (failure._tag === "canvasNotFound") return yield* Effect.fail(new ReplicaCanvasNotFound({ canvasId }))
+        if (Predicate.isTagged(failure, "canvasNotFound")) return yield* Effect.fail(new ReplicaCanvasNotFound({ canvasId }))
         return yield* Effect.fail(new ReplicaDiverged({ canvasId, reason: `authority rejected pending identity: ${failure._tag}` }))
       }
       yield* modify<undefined, ReplicaSyncFailure>(canvasId, (current): Result.Result<readonly [undefined, ReplicaState], ReplicaSyncFailure> => {
         if (current === undefined) return Result.fail(new ReplicaNotOpen({ canvasId }))
         const next = ReplicaPolicy.receipt(current, submitted.success)
-        return next._tag === "Success"
+        return Result.isSuccess(next)
           ? Result.succeed([undefined, next.success] as const)
           : Result.fail(next.failure)
       })
@@ -200,8 +204,8 @@ const makeCanvasReplica = Effect.gen(function*() {
       canvasId,
       pulled,
       acknowledged,
-      conflicted: view.pending.filter((pending) => pending.state._tag === "conflicted").length,
-      blocked: view.pending.filter((pending) => pending.state._tag === "blocked").length,
+      conflicted: view.pending.filter((pending) => Predicate.isTagged(pending.state, "conflicted")).length,
+      blocked: view.pending.filter((pending) => Predicate.isTagged(pending.state, "blocked")).length,
       view
     })
   })).pipe(Effect.withSpan("crit.replica.sync", { attributes: { "crit.canvas.id": canvasId } }))

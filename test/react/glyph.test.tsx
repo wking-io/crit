@@ -66,8 +66,9 @@ describe("Glyph", () => {
   })
 
   it("rejects unknown glyph names at compile time", () => {
-    // @ts-expect-error unknown glyphs must fail at the caller seam
-    const glyph = <Glyph name="not-a-glyph" />
-    expect(glyph).toBeDefined()
+    type GlyphNameProp = Parameters<typeof Glyph>[0]["name"]
+    type UnknownGlyphRejected = "not-a-glyph" extends GlyphNameProp ? never : true
+    const unknownGlyphRejected: UnknownGlyphRejected = true
+    expect(unknownGlyphRejected).toBe(true)
   })
 })

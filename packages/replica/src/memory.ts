@@ -20,11 +20,11 @@ const store = Effect.gen(function*() {
     modify: <A, E>(canvasId: CanvasId, transition: (state: ReplicaState | undefined) => Result.Result<readonly [A, ReplicaState | undefined], E>) => cell(canvasId).pipe(
       Effect.flatMap((state) => SynchronizedRef.modify<ReplicaState | undefined, Result.Result<A, E>>(state, (current): readonly [Result.Result<A, E>, ReplicaState | undefined] => {
         const result = transition(current)
-        return result._tag === "Success"
+        return Result.isSuccess(result)
           ? [Result.succeed(result.success[0]), result.success[1]] as const
           : [Result.fail(result.failure), current] as const
       })),
-      Effect.flatMap((result) => result._tag === "Success" ? Effect.succeed(result.success) : Effect.fail(result.failure))
+      Effect.flatMap((result) => Result.isSuccess(result) ? Effect.succeed(result.success) : Effect.fail(result.failure))
     )
   } satisfies ReplicaStore["Service"]
 })

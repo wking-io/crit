@@ -1,4 +1,4 @@
-import { Effect, Schema } from "effect"
+import { Effect, Match, Schema } from "effect"
 
 import {
   AgentId,
@@ -145,10 +145,16 @@ export const decodeReportedRuntime = (input: Schema.Json) =>
   )(input)
 
 export const actorFromAttribution = (attribution: AcceptedAttribution): ActorSnapshot =>
-  attribution._tag === "person" ? attribution.person : attribution.agent
+  Match.value(attribution).pipe(Match.tagsExhaustive({
+    person: ({ person }) => person,
+    agent: ({ agent }) => agent
+  }))
 
 export const actorFromPrincipal = (principal: Principal): ActorSnapshot =>
-  principal._tag === "person" ? principal.person : principal.agent
+  Match.value(principal).pipe(Match.tagsExhaustive({
+    person: ({ person }) => person,
+    agent: ({ agent }) => agent
+  }))
 
 const hex = (bytes: Uint8Array): string =>
   Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("")

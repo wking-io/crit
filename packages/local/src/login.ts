@@ -13,7 +13,7 @@ import {
   negotiateWire,
   readProtocolFailure
 } from "@crit/protocol"
-import { Effect, FileSystem, Option, Path, Result, Schema } from "effect"
+import { Effect, FileSystem, Option, Path, Predicate, Result, Schema } from "effect"
 import {
   FetchHttpClient,
   HttpClient,
@@ -184,7 +184,7 @@ export const bindAccessPerson = (options: BindAccessPersonOptions) => Effect.gen
     })
   })
   const existingEmail = installation.principal.person.email
-  if (existingEmail._tag === "access") {
+  if (Predicate.isTagged(existingEmail, "access") && "address" in existingEmail) {
     if (existingEmail.address !== options.email.address) {
       return yield* new AccessPersonAlreadyBound({
         existingAddress: existingEmail.address,
@@ -270,7 +270,7 @@ export const bindAnonymousPerson = (
   if (
     installation.principal.person.personId === options.personId &&
     installation.principal.subject === subject &&
-    installation.principal.person.email._tag === "unspecified"
+    Predicate.isTagged(installation.principal.person.email, "unspecified")
   ) {
     return AnonymousInstallationBound.make({ personId: options.personId })
   }
@@ -372,7 +372,7 @@ export const loginToInstallation = (
   const localPerson = yield* readInstallationPerson(options.dataRoot)
   const http = yield* HttpClient.HttpClient
   let request = HttpClientRequest.get(endpoint.identityUrl)
-  if (localPerson.email._tag === "unspecified") {
+  if (Predicate.isTagged(localPerson.email, "unspecified")) {
     request = HttpClientRequest.setHeader(
       request,
       critPersonIdHeader,
@@ -406,8 +406,8 @@ export const loginToInstallation = (
   if (
     Result.isFailure(negotiated)
     && (
-      negotiated.failure._tag === "unsupportedVersion"
-      || negotiated.failure._tag === "messageKindMismatch"
+      Predicate.isTagged(negotiated.failure, "unsupportedVersion")
+      || Predicate.isTagged(negotiated.failure, "messageKindMismatch")
     )
   ) {
     return yield* Effect.fail(negotiated.failure)

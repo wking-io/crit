@@ -28,8 +28,6 @@ describe("Canvas lifecycle", () => {
     )
 
     const opened = Canvas.fromDocument(document)
-    // SAFETY: This test intentionally mutates an exported readonly value at
-    // runtime to prove Canvas owns an isolated copy of its state.
     const mutableDocument = document as { title: string }
     mutableDocument.title = "Mutated outside the Canvas"
 
