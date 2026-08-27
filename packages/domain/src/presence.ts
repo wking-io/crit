@@ -56,7 +56,7 @@ const uniquePeople = (
     seen.add(personId)
     unique.push(person)
   }
-  return unique.toSorted((left, right) =>
+  return unique.slice().sort((left: ConnectedPerson, right: ConnectedPerson) =>
     left.person.personId < right.person.personId
       ? -1
       : left.person.personId > right.person.personId
