@@ -1,7 +1,17 @@
 {
   "name": "@crit/react",
   "version": "0.0.0",
-  "private": true,
+  "description": "Primary Crit review UI.",
+  "license": "MIT",
+  "homepage": "https://github.com/wking-io/crit#readme",
+  "bugs": {
+    "url": "https://github.com/wking-io/crit/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/wking-io/crit.git",
+    "directory": "packages/react"
+  },
   "type": "module",
   "sideEffects": false,
   "exports": {
@@ -13,14 +23,15 @@
   "files": ["dist"],
   "scripts": {
     "doctor": "react-doctor --blocking warning --no-telemetry",
+    "prepack": "tsc -b",
     "test": "vitest run --config vitest.config.ts"
   },
   "dependencies": {
-    "@crit/domain": "*",
-    "@crit/frame-bridge": "*",
-    "@crit/protocol": "*",
-    "@crit/replica": "*",
-    "@crit/representations": "*",
+    "@crit/domain": "0.0.0",
+    "@crit/frame-bridge": "0.0.0",
+    "@crit/protocol": "0.0.0",
+    "@crit/replica": "0.0.0",
+    "@crit/representations": "0.0.0",
     "@tanstack/react-hotkeys": "^0.10.0",
     "@tanstack/react-query": "^5.102.1",
     "effect": "4.0.0-rc.109"
@@ -36,5 +47,8 @@
     "react-doctor": "^0.9.12",
     "react-dom": "19.2.8",
     "vitest": "4.1.0"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

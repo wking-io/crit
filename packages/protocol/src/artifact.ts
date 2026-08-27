@@ -1,6 +1,8 @@
 import { ArtifactId, Sha256Digest } from "@crit/domain"
 import { Option, Schema } from "effect"
 
+import { queryParam } from "./query.js"
+
 export const artifactCollectionPath = "/artifacts"
 
 export const remoteArtifactPath = (artifactId: ArtifactId): string =>
@@ -23,7 +25,7 @@ export const parseArtifactPath = (pathname: string): ArtifactId | undefined => {
 }
 
 export const parseArtifactDigestSearch = (search: string): Sha256Digest | undefined => {
-  const digest = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search).get("digest")
+  const digest = queryParam(search, "digest")
   if (digest === null) return undefined
   return Option.getOrUndefined(Schema.decodeUnknownOption(Sha256Digest)(digest))
 }

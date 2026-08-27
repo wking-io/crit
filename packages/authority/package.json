@@ -1,10 +1,21 @@
 {
   "name": "@crit/authority",
   "version": "0.0.0",
-  "private": true,
+  "description": "Canvas authority and its conformance suite.",
+  "license": "MIT",
+  "homepage": "https://github.com/wking-io/crit#readme",
+  "bugs": {
+    "url": "https://github.com/wking-io/crit/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/wking-io/crit.git",
+    "directory": "packages/authority"
+  },
   "type": "module",
   "sideEffects": false,
   "scripts": {
+    "prepack": "tsc -b",
     "test": "vitest run --config vitest.config.ts"
   },
   "exports": {
@@ -23,11 +34,14 @@
   },
   "files": ["dist"],
   "dependencies": {
-    "@crit/domain": "*",
-    "@crit/protocol": "*",
+    "@crit/domain": "0.0.0",
+    "@crit/protocol": "0.0.0",
     "effect": "4.0.0-rc.109"
   },
   "devDependencies": {
     "vitest": "4.1.0"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

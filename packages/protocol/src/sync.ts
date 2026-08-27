@@ -10,6 +10,7 @@ import { Data, Option, Result, Schema } from "effect"
 import type { ProposedCanvasChange } from "./change.js"
 import { ChangeProtocol } from "./codec.js"
 import type { ProtocolFailure } from "./failure.js"
+import { encodeQuery, queryParam } from "./query.js"
 import { CursorSchema } from "./value.js"
 
 export const remoteChangesPageLimit = 1_000
@@ -103,11 +104,8 @@ export const remoteCanvasChangesPath = (canvasId: CanvasId): string =>
 export const parseChangesAfterSearch = (
   search: string
 ): ChangesAfterQuery | undefined => {
-  const params = new URLSearchParams(
-    search.startsWith("?") ? search.slice(1) : search
-  )
-  const afterRaw = params.get("after")
-  const limitRaw = params.get("limit")
+  const afterRaw = queryParam(search, "after")
+  const limitRaw = queryParam(search, "limit")
   if (limitRaw !== null && !/^[1-9][0-9]*$/.test(limitRaw)) return undefined
   return Option.getOrUndefined(Schema.decodeUnknownOption(ChangesAfterQuery)({
     after: afterRaw === null || afterRaw === "" ? null : afterRaw,
@@ -116,10 +114,10 @@ export const parseChangesAfterSearch = (
 }
 
 export const encodeChangesAfterSearch = (query: ChangesAfterQuery): string => {
-  const params = new URLSearchParams()
-  if (query.after !== null) params.set("after", query.after)
-  params.set("limit", String(query.limit))
-  return params.toString()
+  const entries: Array<readonly [string, string]> = []
+  if (query.after !== null) entries.push(["after", query.after])
+  entries.push(["limit", String(query.limit)])
+  return encodeQuery(entries)
 }
 
 export const decodeSubmitCanvasChangeWire = (
@@ -142,7 +140,7 @@ export const decodeSubmitCanvasChangeWire = (
 
 export const encodeSubmitCanvasChangeWire = (
   input: SubmitCanvasChange
-): SubmitCanvasChangeWire => Schema.encodeSync(
+): typeof SubmitCanvasChangeWire.Encoded => Schema.encodeUnknownSync(
   SubmitCanvasChangeWire,
   { onExcessProperty: "error" }
 )({
