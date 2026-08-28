@@ -1,4 +1,4 @@
-import type { CanvasId } from "@crit/domain"
+import type { CanvasCommandBatch, CanvasId } from "@crit/domain"
 import {
   ReplicaBoard,
   ReplicaSession,
@@ -9,7 +9,7 @@ import {
   type ReplicaSessionPorts
 } from "@crit/react"
 import { Match } from "effect"
-import { type ReactElement } from "react"
+import { useCallback, type ReactElement } from "react"
 
 export interface CritHostProps {
   readonly canvasId: CanvasId
@@ -26,31 +26,33 @@ export function CritHost({
   resolver,
   snapshotter
 }: CritHostProps): ReactElement {
-  const { onCameraChange, onSelectionChange, session, submit } = useReplicaSession({
-    canvasId,
-    ports
-  })
+  const { chrome, onCameraChange, onSelectionChange, session, submit } =
+    useReplicaSession({
+      canvasId,
+      ports
+    })
   const presence = useCanvasPresence({
     attend: ReplicaSession.$is("ready")(session) ? ports.attend : idleAttend,
     canvasId
   })
+  const onSubmit = useCallback((commands: CanvasCommandBatch) => {
+    void submit(commands)
+  }, [submit])
   return (
     <div className="crit-host">
       {Match.value(session).pipe(Match.tagsExhaustive({
         loading: () => <p role="status">Connecting to Crit…</p>,
-        ready: ({ camera, connection, notice, selection, view }) => (
+        ready: ({ connection, notice, view }) => (
           <ReplicaBoard
-            camera={camera}
+            camera={chrome.camera}
             connection={connection}
             notice={notice}
             onCameraChange={onCameraChange}
             onSelectionChange={onSelectionChange}
-            onSubmit={(commands) => {
-              void submit(commands)
-            }}
+            onSubmit={onSubmit}
             presence={presence}
             resolver={resolver}
-            selection={selection}
+            selection={chrome.selection}
             snapshotter={snapshotter}
             view={view}
           />

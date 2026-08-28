@@ -254,10 +254,12 @@ describe("useReplicaSession", () => {
     expect(latest?.session).toEqual({
       _tag: "ready",
       view: viewOne,
-      camera: defaultCamera,
-      selection: defaultSelection,
       connection: liveConnection,
       notice: undefined
+    })
+    expect(latest?.chrome).toEqual({
+      camera: defaultCamera,
+      selection: defaultSelection
     })
   })
 
@@ -273,16 +275,18 @@ describe("useReplicaSession", () => {
       <Probe canvasId={canvasA} ports={replica.ports}  />
     ))
 
-    await waitFor(() =>
+    await waitFor(() => {
       expect(latest?.session).toEqual({
         _tag: "ready",
         view: viewOne,
-        camera: savedCamera,
-        selection: savedSelection,
         connection: liveConnection,
         notice: undefined
       })
-    )
+      expect(latest?.chrome).toEqual({
+        camera: savedCamera,
+        selection: savedSelection
+      })
+    })
   })
 
   it("uses the default camera and selection when none are saved", async() => {
@@ -292,16 +296,18 @@ describe("useReplicaSession", () => {
       <Probe canvasId={canvasA} ports={replica.ports}  />
     ))
 
-    await waitFor(() =>
+    await waitFor(() => {
       expect(latest?.session).toEqual({
         _tag: "ready",
         view: viewOne,
-        camera: defaultCamera,
-        selection: defaultSelection,
         connection: liveConnection,
         notice: undefined
       })
-    )
+      expect(latest?.chrome).toEqual({
+        camera: defaultCamera,
+        selection: defaultSelection
+      })
+    })
   })
 
   it("reports unavailable when open fails", async() => {
@@ -334,8 +340,6 @@ describe("useReplicaSession", () => {
       expect(latest?.session).toEqual({
         _tag: "ready",
         view: viewOne,
-        camera: defaultCamera,
-        selection: defaultSelection,
         connection: liveConnection,
         notice: undefined
       })
@@ -362,16 +366,18 @@ describe("useReplicaSession", () => {
     replica.views.delete(canvasA)
     await act(async() => replica.notify(canvasA))
 
-    await waitFor(() =>
+    await waitFor(() => {
       expect(latest?.session).toEqual({
         _tag: "ready",
         view: viewOne,
-        camera: savedCamera,
-        selection: savedSelection,
         connection: ReplicaConnection.lost({ reason: "socket closed" }),
         notice: undefined
       })
-    )
+      expect(latest?.chrome).toEqual({
+        camera: savedCamera,
+        selection: savedSelection
+      })
+    })
   })
 
   it("keeps the ready payload when the subscription is lost", async() => {
@@ -392,15 +398,11 @@ describe("useReplicaSession", () => {
     expect(latest?.session).toEqual({
       _tag: "ready",
       view: viewOne,
-      camera: defaultCamera,
-      selection: defaultSelection,
       connection: ReplicaConnection.lost({ reason: "socket closed" }),
       notice: undefined
     })
     if (ReplicaSession.$is("ready")(previous) && ReplicaSession.$is("ready")(latest?.session)) {
       expect(latest.session.view).toBe(previous.view)
-      expect(latest.session.camera).toBe(previous.camera)
-      expect(latest.session.selection).toBe(previous.selection)
     }
   })
 
@@ -423,8 +425,6 @@ describe("useReplicaSession", () => {
       expect(latest?.session).toEqual({
         _tag: "ready",
         view: viewTwo,
-        camera: defaultCamera,
-        selection: defaultSelection,
         connection: liveConnection,
         notice: undefined
       })
@@ -447,16 +447,18 @@ describe("useReplicaSession", () => {
     replica.views.set(canvasA, viewTwo)
     await act(async() => replica.notify(canvasA))
 
-    await waitFor(() =>
+    await waitFor(() => {
       expect(latest?.session).toEqual({
         _tag: "ready",
         view: viewTwo,
-        camera: savedCamera,
-        selection: savedSelection,
         connection: liveConnection,
         notice: undefined
       })
-    )
+      expect(latest?.chrome).toEqual({
+        camera: savedCamera,
+        selection: savedSelection
+      })
+    })
   })
 
   it("persists onCameraChange through the camera session", async() => {
@@ -470,16 +472,16 @@ describe("useReplicaSession", () => {
 
     await act(async() => latest?.onCameraChange(moved))
 
-    await waitFor(() =>
-      expect(latest?.session).toEqual({
-        _tag: "ready",
-        view: viewOne,
-        camera: moved,
-        selection: defaultSelection,
-        connection: liveConnection,
-        notice: undefined
-      })
-    )
+    expect(latest?.session).toEqual({
+      _tag: "ready",
+      view: viewOne,
+      connection: liveConnection,
+      notice: undefined
+    })
+    expect(latest?.chrome).toEqual({
+      camera: defaultCamera,
+      selection: defaultSelection
+    })
     await waitFor(async() =>
       expect(await seedSession(getCanvasCameraSession({ canvasId: canvasA }))).toEqual(moved)
     )
@@ -495,16 +497,16 @@ describe("useReplicaSession", () => {
 
     await act(async() => latest?.onSelectionChange(savedSelection))
 
-    await waitFor(() =>
-      expect(latest?.session).toEqual({
-        _tag: "ready",
-        view: viewOne,
-        camera: defaultCamera,
-        selection: savedSelection,
-        connection: liveConnection,
-        notice: undefined
-      })
-    )
+    expect(latest?.session).toEqual({
+      _tag: "ready",
+      view: viewOne,
+      connection: liveConnection,
+      notice: undefined
+    })
+    expect(latest?.chrome).toEqual({
+      camera: defaultCamera,
+      selection: defaultSelection
+    })
     await waitFor(async() =>
       expect(await seedSession(getCanvasSelectionSession({ canvasId: canvasA }))).toEqual(
         savedSelection
@@ -531,8 +533,6 @@ describe("useReplicaSession", () => {
       expect(latest?.session).toEqual({
         _tag: "ready",
         view: viewOther,
-        camera: defaultCamera,
-        selection: defaultSelection,
         connection: liveConnection,
         notice: undefined
       })
@@ -562,10 +562,12 @@ describe("useReplicaSession", () => {
     expect(latest?.session).toEqual({
       _tag: "ready",
       view: viewAfterAdd,
-      camera: savedCamera,
-      selection: savedSelection,
       connection: liveConnection,
       notice: undefined
+    })
+    expect(latest?.chrome).toEqual({
+      camera: savedCamera,
+      selection: savedSelection
     })
   })
 
@@ -608,8 +610,6 @@ describe("useReplicaSession", () => {
     expect(latest?.session).toEqual({
       _tag: "ready",
       view: viewOne,
-      camera: savedCamera,
-      selection: savedSelection,
       connection: liveConnection,
       notice: rejected
     })
@@ -622,10 +622,12 @@ describe("useReplicaSession", () => {
     expect(latest?.session).toEqual({
       _tag: "ready",
       view: viewAfterAdd,
-      camera: savedCamera,
-      selection: savedSelection,
       connection: liveConnection,
       notice: undefined
+    })
+    expect(latest?.chrome).toEqual({
+      camera: savedCamera,
+      selection: savedSelection
     })
   })
 
@@ -655,8 +657,6 @@ describe("useReplicaSession", () => {
     await waitFor(() => expect(latest?.session).toEqual({
       _tag: "ready",
       view: viewOne,
-      camera: defaultCamera,
-      selection: defaultSelection,
       connection: liveConnection,
       notice: failure
     }))
@@ -678,8 +678,6 @@ describe("useReplicaSession", () => {
       expect(latest?.session).toEqual({
         _tag: "ready",
         view: viewAfterAdd,
-        camera: defaultCamera,
-        selection: defaultSelection,
         connection: liveConnection,
         notice: undefined
       })
@@ -692,8 +690,6 @@ describe("useReplicaSession", () => {
       expect(latest?.session).toEqual({
         _tag: "ready",
         view: viewTwo,
-        camera: defaultCamera,
-        selection: defaultSelection,
         connection: liveConnection,
         notice: undefined
       })
@@ -784,8 +780,6 @@ describe("useReplicaSession", () => {
       expect(latest?.session).toEqual({
         _tag: "ready",
         view: viewOther,
-        camera: defaultCamera,
-        selection: defaultSelection,
         connection: liveConnection,
         notice: undefined
       })
@@ -800,8 +794,6 @@ describe("useReplicaSession", () => {
     expect(latest?.session).toEqual({
       _tag: "ready",
       view: viewOther,
-      camera: defaultCamera,
-      selection: defaultSelection,
       connection: liveConnection,
       notice: undefined
     })

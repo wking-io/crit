@@ -635,6 +635,7 @@ button.crit-toolbar__title:focus-visible { border-radius: 2px; outline: 2px soli
   z-index: 2;
 }
 .crit-frame__viewport iframe { background: var(--crit-frame-viewport-surface, oklch(99% 0 none)); border: 0; height: 100%; inset: 0; position: absolute; width: 100%; }
+.crit-frame[data-offscreen] .crit-frame__viewport iframe,
 .crit-frame__viewport iframe[data-paused="true"] { content-visibility: hidden; pointer-events: none; visibility: hidden; }
 .crit-frame__paused,
 .crit-frame__viewport > [role="status"],

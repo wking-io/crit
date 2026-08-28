@@ -72,10 +72,12 @@ const artifactLooksLikeHtml = (bytes: Uint8Array): boolean => {
 
 function ArtifactContent({
   className,
+  paused,
   plan,
   title
 }: {
   readonly className: string | undefined
+  readonly paused: boolean
   readonly plan: Extract<RenderPlan, { readonly _tag: "artifactBytes" }>
   readonly title: Frame["title"]
 }) {
@@ -108,6 +110,7 @@ function ArtifactContent({
   if (html) {
     return <iframe
       className={className}
+      data-paused={paused || undefined}
       sandbox="allow-scripts"
       src={content.href}
       title={title}
@@ -133,12 +136,14 @@ function LiveFrame({
   className,
   onInputIntent,
   onRouteChange,
+  paused,
   plan,
   title
 }: {
   readonly className: string | undefined
   readonly onInputIntent?: (intent: FrameInputIntent) => void
   readonly onRouteChange?: (route: string) => void
+  readonly paused: boolean
   readonly plan: Extract<RenderPlan, { readonly _tag: "iframe" }>
   readonly title: Frame["title"]
 }): ReactElement {
@@ -232,6 +237,7 @@ function LiveFrame({
     <UnsandboxedLiveReviewIframe
       className={className}
       iframeRef={iframeRef}
+      paused={paused}
       src={plan.url}
       title={title}
     />
@@ -242,12 +248,14 @@ const ResolvedFrame = ({
   className,
   onInputIntent,
   onRouteChange,
+  paused,
   plan,
   title
 }: {
   readonly className: string | undefined
   readonly onInputIntent?: (intent: FrameInputIntent) => void
   readonly onRouteChange?: (route: string) => void
+  readonly paused: boolean
   readonly plan: RenderPlan
   readonly title: Frame["title"]
 }): ReactElement => Match.value(plan).pipe(Match.tagsExhaustive({
@@ -256,12 +264,14 @@ const ResolvedFrame = ({
       className={className}
       {...(onInputIntent === undefined ? {} : { onInputIntent })}
       {...(onRouteChange === undefined ? {} : { onRouteChange })}
+      paused={paused}
       plan={iframe}
       title={title}
     />
   ),
   "artifactBytes": (artifact) => <ArtifactContent
     className={className}
+    paused={paused}
     plan={artifact}
     title={title}
   />,
@@ -275,6 +285,7 @@ function ActiveFrameRenderer({
   frame,
   onInputIntent,
   onRouteChange,
+  paused,
   resolver
 }: {
   readonly className?: string | undefined
@@ -282,6 +293,7 @@ function ActiveFrameRenderer({
   readonly resolver: FrameRepresentationResolver
   readonly onInputIntent?: (intent: FrameInputIntent) => void
   readonly onRouteChange?: (route: string) => void
+  readonly paused: boolean
 }): ReactElement {
   const plan = useAtomValue(frameRenderPlanFor(resolver, frame))
   return AsyncResult.match(plan, {
@@ -296,6 +308,7 @@ function ActiveFrameRenderer({
         className={className}
         {...(onInputIntent === undefined ? {} : { onInputIntent })}
         {...(onRouteChange === undefined ? {} : { onRouteChange })}
+        paused={paused}
         plan={value}
         title={frame.title}
       />
@@ -311,16 +324,23 @@ export function FrameRenderer({
   paused = false,
   resolver
 }: FrameRendererProps): ReactElement {
-  if (paused) {
-    return <div className={className} role="status">{frame.title} is paused.</div>
-  }
   return (
-    <ActiveFrameRenderer
-      {...(className === undefined ? {} : { className })}
-      frame={frame}
-      {...(onInputIntent === undefined ? {} : { onInputIntent })}
-      {...(onRouteChange === undefined ? {} : { onRouteChange })}
-      resolver={resolver}
-    />
+    <>
+      <ActiveFrameRenderer
+        {...(className === undefined ? {} : { className })}
+        frame={frame}
+        {...(onInputIntent === undefined ? {} : { onInputIntent })}
+        {...(onRouteChange === undefined ? {} : { onRouteChange })}
+        paused={paused}
+        resolver={resolver}
+      />
+      {paused
+        ? (
+          <div className="crit-frame__paused" role="status">
+            Frame paused while offscreen
+          </div>
+        )
+        : null}
+    </>
   )
 }

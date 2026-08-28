@@ -71,7 +71,7 @@ const render = (element: ReactElement) => root.render(
 )
 const waitFor = (assertion: () => void) => act(async() => vi.waitFor(assertion))
 const pointer = (
-  target: Element,
+  target: EventTarget,
   type: "pointerdown" | "pointermove" | "pointerup",
   clientX: number,
   clientY: number
@@ -280,6 +280,42 @@ describe("CanvasBoard", () => {
       pointer(board, "pointerup", 120, 130)
     })
 
+    expect(onSubmit).toHaveBeenCalledWith([{
+      _tag: "setFrameGeometry",
+      frameId: "frame_checkout",
+      expectedChangedByChangeId: "change_1",
+      geometry: { x: 60, y: 110, width: 320, height: 200 }
+    }])
+  })
+
+  it("follows a pointer on window after the Frame starts a drag", async() => {
+    const onSubmit = vi.fn()
+    const resolver: FrameRepresentationResolver = {
+      resolve: () => Effect.succeed(IframeRenderPlan.make({
+        representation: projection.frames[0]!.representation,
+        url
+      }) satisfies RenderPlan)
+    }
+    await act(async() => render(
+      <CanvasBoard
+        {...requiredBoard}
+        onSubmit={onSubmit}
+        projection={projection}
+        resolver={resolver}
+        snapshotter={snapshotter}
+      />
+    ))
+    const frame = container.querySelector("[aria-label='Checkout']")
+    if (!(frame instanceof HTMLElement)) throw new Error("Review Frame missing")
+
+    await act(async() => {
+      pointer(frame, "pointerdown", 100, 100)
+      pointer(window, "pointermove", 120, 130)
+      pointer(window, "pointerup", 120, 130)
+    })
+
+    expect(frame.style.left).toBe("60px")
+    expect(frame.style.top).toBe("110px")
     expect(onSubmit).toHaveBeenCalledWith([{
       _tag: "setFrameGeometry",
       frameId: "frame_checkout",
@@ -605,8 +641,61 @@ describe("CanvasBoard", () => {
       {} as IntersectionObserver
     ))
 
-    expect(container.querySelector("iframe")).toBeNull()
-    expect(container.textContent).toContain("Checkout is paused.")
+    const iframe = container.querySelector("iframe")
+    expect(iframe).toBeInstanceOf(HTMLIFrameElement)
+    expect(container.querySelector("[data-offscreen]")).toBeInstanceOf(HTMLElement)
+    expect(container.textContent).toContain("Frame paused while offscreen")
+  })
+
+  it("keeps the same iframe through selection and a later projection", async() => {
+    const resolver: FrameRepresentationResolver = {
+      resolve: () => Effect.succeed(IframeRenderPlan.make({
+        representation: projection.frames[0]!.representation,
+        url
+      }) satisfies RenderPlan)
+    }
+    await act(async() => render(
+      <CanvasBoard
+        {...requiredBoard}
+        onSubmit={vi.fn()}
+        projection={projection}
+        resolver={resolver}
+        snapshotter={snapshotter}
+      />
+    ))
+    await waitFor(() => expect(container.querySelector("iframe")).not.toBeNull())
+    const iframe = container.querySelector("iframe")
+    expect(iframe).toBeInstanceOf(HTMLIFrameElement)
+
+    await act(async() => render(
+      <CanvasBoard
+        {...requiredBoard}
+        onSubmit={vi.fn()}
+        projection={projection}
+        resolver={resolver}
+        snapshotter={snapshotter}
+        selection={CanvasSelection.make([{
+          _tag: "frame",
+          frameId: "frame_checkout"
+        }])}
+      />
+    ))
+    expect(container.querySelector("iframe")).toBe(iframe)
+
+    await act(async() => render(
+      <CanvasBoard
+        {...requiredBoard}
+        onSubmit={vi.fn()}
+        projection={reviewProjection("ready-for-review")}
+        resolver={resolver}
+        snapshotter={snapshotter}
+        selection={CanvasSelection.make([{
+          _tag: "frame",
+          frameId: "frame_checkout"
+        }])}
+      />
+    ))
+    expect(container.querySelector("iframe")).toBe(iframe)
   })
 
   it("paints rewrite corner handles and status chrome on a selected Frame", async() => {
@@ -747,5 +836,44 @@ describe("CanvasBoard", () => {
       expect(menu?.textContent).toContain("Zoom to fit")
       expect(menu?.textContent).not.toContain("Add note")
     })
+  })
+
+  it("persists marquee selection only on pointerup", async() => {
+    const onSelectionChange = vi.fn()
+    const resolver: FrameRepresentationResolver = {
+      resolve: () => Effect.succeed(IframeRenderPlan.make({
+        representation: projection.frames[0]!.representation,
+        url
+      }) satisfies RenderPlan)
+    }
+
+    await act(async() => render(
+      <CanvasBoard
+        {...requiredBoard}
+        onSelectionChange={onSelectionChange}
+        projection={projection}
+        resolver={resolver}
+      />
+    ))
+    await waitFor(() => expect(container.querySelector("iframe")).not.toBeNull())
+
+    const board = container.querySelector("[aria-label='Review']")
+    expect(board).toBeInstanceOf(HTMLElement)
+    if (!(board instanceof HTMLElement)) return
+
+    await act(async() => {
+      pointer(board, "pointerdown", 10, 10)
+      pointer(window, "pointermove", 400, 300)
+    })
+    expect(onSelectionChange).not.toHaveBeenCalled()
+
+    await act(async() => {
+      pointer(window, "pointerup", 400, 300)
+    })
+    expect(onSelectionChange).toHaveBeenCalledTimes(1)
+    expect(onSelectionChange).toHaveBeenCalledWith(CanvasSelection.make([{
+      _tag: "frame",
+      frameId: "frame_checkout"
+    }]))
   })
 })

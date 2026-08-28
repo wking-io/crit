@@ -5,10 +5,7 @@ import type { Frame } from "@crit/domain"
 import { Predicate } from "effect"
 import {
   AnimatePresence,
-  LazyMotion,
-  MotionConfig,
   animate,
-  domAnimation,
   m,
   useMotionValue,
   usePresence,
@@ -29,6 +26,11 @@ import {
   type RefObject
 } from "react"
 
+import {
+  useFrameIsInputTarget,
+  useItemSelected
+} from "./canvas-selection-store.js"
+import { useFrameOccupancy } from "./canvas-frame-occupancy.js"
 import {
   CritContextActions,
   ReviewMenuItem
@@ -145,12 +147,12 @@ const reviewFrameMenuItems = (input: {
 }) => [
   ReviewMenuItem.action({
     policy: input.removePolicy,
-    disabled: !input.runner.runnableIds.has("remove"),
+    disabled: !input.runner.runnableIds().has("remove"),
     onSelect: input.onRemove
   }),
   ReviewMenuItem.action({
     policy: input.fullscreenPolicy,
-    disabled: !input.runner.runnableIds.has(input.fullscreenPolicy.id),
+    disabled: !input.runner.runnableIds().has(input.fullscreenPolicy.id),
     onSelect: () => input.runner.run(input.fullscreenPolicy.id)
   }),
   ...(input.url === undefined
@@ -161,12 +163,12 @@ const reviewFrameMenuItems = (input: {
     })]),
   ReviewMenuItem.action({
     policy: reviewActionPolicy("bring-to-front"),
-    disabled: !input.runner.runnableIds.has("bring-to-front"),
+    disabled: !input.runner.runnableIds().has("bring-to-front"),
     onSelect: () => input.runner.run("bring-to-front")
   }),
   ReviewMenuItem.action({
     policy: reviewActionPolicy("send-to-back"),
-    disabled: !input.runner.runnableIds.has("send-to-back"),
+    disabled: !input.runner.runnableIds().has("send-to-back"),
     onSelect: () => input.runner.run("send-to-back")
   }),
   ...(input.live
@@ -179,7 +181,7 @@ const reviewFrameMenuItems = (input: {
           const id = `resize-frame-${preset.id}` as const
           return ReviewMenuItem.action({
             policy: reviewActionPolicy(id),
-            disabled: !input.runner.runnableIds.has(id),
+            disabled: !input.runner.runnableIds().has(id),
             detail: presetSizeDetail(preset),
             onSelect: () => input.runner.run(id)
           })
@@ -193,7 +195,7 @@ const reviewFrameMenuItems = (input: {
           const id = `duplicate-frame-${preset.id}` as const
           return ReviewMenuItem.action({
             policy: reviewActionPolicy(id),
-            disabled: !input.runner.runnableIds.has(id),
+            disabled: !input.runner.runnableIds().has(id),
             detail: presetSizeDetail(preset),
             onSelect: () => input.runner.run(id)
           })
@@ -433,7 +435,7 @@ function FrameStatusFan({
                   const policy = reviewActionPolicy(actionId)
                   return (
                     <StatusPillOption
-                      disabled={!runner.runnableIds.has(actionId)}
+                      disabled={!runner.runnableIds().has(actionId)}
                       finalRotate={item.finalRotate}
                       finalX={item.finalX}
                       finalY={item.finalY}
@@ -698,7 +700,7 @@ function FrameActionBar({
                       <Menu.Item
                         aria-label={policy.label}
                         className="crit-context-menu__item"
-                        disabled={!runner?.runnableIds.has(id)}
+                        disabled={!runner?.runnableIds()?.has(id)}
                         key={preset.id}
                         {...reviewActionHelpTarget(policy)}
                         onClick={() => runner?.run(id)}
@@ -749,7 +751,7 @@ function FrameActionBar({
           <Button
             aria-label={fullscreenPolicy.label}
             className="crit-frame__action"
-            disabled={!runner?.runnableIds.has(fullscreenPolicy.id)}
+            disabled={!runner?.runnableIds()?.has(fullscreenPolicy.id)}
             {...reviewActionHelpTarget(fullscreenPolicy)}
             onClick={() => runner?.run(fullscreenPolicy.id)}
             type="button"
@@ -768,7 +770,7 @@ function FrameActionBar({
           <Button
             aria-label={removePolicy.label}
             className="crit-frame__action"
-            disabled={!runner?.runnableIds.has("remove")}
+            disabled={!runner?.runnableIds()?.has("remove")}
             {...reviewActionHelpTarget(removePolicy)}
             onClick={onRemove}
             type="button"
@@ -780,6 +782,40 @@ function FrameActionBar({
     </div>
   )
 }
+
+const FrameViewport = ({
+  captureNow,
+  children,
+  occupancyPainted
+}: {
+  readonly captureNow: boolean
+  readonly children: ReactNode
+  readonly occupancyPainted: boolean
+}): ReactElement => (
+  <div className="crit-frame__viewport">
+    {children}
+    {occupancyPainted
+      ? null
+      : (
+        <div className="crit-frame__paused" role="status">
+          Frame paused while offscreen
+        </div>
+      )}
+    {captureNow
+      ? (
+        <div
+          aria-hidden
+          data-crit-frame-capture=""
+          style={{
+            inset: 0,
+            pointerEvents: "auto",
+            position: "absolute"
+          }}
+        />
+      )
+      : null}
+  </div>
+)
 
 export function ReviewFrame({
   capture,
@@ -797,7 +833,7 @@ export function ReviewFrame({
   zIndex,
   frameRef
 }: {
-  readonly capture: boolean
+  readonly capture?: boolean
   readonly children: ReactNode
   readonly frame: Frame
   readonly frameRef: (element: HTMLDivElement | null) => void
@@ -810,14 +846,24 @@ export function ReviewFrame({
     ) => void)
     | undefined
   readonly onSelect: (event: ReactPointerEvent<HTMLDivElement>) => void
-  readonly selected: boolean
-  readonly selectedLabel: true | undefined
+  readonly selected?: boolean
+  readonly selectedLabel?: true | undefined
   readonly shortId: string
   readonly topZIndex?: number
   readonly uiScale: number
   readonly zIndex: number
 }): ReactElement {
   const runner = useOptionalReviewRunner()
+  const selectedNow = useItemSelected(
+    { _tag: "frame", frameId: frame.frameId },
+    selected ?? selectedLabel === true
+  )
+  const isInputTarget = useFrameIsInputTarget(
+    frame.frameId,
+    capture === undefined ? false : !capture
+  )
+  const captureNow = !isInputTarget
+  const selectedLabelNow = selectedNow ? true : undefined
   const status = frameStatus(frame.status)
   const live = isLiveFrame(frame)
   const url = liveFrameUrl(frame)
@@ -839,13 +885,13 @@ export function ReviewFrame({
   const removePolicy = reviewActionPolicy("remove")
   const openPolicy = reviewActionPolicy("open-url")
   const fullscreenPolicy = reviewActionPolicy(
-    runner?.runnableIds.has("exit-fullscreen") === true
+    runner?.runnableIds()?.has("exit-fullscreen") === true
       ? "exit-fullscreen"
       : "enter-fullscreen"
   )
   const snapshotCapturing = runner?.snapshotCapturing === true
   const snapshotAvailable = canMutate && live &&
-    runner.runnableIds.has("snapshot")
+    runner.runnableIds().has("snapshot")
   const screenWidth = geometry.width / uiScale
   const actions = visibleFrameActions(
     canMutate,
@@ -879,6 +925,7 @@ export function ReviewFrame({
       url
     })
 
+  const occupancy = useFrameOccupancy(frameElementRef)
   const bindFrameRef = (element: HTMLDivElement | null) => {
     frameElementRef.current = element
     frameRef(element)
@@ -888,12 +935,13 @@ export function ReviewFrame({
     <div
       ref={bindFrameRef}
       aria-label={frame.title}
-      aria-selected={selectedLabel}
+      aria-selected={selectedLabelNow}
       className="crit-frame"
       data-frame-id={frame.frameId}
       data-frame-status={frame.status}
+      data-offscreen={occupancy.painted ? undefined : ""}
       data-review-status={frame.status}
-      data-selected={selected || undefined}
+      data-selected={selectedNow || undefined}
       role="option"
       style={cssVariableStyle({
         ...itemStyle(
@@ -943,7 +991,7 @@ export function ReviewFrame({
             frameTitle={frame.title}
             live={live}
             runner={runner}
-            selected={selected}
+            selected={selectedNow}
             shortId={shortId}
             status={status}
             statusMenuHandle={statusMenuHandle}
@@ -977,24 +1025,11 @@ export function ReviewFrame({
             title="Remove Frame?"
           />
         </header>
-        <div className="crit-frame__viewport">
+        <FrameViewport captureNow={captureNow} occupancyPainted={occupancy.painted}>
           {children}
-          {capture
-            ? (
-              <div
-                aria-hidden
-                data-crit-frame-capture=""
-                style={{
-                  inset: 0,
-                  pointerEvents: "auto",
-                  position: "absolute"
-                }}
-              />
-            )
-            : null}
-        </div>
+        </FrameViewport>
       </div>
-      {selected
+      {selectedNow
         ? (
           <ReviewSelectionChrome
             ink={status.ink}
@@ -1022,13 +1057,7 @@ export function ReviewFrame({
     )
     : frameNode
 
-  return (
-    <MotionConfig reducedMotion="user">
-      <LazyMotion features={domAnimation} strict>
-        {frameTree}
-      </LazyMotion>
-    </MotionConfig>
-  )
+  return frameTree
 }
 
 export { FRAME_CHROME_HEIGHT }

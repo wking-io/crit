@@ -1,7 +1,8 @@
-import type { Frame } from "@crit/domain"
 import { Match } from "effect"
 import {
+  useCallback,
   useEffect,
+  useMemo,
   useState,
   type RefObject
 } from "react"
@@ -40,16 +41,11 @@ export const applyReviewEffect = (
 }
 
 export const useReviewEffects = (args: {
-  readonly frameElementsRef: RefObject<Map<string, HTMLDivElement>>
-  readonly frames: readonly Frame[]
   readonly onEffect?: (effect: ReviewClientEffect) => void
   readonly selectedFrameRef: RefObject<HTMLDivElement | null>
   readonly zoomToFit?: () => void
 }) => {
   const [fullscreen, setFullscreen] = useState(false)
-  const [offscreenFrames, setOffscreenFrames] = useState<ReadonlySet<string>>(
-    () => new Set()
-  )
 
   useEffect(() => {
     const changed = () => setFullscreen(document.fullscreenElement !== null)
@@ -58,39 +54,22 @@ export const useReviewEffects = (args: {
     return () => document.removeEventListener("fullscreenchange", changed)
   }, [])
 
-  useEffect(() => {
-    const observer = new IntersectionObserver((entries) => {
-      setOffscreenFrames((current) => {
-        const next = new Set(current)
-        for (const entry of entries) {
-          const frameId = entry.target.getAttribute("data-frame-id")
-          if (frameId === null) continue
-          if (entry.isIntersecting) next.delete(frameId)
-          else next.add(frameId)
-        }
-        return next
-      })
-    })
-    for (const element of args.frameElementsRef.current.values()) {
-      observer.observe(element)
-    }
-    return () => observer.disconnect()
-  }, [args.frameElementsRef, args.frames])
-
-  const handle = (effect: ReviewClientEffect) => {
-    if (args.onEffect !== undefined) {
-      args.onEffect(effect)
+  const onEffect = args.onEffect
+  const selectedFrameRef = args.selectedFrameRef
+  const zoomToFit = args.zoomToFit
+  const handle = useCallback((effect: ReviewClientEffect) => {
+    if (onEffect !== undefined) {
+      onEffect(effect)
       return
     }
     applyReviewEffect(effect, {
-      frameElement: args.selectedFrameRef.current,
-      zoomToFit: args.zoomToFit
+      frameElement: selectedFrameRef.current,
+      zoomToFit
     })
-  }
+  }, [onEffect, selectedFrameRef, zoomToFit])
 
-  return {
+  return useMemo(() => ({
     fullscreen,
-    handle,
-    isFramePaused: (frameId: string) => offscreenFrames.has(frameId)
-  }
+    handle
+  }), [fullscreen, handle])
 }

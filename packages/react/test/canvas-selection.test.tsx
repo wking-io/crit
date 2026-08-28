@@ -408,6 +408,10 @@ describe("CanvasBoard selection", () => {
     if (!(board instanceof HTMLElement)) return
 
     pointerDown(board)
+    expect(onSelectionChange).not.toHaveBeenCalled()
+    act(() => {
+      window.dispatchEvent(new MouseEvent("pointerup", { bubbles: true }))
+    })
 
     expect(onSelectionChange).toHaveBeenCalledTimes(1)
     expect(onSelectionChange).toHaveBeenCalledWith(emptySelection)

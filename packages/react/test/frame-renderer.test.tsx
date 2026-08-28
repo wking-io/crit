@@ -98,6 +98,29 @@ describe("FrameRenderer", () => {
     expect(iframe?.hasAttribute("sandbox")).toBe(false)
   })
 
+  it("keeps the same iframe when painting is paused", async() => {
+    const resolver: FrameRepresentationResolver = {
+      resolve: () => Effect.succeed(iframePlan("https://example.com/ready"))
+    }
+    await act(async() => render(
+      <FrameRenderer frame={frame("change_frame_paused")} resolver={resolver} />
+    ))
+    await waitFor(() => expect(container.querySelector("iframe")).not.toBeNull())
+    const iframe = container.querySelector("iframe")
+    expect(iframe).toBeInstanceOf(HTMLIFrameElement)
+
+    await act(async() => render(
+      <FrameRenderer
+        frame={frame("change_frame_paused")}
+        paused
+        resolver={resolver}
+      />
+    ))
+    expect(container.querySelector("iframe")).toBe(iframe)
+    expect(iframe?.getAttribute("data-paused")).toBe("true")
+    expect(container.textContent).toContain("Frame paused while offscreen")
+  })
+
   it("injects and connects the input bridge for a same-origin live iframe", async() => {
     const url = "https://example.com/fixture"
     const resolver: FrameRepresentationResolver = {
