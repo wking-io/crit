@@ -783,6 +783,40 @@ function FrameActionBar({
   )
 }
 
+const FrameViewport = ({
+  captureNow,
+  children,
+  occupancyPainted
+}: {
+  readonly captureNow: boolean
+  readonly children: ReactNode
+  readonly occupancyPainted: boolean
+}): ReactElement => (
+  <div className="crit-frame__viewport">
+    {children}
+    {occupancyPainted
+      ? null
+      : (
+        <div className="crit-frame__paused" role="status">
+          Frame paused while offscreen
+        </div>
+      )}
+    {captureNow
+      ? (
+        <div
+          aria-hidden
+          data-crit-frame-capture=""
+          style={{
+            inset: 0,
+            pointerEvents: "auto",
+            position: "absolute"
+          }}
+        />
+      )
+      : null}
+  </div>
+)
+
 export function ReviewFrame({
   capture,
   children,
@@ -991,29 +1025,9 @@ export function ReviewFrame({
             title="Remove Frame?"
           />
         </header>
-        <div className="crit-frame__viewport">
+        <FrameViewport captureNow={captureNow} occupancyPainted={occupancy.painted}>
           {children}
-          {occupancy.painted
-            ? null
-            : (
-              <div className="crit-frame__paused" role="status">
-                Frame paused while offscreen
-              </div>
-            )}
-          {captureNow
-            ? (
-              <div
-                aria-hidden
-                data-crit-frame-capture=""
-                style={{
-                  inset: 0,
-                  pointerEvents: "auto",
-                  position: "absolute"
-                }}
-              />
-            )
-            : null}
-        </div>
+        </FrameViewport>
       </div>
       {selectedNow
         ? (
