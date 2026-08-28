@@ -133,7 +133,7 @@ export const LocalProjectApplicationBindings = {
     return ApplicationBindings.of({
       get: (requestedApplicationId) => resolve(requestedApplicationId).pipe(
         Effect.map((binding) =>
-          binding._tag === "unbound" ? Option.none() : Option.some(binding.baseUrl)
+          "baseUrl" in binding ? Option.some(binding.baseUrl) : Option.none()
         )
       )
     })
