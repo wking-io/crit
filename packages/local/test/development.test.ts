@@ -22,7 +22,7 @@ import { Context, Effect, Exit, Layer, Predicate, Redacted, Result, Scope } from
 import { FetchHttpClient } from "effect/unstable/http"
 import { describe, expect, it } from "vitest"
 
-import { DevHostRequest, inspectLocalDaemon, LocalDevelopment } from "../src/index.js"
+import { BrowserAttachment, DevHostRequest, inspectLocalDaemon, LocalDevelopment } from "../src/index.js"
 import { LocalInstallation, type LocalDevelopmentOptions } from "../src/development.js"
 import { decodeStored } from "../src/stored-json.js"
 
@@ -186,7 +186,7 @@ describe("LocalDevelopment", () => {
       yield* Effect.scoped(Effect.gen(function*() {
         const context = yield* build(dataRoot, yield* Effect.scope)
         const development = Context.get(context, LocalDevelopment)
-        expect(development.attachment._tag).toBe("None")
+        expect(BrowserAttachment.$is("None")(development.attachment)).toBe(true)
         installationId = development.installationId
         const descriptor = readFileSync(join(dataRoot, "daemon.json"), "utf8")
         expect(descriptor).not.toContain("bearerSecret")
@@ -388,8 +388,8 @@ describe("LocalDevelopment", () => {
           hostOrigin: "http://127.0.0.1:5173"
         })
       }), LocalDevelopment)
-      expect(development.attachment._tag).toBe("Integrated")
-      if (development.attachment._tag !== "Integrated") return
+      expect(BrowserAttachment.$is("Integrated")(development.attachment)).toBe(true)
+      if (!BrowserAttachment.$is("Integrated")(development.attachment)) return
       const { plane } = development.attachment
       const canvasUrl = `${development.descriptor.baseUrl}/browser/${plane.instance}/api/v1/canvas`
       const listed = yield* Effect.promise(() => fetch(canvasUrl, {

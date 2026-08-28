@@ -6,7 +6,7 @@ import { type ReactElement } from "react"
 
 import { CritHost } from "./crit-host.js"
 import { sessionHash } from "./host-canvas-id.js"
-import type { HostRuntime } from "./host-connection.js"
+import { HostRuntime } from "./host-connection.js"
 import { hostIndexAtom, hostScreenAtom } from "./host-atoms.js"
 import { HostCanvasList } from "./host-canvas-list.js"
 
@@ -30,7 +30,7 @@ export function HostIndexView({ runtime }: {
     invalid: ({ reason }) => <p role="alert">{reason}</p>,
     connecting: () => <p role="status">Connecting to Crit…</p>,
     failed: ({ reason }) => <p role="alert">{reason}</p>,
-    ready: ({ listings }) => runtime._tag === "standalone"
+    ready: ({ listings }) => HostRuntime.$is("standalone")(runtime)
       ? (
         <HostCanvasList
           listings={listings}

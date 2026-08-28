@@ -79,7 +79,7 @@ export const resolveHostRuntime = (input: {
 export const localClientOptionsFor = (
   runtime: Extract<HostRuntime, { readonly _tag: "integrated" | "standalone" }>
 ): LocalClientOptions => {
-  if (runtime._tag === "integrated") {
+  if (HostRuntime.$is("integrated")(runtime)) {
     return LocalClientOptions.integrated({
       origin: runtime.origin,
       apiBase: runtime.apiBase

@@ -27,6 +27,7 @@ import {
   CanvasShareSuccess,
   InstallationUrlInvalid,
   AGENT_SESSION_ENV,
+  DevHostRequest,
   inspectLocalDaemon,
   LocalDaemonIdentityMismatch,
   LocalDaemonDescriptor,
@@ -247,7 +248,7 @@ const dev = Command.make(
         return yield* request.failure
       }
       if (
-        request.success._tag === "Integrated" &&
+        DevHostRequest.$is("Integrated")(request.success) &&
         resolveHostRoot() === undefined
       ) {
         return yield* new CliOperationalFailure({
@@ -265,21 +266,20 @@ const dev = Command.make(
           yield* Effect.scope
         )
         const development = Context.get(services, LocalDevelopment)
-        if (development.attachment._tag === "Integrated") {
-          const { plane } = development.attachment
-          yield* startIntegratedHost(plane).pipe(
+        yield* Match.valueTags(development.attachment, {
+          Integrated: ({ plane }) => startIntegratedHost(plane).pipe(
             Effect.mapError((failure) => new CliOperationalFailure({
               message: failure.message
-            }))
+            })),
+            Effect.andThen(Console.log(`Crit is at ${plane.hostOrigin}`))
+          ),
+          Standalone: ({ session }) => Console.log(
+            `Open Crit in your browser: ${Redacted.value(session.bootstrapUrl)}`
+          ),
+          None: () => Console.log(
+            `Crit daemon listening at ${development.descriptor.baseUrl}`
           )
-          yield* Console.log(`Crit is at ${plane.hostOrigin}`)
-        } else if (development.attachment._tag === "Standalone") {
-          yield* Console.log(
-            `Open Crit in your browser: ${Redacted.value(development.attachment.session.bootstrapUrl)}`
-          )
-        } else {
-          yield* Console.log(`Crit daemon listening at ${development.descriptor.baseUrl}`)
-        }
+        })
         return yield* Effect.never
       }))
     })

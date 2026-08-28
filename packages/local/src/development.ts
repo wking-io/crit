@@ -25,6 +25,7 @@ import {
   Encoding,
   FileSystem,
   Layer,
+  Match,
   Option,
   Path,
   Predicate,
@@ -288,41 +289,40 @@ export class LocalDevelopment extends Context.Service<
       const daemonOrigin = Schema.decodeUnknownSync(LocalDaemonDescriptor.fields.baseUrl)(
         `http://127.0.0.1:${installation.port}`
       )
-      let attachment: BrowserAttachment
-      if (options.attachment._tag === "None") {
-        attachment = BrowserAttachment.None()
-      } else if (options.attachment._tag === "Integrated") {
-        const { hostOrigin } = options.attachment
-        const origin = yield* Effect.try({
-          try: () => Schema.decodeUnknownSync(BrowserOrigin)(hostOrigin),
-          catch: (cause) => fail("validate browser origin", "hostOrigin", String(cause))
-        })
-        attachment = BrowserAttachment.Integrated({
-          plane: yield* mintIntegratedPlane({
-            hostOrigin: origin,
-            daemonOrigin,
-            instance,
-            invocation
+      const attachment = yield* Match.valueTags(options.attachment, {
+        None: () => Effect.succeed(BrowserAttachment.None()),
+        Integrated: ({ hostOrigin }) => Effect.gen(function*() {
+          const origin = yield* Effect.try({
+            try: () => Schema.decodeUnknownSync(BrowserOrigin)(hostOrigin),
+            catch: (cause) => fail("validate browser origin", "hostOrigin", String(cause))
+          })
+          return BrowserAttachment.Integrated({
+            plane: yield* mintIntegratedPlane({
+              hostOrigin: origin,
+              daemonOrigin,
+              instance,
+              invocation
+            })
+          })
+        }),
+        Standalone: ({ browserOrigin }) => Effect.gen(function*() {
+          const origin = yield* Effect.try({
+            try: () => Schema.decodeUnknownSync(BrowserOrigin)(browserOrigin),
+            catch: (cause) => fail("validate browser origin", "browserOrigin", String(cause))
+          })
+          return BrowserAttachment.Standalone({
+            session: Context.get(
+              yield* Layer.buildWithScope(BrowserSession.layer({
+                daemonOrigin: Schema.decodeUnknownSync(BrowserOrigin)(daemonOrigin),
+                instance,
+                browserOrigin: origin,
+                invocation
+              }), daemonScope),
+              BrowserSession
+            )
           })
         })
-      } else {
-        const { browserOrigin } = options.attachment
-        const origin = yield* Effect.try({
-          try: () => Schema.decodeUnknownSync(BrowserOrigin)(browserOrigin),
-          catch: (cause) => fail("validate browser origin", "browserOrigin", String(cause))
-        })
-        attachment = BrowserAttachment.Standalone({
-          session: Context.get(
-            yield* Layer.buildWithScope(BrowserSession.layer({
-              daemonOrigin: Schema.decodeUnknownSync(BrowserOrigin)(daemonOrigin),
-              instance,
-              browserOrigin: origin,
-              invocation
-            }), daemonScope),
-            BrowserSession
-          )
-        })
-      }
+      })
       const daemonOptions = {
         databasePath,
         token: localApiToken(installation.bearerSecret),

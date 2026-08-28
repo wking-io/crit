@@ -785,7 +785,7 @@ const integratedNotificationRoutes = (plane: IntegratedHostPlane) =>
       const failure = yield* integratedAuthorizationFailure(request, plane)
       if (failure !== undefined) {
         return HttpServerResponse.empty({
-          status: failure._tag === "LocalApiOriginRejected" ? 403 : 401
+          status: Predicate.isTagged(failure, "LocalApiOriginRejected") ? 403 : 401
         })
       }
       const route = yield* HttpRouter.RouteContext
@@ -875,22 +875,22 @@ const daemonLayer = (
       bearerRepresentationRoutes(options),
       announceApplicationRoutes(options)
     )
-    const routeDefinitions = attachment._tag === "None"
-      ? bearerApi
-      : attachment._tag === "Integrated"
-        ? Layer.mergeAll(
-          bearerApi,
-          integratedCanvasRoutes(attachment.plane),
-          integratedNotificationRoutes(attachment.plane),
-          integratedRepresentationRoutes(attachment.plane)
-        )
-        : Layer.mergeAll(
-          bearerApi,
-          browserBootstrapRoutes,
-          browserCanvasRoutes,
-          browserNotificationRoutes,
-          browserRepresentationRoutes
-        ).pipe(Layer.provide(Layer.succeed(BrowserSession, attachment.session)))
+    const routeDefinitions = Match.valueTags(attachment, {
+      None: () => bearerApi,
+      Integrated: ({ plane }) => Layer.mergeAll(
+        bearerApi,
+        integratedCanvasRoutes(plane),
+        integratedNotificationRoutes(plane),
+        integratedRepresentationRoutes(plane)
+      ),
+      Standalone: ({ session }) => Layer.mergeAll(
+        bearerApi,
+        browserBootstrapRoutes,
+        browserCanvasRoutes,
+        browserNotificationRoutes,
+        browserRepresentationRoutes
+      ).pipe(Layer.provide(Layer.succeed(BrowserSession, session)))
+    })
     const routes = routeDefinitions.pipe(Layer.provide(services), Layer.provide(sessions))
     return HttpRouter.serve(routes).pipe(
       Layer.provideMerge(NodeHttpServer.layer(createServer, {
