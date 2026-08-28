@@ -6,6 +6,7 @@ import { AtomRegistry } from "effect/unstable/reactivity"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { HostIndexScreen, hostIndexAtom, HostScreen, hostScreenAtom } from "../src/host-atoms.js"
+import { resolveHostRuntime } from "../src/host-connection.js"
 
 const fetchMock = vi.hoisted(() => {
   const mock = vi.fn<typeof globalThis.fetch>(() => new Promise(() => {}))
@@ -21,6 +22,9 @@ const shopCanvasId = Id.canvas("canvas_shop")
 const reviewCanvasId = Id.canvas("canvas_review")
 const localOrigin = "http://127.0.0.1:5173"
 
+const runtimeAt = (fragment: string, origin = localOrigin) =>
+  resolveHostRuntime({ fragment, origin })
+
 afterEach(() => {
   fetchMock.mockReset()
   fetchMock.mockImplementation(() => new Promise(() => {}))
@@ -28,7 +32,7 @@ afterEach(() => {
 
 describe("hostScreenAtom", () => {
   it("is invalid for a bad fragment and can be read after the registry is replaced", () => {
-    const atom = hostScreenAtom("#crit=")(localOrigin)(shopCanvasId)
+    const atom = hostScreenAtom(runtimeAt("#crit="))(shopCanvasId)
     const first = AtomRegistry.make()
     expect(first.get(atom)).toEqual({
       _tag: "invalid",
@@ -44,24 +48,24 @@ describe("hostScreenAtom", () => {
     second.dispose()
   })
 
-  it("reuses the atom for the same fragment and canvas id", () => {
+  it("reuses the atom for the same runtime and canvas id", () => {
     const descriptor = LocalBrowserConnection.make({
       baseUrl: "http://127.0.0.1:49152",
       instance
     })
-    const fragment = LocalBrowserConnection.encode(descriptor)
-    expect(hostScreenAtom(fragment)(localOrigin)(shopCanvasId))
-      .toBe(hostScreenAtom(fragment)(localOrigin)(shopCanvasId))
+    const runtime = runtimeAt(LocalBrowserConnection.encode(descriptor))
+    expect(hostScreenAtom(runtime)(shopCanvasId))
+      .toBe(hostScreenAtom(runtime)(shopCanvasId))
   })
 
-  it("is ready for a valid fragment without creating a canvas", () => {
+  it("is ready for a valid standalone runtime without creating a canvas", () => {
     const descriptor = LocalBrowserConnection.make({
       baseUrl: "http://127.0.0.1:49152",
       instance
     })
     const registry = AtomRegistry.make()
     const screen = registry.get(
-      hostScreenAtom(LocalBrowserConnection.encode(descriptor))(localOrigin)(
+      hostScreenAtom(runtimeAt(LocalBrowserConnection.encode(descriptor)))(
         shopCanvasId
       )
     )
@@ -72,14 +76,14 @@ describe("hostScreenAtom", () => {
     registry.dispose()
   })
 
-  it("boots two named canvases as separate atoms on the same fragment", () => {
+  it("boots two named canvases as separate atoms on the same runtime", () => {
     const descriptor = LocalBrowserConnection.make({
       baseUrl: "http://127.0.0.1:49152",
       instance
     })
-    const fragment = LocalBrowserConnection.encode(descriptor)
-    const shop = hostScreenAtom(fragment)(localOrigin)(shopCanvasId)
-    const review = hostScreenAtom(fragment)(localOrigin)(reviewCanvasId)
+    const runtime = runtimeAt(LocalBrowserConnection.encode(descriptor))
+    const shop = hostScreenAtom(runtime)(shopCanvasId)
+    const review = hostScreenAtom(runtime)(reviewCanvasId)
     expect(review).not.toBe(shop)
     const registry = AtomRegistry.make()
     const shopScreen = registry.get(shop)
@@ -99,30 +103,30 @@ describe("hostScreenAtom", () => {
 describe("hostIndexAtom", () => {
   it("is invalid for a bad fragment", () => {
     const registry = AtomRegistry.make()
-    expect(registry.get(hostIndexAtom("#crit=")(localOrigin))).toEqual({
+    expect(registry.get(hostIndexAtom(runtimeAt("#crit=")))).toEqual({
       _tag: "invalid",
       reason: "Unable to connect to Crit."
     })
     registry.dispose()
   })
 
-  it("is invalid for a fragment-free loopback origin", () => {
+  it("is invalid for a disconnected loopback origin", () => {
     const registry = AtomRegistry.make()
-    expect(registry.get(hostIndexAtom("")(localOrigin))).toEqual({
+    expect(registry.get(hostIndexAtom(runtimeAt("")))).toEqual({
       _tag: "invalid",
-      reason: "Hosted mode requires a non-loopback HTTPS origin."
+      reason: "This Crit host is not connected. Run crit dev."
     })
     registry.dispose()
   })
 
-  it("starts connecting for a valid fragment", () => {
+  it("starts connecting for a valid standalone runtime", () => {
     const descriptor = LocalBrowserConnection.make({
       baseUrl: "http://127.0.0.1:49152",
       instance
     })
     const registry = AtomRegistry.make()
     expect(HostIndexScreen.$is("connecting")(registry.get(
-      hostIndexAtom(LocalBrowserConnection.encode(descriptor))(localOrigin)
+      hostIndexAtom(runtimeAt(LocalBrowserConnection.encode(descriptor)))
     ))).toBe(true)
     registry.dispose()
   })
@@ -140,7 +144,7 @@ describe("hostIndexAtom", () => {
       headers: { "content-type": "application/json" }
     }))
     const registry = AtomRegistry.make()
-    const atom = hostIndexAtom(LocalBrowserConnection.encode(descriptor))(localOrigin)
+    const atom = hostIndexAtom(runtimeAt(LocalBrowserConnection.encode(descriptor)))
     const keep = registry.mount(atom)
     expect(HostIndexScreen.$is("connecting")(registry.get(atom))).toBe(true)
     await vi.waitFor(() => {

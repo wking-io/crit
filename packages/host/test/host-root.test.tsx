@@ -1,4 +1,4 @@
-import { LocalBrowserConnection } from "@crit/client"
+import { IntegratedConnectionDocument, LocalBrowserConnection } from "@crit/client"
 import { LocalDaemonInstanceNonce } from "@crit/replica/http"
 import { createMemoryHistory } from "@tanstack/react-router"
 import { Schema } from "effect"
@@ -6,7 +6,7 @@ import { StrictMode, act, type ReactElement } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
-import { HostRoot } from "../src/index.js"
+import { HostRoot, resolveHostRuntime } from "../src/index.js"
 
 const fetchMock = vi.hoisted(() => {
   const mock = vi.fn<typeof globalThis.fetch>()
@@ -32,12 +32,12 @@ const fetched = (url: string): boolean => fetchMock.mock.calls.some(
 const hostAt = (
   path: string,
   fragment: string,
-  origin = "http://127.0.0.1:5173"
+  origin = "http://127.0.0.1:5173",
+  injected?: IntegratedConnectionDocument
 ) => (
   <HostRoot
-    fragment={fragment}
     history={createMemoryHistory({ initialEntries: [path] })}
-    origin={origin}
+    runtime={resolveHostRuntime({ fragment, injected, origin })}
   />
 )
 
@@ -163,6 +163,41 @@ describe("HostRoot", () => {
     expect(fetched(
       `http://127.0.0.1:5173/browser/${instance}/api/v1/canvas`
     )).toBe(true)
+  })
+
+  it("lists canvases through the integrated same-origin prefix", async() => {
+    let release!: (response: Response) => void
+    const listed = new Promise<Response>((resolve) => {
+      release = resolve
+    })
+    fetchMock.mockImplementation(() => listed)
+
+    await act(async() => render(
+      hostAt("/", "", "http://127.0.0.1:5173", Schema.decodeUnknownSync(
+        IntegratedConnectionDocument
+      )({
+        kind: "integrated",
+        apiBase: "/__crit/"
+      }))
+    ))
+
+    await act(async() => {
+      release(new Response(JSON.stringify([{
+        canvasId: "canvas_launch_lab",
+        title: "Launch lab"
+      }]), {
+        status: 200,
+        headers: { "content-type": "application/json" }
+      }))
+    })
+
+    await act(async() => vi.waitFor(() => {
+      expect(container.querySelector("a")?.textContent).toBe("Launch lab")
+      expect(container.querySelector("a")?.getAttribute("href")).toBe(
+        "/canvas/canvas_launch_lab"
+      )
+    }))
+    expect(fetched("http://127.0.0.1:5173/__crit/api/v1/canvas")).toBe(true)
   })
 
   it("lists hosted canvases from the same-origin directory", async() => {

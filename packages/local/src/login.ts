@@ -326,10 +326,7 @@ const installationEndpoint = (
 
 const readInstallationPerson = (
   dataRoot: string
-): Effect.Effect<
-  { readonly personId: PersonId, readonly email: PersonSnapshot["email"] },
-  LocalDaemonStateMissing | LocalDaemonStateUnreadable | LocalDaemonStateMalformed
-> =>
+) =>
   Effect.gen(function*() {
     const fs = yield* FileSystem.FileSystem
     const path = yield* Path.Path

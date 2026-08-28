@@ -16,14 +16,14 @@ import { HostCanvasList } from "../src/index.js"
 Object.defineProperty(globalThis, "IS_REACT_ACT_ENVIRONMENT", { value: true })
 
 const title = Schema.decodeUnknownSync(CanvasTitle)("Shop")
-const fragment = "#crit=session"
+const hash = "crit=session"
 
 let container: HTMLDivElement
 let root: Root
 
 const renderList = (listings: Parameters<typeof HostCanvasList>[0]["listings"]) => {
   const rootRoute = createRootRoute({
-    component: () => <HostCanvasList fragment={fragment} listings={listings} />
+    component: () => <HostCanvasList listings={listings} sessionHash={hash} />
   })
   const canvasRoute = createRoute({
     getParentRoute: () => rootRoute,

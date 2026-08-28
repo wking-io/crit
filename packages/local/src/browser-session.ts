@@ -1,20 +1,18 @@
 import type { VerifiedInvocation } from "@crit/authority"
 import {
+  BrowserOrigin,
   LocalBrowserConnection,
   type LocalBrowserConnectionDescriptor
 } from "@crit/client"
 import type { LocalDaemonInstanceNonce } from "@crit/replica/http"
 import { Context, Crypto, Data, Effect, Encoding, Layer, Redacted, Ref, Schema } from "effect"
 
+export { BrowserOrigin }
+
 export const BrowserCapability = Schema.String.check(
   Schema.isPattern(/^[A-Za-z0-9_-]{86}$/)
 ).pipe(Schema.brand("BrowserCapability"))
 type BrowserCapability = typeof BrowserCapability.Type
-
-export const BrowserOrigin = Schema.String.check(
-  Schema.isPattern(/^http:\/\/127\.0\.0\.1:(?:[1-9][0-9]{0,3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5])$/)
-).pipe(Schema.brand("BrowserOrigin"))
-export type BrowserOrigin = typeof BrowserOrigin.Type
 
 const BrowserSessionSecret = Schema.String.check(
   Schema.isPattern(/^[A-Za-z0-9_-]{86}$/)

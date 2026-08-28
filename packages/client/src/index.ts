@@ -52,7 +52,7 @@ import { FetchHttpClient, HttpClient, HttpClientError, HttpClientRequest, HttpCl
 import { HttpApiClient, HttpApiMiddleware } from "effect/unstable/httpapi"
 import * as Socket from "effect/unstable/socket/Socket"
 
-import { LocalClientOptions } from "./local-client-options.js"
+import { LocalClientOptions, localPath } from "./local-client-options.js"
 
 export {
   HostedAccessDenied,
@@ -69,7 +69,14 @@ export {
   LocalBrowserConnectionDescriptor,
   LocalBrowserConnectionInvalid
 } from "./browser-connection.js"
-export { LocalClientOptions, ReplicaChange }
+export {
+  BrowserOrigin,
+  IntegratedApiBase,
+  IntegratedConnectionDocument,
+  LocalClientOptions,
+  localPath
+} from "./local-client-options.js"
+export { ReplicaChange }
 export {
   makeRemoteCanvasAuthority,
   overlayRemoteLedger,
@@ -148,13 +155,12 @@ export interface LocalRepresentationClientService {
   ) => Effect.Effect<RenderPlan, LocalRepresentationClientFailure>
 }
 
-const localPath = (options: LocalClientOptions, path: `/${string}`) =>
-  LocalClientOptions.$is("bearer")(options)
-    ? path
-    : `${options.browserPath}${path.slice(1)}`
-
-const localUrl = (options: LocalClientOptions, path: `/${string}`) =>
-  `${options.baseUrl.replace(/\/$/, "")}${localPath(options, path)}`
+const localUrl = (options: LocalClientOptions, path: `/${string}`) => {
+  const origin = LocalClientOptions.$is("integrated")(options)
+    ? options.origin
+    : options.baseUrl
+  return `${origin.replace(/\/$/, "")}${localPath(options, path)}`
+}
 
 const withBrowserCredentials = <A, E, R>(
   options: LocalClientOptions,

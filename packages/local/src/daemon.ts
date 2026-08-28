@@ -58,6 +58,12 @@ import {
   localApplicationAnnouncePath
 } from "./application-bindings.js"
 import { AgentSessions, type AgentSessionsService } from "./agent-sessions.js"
+import { LocalDatabaseOpenFailure } from "./database.js"
+import {
+  authorizeIntegrated,
+  BrowserAttachment,
+  type IntegratedHostPlane
+} from "./browser-attachment.js"
 import {
   BrowserCapability,
   BrowserSession,
@@ -82,8 +88,8 @@ const reconcileEagerly = (replica: CanvasReplicaService) =>
   (canvasId: CanvasId): Effect.Effect<void> =>
     replica.sync(canvasId).pipe(
       Effect.catchTags({
-        ReplicaNotOpen: Effect.ignore,
-        ReplicaCanvasNotFound: Effect.ignore,
+        ReplicaNotOpen: () => Effect.void,
+        ReplicaCanvasNotFound: () => Effect.void,
         ReplicaDiverged: Effect.die,
         ReplicaInvariantFailure: Effect.die
       }),
@@ -731,10 +737,95 @@ const changeIds = Layer.effect(ReplicaChangeIds, Effect.gen(function*() {
   })
 }))
 
+const integratedPath = (plane: IntegratedHostPlane): `/${string}` =>
+  `/browser/${plane.instance}/`
+
+const integratedAuthorizationFailure = (
+  request: HttpServerRequest.HttpServerRequest,
+  plane: IntegratedHostPlane
+): Effect.Effect<LocalRequestAuthorizationFailure | undefined> =>
+  Effect.gen(function*() {
+    const requestedVersion = request.headers[localApiVersionHeader]
+    if (requestedVersion !== localApiVersion) {
+      return new LocalApiVersionUnsupported({
+        requestedVersion: requestedVersion ?? null,
+        supportedVersion: localApiVersion
+      })
+    }
+    if (!(yield* authorizeIntegrated(request, plane))) {
+      return request.headers.origin !== plane.hostOrigin
+        ? new LocalApiOriginRejected({ origin: request.headers.origin ?? "missing" })
+        : new LocalApiUnauthorized({ message: "Missing or invalid host token" })
+    }
+    return undefined
+  })
+
+const integratedAuthorizationLayer = (plane: IntegratedHostPlane) => Layer.succeed(
+  LocalApiAuthorization,
+  LocalApiAuthorization.of({
+    bearer: Effect.fn(function*(httpEffect) {
+      const request = yield* HttpServerRequest.HttpServerRequest
+      const failure = yield* integratedAuthorizationFailure(request, plane)
+      if (failure !== undefined) return yield* failure
+      return yield* Effect.provideService(
+        httpEffect,
+        AuthenticatedInvocation,
+        plane.invocation
+      )
+    })
+  })
+)
+
+const integratedNotificationRoutes = (plane: IntegratedHostPlane) =>
+  HttpRouter.use(Effect.fn(function*(router) {
+    const replica = yield* CanvasReplica
+    const path: `/${string}` = `${integratedPath(plane)}${localReplicaNotificationsPath.slice(1)}`
+    yield* router.add("GET", path, (request) => Effect.gen(function*() {
+      if (!isWebSocketUpgrade(request)) return HttpServerResponse.empty({ status: 400 })
+      const failure = yield* integratedAuthorizationFailure(request, plane)
+      if (failure !== undefined) {
+        return HttpServerResponse.empty({
+          status: Predicate.isTagged(failure, "LocalApiOriginRejected") ? 403 : 401
+        })
+      }
+      const route = yield* HttpRouter.RouteContext
+      const decoded = Schema.decodeUnknownOption(CanvasId)(route.params.canvasId)
+      if (Option.isNone(decoded)) return HttpServerResponse.empty({ status: 400 })
+      return yield* notificationSocket(replica, decoded.value, undefined, undefined).pipe(
+        Effect.catch(() => Effect.succeed(HttpServerResponse.empty()))
+      )
+    }))
+  }))
+
+const integratedRepresentationRoutes = (plane: IntegratedHostPlane) =>
+  HttpRouter.use(Effect.fn(function*(router) {
+    const resolvePath: `/${string}` = `${integratedPath(plane)}${localRepresentationResolvePath.slice(1)}`
+    yield* router.add("POST", resolvePath, (request) => Effect.gen(function*() {
+      const failure = yield* integratedAuthorizationFailure(request, plane)
+      return failure === undefined
+        ? yield* resolveRepresentation()
+        : authorizationFailureResponse(failure)
+    }))
+    const capturePath: `/${string}` = `${integratedPath(plane)}${localRepresentationCapturePath.slice(1)}`
+    yield* router.add("POST", capturePath, (request) => Effect.gen(function*() {
+      const failure = yield* integratedAuthorizationFailure(request, plane)
+      return failure === undefined
+        ? yield* captureRepresentation()
+        : authorizationFailureResponse(failure)
+    }))
+  }))
+
 const daemonLayer = (
   options: LocalDaemonOptions,
-  browser: BrowserSessionService | undefined
-) => {
+  attachment: BrowserAttachment
+): Layer.Layer<
+  import("effect/unstable/http/Etag").Generator |
+    import("effect/unstable/http/HttpPlatform").HttpPlatform |
+    import("effect/unstable/http/HttpServer").HttpServer |
+    import("@effect/platform-node/NodeServices").NodeServices,
+  LocalDatabaseOpenFailure | import("effect/unstable/http/HttpServerError").ServeError,
+  RepresentationRuntime
+> => {
     const sqliteAuthority = SqliteCanvasAuthority.layer({ path: options.databasePath }).pipe(
       Layer.provide(AuthorityClockLive)
     )
@@ -764,27 +855,42 @@ const daemonLayer = (
         )
       )
     }))
-    const routeDefinitions = browser === undefined
-      ? Layer.mergeAll(
-        bearerRoutes,
-        agentRoutes,
-        bearerNotificationRoutes(options),
-        bearerRepresentationRoutes(options),
-        announceApplicationRoutes(options)
-      )
-      : Layer.mergeAll(
-        bearerRoutes,
-        agentRoutes,
-        bearerNotificationRoutes(options),
-        bearerRepresentationRoutes(options),
-        announceApplicationRoutes(options),
+    const integratedCanvasRoutes = (plane: IntegratedHostPlane) =>
+      HttpRouter.use(Effect.fn(function*(router) {
+        yield* Layer.build(
+          HttpApiBuilder.layer(LocalCanvasApi).pipe(
+            Layer.provide(handlers(options)),
+            Layer.provide(integratedAuthorizationLayer(plane)),
+            Layer.provide(Layer.succeed(
+              HttpRouter.HttpRouter,
+              router.prefixed(integratedPath(plane))
+            ))
+          )
+        )
+      }))
+    const bearerApi = Layer.mergeAll(
+      bearerRoutes,
+      agentRoutes,
+      bearerNotificationRoutes(options),
+      bearerRepresentationRoutes(options),
+      announceApplicationRoutes(options)
+    )
+    const routeDefinitions = Match.valueTags(attachment, {
+      None: () => bearerApi,
+      Integrated: ({ plane }) => Layer.mergeAll(
+        bearerApi,
+        integratedCanvasRoutes(plane),
+        integratedNotificationRoutes(plane),
+        integratedRepresentationRoutes(plane)
+      ),
+      Standalone: ({ session }) => Layer.mergeAll(
+        bearerApi,
         browserBootstrapRoutes,
         browserCanvasRoutes,
         browserNotificationRoutes,
         browserRepresentationRoutes
-      ).pipe(
-        Layer.provide(Layer.succeed(BrowserSession, browser))
-      )
+      ).pipe(Layer.provide(Layer.succeed(BrowserSession, session)))
+    })
     const routes = routeDefinitions.pipe(Layer.provide(services), Layer.provide(sessions))
     return HttpRouter.serve(routes).pipe(
       Layer.provideMerge(NodeHttpServer.layer(createServer, {
@@ -796,7 +902,7 @@ const daemonLayer = (
 }
 
 export const LocalDaemon = {
-  layer: (options: LocalDaemonOptions) => daemonLayer(options, undefined)
+  layer: (options: LocalDaemonOptions) => daemonLayer(options, BrowserAttachment.None())
 }
 
 export const localDaemonWithBrowser = daemonLayer
