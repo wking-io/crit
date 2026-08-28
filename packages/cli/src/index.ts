@@ -227,7 +227,7 @@ const dev = Command.make(
       Flag.withDefault(".")
     ),
     applicationOrigin: Flag.string("application-origin").pipe(
-      Flag.withDescription("Canonical base URL of the project application"),
+      Flag.withDescription("Override the announced project application origin"),
       Flag.optional
     ),
     browserOrigin: Flag.string("browser-origin").pipe(
@@ -240,13 +240,13 @@ const dev = Command.make(
   },
   Effect.fn(function*({ applicationOrigin, browserOrigin, dataRoot: root, noHost, root: projectRoot }) {
     const application = yield* Option.match(applicationOrigin, {
-      onNone: () => Effect.succeed(undefined),
+      onNone: () => Effect.succeed({ root: projectRoot }),
       onSome: (origin) => decode(ApplicationBaseUrl, origin, "application origin").pipe(
         Effect.map((baseUrl) => ({ root: projectRoot, baseUrl }))
       )
     })
     yield* Effect.scoped(Effect.gen(function*() {
-      const applicationOptions = application === undefined ? {} : { application }
+      const applicationOptions = { application }
       const managedHostRoot = yield* Option.match(browserOrigin, {
         onSome: () => Effect.succeed(Option.none<string>()),
         onNone: () => noHost

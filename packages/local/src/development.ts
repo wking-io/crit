@@ -36,6 +36,7 @@ import { FetchHttpClient, HttpServer } from "effect/unstable/http"
 import { localDaemonWithBrowser, LocalDaemon } from "./daemon.js"
 import { LocalArtifactStore } from "./artifact-store.js"
 import {
+  LocalApplicationAnnouncements,
   LocalProjectApplicationBindings,
   type LocalProjectApplicationBindingsOptions
 } from "./application-bindings.js"
@@ -165,10 +166,17 @@ export class LocalDevelopment extends Context.Service<
       const fail = (operation: string, target: string, reason: string) =>
         new LocalDevelopmentFailure({ operation, path: target, reason })
       const daemonScope = yield* Effect.scope
+      const announcements = Context.get(
+        yield* Layer.buildWithScope(LocalApplicationAnnouncements.layer, daemonScope),
+        LocalApplicationAnnouncements
+      )
+      const announcementsLayer = Layer.succeed(LocalApplicationAnnouncements, announcements)
       const applicationBindings = options.application === undefined
         ? ApplicationBindings.of({ get: () => Effect.succeed(Option.none()) })
         : yield* Layer.buildWithScope(
-          LocalProjectApplicationBindings.layer(options.application),
+          LocalProjectApplicationBindings.layer(options.application).pipe(
+            Layer.provide(announcementsLayer)
+          ),
           daemonScope
         ).pipe(
           Effect.map((context) => Context.get(context, ApplicationBindings)),
@@ -312,7 +320,10 @@ export class LocalDevelopment extends Context.Service<
         Layer.provide(LiveContentHttp.pipe(Layer.provide(FetchHttpClient.layer)))
       )
       const daemonContext = yield* Layer.buildWithScope(
-        daemonLayer.pipe(Layer.provide(representationRuntime)),
+        daemonLayer.pipe(
+          Layer.provide(representationRuntime),
+          Layer.provide(announcementsLayer)
+        ),
         daemonScope
       ).pipe(
         Effect.mapError((cause) => {

@@ -42,7 +42,11 @@ import { FetchHttpClient, HttpClient, HttpClientRequest, HttpServer } from "effe
 import * as Socket from "effect/unstable/socket/Socket"
 import { describe, expect, it } from "vitest"
 
-import { LocalDaemon, SqliteCanvasAuthority } from "../src/index.js"
+import {
+  LocalApplicationAnnouncements,
+  LocalDaemon,
+  SqliteCanvasAuthority
+} from "../src/index.js"
 
 const invocation = Schema.decodeUnknownSync(PersonInvocation)({
   _tag: "person",
@@ -110,7 +114,10 @@ const clientFor = (options: {
     invocation,
     instance,
     installationId
-  }).pipe(Layer.provide(representationRuntime)), scope)
+  }).pipe(
+    Layer.provide(representationRuntime),
+    Layer.provide(LocalApplicationAnnouncements.layer)
+  ), scope)
   const server = Context.get(serverContext, HttpServer.HttpServer)
   if (!Predicate.isTagged(server.address, "TcpAddress") || !("port" in server.address)) {
     return yield* Effect.die("expected TCP daemon")
@@ -277,7 +284,10 @@ describe("LocalDaemon", () => {
         invocation,
         instance,
         installationId
-      }).pipe(Layer.provide(failingRuntime)), scope)
+      }).pipe(
+        Layer.provide(failingRuntime),
+        Layer.provide(LocalApplicationAnnouncements.layer)
+      ), scope)
       const server = Context.get(serverContext, HttpServer.HttpServer)
       if (!Predicate.isTagged(server.address, "TcpAddress") || !("port" in server.address)) {
         return yield* Effect.die("expected TCP daemon")

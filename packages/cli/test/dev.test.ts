@@ -94,7 +94,11 @@ const startWithoutBrowser = (dataRoot: string, environment?: NodeJS.ProcessEnv) 
   })
 })
 
-const startWithApplication = (dataRoot: string, root: string, applicationOrigin: string) => new Promise<{
+const startWithProject = (
+  dataRoot: string,
+  root: string,
+  applicationOrigin?: string
+) => new Promise<{
   readonly child: ReturnType<typeof spawn>
   readonly baseUrl: string
 }>((resolve, reject) => {
@@ -106,8 +110,7 @@ const startWithApplication = (dataRoot: string, root: string, applicationOrigin:
     dataRoot,
     "--root",
     root,
-    "--application-origin",
-    applicationOrigin
+    ...(applicationOrigin === undefined ? [] : ["--application-origin", applicationOrigin])
   ], { stdio: ["ignore", "pipe", "pipe"] })
   children.push(child)
   let output = ""
@@ -127,6 +130,81 @@ const startWithApplication = (dataRoot: string, root: string, applicationOrigin:
     new Error(`Daemon exited before readiness with code=${code} signal=${signal}: ${output}`)
   ))
 })
+
+const startWithApplication = (dataRoot: string, root: string, applicationOrigin: string) =>
+  startWithProject(dataRoot, root, applicationOrigin)
+
+const InstallationDescriptor = Schema.Struct({
+  bearerSecret: Schema.String
+})
+const DaemonDescriptor = Schema.Struct({
+  instance: Schema.String,
+  baseUrl: Schema.String
+})
+
+const resolveApplication = async (
+  baseUrl: string,
+  dataRoot: string,
+  applicationId: string,
+  route = "/products"
+) => {
+  const installation = Schema.decodeUnknownSync(InstallationDescriptor)(
+    JSON.parse(readFileSync(join(dataRoot, "installation.json"), "utf8"))
+  )
+  const response = await fetch(`${baseUrl}/api/v1/representations/resolve`, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${installation.bearerSecret}`,
+      "content-type": "application/json",
+      "x-crit-api-version": "1"
+    },
+    body: JSON.stringify({
+      _tag: "resolveRepresentation",
+      schemaVersion: 1,
+      representation: { _tag: "applicationRoute", applicationId, route }
+    })
+  })
+  return {
+    status: response.status,
+    body: await response.json()
+  }
+}
+
+const announceApplication = async (
+  dataRoot: string,
+  applicationId: string,
+  origin: string,
+  instance?: string
+) => {
+  const descriptor = Schema.decodeUnknownSync(DaemonDescriptor)(
+    JSON.parse(readFileSync(join(dataRoot, "daemon.json"), "utf8"))
+  )
+  return fetch(`${descriptor.baseUrl}/api/v1/applications/announce`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-crit-api-version": "1"
+    },
+    body: JSON.stringify({
+      schemaVersion: 1,
+      applicationId,
+      origin,
+      instance: instance ?? descriptor.instance
+    })
+  })
+}
+
+const initializeProject = (directory: string) => {
+  const initialized = spawnSync(process.execPath, [
+    join(import.meta.dirname, "..", "dist", "main.js"),
+    "init",
+    "--root",
+    directory,
+    "--json"
+  ], { encoding: "utf8" })
+  expect(initialized.status, initialized.stderr).toBe(0)
+  return JSON.parse(initialized.stdout).manifest.applicationId as string
+}
 
 const stop = (child: ReturnType<typeof spawn>) => new Promise<void>((resolve, reject) => {
   child.once("error", reject)
@@ -275,6 +353,129 @@ describe("built crit-target dev", () => {
     expect(await response.json()).toMatchObject({
       _tag: "iframe",
       url: "http://127.0.0.1:5173/products"
+    })
+    await stop(started.child)
+  })
+
+  it("does not bind a project application to the Crit host without an origin", async() => {
+    const directory = mkdtempSync(join(tmpdir(), "crit-cli-unbound-application-"))
+    directories.push(directory)
+    const dataRoot = join(directory, ".crit", "v1")
+    const applicationId = initializeProject(directory)
+    const started = await startWithProject(dataRoot, directory)
+    const resolved = await resolveApplication(started.baseUrl, dataRoot, applicationId, "/")
+    expect(resolved.status).toBe(200)
+    expect(resolved.body).toMatchObject({
+      _tag: "unavailable",
+      reason: "application-unbound"
+    })
+    expect(JSON.stringify(resolved.body)).not.toContain("127.0.0.1:5173")
+    await stop(started.child)
+  })
+
+  it("binds --application-origin http://127.0.0.1:5174/ through the real transport", async() => {
+    const directory = mkdtempSync(join(tmpdir(), "crit-cli-flag-application-"))
+    directories.push(directory)
+    const dataRoot = join(directory, ".crit", "v1")
+    const applicationId = initializeProject(directory)
+    const started = await startWithApplication(dataRoot, directory, "http://127.0.0.1:5174/")
+    const resolved = await resolveApplication(started.baseUrl, dataRoot, applicationId)
+    expect(resolved.status).toBe(200)
+    expect(resolved.body).toMatchObject({
+      _tag: "iframe",
+      url: "http://127.0.0.1:5174/products"
+    })
+    await stop(started.child)
+  })
+
+  it("binds an announced matching application without --application-origin", async() => {
+    const directory = mkdtempSync(join(tmpdir(), "crit-cli-announce-application-"))
+    directories.push(directory)
+    const dataRoot = join(directory, ".crit", "v1")
+    const applicationId = initializeProject(directory)
+    const started = await startWithProject(dataRoot, directory)
+    const announced = await announceApplication(
+      dataRoot,
+      applicationId,
+      "http://127.0.0.1:5174/"
+    )
+    expect(announced.status).toBe(204)
+    const resolved = await resolveApplication(started.baseUrl, dataRoot, applicationId, "/")
+    expect(resolved.status).toBe(200)
+    expect(resolved.body).toMatchObject({
+      _tag: "iframe",
+      url: "http://127.0.0.1:5174/"
+    })
+    const checkout = await resolveApplication(
+      started.baseUrl,
+      dataRoot,
+      applicationId,
+      "/checkout"
+    )
+    expect(checkout.body).toMatchObject({
+      _tag: "iframe",
+      url: "http://127.0.0.1:5174/checkout"
+    })
+    await stop(started.child)
+  })
+
+  it("stays unbound when a different applicationId announces", async() => {
+    const directory = mkdtempSync(join(tmpdir(), "crit-cli-announce-foreign-"))
+    directories.push(directory)
+    const dataRoot = join(directory, ".crit", "v1")
+    const applicationId = initializeProject(directory)
+    const started = await startWithProject(dataRoot, directory)
+    const announced = await announceApplication(
+      dataRoot,
+      "application_foreign",
+      "http://127.0.0.1:5174/"
+    )
+    expect(announced.status).toBe(204)
+    const resolved = await resolveApplication(started.baseUrl, dataRoot, applicationId)
+    expect(resolved.body).toMatchObject({
+      _tag: "unavailable",
+      reason: "application-unbound"
+    })
+    await stop(started.child)
+  })
+
+  it("lets --application-origin win over an announce", async() => {
+    const directory = mkdtempSync(join(tmpdir(), "crit-cli-flag-wins-"))
+    directories.push(directory)
+    const dataRoot = join(directory, ".crit", "v1")
+    const applicationId = initializeProject(directory)
+    const started = await startWithApplication(dataRoot, directory, "http://127.0.0.1:5174/")
+    const announced = await announceApplication(
+      dataRoot,
+      applicationId,
+      "http://127.0.0.1:4173/"
+    )
+    expect(announced.status).toBe(204)
+    const resolved = await resolveApplication(started.baseUrl, dataRoot, applicationId)
+    expect(resolved.body).toMatchObject({
+      _tag: "iframe",
+      url: "http://127.0.0.1:5174/products"
+    })
+    await stop(started.child)
+  })
+
+  it("rejects an announce that does not present this daemon instance", async() => {
+    const directory = mkdtempSync(join(tmpdir(), "crit-cli-announce-instance-"))
+    directories.push(directory)
+    const dataRoot = join(directory, ".crit", "v1")
+    const applicationId = initializeProject(directory)
+    const started = await startWithProject(dataRoot, directory)
+    const announced = await announceApplication(
+      dataRoot,
+      applicationId,
+      "http://127.0.0.1:5174/",
+      "ffffffffffffffffffffffffffffffff"
+    )
+    expect(announced.status).toBe(401)
+    const resolved = await resolveApplication(started.baseUrl, dataRoot, applicationId)
+    expect(resolved.body).toMatchObject({
+      _tag: "unavailable",
+      reason: "application-unbound"
     })
     await stop(started.child)
   })

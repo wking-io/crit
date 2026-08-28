@@ -52,6 +52,11 @@ import { HttpApiBuilder } from "effect/unstable/httpapi"
 import * as Socket from "effect/unstable/socket/Socket"
 import { createServer } from "node:http"
 
+import {
+  LocalApplicationAnnouncements,
+  LocalApplicationAnnounceRequest,
+  localApplicationAnnouncePath
+} from "./application-bindings.js"
 import { AgentSessions, type AgentSessionsService } from "./agent-sessions.js"
 import {
   BrowserCapability,
@@ -562,6 +567,43 @@ const captureRepresentation = Effect.fn(function*() {
   )
 })
 
+const announceApplication = (options: LocalDaemonOptions) => Effect.fn(function*() {
+  const announcements = yield* LocalApplicationAnnouncements
+  const request = yield* HttpServerRequest.HttpServerRequest
+  const requestedVersion = request.headers[localApiVersionHeader]
+  if (requestedVersion !== localApiVersion) {
+    return authorizationFailureResponse(new LocalApiVersionUnsupported({
+      requestedVersion: requestedVersion ?? null,
+      supportedVersion: localApiVersion
+    }))
+  }
+  const contentLengthHeader = request.headers["content-length"]
+  if (contentLengthHeader === undefined) return HttpServerResponse.empty({ status: 411 })
+  const contentLength = Number(contentLengthHeader)
+  if (!Number.isSafeInteger(contentLength) || contentLength < 0) {
+    return HttpServerResponse.empty({ status: 400 })
+  }
+  if (contentLength > 16_384) {
+    return HttpServerResponse.empty({ status: 413 })
+  }
+  const body = yield* representationRequestBody(request, LocalApplicationAnnounceRequest)
+  if (body === oversizedRepresentationRequest) {
+    return HttpServerResponse.empty({ status: 413 })
+  }
+  if (body === invalidRepresentationRequest) {
+    return HttpServerResponse.empty({ status: 400 })
+  }
+  if (body.instance !== options.instance) {
+    return HttpServerResponse.empty({ status: 401 })
+  }
+  yield* announcements.record(body.applicationId, body.origin)
+  return HttpServerResponse.empty({ status: 204 })
+})
+
+const announceApplicationRoutes = (options: LocalDaemonOptions) => HttpRouter.use(Effect.fn(function*(router) {
+  yield* router.add("POST", localApplicationAnnouncePath, () => announceApplication(options)())
+}))
+
 const bearerRepresentationRoutes = (options: LocalDaemonOptions) => HttpRouter.use(Effect.fn(function*(router) {
   const sessions = yield* AgentSessions
   yield* router.add("POST", localRepresentationResolvePath, (request) =>
@@ -723,8 +765,24 @@ const daemonLayer = (
       )
     }))
     const routeDefinitions = browser === undefined
-      ? Layer.mergeAll(bearerRoutes, agentRoutes, bearerNotificationRoutes(options), bearerRepresentationRoutes(options))
-      : Layer.mergeAll(bearerRoutes, agentRoutes, bearerNotificationRoutes(options), bearerRepresentationRoutes(options), browserBootstrapRoutes, browserCanvasRoutes, browserNotificationRoutes, browserRepresentationRoutes).pipe(
+      ? Layer.mergeAll(
+        bearerRoutes,
+        agentRoutes,
+        bearerNotificationRoutes(options),
+        bearerRepresentationRoutes(options),
+        announceApplicationRoutes(options)
+      )
+      : Layer.mergeAll(
+        bearerRoutes,
+        agentRoutes,
+        bearerNotificationRoutes(options),
+        bearerRepresentationRoutes(options),
+        announceApplicationRoutes(options),
+        browserBootstrapRoutes,
+        browserCanvasRoutes,
+        browserNotificationRoutes,
+        browserRepresentationRoutes
+      ).pipe(
         Layer.provide(Layer.succeed(BrowserSession, browser))
       )
     const routes = routeDefinitions.pipe(Layer.provide(services), Layer.provide(sessions))

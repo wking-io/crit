@@ -178,6 +178,14 @@ describe("DeploymentApplicationBindings", () => {
     expect(frame.representation).toBe(frameRepresentation)
   })
 
+  it("stays unbound without a review Deployment and never invents a loopback origin", async() => {
+    const result = await Effect.runPromise(getBinding(
+      deploymentBindings([]),
+      applicationId
+    ))
+    expect(Option.isNone(result)).toBe(true)
+  })
+
   it("leaves another application unbound", async() => {
     const result = await Effect.runPromise(getBinding(
       deploymentBindings([deployment({ id: "deployment_bound" })]),
