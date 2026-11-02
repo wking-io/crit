@@ -69,7 +69,8 @@
     "dev": "npm run build --silent && node playground/seed.mjs && vite --config playground/vite.config.ts",
     "dev:agent": "npm run build --silent && cd playground && CRIT_FEATURE_PROFILE=development node ../dist/cli.js",
     "dev:phone": "PORTLESS_LAN=1 PORTLESS_HTTPS=0 PORTLESS_PORT=80 portless",
-    "dev:portless": "PORTLESS_PORT=443 portless",
+    "dev:portless": "npm run build:target && node scripts/dev-v1.mjs",
+    "playground:portless": "portless run --name crit-frames npm run dev",
     "dev:seed": "npm run build --silent && node playground/seed.mjs",
     "playground:alpha": "CRIT_PLAYGROUND_MODE=alpha npm run dev",
     "playground:alpha:agent": "npm run build --silent && cd playground && CRIT_FEATURE_PROFILE=alpha node ../dist/cli.js",
@@ -87,7 +88,8 @@
     "verify": "npm run lint && npm run typecheck && npm test && npm run check:package && npm run check:sdk-package && npm run check:raw-tag-checks && npm run check:source-comments && npm run doctor",
     "www:build": "vite build --config www/vite.config.ts",
     "www:deploy": "npm run www:build && npx wrangler pages deploy www/dist --project-name crit",
-    "www:dev": "vite --config www/vite.config.ts"
+    "www:dev": "vite --config www/vite.config.ts",
+    "dev:canvas": "node packages/cli/dist/main.js dev --application-origin \"$(portless get crit-frames)/\""
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",
@@ -132,7 +134,7 @@
   },
   "portless": {
     "name": "crit",
-    "script": "dev"
+    "script": "dev:canvas"
   },
   "packageManager": "npm@11.11.0"
 }

@@ -49,15 +49,19 @@ export function createFrameInputRelay() {
       readonly key: string
       readonly metaKey: boolean
     }): FrameInputIntent | null => {
-      if (input.input && !input.ctrlKey && !input.metaKey) return null
+      const modified = input.ctrlKey || input.metaKey
+      if (!modified && input.key === "Escape") {
+        return { type: "clear-selection" }
+      }
+      if (input.input && !modified) return null
       const key = input.key.toLowerCase()
-      if (!input.ctrlKey && !input.metaKey && key === "backspace") {
+      if (!modified && key === "backspace") {
         return { type: "delete" }
       }
-      if (!input.ctrlKey && !input.metaKey && (key === "v" || key === "h")) {
+      if (!modified && (key === "v" || key === "h")) {
         return { type: "tool", tool: key === "v" ? "select" : "pan" }
       }
-      if (!input.ctrlKey && !input.metaKey) return null
+      if (!modified) return null
       if (
         input.key === "+" ||
         input.key === "=" ||

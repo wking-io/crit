@@ -83,6 +83,45 @@ describe("Frame input relay", () => {
     expect(intents).toEqual([{ type: "wheel", ...wheel }])
   })
 
+  it("captures browser zoom hotkeys as Canvas zoom steps", () => {
+    const target = gestureHost()
+    const root = new EventTarget()
+    Object.defineProperty(root, "getBoundingClientRect", {
+      value: () => ({ bottom: 600, left: 0, right: 800, top: 0 })
+    })
+    const intents: Array<unknown> = []
+    const disconnect = connectCanvasInput({
+      target: canvasInputWindow(target),
+      root: canvasInputRoot(root),
+      onIntent: (intent) => intents.push(intent)
+    })
+    const zoomIn = new Event("keydown", { cancelable: true })
+    Object.defineProperties(zoomIn, {
+      code: { value: "Equal" },
+      ctrlKey: { value: false },
+      key: { value: "+" },
+      metaKey: { value: true }
+    })
+    const zoomOut = new Event("keydown", { cancelable: true })
+    Object.defineProperties(zoomOut, {
+      code: { value: "Minus" },
+      ctrlKey: { value: true },
+      key: { value: "-" },
+      metaKey: { value: false }
+    })
+
+    target.dispatchEvent(zoomIn)
+    target.dispatchEvent(zoomOut)
+    disconnect()
+
+    expect(zoomIn.defaultPrevented).toBe(true)
+    expect(zoomOut.defaultPrevented).toBe(true)
+    expect(intents).toEqual([
+      { type: "zoom-step", direction: 1 },
+      { type: "zoom-step", direction: -1 }
+    ])
+  })
+
   it("lets the Canvas ignore a wheel over a selected Frame", () => {
     const target = gestureHost()
     const root = new EventTarget()
@@ -111,6 +150,48 @@ describe("Frame input relay", () => {
 
     expect(event.defaultPrevented).toBe(false)
     expect(intents).toEqual([])
+  })
+
+  it.each(["ctrlKey", "metaKey"])("captures %s zoom over a selected Frame", (modifier) => {
+    const target = gestureHost()
+    const root = new EventTarget()
+    Object.defineProperty(root, "getBoundingClientRect", {
+      value: () => ({ bottom: 600, left: 0, right: 800, top: 0 })
+    })
+    const intents: Array<unknown> = []
+    const disconnect = connectCanvasInput({
+      target: canvasInputWindow(target), root: canvasInputRoot(root),
+      ignore: () => true, onIntent: (intent) => intents.push(intent)
+    })
+    const event = new Event("wheel", { cancelable: true })
+    for (const [key, value] of Object.entries({ ...wheel, [modifier]: true })) {
+      Object.defineProperty(event, key, { value })
+    }
+    target.dispatchEvent(event)
+    disconnect()
+    expect(event.defaultPrevented).toBe(true)
+    expect(intents).toHaveLength(1)
+  })
+
+  it("captures native pinch over a selected Frame", () => {
+    const target = gestureHost()
+    const root = new EventTarget()
+    Object.defineProperty(root, "getBoundingClientRect", {
+      value: () => ({ bottom: 600, left: 0, right: 800, top: 0 })
+    })
+    const intents: Array<unknown> = []
+    const disconnect = connectCanvasInput({
+      target: canvasInputWindow(target), root: canvasInputRoot(root),
+      ignore: () => true, onIntent: (intent) => intents.push(intent)
+    })
+    for (const [type, scale] of [["gesturestart", 1], ["gesturechange", 1.1], ["gestureend", 1.1]] as const) {
+      const event = new Event(type, { cancelable: true })
+      Object.defineProperties(event, { clientX: { value: 20 }, clientY: { value: 30 }, scale: { value: scale } })
+      target.dispatchEvent(event)
+      expect(event.defaultPrevented).toBe(true)
+    }
+    disconnect()
+    expect(intents).toMatchObject([{ type: "pinch", scaleFactor: 1.1 }])
   })
 
   it("routes trackpad pan and zoom across Frame content", () => {
@@ -328,6 +409,13 @@ describe("Frame input relay", () => {
     }])
   })
 
+  it("anchors relayed input to the scaled Frame viewport", () => {
+    expect(offsetFrameInputIntent({ type: "wheel", ...wheel }, { left: 100, top: 200, scale: 0.5 }))
+      .toMatchObject({ clientX: 110, clientY: 215, deltaY: 8 })
+    expect(offsetFrameInputIntent({ type: "pinch", clientX: 20, clientY: 30, deltaX: 4, deltaY: 8, scaleFactor: 1.1 }, { left: 100, top: 200, scale: 0.5 }))
+      .toMatchObject({ clientX: 110, clientY: 215, deltaX: 2, deltaY: 4, scaleFactor: 1.1 })
+  })
+
   it("serializes a closed factory that matches the host relay", () => {
     const script = critFrameInputBridgeScript({ parentOrigin })
     expect(() => new Function(script)).not.toThrow()
@@ -430,4 +518,27 @@ describe("Frame input relay", () => {
 
     expect(intents).toEqual([])
   })
+})
+
+
+it("relays Escape through the iframe protocol without changing camera coordinates", () => {
+  const relay = createFrameInputRelay()
+  const intent = relay.hotkey({ code: "Escape", ctrlKey: false, input: true, key: "Escape", metaKey: false })
+  expect(intent).toEqual({ type: "clear-selection" })
+  const received: unknown[] = []
+  const target = new EventTarget()
+  const child = {} as Window
+  const disconnect = connectBridgedFrameInput({
+    target: canvasInputWindow(target),
+    frameElement: bridgedInputFrame(child),
+    frameOrigin,
+    onIntent: (value) => received.push(value)
+  })
+  target.dispatchEvent(new MessageEvent("message", {
+    source: child,
+    origin: frameOrigin,
+    data: { source: FRAME_INPUT_BRIDGE_SOURCE, schemaVersion: FRAME_INPUT_BRIDGE_SCHEMA_VERSION, intent }
+  }))
+  expect(received).toEqual([{ type: "clear-selection" }])
+  disconnect()
 })

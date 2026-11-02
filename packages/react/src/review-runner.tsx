@@ -22,13 +22,16 @@ import {
   ReviewActionInput,
   ReviewSelection,
   resolveReviewAction,
+  resolveReviewActionPolicy,
   reviewActionPolicies,
+  reviewActionPolicy,
   type ReviewAction,
   type ReviewActionId,
   type ReviewActionInput as ReviewActionInputValue,
   type ReviewClientEffect,
   type ReviewSelection as ReviewSelectionValue
 } from "./review-actions.js"
+import { ReviewHelpPanel, ReviewHelpSurface } from "./review-help.js"
 
 const emptyReviewSelection = ReviewSelection.items({
   items: CanvasSelection.make([])
@@ -58,18 +61,14 @@ const reviewRunnableIds = (
   snapshotter: FrameSnapshotter | undefined,
   snapshotCapturing: boolean
 ): ReadonlySet<string> => {
-  const context = {
-    projection,
-    selection,
-    input: ReviewActionInput.none(),
-    fullscreen
-  }
   return new Set<string>(reviewActionPolicies.flatMap((entry) => {
     if (!entry.available(selection, projection)) return []
     if (entry.id === "snapshot" && (snapshotter === undefined || snapshotCapturing)) {
       return []
     }
-    return resolveReviewAction(entry.id, context) === null ? [] : [entry.id]
+    if (entry.id === "enter-fullscreen" && fullscreen) return []
+    if (entry.id === "exit-fullscreen" && !fullscreen) return []
+    return [entry.id]
   }))
 }
 
@@ -109,8 +108,39 @@ export const useReviewRunner = ({
   }, [fullscreen, projection, snapshotCapturing, snapshotter])
 
   const beginSnapshot = snapshot.begin
-  const run = useCallback((
+  const actionFor = useCallback((
     id: ReviewActionId,
+    targetSelection: ReviewSelectionValue
+  ) => {
+    const declaration = reviewActionPolicy(id)
+    const runnable = reviewRunnableIds(
+      targetSelection,
+      projection,
+      fullscreen,
+      snapshotter,
+      snapshotCapturing
+    ).has(id)
+    return resolveReviewActionPolicy(declaration, {
+      projection,
+      selection: targetSelection,
+      available: runnable,
+      unavailableReason: id === "snapshot" && snapshotter === undefined
+        ? "snapshot-unavailable"
+        : id === "snapshot" && snapshotCapturing
+          ? "action-pending"
+          : declaration.unavailableReason,
+      unavailableMessage: id === "snapshot" && snapshotter === undefined
+        ? "Snapshot capture is not available for this Frame."
+        : id === "snapshot" && snapshotCapturing
+          ? "Wait for the current snapshot to finish."
+          : declaration.unavailableMessage
+    })
+  }, [fullscreen, projection, snapshotCapturing, snapshotter])
+  const action = useCallback((id: ReviewActionId) =>
+    actionFor(id, getSelectionRef.current()), [actionFor])
+  const runFor = useCallback((
+    id: ReviewActionId,
+    targetSelection: ReviewSelectionValue,
     input: ReviewActionInputValue = ReviewActionInput.none()
   ): boolean => {
     if (
@@ -119,7 +149,7 @@ export const useReviewRunner = ({
     ) return false
     const action = resolveReviewAction(id, {
       projection,
-      selection: getSelectionRef.current(),
+      selection: targetSelection,
       input,
       fullscreen
     })
@@ -135,6 +165,10 @@ export const useReviewRunner = ({
     snapshotCapturing,
     snapshotter
   ])
+  const run = useCallback((
+    id: ReviewActionId,
+    input: ReviewActionInputValue = ReviewActionInput.none()
+  ) => runFor(id, getSelectionRef.current(), input), [runFor])
 
   const [addFramePlacement, setAddFramePlacement] = useState<{
     readonly x: number
@@ -151,18 +185,26 @@ export const useReviewRunner = ({
 
   return useMemo(() => ({
     addFramePlacement,
+    action,
+    actionFor,
     closeAddFrame,
     requestAddFrame,
     run,
+    runFor,
     runnableIds,
+    snapshotAvailable: snapshotter !== undefined,
     snapshotCapturing,
     snapshotFailed
   }), [
     addFramePlacement,
+    action,
+    actionFor,
     closeAddFrame,
     requestAddFrame,
     run,
+    runFor,
     runnableIds,
+    snapshotter,
     snapshotCapturing,
     snapshotFailed
   ])
@@ -181,21 +223,24 @@ export function ReviewRunnerProvider({
   const runner = useReviewRunner(props)
   return (
     <ReviewRunnerContext.Provider value={runner}>
-      {children}
-      <NewFrameDialog
-        onCancel={runner.closeAddFrame}
-        onCreate={(url, title) => {
-          const placement = runner.addFramePlacement
-          if (placement === null) return false
-          return runner.run("add-frame", ReviewActionInput.addFrame({
-            title,
-            url,
-            x: placement.x,
-            y: placement.y
-          }))
-        }}
-        open={runner.addFramePlacement !== null}
-      />
+      <ReviewHelpSurface className="crit-review-help-surface">
+        {children}
+        <NewFrameDialog
+          onCancel={runner.closeAddFrame}
+          onCreate={(url, title) => {
+            const placement = runner.addFramePlacement
+            if (placement === null) return false
+            return runner.run("add-frame", ReviewActionInput.addFrame({
+              title,
+              url,
+              x: placement.x,
+              y: placement.y
+            }))
+          }}
+          open={runner.addFramePlacement !== null}
+        />
+        <ReviewHelpPanel />
+      </ReviewHelpSurface>
     </ReviewRunnerContext.Provider>
   )
 }

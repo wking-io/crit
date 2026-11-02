@@ -20,6 +20,7 @@ import {
   CanvasCamera,
   CanvasSelection,
   ReplicaBoard,
+  fitCameraToBox,
   fitCameraToFrames,
   type FrameRepresentationResolver
 } from "../src/index.js"
@@ -94,7 +95,10 @@ const render = (element: ReactElement) => root.render(
     <StrictMode>{element}</StrictMode>
   </CritRegistry>
 )
-const waitFor = (assertion: () => void) => act(async() => vi.waitFor(assertion))
+const waitFor = (assertion: () => void) => vi.waitFor(async() => {
+  await act(async() => { await new Promise((resolve) => setTimeout(resolve, 0)) })
+  assertion()
+})
 
 const worldLayer = (board: Element) =>
   [...board.children].find((node) =>
@@ -164,6 +168,17 @@ describe("CanvasCamera", () => {
     expect(fitCameraToFrames([], { width: 800, height: 600 })).toEqual(
       CanvasCamera.make({ x: 0, y: 0, zoom: 1 })
     )
+  })
+
+  it("contains a marquee in the viewport and clamps a point at maximum zoom", () => {
+    expect(fitCameraToBox(
+      { x: 100, y: 100, width: 200, height: 100 },
+      { width: 800, height: 600 }
+    )).toEqual(CanvasCamera.make({ x: -400, y: -300, zoom: 4 }))
+    expect(fitCameraToBox(
+      { x: 25, y: 50, width: 0, height: 0 },
+      { width: 800, height: 600 }
+    )).toEqual(CanvasCamera.make({ x: 200, y: -100, zoom: 8 }))
   })
 })
 
@@ -479,4 +494,35 @@ describe("ReplicaBoard camera", () => {
     expect(world.style.transform).toBe("translate(6px, 12px) scale(1)")
     expect(onCameraChange).not.toHaveBeenCalled()
   })
+})
+
+
+it("moves immediately but publishes only the latest camera after a zoom burst", async() => {
+  const onCameraChange = vi.fn()
+  await act(async() => render(
+    <CanvasBoard {...requiredBoard} camera={resting} onCameraChange={onCameraChange}
+      projection={projection} resolver={resolver} />
+  ))
+  await waitFor(() => expect(container.querySelector("iframe")).not.toBeNull())
+  const board = container.querySelector("[aria-label='Review']") as HTMLElement
+  stubBoardRect(board)
+  const world = worldLayer(board) as HTMLElement
+  vi.useFakeTimers()
+  try {
+    await act(async() => {
+      for (let index = 0; index < 8; index++) {
+        window.dispatchEvent(new WheelEvent("wheel", {
+          cancelable: true, ctrlKey: true, deltaY: 10, clientX: 20, clientY: 30
+        }))
+        vi.advanceTimersByTime(20)
+      }
+    })
+    expect(world.style.transform).not.toBe("translate(10px, 20px) scale(1)")
+    expect(onCameraChange).not.toHaveBeenCalled()
+    await act(async() => vi.advanceTimersByTime(120))
+    expect(onCameraChange).toHaveBeenCalledTimes(1)
+    expect(onCameraChange.mock.calls[0]?.[0].zoom).toBeCloseTo(0.9 ** 8)
+  } finally {
+    vi.useRealTimers()
+  }
 })

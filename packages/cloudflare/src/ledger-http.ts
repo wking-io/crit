@@ -9,10 +9,12 @@ import {
 } from "@crit/authority"
 import { type CanvasId } from "@crit/domain"
 import {
+  ChangePageSchema,
   ChangeProtocol,
   decodeSubmitCanvasChangeWire,
   parseChangesAfterSearch,
-  RemoteAuthorityRoute
+  RemoteAuthorityRoute,
+  SubmitChangeReceiptSchema
 } from "@crit/protocol"
 import { Match, Result, Schema } from "effect"
 
@@ -30,11 +32,11 @@ const jsonResponse = (status: number, body: string) => new Response(body, {
   headers: { "content-type": "application/json" }
 })
 
-const encodedJson = <A>(
+const encodedJson = <S extends Schema.ConstraintEncoder<unknown>>(
   status: number,
-  schema: Schema.Schema<A>,
-  value: A
-) => jsonResponse(status, JSON.stringify(Schema.encodeSync(schema)(value)))
+  schema: S,
+  value: S["Type"]
+) => jsonResponse(status, JSON.stringify(Schema.encodeUnknownSync(schema)(value)))
 
 const encodeSubmitFailure = (error: SubmitCanvasChangeFailure) =>
   Match.value(error).pipe(Match.tagsExhaustive({
@@ -81,7 +83,9 @@ const pullChanges = async (
   const page = await stub.changesAfter(oneCanvasQuery)
   return Match.value(page).pipe(
     Match.tag("success", ({ value }) =>
-      jsonResponse(200, JSON.stringify(ChangeProtocol.page.encode(value)))),
+      jsonResponse(200, JSON.stringify(ChangeProtocol.page.encode(
+        Schema.decodeUnknownSync(ChangePageSchema)(value)
+      )))),
     Match.tag("failure", ({ error }) => Match.value(error).pipe(
       Match.tag("canvasNotFound", (notFound) => encodedJson(404, CanvasNotFound, notFound)),
       Match.orElse((notFound) => encodedJson(404, CursorNotFound, notFound))
@@ -123,7 +127,9 @@ const pushChange = async (
   const submitted = await stub.submit(proposal, decoded.success.invocation)
   return Match.value(submitted).pipe(
     Match.tag("success", ({ value }) => respondWithCallerCookie(
-      jsonResponse(200, JSON.stringify(ChangeProtocol.receipt.encode(value))),
+      jsonResponse(200, JSON.stringify(ChangeProtocol.receipt.encode(
+        Schema.decodeUnknownSync(SubmitChangeReceiptSchema)(value)
+      ))),
       request,
       resolved
     )),

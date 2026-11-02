@@ -49,6 +49,48 @@ describe("applyReviewEffect", () => {
     )
   })
 
+  it("opens the resolved application URL synchronously", () => {
+    const open = vi.spyOn(window, "open").mockImplementation(() => null)
+    const frameElement = document.createElement("div")
+    const iframe = document.createElement("iframe")
+    iframe.src = "http://localhost:3000/agent-design-preview?sidebar=unified"
+    frameElement.append(iframe)
+    applyReviewEffect({ _tag: "openFrame" }, { frameElement })
+    expect(open).toHaveBeenCalledExactlyOnceWith(
+      iframe.src, "_blank", "noopener,noreferrer"
+    )
+    applyReviewEffect({ _tag: "openFrame" }, { frameElement: null })
+    applyReviewEffect({ _tag: "openFrame" }, { frameElement: document.createElement("div") })
+    expect(open).toHaveBeenCalledTimes(1)
+  })
+
+  it("reloads the current same-origin iframe page", () => {
+    const frameElement = document.createElement("div")
+    const iframe = document.createElement("iframe")
+    frameElement.append(iframe)
+    const reload = vi.fn()
+    Object.defineProperty(iframe, "contentWindow", {
+      value: { location: { href: "https://example.com/current", reload } }
+    })
+    applyReviewEffect({ _tag: "reloadFrame" }, { frameElement })
+    expect(reload).toHaveBeenCalledOnce()
+  })
+
+  it("reloads cross-origin frames through their source without replacing the element", () => {
+    const frameElement = document.createElement("div")
+    const iframe = document.createElement("iframe")
+    iframe.src = "https://example.com/page"
+    frameElement.append(iframe)
+    Object.defineProperty(iframe, "contentWindow", {
+      get() { throw new DOMException("Cross origin", "SecurityError") }
+    })
+    const setSrc = vi.spyOn(iframe, "src", "set")
+    applyReviewEffect({ _tag: "reloadFrame" }, { frameElement })
+    expect(setSrc).toHaveBeenCalledWith("https://example.com/page")
+    expect(frameElement.querySelector("iframe")).toBe(iframe)
+    expect(() => applyReviewEffect({ _tag: "reloadFrame" }, { frameElement: null })).not.toThrow()
+  })
+
   it("copies node ids", () => {
     const writeText = vi.fn().mockResolvedValue(undefined)
     Object.defineProperty(Navigator.prototype, "clipboard", {
@@ -65,29 +107,21 @@ describe("applyReviewEffect", () => {
   })
 
   it("enters and exits fullscreen", () => {
-    const requestFullscreen = vi.fn().mockResolvedValue(undefined)
-    const exitFullscreen = vi.fn().mockResolvedValue(undefined)
+    const setFullscreenFrameId = vi.fn()
     const frameElement = document.createElement("div")
-    Object.defineProperty(frameElement, "requestFullscreen", {
-      configurable: true,
-      value: requestFullscreen
-    })
-    Object.defineProperty(Document.prototype, "exitFullscreen", {
-      configurable: true,
-      value: exitFullscreen
-    })
+    frameElement.dataset.frameId = "frame_a"
 
     applyReviewEffect(
       { _tag: "fullscreen", target: "frame" },
-      { frameElement }
+      { frameElement, setFullscreenFrameId }
     )
     applyReviewEffect(
       { _tag: "fullscreen", target: "exit" },
-      { frameElement }
+      { frameElement, setFullscreenFrameId }
     )
 
-    expect(requestFullscreen).toHaveBeenCalledOnce()
-    expect(exitFullscreen).toHaveBeenCalledOnce()
+    expect(setFullscreenFrameId).toHaveBeenNthCalledWith(1, "frame_a")
+    expect(setFullscreenFrameId).toHaveBeenNthCalledWith(2, null)
   })
 
   it("fits the camera when a zoom handler is provided", () => {

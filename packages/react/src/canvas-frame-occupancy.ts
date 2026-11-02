@@ -1,4 +1,5 @@
 import {
+  useEffect,
   useLayoutEffect,
   useRef,
   useState,
@@ -6,6 +7,7 @@ import {
 } from "react"
 
 import type { CanvasCamera } from "./canvas-camera.js"
+import { frameMountQueueFor } from "./frame-mount-queue.js"
 
 export const FRAME_IFRAME_MOUNT_MARGIN = 500
 
@@ -55,18 +57,51 @@ export const frameIframeOccupancy = (
 export const useFrameOccupancy = (
   elementRef: RefObject<Element | null>
 ): FrameIframeOccupancy => {
-  const [intersecting, setIntersecting] = useState(true)
-  const mountedRef = useRef(false)
-  if (intersecting) mountedRef.current = true
+  const [intersecting, setIntersecting] = useState(false)
+  const [mounted, setMounted] = useState(false)
+
+  const priorityRef = useRef(Infinity)
+
+  useEffect(() => {
+    const element = elementRef.current
+    if (element === null) return
+    const root = element.closest(".crit-canvas") ?? element
+    return frameMountQueueFor(root).enqueue((ready) => {
+      const loaded = (event: Event) => {
+        if (event.target instanceof HTMLIFrameElement) ready()
+      }
+      element.addEventListener("load", loaded, true)
+      setMounted(true)
+      return () => element.removeEventListener("load", loaded, true)
+    }, () => priorityRef.current)
+  }, [elementRef])
 
   useLayoutEffect(() => {
     const element = elementRef.current
     if (element === null) return
     const root = element.closest(".crit-canvas")
+    const elementRect = element.getBoundingClientRect()
+    const rootRect = root instanceof Element
+      ? root.getBoundingClientRect()
+      : { left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight }
+    const update = (rect: Pick<DOMRectReadOnly, "left" | "right" | "top" | "bottom">, visible: boolean) => {
+      priorityRef.current = visible ? 0 : 1 + Math.hypot(
+        (rect.left + rect.right - rootRect.left - rootRect.right) / 2,
+        (rect.top + rect.bottom - rootRect.top - rootRect.bottom) / 2
+      )
+      setIntersecting(visible)
+      frameMountQueueFor(root ?? element).wake()
+    }
+    update(elementRect,
+      elementRect.right >= rootRect.left - FRAME_IFRAME_MOUNT_MARGIN &&
+      elementRect.bottom >= rootRect.top - FRAME_IFRAME_MOUNT_MARGIN &&
+      elementRect.left <= rootRect.right + FRAME_IFRAME_MOUNT_MARGIN &&
+      elementRect.top <= rootRect.bottom + FRAME_IFRAME_MOUNT_MARGIN
+    )
     const observer = new IntersectionObserver((entries) => {
       const entry = entries[0]
       if (entry === undefined) return
-      setIntersecting(entry.isIntersecting)
+      update(entry.boundingClientRect ?? element.getBoundingClientRect(), entry.isIntersecting)
     }, {
       root: root instanceof Element ? root : null,
       rootMargin: `${FRAME_IFRAME_MOUNT_MARGIN}px`
@@ -75,5 +110,5 @@ export const useFrameOccupancy = (
     return () => observer.disconnect()
   }, [elementRef])
 
-  return frameIframeOccupancy(intersecting, mountedRef.current)
+  return { mounted, painted: mounted && intersecting }
 }

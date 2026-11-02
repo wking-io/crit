@@ -63,6 +63,7 @@ export const FrameInputIntentSchema = Schema.Union([
     additive: Schema.Boolean
   }),
   Schema.Struct({ type: Schema.Literal("delete") }),
+  Schema.Struct({ type: Schema.Literal("clear-selection") }),
   Schema.Struct({
     type: Schema.Literal("tool"),
     tool: Schema.Literals(["select", "pan"])

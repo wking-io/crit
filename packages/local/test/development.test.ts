@@ -218,7 +218,7 @@ describe("LocalDevelopment", () => {
     expect(Predicate.isTagged(failures[0]?.failure, "LocalDaemonOwnershipFailure")).toBe(true)
   }))))
 
-  it("rejects a foreign process occupying the configured port", () =>
+  it("starts on a free port when another process occupies the previous port", () =>
     Effect.runPromise(Effect.scoped(Effect.gen(function*() {
       const directory = yield* temporaryRoot
       const dataRoot = join(directory, ".crit", "v1")
@@ -235,11 +235,13 @@ describe("LocalDevelopment", () => {
         (candidate) => Effect.callback<void>((resume) => candidate.close(() => resume(Effect.void)))
       )
       expect(server.listening).toBe(true)
-      const result = yield* Effect.result(build(dataRoot, yield* Effect.scope))
-      expect(Result.isFailure(result)).toBe(true)
-      if (Result.isFailure(result)) {
-        expect(Predicate.isTagged(result.failure, "LocalDaemonOwnershipFailure")).toBe(true)
-      }
+      const installationPath = join(dataRoot, "installation.json")
+      const installation = JSON.parse(readFileSync(installationPath, "utf8"))
+      writeFileSync(installationPath, JSON.stringify({ ...installation, port }))
+      const development = Context.get(yield* build(dataRoot, yield* Effect.scope), LocalDevelopment)
+      expect(Number(new URL(development.descriptor.baseUrl).port)).not.toBe(port)
+      expect((yield* inspectLocalDaemon({ dataRoot }).pipe(Effect.provide(NodeServices.layer))).kind).toBe("Running")
+      expect(server.listening).toBe(true)
     }))))
 
   it("does not remove a descriptor published by another instance", () =>
@@ -254,7 +256,7 @@ describe("LocalDevelopment", () => {
       expect(readFileSync(join(dataRoot, "daemon.json"), "utf8")).toBe(replacement)
     }))))
 
-  it("replaces a stale descriptor only after acquiring the port", () =>
+  it("replaces a stale descriptor only after acquiring ownership", () =>
     Effect.runPromise(Effect.scoped(Effect.gen(function*() {
       const directory = yield* temporaryRoot
       const dataRoot = join(directory, ".crit", "v1")
@@ -282,14 +284,14 @@ describe("LocalDevelopment", () => {
     expect(Exit.isFailure(result)).toBe(true)
   }))))
 
-  it("rejects browser origins outside standalone 127.0.0.1 HTTP", () =>
+  it("rejects browser origins outside loopback hosts", () =>
     Effect.runPromise(Effect.scoped(Effect.gen(function*() {
       const directory = yield* temporaryRoot
       const result = yield* Effect.result(Layer.buildWithScope(
         LocalDevelopment.layer({
           dataRoot: join(directory, ".crit", "v1"),
           attachment: DevHostRequest.Standalone({
-            browserOrigin: "http://localhost:5173"
+            browserOrigin: "https://example.com"
           })
         }).pipe(Layer.provide(NodeServices.layer)),
         yield* Effect.scope

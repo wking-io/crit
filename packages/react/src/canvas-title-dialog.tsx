@@ -5,7 +5,11 @@ import { Schema } from "effect"
 import { type FormEvent, type ReactElement } from "react"
 
 import { useCritOverlayContainer } from "./overlay-container.js"
-import { reviewActionPolicy } from "./review-actions.js"
+import {
+  reviewActionAriaKeyShortcuts,
+  reviewNativeActionPolicy
+} from "./review-actions.js"
+import { reviewActionHelpTarget } from "./review-help.js"
 
 export function CanvasTitleDialog({
   onOpenChange,
@@ -19,7 +23,8 @@ export function CanvasTitleDialog({
   readonly title: string
 }): ReactElement {
   const overlayContainer = useCritOverlayContainer()
-  const cancel = reviewActionPolicy("rename-canvas")
+  const cancel = reviewNativeActionPolicy("cancel-canvas-title")
+  const save = reviewNativeActionPolicy("save-canvas-title")
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -41,7 +46,7 @@ export function CanvasTitleDialog({
         <Dialog.Backdrop className="crit-dialog-backdrop" />
         <Dialog.Popup className="crit-new-frame-dialog crit-new-frame-dialog--popup">
           <form
-            aria-label={cancel.label}
+            aria-label="Rename canvas"
             className="crit-new-frame-dialog__form"
             onSubmit={submit}
           >
@@ -62,9 +67,20 @@ export function CanvasTitleDialog({
               />
             </label>
             <div className="crit-new-frame-dialog__actions">
-              <Dialog.Close type="button">Cancel</Dialog.Close>
-              <Button data-primary="" type="submit">
-                Save title
+              <Dialog.Close
+                aria-keyshortcuts={reviewActionAriaKeyShortcuts(cancel)}
+                {...reviewActionHelpTarget(cancel)}
+                type="button"
+              >
+                {cancel.label}
+              </Dialog.Close>
+              <Button
+                aria-keyshortcuts={reviewActionAriaKeyShortcuts(save)}
+                data-primary=""
+                {...reviewActionHelpTarget(save)}
+                type="submit"
+              >
+                {save.label}
               </Button>
             </div>
           </form>

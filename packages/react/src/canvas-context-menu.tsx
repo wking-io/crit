@@ -19,17 +19,25 @@ import {
   reviewActionHelpTarget,
   reviewInformationalHelpTarget
 } from "./review-help.js"
-import type { ReviewActionPolicy } from "./review-actions.js"
+import {
+  displayReviewShortcuts,
+  reviewActionAriaKeyShortcuts,
+  type ResolvedReviewAction,
+  type ReviewActionPolicy
+} from "./review-actions.js"
+
+type ReviewMenuAction = ReviewActionPolicy | ResolvedReviewAction
 
 export type ReviewMenuItem = Data.TaggedEnum<{
   readonly action: {
-    readonly policy: ReviewActionPolicy
+    readonly policy: ReviewMenuAction
     readonly disabled?: boolean
     readonly detail?: string | undefined
+    readonly label?: string | undefined
     readonly onSelect: () => void
   }
   readonly link: {
-    readonly policy: ReviewActionPolicy
+    readonly policy: ReviewMenuAction
     readonly href: string
   }
   readonly submenu: {
@@ -101,17 +109,20 @@ export function CritContextMenuDismissalScope({
 
 function ActionItemContent({
   detail,
-  label
+  label,
+  shortcuts
 }: {
   readonly detail?: string | undefined
   readonly label: string
+  readonly shortcuts: readonly string[]
 }) {
+  const trailing = [detail, ...shortcuts].filter((value) => value !== undefined).join(" · ")
   return (
     <>
       <span>{label}</span>
-      {detail === undefined
+      {trailing.length === 0
         ? null
-        : <span className="crit-context-menu__detail">{detail}</span>}
+        : <span className="crit-context-menu__detail">{trailing}</span>}
     </>
   )
 }
@@ -127,7 +138,7 @@ function ReviewMenuEntry({
   return Match.value(item).pipe(Match.tagsExhaustive({
     action: (entry) => {
       const sharedProps = {
-        "aria-keyshortcuts": entry.policy.shortcuts[0],
+        "aria-keyshortcuts": reviewActionAriaKeyShortcuts(entry.policy),
         "aria-label": entry.policy.label,
         className: "crit-context-menu__item",
         "data-tone": entry.policy.id === "remove" ? "danger" : undefined,
@@ -143,7 +154,8 @@ function ReviewMenuEntry({
           <ContextMenu.Item {...sharedProps}>
             <ActionItemContent
               detail={entry.detail}
-              label={entry.policy.label}
+              label={entry.label ?? entry.policy.label}
+              shortcuts={displayReviewShortcuts(entry.policy.shortcuts)}
             />
           </ContextMenu.Item>
         )
@@ -151,7 +163,8 @@ function ReviewMenuEntry({
           <Menu.Item {...sharedProps}>
             <ActionItemContent
               detail={entry.detail}
-              label={entry.policy.label}
+              label={entry.label ?? entry.policy.label}
+              shortcuts={displayReviewShortcuts(entry.policy.shortcuts)}
             />
           </Menu.Item>
         )
@@ -159,11 +172,14 @@ function ReviewMenuEntry({
     link: (entry) => {
       const link = (
         <a href={entry.href} rel="noreferrer" target="_blank">
-          <ActionItemContent label={entry.policy.label} />
+          <ActionItemContent
+            label={entry.policy.label}
+            shortcuts={displayReviewShortcuts(entry.policy.shortcuts)}
+          />
         </a>
       )
       const sharedProps = {
-        "aria-keyshortcuts": entry.policy.shortcuts[0],
+        "aria-keyshortcuts": reviewActionAriaKeyShortcuts(entry.policy),
         "aria-label": entry.policy.label,
         className: "crit-context-menu__item",
         closeOnClick: true,

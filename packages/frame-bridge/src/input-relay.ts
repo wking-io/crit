@@ -8,15 +8,31 @@ export { createFrameInputRelay, type FrameWheelDecision } from "./relay-factory.
 
 export const offsetFrameInputIntent = (
   intent: FrameInputIntent,
-  offset: { readonly left: number; readonly top: number }
-): FrameInputIntent =>
-  intent.type === "wheel" || intent.type === "pinch"
-    ? {
-        ...intent,
-        clientX: offset.left + intent.clientX,
-        clientY: offset.top + intent.clientY
-      }
-    : intent
+  offset: { readonly left: number; readonly top: number; readonly scale?: number }
+): FrameInputIntent => {
+  if (intent.type !== "wheel" && intent.type !== "pinch") return intent
+  const scale = offset.scale ?? 1
+  const point = {
+    clientX: offset.left + intent.clientX * scale,
+    clientY: offset.top + intent.clientY * scale
+  }
+  if (intent.type === "pinch") return {
+    ...intent,
+    ...point,
+    deltaX: intent.deltaX * scale,
+    deltaY: intent.deltaY * scale
+  }
+  return { ...intent, ...point }
+}
+
+export const frameInputOffset = (frame: HTMLIFrameElement) => {
+  const rect = frame.getBoundingClientRect()
+  return {
+    left: rect.left,
+    top: rect.top,
+    scale: frame.offsetWidth > 0 ? rect.width / frame.offsetWidth : 1
+  }
+}
 
 type NativeGestureEvent = Event & {
   readonly clientX?: number
@@ -78,7 +94,7 @@ export const connectCanvasInput = (input: {
       event.clientY < rect.top ||
       event.clientY > rect.bottom
     ) return
-    if (ignored(event.clientX, event.clientY)) return
+    if (!event.ctrlKey && !event.metaKey && ignored(event.clientX, event.clientY)) return
     const decision = relay.wheel(event)
     if (!decision.handled) return
     event.preventDefault()
@@ -86,6 +102,20 @@ export const connectCanvasInput = (input: {
     if (decision.intent !== undefined) {
       input.onIntent(decision.intent)
     }
+  }
+  const captureHotkey = (event: KeyboardEvent) => {
+    if (event.key === "Escape" || event.defaultPrevented) return
+    const intent = relay.hotkey({
+      code: event.code,
+      ctrlKey: event.ctrlKey,
+      input: inputTarget(event.target),
+      key: event.key,
+      metaKey: event.metaKey
+    })
+    if (intent?.type !== "zoom-step" && intent?.type !== "tool") return
+    event.preventDefault()
+    event.stopImmediatePropagation()
+    input.onIntent(intent)
   }
   const gesturePoint = (event: NativeGestureEvent) => {
     const rect = input.root.getBoundingClientRect()
@@ -95,19 +125,16 @@ export const connectCanvasInput = (input: {
     }
   }
   const captureGestureStart = (event: NativeGestureEvent) => {
-    if (ignored(event.clientX ?? 0, event.clientY ?? 0)) return
     event.preventDefault()
     event.stopPropagation()
     relay.gestureStart(event.scale, gesturePoint(event))
   }
   const captureGestureChange = (event: NativeGestureEvent) => {
-    if (ignored(event.clientX ?? 0, event.clientY ?? 0)) return
     event.preventDefault()
     event.stopPropagation()
     input.onIntent(relay.gestureChange(event.scale, gesturePoint(event)))
   }
   const captureGestureEnd = (event: NativeGestureEvent) => {
-    if (ignored(event.clientX ?? 0, event.clientY ?? 0)) return
     event.preventDefault()
     event.stopPropagation()
     relay.gestureEnd()
@@ -135,6 +162,14 @@ export const connectCanvasInput = (input: {
   const options = { capture: true, passive: false } as const
   const nativeGestures = usesNativeGestureEvents(input.target)
   input.target.addEventListener("wheel", captureWheel, options)
+  const clearSelection = (event: KeyboardEvent) => {
+    if (event.key !== "Escape" || event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) return
+    event.preventDefault()
+    event.stopPropagation()
+    input.onIntent({ type: "clear-selection" })
+  }
+  input.target.addEventListener("keydown", clearSelection)
+  input.target.addEventListener("keydown", captureHotkey, true)
   if (nativeGestures) {
     input.target.addEventListener(
       "gesturestart",
@@ -160,6 +195,8 @@ export const connectCanvasInput = (input: {
   return () => {
     relay.gestureEnd()
     input.target.removeEventListener("wheel", captureWheel, true)
+    input.target.removeEventListener("keydown", clearSelection)
+    input.target.removeEventListener("keydown", captureHotkey, true)
     if (nativeGestures) {
       input.target.removeEventListener(
         "gesturestart",
@@ -193,7 +230,7 @@ export const connectSameOriginFrameInput = (input: {
   const relay = createFrameInputRelay()
   const emit = (intent: FrameInputIntent) =>
     input.onIntent(
-      offsetFrameInputIntent(intent, input.frameElement.getBoundingClientRect())
+      offsetFrameInputIntent(intent, frameInputOffset(input.frameElement))
     )
   const captureWheel = (event: WheelEvent) => {
     if (event.defaultPrevented) return
@@ -241,6 +278,7 @@ export const connectSameOriginFrameInput = (input: {
     relay.touchEnd(touchPoints(event))
   }
   const captureHotkey = (event: KeyboardEvent) => {
+    if (event.key === "Escape" || event.defaultPrevented) return
     const intent = relay.hotkey({
       code: event.code,
       ctrlKey: event.ctrlKey,
@@ -260,6 +298,13 @@ export const connectSameOriginFrameInput = (input: {
   const options = { capture: true, passive: false } as const
   const nativeGestures = usesNativeGestureEvents(input.target)
   input.target.addEventListener("wheel", captureWheel, options)
+  const clearSelection = (event: KeyboardEvent) => {
+    if (event.key !== "Escape" || event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) return
+    event.preventDefault()
+    event.stopPropagation()
+    input.onIntent({ type: "clear-selection" })
+  }
+  input.target.addEventListener("keydown", clearSelection)
   input.target.addEventListener("keydown", captureHotkey, true)
   input.target.addEventListener("pointerdown", selectFrame, true)
   if (nativeGestures) {
@@ -287,6 +332,7 @@ export const connectSameOriginFrameInput = (input: {
   return () => {
     relay.gestureEnd()
     input.target.removeEventListener("wheel", captureWheel, true)
+    input.target.removeEventListener("keydown", clearSelection)
     input.target.removeEventListener("keydown", captureHotkey, true)
     input.target.removeEventListener("pointerdown", selectFrame, true)
     if (nativeGestures) {

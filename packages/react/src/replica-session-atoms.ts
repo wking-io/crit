@@ -3,6 +3,7 @@ import { useAtomSet, useAtomValue } from "@effect/atom-react"
 import { Effect, Match, Result } from "effect"
 import { Atom } from "effect/unstable/reactivity"
 import type { AtomRegistry } from "effect/unstable/reactivity/AtomRegistry"
+import { useMemo } from "react"
 
 import { sessionStoreLayer } from "./browser-session.js"
 import { CanvasCamera } from "./canvas-camera.js"
@@ -26,7 +27,7 @@ import {
   type ReplicaSessionPorts
 } from "./replica-session.js"
 
-const replicaIdleTtl = 0
+const replicaIdleTtl = 400
 
 const writeSession = (
   registry: AtomRegistry,
@@ -165,7 +166,10 @@ export const useReplicaSession = (args: {
   readonly canvasId: CanvasId
   readonly ports: ReplicaSessionPorts
 }): ReplicaSessionHandle => {
-  const atoms = replicaSessionAtoms(args.canvasId)(args.ports)
+  const atoms = useMemo(
+    () => replicaSessionAtoms(args.canvasId)(args.ports),
+    [args.canvasId, args.ports]
+  )
   const session = useAtomValue(atoms.session)
   const chrome = useAtomValue(atoms.chrome)
   const onCameraChange = useAtomSet(atoms.setCamera)

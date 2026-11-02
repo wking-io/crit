@@ -18,6 +18,7 @@ export {
 export {
   applyCanvasCameraIntent,
   CanvasCamera,
+  fitCameraToBox,
   fitCameraToFrames
 } from "./canvas-camera.js"
 export {
@@ -37,6 +38,11 @@ export {
 } from "./canvas-camera-session.js"
 export { CanvasBoard } from "./canvas-board.js"
 export type { CanvasBoardProps } from "./canvas-board.js"
+export {
+  installCanvasPerformanceProbe,
+  recordCanvasReactCommit
+} from "./canvas-performance-probe.js"
+export type { CanvasPerformanceSnapshot } from "./canvas-performance-probe.js"
 export { critStyles } from "./crit-styles.js"
 export {
   FRAME_STATUSES,
@@ -125,18 +131,34 @@ export type { ReviewChromeProps } from "./review-chrome.js"
 export { ReviewFrame, canvasUiScale } from "./review-frame.js"
 export {
   ReviewAction,
+  ReviewActionAvailability,
   ReviewActionInput,
   ReviewClientEffect,
   ReviewSelection,
   availableReviewActions,
+  displayReviewShortcut,
+  displayReviewShortcuts,
   resolveReviewAction,
+  resolveReviewActionPolicy,
+  reviewActionAriaKeyShortcuts,
   reviewActionPolicies,
-  reviewActionPolicy
+  reviewActionPolicy,
+  reviewControlPlatform,
+  reviewNativeActionPolicies,
+  reviewNativeActionPolicy,
+  validateReviewActionPolicies
 } from "./review-actions.js"
 export type {
   ReviewActionContext,
+  ReviewActionControl,
   ReviewActionId,
+  ReviewActionScope,
   ReviewActionPolicy,
+  ReviewControlPlatform,
+  ReviewNativeActionId,
+  ReviewShortcut,
+  ReviewShortcutPolicy,
+  ResolvedReviewAction,
   SnapshotRequest,
   SnapshotSource
 } from "./review-actions.js"

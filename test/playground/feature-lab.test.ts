@@ -376,9 +376,9 @@ describe("Crit feature lab", () => {
     const canvas = manifest.canvases[0]!
 
     expect(packageJson.scripts?.["dev:portless"]).toBe(
-      "PORTLESS_PORT=443 portless"
+      "npm run build:target && node scripts/dev-v1.mjs"
     )
-    expect(packageJson.portless).toEqual({ name: "crit", script: "dev" })
+    expect(packageJson.portless).toEqual({ name: "crit", script: "dev:canvas" })
     expect(canvas.id).toBe("feature-lab")
     expect(canvas.frames.map((frame) => frame.id)).toEqual([
       "synth-workbench",

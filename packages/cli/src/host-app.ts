@@ -6,11 +6,22 @@ import { fileURLToPath } from "node:url"
 import path from "node:path"
 
 import { hostTokenHeader, type IntegratedHostPlane } from "@crit/local"
+import { localApiVersion, localApiVersionHeader } from "@crit/replica/http"
 import { Effect, Redacted, Schema, Scope } from "effect"
 import { createServer, type Plugin, type ViteDevServer } from "vite"
 
 export const HOST_PORT = 5173
 export const HOST_ORIGIN = `http://127.0.0.1:${HOST_PORT}`
+
+export const hostListenPort = (environment: Readonly<Record<string, string | undefined>>) => {
+  const value = environment.PORT
+  if (value === undefined) return HOST_PORT
+  const port = Number(value)
+  if (!/^[0-9]+$/.test(value) || !Number.isInteger(port) || port < 1 || port > 65535) {
+    throw new HostAppFailure({ message: "PORT must be an integer between 1 and 65535" })
+  }
+  return port
+}
 
 export class HostAppFailure extends Schema.TaggedError<HostAppFailure>()(
   "HostAppFailure",
@@ -52,6 +63,7 @@ const daemonHeaders = (request: IncomingMessage, plane: IntegratedHostPlane) => 
   headers.host = daemon.host
   if (headers.origin === undefined) headers.origin = plane.hostOrigin
   headers[hostTokenHeader] = Redacted.value(plane.hostToken)
+  headers[localApiVersionHeader] = localApiVersion
   return { headers, daemon }
 }
 
@@ -82,7 +94,8 @@ const proxyUpgrade = (
   request: IncomingMessage,
   socket: Duplex,
   head: Buffer,
-  plane: IntegratedHostPlane
+  plane: IntegratedHostPlane,
+  connections: Set<Duplex>
 ) => {
   const { headers, daemon } = daemonHeaders(request, plane)
   headers.connection = "upgrade"
@@ -94,7 +107,21 @@ const proxyUpgrade = (
     method: "GET",
     headers
   })
+  connections.add(socket)
+  socket.once("close", () => {
+    connections.delete(socket)
+    upstream.destroy()
+  })
   upstream.on("upgrade", (proxied, proxiedSocket, proxiedHead) => {
+    if (socket.destroyed) {
+      proxiedSocket.destroy()
+      return
+    }
+    connections.add(proxiedSocket)
+    proxiedSocket.once("close", () => {
+      connections.delete(proxiedSocket)
+      socket.destroy()
+    })
     const lines = [`HTTP/1.1 ${proxied.statusCode} ${proxied.statusMessage}`]
     for (const [key, value] of Object.entries(proxied.headers)) {
       if (value === undefined) continue
@@ -116,42 +143,49 @@ const proxyUpgrade = (
   upstream.end()
 }
 
-export const integratedHostPlugin = (plane: IntegratedHostPlane): Plugin => ({
-  name: "crit-integrated-host",
-  transformIndexHtml(html) {
-    const document = JSON.stringify({ kind: "integrated", apiBase: "/__crit/" })
-    return html.replace(
-      "<head>",
-      `<head><script type="application/json" id="crit-host-runtime">${document}</script>`
-    )
-  },
-  configureServer(server) {
-    server.middlewares.use((request, response, next) => {
-      const url = request.url ?? ""
-      if (
-        request.method === "GET" &&
-        (url === "/__crit/connection" || url.startsWith("/__crit/connection?"))
-      ) {
-        response.statusCode = 200
-        response.setHeader("content-type", "application/json")
-        response.setHeader("cache-control", "no-store")
-        response.end(JSON.stringify({ kind: "integrated", apiBase: "/__crit/" }))
-        return
-      }
-      if (url === "/__crit" || url.startsWith("/__crit/")) {
-        proxyHttp(request, response, plane)
-        return
-      }
-      next()
-    })
-    server.httpServer?.on("upgrade", (request, socket, head) => {
-      const url = request.url ?? ""
-      if (url === "/__crit" || url.startsWith("/__crit/")) {
-        proxyUpgrade(request, socket, head, plane)
-      }
-    })
+export const integratedHostPlugin = (plane: IntegratedHostPlane): Plugin => {
+  const connections = new Set<Duplex>()
+  return {
+    name: "crit-integrated-host",
+    closeBundle() {
+      for (const socket of connections) socket.destroy()
+      connections.clear()
+    },
+    transformIndexHtml(html) {
+      const document = JSON.stringify({ kind: "integrated", apiBase: "/__crit/" })
+      return html.replace(
+        "<head>",
+        `<head><script type="application/json" id="crit-host-runtime">${document}</script>`
+      )
+    },
+    configureServer(server) {
+      server.middlewares.use((request, response, next) => {
+        const url = request.url ?? ""
+        if (
+          request.method === "GET" &&
+          (url === "/__crit/connection" || url.startsWith("/__crit/connection?"))
+        ) {
+          response.statusCode = 200
+          response.setHeader("content-type", "application/json")
+          response.setHeader("cache-control", "no-store")
+          response.end(JSON.stringify({ kind: "integrated", apiBase: "/__crit/" }))
+          return
+        }
+        if (url === "/__crit" || url.startsWith("/__crit/")) {
+          proxyHttp(request, response, plane)
+          return
+        }
+        next()
+      })
+      server.httpServer?.on("upgrade", (request, socket, head) => {
+        const url = request.url ?? ""
+        if (url === "/__crit" || url.startsWith("/__crit/")) {
+          proxyUpgrade(request, socket, head, plane, connections)
+        }
+      })
+    }
   }
-})
+}
 
 export const startIntegratedHost = (
   plane: IntegratedHostPlane
@@ -169,8 +203,9 @@ export const startIntegratedHost = (
           plugins: [integratedHostPlugin(plane)],
           server: {
             host: "127.0.0.1",
-            port: HOST_PORT,
-            strictPort: true
+            port: hostListenPort(process.env),
+            strictPort: true,
+            allowedHosts: [new URL(plane.hostOrigin).hostname]
           }
         })
         await server.listen()

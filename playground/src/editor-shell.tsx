@@ -1,4 +1,5 @@
 import {
+  Profiler,
   lazy,
   Suspense,
   useEffect,
@@ -8,6 +9,10 @@ import {
 } from "react"
 import { createElement } from "react"
 import { createRoot } from "react-dom/client"
+import {
+  installCanvasPerformanceProbe,
+  recordCanvasReactCommit
+} from "../../packages/react/src/canvas-performance-probe.js"
 
 import {
   connectCanvasLiveRefresh,
@@ -149,6 +154,11 @@ function PlaygroundEditor() {
   )
 }
 
+installCanvasPerformanceProbe()
 createRoot(document.getElementById("crit-root")!).render(
-  createElement(PlaygroundEditor)
+  <Profiler id="crit-alpha" onRender={(_id, _phase, duration) => {
+    recordCanvasReactCommit(duration)
+  }}>
+    {createElement(PlaygroundEditor)}
+  </Profiler>
 )

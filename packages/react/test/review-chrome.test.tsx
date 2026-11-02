@@ -275,52 +275,8 @@ describe("ReviewChrome", () => {
 
     expect(container.querySelector("[aria-label='Canvas toolbar']"))
       .toBeInstanceOf(HTMLElement)
-    expect(container.querySelector("[aria-label='Align and distribute']"))
-      .toBeInstanceOf(HTMLButtonElement)
-    expect(container.querySelector("[aria-label='Add frame']"))
-      .toBeInstanceOf(HTMLButtonElement)
-  })
-
-  it("opens the add-frame dialog from the toolbar", async() => {
-    const onSubmit = vi.fn()
-    await act(async() => render(
-      <ReviewChrome
-        onSubmit={onSubmit}
-        projection={projection}
-        selection={selection([])}
-      />
-    ))
-
-    expect(container.querySelector("[aria-label='Add frame']"))
-      .toBeInstanceOf(HTMLButtonElement)
-    expect(container.querySelector("[aria-label='Pause offscreen frames']"))
-      .toBeNull()
-    expect(container.querySelector("[aria-label='Set status to approved']"))
-      .toBeNull()
-    expect(container.querySelector("[aria-label='Enter fullscreen']")).toBeNull()
-
-    await act(async() => button("Add frame").click())
-    const url = await vi.waitFor(() => {
-      const match = queryUi("[aria-label='Frame URL']")
-      if (!(match instanceof HTMLInputElement)) {
-        throw new Error("Frame URL input missing")
-      }
-      return match
-    })
-    const form = queryUi("form[aria-label='Add frame']")
-    if (!(form instanceof HTMLFormElement)) {
-      throw new Error("Add frame form missing")
-    }
-    await act(async() => setInputValue(url, "https://example.com/new"))
-    await act(async() => form.requestSubmit())
-    expect(onSubmit).toHaveBeenCalledWith([{
-      _tag: "addFrame",
-      frameId: expect.stringMatching(/^frame_[0-9a-f]{32}$/),
-      title: "new",
-      representation: { _tag: "webUrl", url: "https://example.com/new" },
-      status: "in-progress",
-      geometry: { x: 0, y: 0, width: 1280, height: 832 }
-    }])
+    expect(container.querySelector("[aria-label='Align and distribute']")).toBeNull()
+    expect(container.querySelector("[aria-label='Add frame']")).toBeNull()
   })
 
   it("hides control help until a help target is hovered", async() => {
@@ -336,7 +292,7 @@ describe("ReviewChrome", () => {
     expect(container.textContent).not.toContain(removePolicy.label)
   })
 
-  it("shows the Remove policy description on pointer over", async() => {
+  it("shows canvas options help on pointer over", async() => {
     await act(async() => render(
       <ReviewChrome
         onSubmit={vi.fn()}
@@ -346,16 +302,16 @@ describe("ReviewChrome", () => {
     ))
 
     await act(async() => {
-      button("Align and distribute").dispatchEvent(
+      button("Canvas options").dispatchEvent(
         new Event("pointerover", { bubbles: true })
       )
     })
 
     const panel = helpPanel()
     expect(panel.querySelector(".crit-help__title")?.textContent).toBe(
-      "Align and distribute"
+      "Canvas options"
     )
-    expect(panel.textContent).toContain("Align, distribute, or arrange")
+    expect(panel.textContent).toContain("Rename this canvas.")
     expect(panel.querySelector(".crit-help__shortcut")).toBeNull()
   })
 
@@ -368,10 +324,10 @@ describe("ReviewChrome", () => {
       />
     ))
 
-    await act(async() => button("Align and distribute").focus())
+    await act(async() => button("Canvas options").focus())
 
     expect(helpPanel().querySelector(".crit-help__title")?.textContent).toBe(
-      "Align and distribute"
+      "Canvas options"
     )
   })
 
@@ -422,6 +378,46 @@ describe("ReviewChrome", () => {
     })
 
     expect(onSubmit).not.toHaveBeenCalled()
+  })
+
+  it("opens an application-route Frame from O but ignores typing", async() => {
+    const onEffect = vi.fn()
+    const applicationProjection = decodeCanvasProjection({
+      ...projection,
+      frames: projection.frames.map((frame) => ({
+        ...frame,
+        representation: {
+          _tag: "applicationRoute",
+          applicationId: "application_bridge",
+          route: "/agent-design-preview?sidebar=unified"
+        }
+      }))
+    })
+    await act(async() => render(
+      <ReviewChrome onSubmit={vi.fn()} onEffect={onEffect}
+        projection={applicationProjection} selection={selectedFrame} />
+    ))
+    await act(async() => press("o"))
+    expect(onEffect).toHaveBeenCalledExactlyOnceWith({ _tag: "openFrame" })
+    await openRenameDialog()
+    const input = queryUi("[aria-label='Canvas title']")
+    if (!(input instanceof HTMLInputElement)) throw new Error("Missing title input")
+    await act(async() => { input.focus(); press("o") })
+    expect(onEffect).toHaveBeenCalledTimes(1)
+  })
+
+  it("reloads from R only outside text inputs", async() => {
+    const onEffect = vi.fn()
+    await act(async() => render(
+      <ReviewChrome onEffect={onEffect} onSubmit={vi.fn()} projection={projection} selection={selectedFrame} />
+    ))
+    await act(async() => press("R"))
+    expect(onEffect).toHaveBeenCalledExactlyOnceWith({ _tag: "reloadFrame" })
+    await openRenameDialog()
+    const input = queryUi("[aria-label='Canvas title']")
+    if (!(input instanceof HTMLInputElement)) throw new Error("Title input missing")
+    await act(async() => { input.focus(); press("R") })
+    expect(onEffect).toHaveBeenCalledOnce()
   })
 
   it("enters fullscreen from F when a single Frame is selected", async() => {
@@ -476,6 +472,12 @@ describe("ReviewChrome", () => {
     if (!(input instanceof HTMLInputElement) || !(form instanceof HTMLFormElement)) {
       throw new Error("Rename canvas form missing")
     }
+    expect(form.querySelector("button[type='submit']")?.getAttribute(
+      "aria-keyshortcuts"
+    )).toBe("Enter")
+    expect(form.querySelector("button[type='button']")?.getAttribute(
+      "aria-keyshortcuts"
+    )).toBe("Escape")
 
     await act(async() => setInputValue(input, "Updated review"))
     await act(async() => form.requestSubmit())

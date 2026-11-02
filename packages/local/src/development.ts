@@ -33,7 +33,8 @@ import {
 } from "effect"
 import { FetchHttpClient, HttpServer } from "effect/unstable/http"
 
-import { localDaemonWithBrowser, LocalDaemon } from "./daemon.js"
+import { daemonHttpServer, localDaemonWithBrowser } from "./daemon.js"
+import { acquireDaemonOwnership } from "./daemon-ownership.js"
 import { LocalArtifactStore } from "./artifact-store.js"
 import {
   LocalApplicationAnnouncements,
@@ -47,6 +48,8 @@ import {
 } from "./browser-attachment.js"
 import { BrowserOrigin, BrowserSession } from "./browser-session.js"
 import { decodeStored, encodeStored } from "./stored-json.js"
+
+export { LocalDaemonOwnershipFailure } from "./daemon-ownership.js"
 
 const InstallationSecret = Schema.String.check(
   Schema.isPattern(/^[A-Za-z0-9_-]{86}$/)
@@ -89,7 +92,7 @@ export const LocalInstallation = Schema.Struct({
   installationId: InstallationId,
   principal: PersonPrincipal,
   bearerSecret: InstallationSecret,
-  port: LocalPort,
+  port: Schema.optionalKey(LocalPort),
   installationOrigin: Schema.optionalKey(InstallationOrigin)
 })
 export type LocalInstallation = typeof LocalInstallation.Type
@@ -108,11 +111,6 @@ export class LocalDevelopmentFailure extends Schema.TaggedError<LocalDevelopment
   { operation: Schema.String, path: Schema.String, reason: Schema.String }
 ) {}
 
-export class LocalDaemonOwnershipFailure extends Schema.TaggedError<LocalDaemonOwnershipFailure>()(
-  "LocalDaemonOwnershipFailure",
-  { port: LocalPort, reason: Schema.String }
-) {}
-
 export interface LocalDevelopmentOptions {
   readonly dataRoot: string
   readonly allowedOrigins?: ReadonlySet<string>
@@ -126,10 +124,6 @@ export interface LocalDevelopmentService {
   readonly attachment: BrowserAttachment
 }
 
-const AddressInUseFailure = Schema.Struct({
-  _tag: Schema.Literal("ServeError"),
-  cause: Schema.Struct({ code: Schema.Literal("EADDRINUSE") })
-})
 const DatabaseOpenFailure = Schema.Struct({
   _tag: Schema.Literal("LocalDatabaseOpenFailure"),
   path: Schema.String,
@@ -205,6 +199,8 @@ export class LocalDevelopment extends Context.Service<
         Effect.mapError((cause) => fail("secure data directory", options.dataRoot, String(cause)))
       )
 
+      yield* acquireDaemonOwnership(options.dataRoot)
+
       const exists = yield* fs.exists(installationPath).pipe(
         Effect.mapError((cause) => fail("inspect installation", installationPath, String(cause)))
       )
@@ -216,7 +212,6 @@ export class LocalDevelopment extends Context.Service<
           )
           const idBytes = yield* randomBytes(16)
           const secretBytes = yield* randomBytes(64)
-          const portBytes = yield* randomBytes(2)
           const suffix = Encoding.encodeHex(idBytes)
           const candidate = Schema.decodeUnknownSync(LocalInstallation)({
             version: 1,
@@ -229,8 +224,7 @@ export class LocalDevelopment extends Context.Service<
                 email: UnspecifiedPersonEmail.make({})
               })
             }),
-            bearerSecret: Encoding.encodeBase64Url(secretBytes),
-            port: 49_152 + (((portBytes[0] ?? 0) << 8 | (portBytes[1] ?? 0)) % 16_384)
+            bearerSecret: Encoding.encodeBase64Url(secretBytes)
           })
           const temporaryPath = path.join(options.dataRoot, `.installation-${suffix}.tmp`)
           const publish = Effect.scoped(Effect.gen(function*() {
@@ -286,8 +280,13 @@ export class LocalDevelopment extends Context.Service<
         ))
       )
       const invocation = AuthorityModel.personInvocation({ principal: installation.principal })
+      const serverContext = yield* Layer.buildWithScope(daemonHttpServer(), daemonScope)
+      const server = Context.get(serverContext, HttpServer.HttpServer)
+      if (!Predicate.isTagged(server.address, "TcpAddress")) {
+        return yield* fail("bind daemon", descriptorPath, "Expected a TCP address")
+      }
       const daemonOrigin = Schema.decodeUnknownSync(LocalDaemonDescriptor.fields.baseUrl)(
-        `http://127.0.0.1:${installation.port}`
+        `http://127.0.0.1:${server.address.port}`
       )
       const attachment = yield* Match.valueTags(options.attachment, {
         None: () => Effect.succeed(BrowserAttachment.None()),
@@ -328,20 +327,17 @@ export class LocalDevelopment extends Context.Service<
         token: localApiToken(installation.bearerSecret),
         allowedOrigins: options.allowedOrigins ?? new Set(),
         invocation,
-        port: installation.port,
         instance,
         installationId: installation.installationId,
         dataRoot: options.dataRoot
       }
-      const daemonLayer = BrowserAttachment.$is("None")(attachment)
-        ? LocalDaemon.layer(daemonOptions)
-        : localDaemonWithBrowser(daemonOptions, attachment)
+      const daemonLayer = localDaemonWithBrowser(daemonOptions, attachment, Layer.succeedContext(serverContext))
       const representationRuntime = RepresentationRuntimeLive.pipe(
         Layer.provide(LocalArtifactStore.layer({ directory: options.dataRoot })),
         Layer.provide(Layer.succeed(ApplicationBindings, applicationBindings)),
         Layer.provide(LiveContentHttp.pipe(Layer.provide(FetchHttpClient.layer)))
       )
-      const daemonContext = yield* Layer.buildWithScope(
+      yield* Layer.buildWithScope(
         daemonLayer.pipe(
           Layer.provide(representationRuntime),
           Layer.provide(announcementsLayer)
@@ -349,12 +345,6 @@ export class LocalDevelopment extends Context.Service<
         daemonScope
       ).pipe(
         Effect.mapError((cause) => {
-          if (Schema.is(AddressInUseFailure)(cause)) {
-            return new LocalDaemonOwnershipFailure({
-              port: installation.port,
-              reason: "The configured port is already in use"
-            })
-          }
           if (Schema.is(DatabaseOpenFailure)(cause)) {
             return fail("open local database", cause.path, cause.reason)
           }
@@ -362,10 +352,6 @@ export class LocalDevelopment extends Context.Service<
           return fail("start daemon", descriptorPath, `Daemon startup failed (${tag})`)
         })
       )
-      const server = Context.get(daemonContext, HttpServer.HttpServer)
-      if (!Predicate.isTagged(server.address, "TcpAddress") || !("port" in server.address)) {
-        return yield* Effect.fail(fail("bind daemon", descriptorPath, "Expected a TCP address"))
-      }
       const descriptor = Schema.decodeUnknownSync(LocalDaemonDescriptor)({
         version: 1,
         instance,

@@ -1,7 +1,6 @@
 import {
   AuthorityModel,
-  type AuthorityView,
-  type SubmitCanvasChangeFailure
+  type AuthorityView
 } from "@crit/authority"
 import type { RemoteCanvasAuthorityService, HostedReviewFailure } from "@crit/client"
 import {
@@ -172,10 +171,7 @@ export const hostedReplicaSessionPorts = (
     canvasId,
     commands
   }) => {
-    const changed: Effect.Effect<
-      ReplicaView,
-      SubmitCanvasChangeFailure
-    > = Effect.gen(function*() {
+    const changed = Effect.gen(function*() {
       const receipt = yield* deps.authority.submit({
         changeId: mintChangeId(),
         canvasId,

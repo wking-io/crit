@@ -1,14 +1,19 @@
 import { decodeCanvasProjection } from "@crit/domain"
+import { Predicate } from "effect"
 import { describe, expect, it } from "vitest"
 
 import { CanvasSelection } from "../src/canvas-selection.js"
 import {
   ReviewAction,
+  ReviewActionAvailability,
   ReviewActionInput,
   ReviewSelection,
   availableReviewActions,
+  displayReviewShortcut,
   resolveReviewAction,
+  resolveReviewActionPolicy,
   reviewActionPolicies,
+  validateReviewActionPolicies,
   type ReviewActionContext,
   type ReviewActionId
 } from "../src/review-actions.js"
@@ -169,6 +174,18 @@ describe("review actions", () => {
       .toBe(true)
     expect(policyById("duplicate-frame-mobile").available(artifact.selection, projection))
       .toBe(false)
+    expect(ReviewActionAvailability.$is("hidden")(resolveReviewActionPolicy(
+      policyById("duplicate-frame-mobile"),
+      { projection, selection: artifact.selection }
+    ).availability)).toBe(true)
+    expect(commandsFor("duplicate-frame-current", live)).toEqual([{
+      _tag: "addFrame",
+      frameId: expect.stringMatching(/^frame_[0-9a-f]{32}$/),
+      title: "Alpha",
+      representation: { _tag: "webUrl", url: "https://example.com/a" },
+      status: "in-progress",
+      geometry: { x: 10 - 100 - 40, y: 20, width: 100, height: 80 }
+    }])
     expect(commandsFor("duplicate-frame-mobile", live)).toEqual([{
       _tag: "addFrame",
       frameId: expect.stringMatching(/^frame_[0-9a-f]{32}$/),
@@ -177,6 +194,17 @@ describe("review actions", () => {
       status: "in-progress",
       geometry: { x: 10 - 402 - 40, y: 20, width: 402, height: 874 }
     }])
+    expect(commandsFor("duplicate-frame-all-breakpoints", live).map((command) =>
+      Predicate.isTagged(command, "addFrame")
+        ? [command.geometry.width, command.geometry.height]
+        : null
+    )).toEqual([
+      [402, 874],
+      [832, 1194],
+      [1280, 832],
+      [1512, 982],
+      [2560, 1440]
+    ])
   })
 
   it("fits live Frame height from measured input", () => {
@@ -217,6 +245,20 @@ describe("review actions", () => {
     expect(policyById("zoom-to-fit").available(itemSelection([]), empty)).toBe(false)
   })
 
+  it("reloads only a single selected live frame", () => {
+    const live = itemSelection([{ _tag: "frame", frameId: "frame_a" }])
+    const artifact = itemSelection([{ _tag: "frame", frameId: "frame_b" }])
+    const mixed = itemSelection(projection.stack)
+    expect(policyById("reload-frame").shortcuts).toEqual(["R"])
+    expect(resolveReviewAction("reload-frame", context(live))).toEqual({
+      _tag: "effect", effect: { _tag: "reloadFrame" }
+    })
+    for (const selected of [itemSelection([]), artifact, mixed]) {
+      expect(policyById("reload-frame").available(selected, projection)).toBe(false)
+      expect(resolveReviewAction("reload-frame", context(selected))).toBeNull()
+    }
+  })
+
   it("snapshots only selected live Frames", () => {
     const live = itemSelection([{ _tag: "frame", frameId: "frame_a" }])
     const artifact = itemSelection([{ _tag: "frame", frameId: "frame_b" }])
@@ -241,7 +283,7 @@ describe("review actions", () => {
   })
 
   it("binds review shortcuts from the table", () => {
-    expect(policyById("remove").shortcuts).toEqual(["Delete", "Backspace"])
+    expect(policyById("remove").shortcuts).toEqual(["Backspace", "Delete"])
     expect(policyById("exit-fullscreen").shortcuts).toEqual(["Escape"])
     expect(policyById("enter-fullscreen").shortcuts).toEqual(["F"])
     expect(policyById("open-url").shortcuts).toEqual(["O"])
@@ -262,6 +304,49 @@ describe("review actions", () => {
     expect(policyById("distribute-horizontal").shortcuts).toEqual(["Control+Alt+H"])
     expect(policyById("distribute-vertical").shortcuts).toEqual(["Control+Alt+V"])
     expect(policyById("arrange-grid").shortcuts).toEqual(["Alt+G"])
+  })
+
+  it("projects one shortcut consistently for display and assistive technology", () => {
+    const remove = resolveReviewActionPolicy(policyById("remove"), {
+      platform: "macos",
+      projection,
+      selection: itemSelection([])
+    })
+
+    expect(displayReviewShortcut("Mod+Shift+C", "macos")).toBe("⌘⇧C")
+    expect(remove.shortcut).toBe("⌫")
+    expect(remove.ariaKeyShortcuts).toBe("Backspace Delete")
+    expect(ReviewActionAvailability.$is("disabled")(remove.availability)).toBe(true)
+    if (ReviewActionAvailability.$is("disabled")(remove.availability)) {
+      expect(remove.availability.message).toBe(
+        "Select at least one Frame to remove it."
+      )
+    }
+  })
+
+  it("rejects shortcut conflicts in simultaneously active scopes", () => {
+    const conflicting = {
+      ...policyById("rename-canvas"),
+      id: "conflicting-action",
+      shortcuts: ["S"] as const
+    }
+    expect(() => validateReviewActionPolicies([
+      ...reviewActionPolicies,
+      conflicting
+    ])).toThrow(/snapshot and conflicting-action use S/)
+  })
+
+  it("allows the same shortcut in scopes that cannot be active together", () => {
+    const separateScope = {
+      ...policyById("rename-canvas"),
+      id: "fullscreen-only-action",
+      scopes: ["fullscreen"] as const,
+      shortcuts: ["S"] as const
+    }
+    expect(() => validateReviewActionPolicies([
+      ...reviewActionPolicies,
+      separateScope
+    ])).not.toThrow()
   })
 
   it("resolves a policy that has no shortcuts", () => {

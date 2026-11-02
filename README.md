@@ -10,6 +10,20 @@ Crit is being rewritten around the target v1 architecture. The current source tr
 
 The rewrite does not preserve the alpha's runtime APIs, JSON Canvas format, IndexedDB state, Git-derived Canvas ownership, URL-based Frame identity, or Vite-owned persistence.
 
+## Run the v1 canvas in this repository
+
+```sh
+npm run dev:portless
+```
+
+This builds the v1 packages and starts both the canvas and its live playground pages through Portless. The canvas is at `https://crit.localhost` and the pages are at `https://crit-frames.localhost`. When the shared proxy uses an unprivileged port, the printed URLs include that port, such as `:1355`. `npx portless get crit` prints the current canvas origin.
+
+Open `/canvas/canvas_performance_lab_v2` on the canvas origin for the saved avatar and pattern iterations. Existing canvases remain in this repository's `.crit/v1` directory. Each project has its own saved canvases; a Crit server launched from another repository shows that project's directory.
+
+Portless assigns each browser server a free port. The local daemon also binds a free loopback port and publishes it for CLI discovery. A SQLite lock in `daemon-lock.sqlite` permits one daemon per data directory and releases on shutdown or process termination. Older installation files with a saved port are accepted, but that port is no longer used.
+
+Stop both app processes with Ctrl+C. The shared Portless proxy stays available for other projects. Worktree runs use Portless's branch-prefixed names. To run only the old alpha playground, use `npm run playground:portless`.
+
 ## Target developer workflow
 
 Install Crit in a web project:

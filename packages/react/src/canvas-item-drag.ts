@@ -2,6 +2,7 @@ import {
   type CanvasCommandBatch,
   type CanvasProjection,
   type Frame,
+  type FrameId,
   type Geometry,
   proposeSetFrameGeometry
 } from "@crit/domain"
@@ -18,47 +19,99 @@ import {
   resizeGeometry,
   type ResizeHandlePosition
 } from "./review-selection-chrome.js"
+import { geometryBounds } from "./canvas-group-selection.js"
 
-type DragMode = "move" | "resize"
-
-type CanvasDrag = {
-  readonly frame: Frame
-  readonly mode: DragMode
+type DragPointer = {
   readonly handle: ResizeHandlePosition | undefined
   readonly pointerId: number
   readonly startClientX: number
   readonly startClientY: number
 }
 
+type CanvasDrag =
+  | (DragPointer & {
+    readonly mode: "move"
+    readonly frames: readonly [Frame, ...Frame[]]
+    readonly handle: undefined
+  })
+  | (DragPointer & {
+    readonly mode: "resize"
+    readonly frames: readonly [Frame]
+    readonly handle: ResizeHandlePosition
+  })
+  | (DragPointer & {
+    readonly mode: "group-resize"
+    readonly frames: readonly [Frame, Frame, ...Frame[]]
+    readonly handle: ResizeHandlePosition
+    readonly startedBounds: Geometry
+  })
+
+type GeometryEntry = {
+  readonly frameId: FrameId
+  readonly geometry: Geometry
+}
+
+const snapGeometryToPixels = (geometry: Geometry): Geometry => ({
+  x: Math.round(geometry.x),
+  y: Math.round(geometry.y),
+  width: Math.round(geometry.width),
+  height: Math.round(geometry.height)
+})
+
 type GeometryOverride = Data.TaggedEnum<{
   readonly dragging: {
-    readonly frameId: Frame["frameId"]
-    readonly geometry: Geometry
+    readonly entries: readonly GeometryEntry[]
   }
   readonly submitted: {
-    readonly frameId: Frame["frameId"]
-    readonly geometry: Geometry
-    readonly started: Geometry
+    readonly entries: readonly (GeometryEntry & { readonly started: Geometry })[]
   }
 }>
 const GeometryOverride = Data.taggedEnum<GeometryOverride>()
 
-const dragGeometry = (
+const dragGeometries = (
   drag: CanvasDrag,
   clientX: number,
   clientY: number,
   zoom: number
-): Geometry => {
+): readonly GeometryEntry[] => {
   const deltaX = (clientX - drag.startClientX) / zoom
   const deltaY = (clientY - drag.startClientY) / zoom
-  if (drag.mode === "move" || drag.handle === undefined) {
-    return {
-      ...drag.frame.geometry,
-      x: drag.frame.geometry.x + deltaX,
-      y: drag.frame.geometry.y + deltaY
-    }
+  if (drag.mode === "move") {
+    return drag.frames.map((frame) => ({
+      frameId: frame.frameId,
+      geometry: snapGeometryToPixels({
+        ...frame.geometry,
+        x: frame.geometry.x + deltaX,
+        y: frame.geometry.y + deltaY
+      })
+    }))
   }
-  return resizeGeometry(drag.frame.geometry, drag.handle, deltaX, deltaY)
+  if (drag.mode === "group-resize") {
+    const nextBounds = resizeGeometry(
+      drag.startedBounds,
+      drag.handle,
+      deltaX,
+      deltaY
+    )
+    const scaleX = nextBounds.width / drag.startedBounds.width
+    const scaleY = nextBounds.height / drag.startedBounds.height
+    return drag.frames.map((frame) => ({
+      frameId: frame.frameId,
+      geometry: snapGeometryToPixels({
+        x: nextBounds.x + (frame.geometry.x - drag.startedBounds.x) * scaleX,
+        y: nextBounds.y + (frame.geometry.y - drag.startedBounds.y) * scaleY,
+        width: frame.geometry.width * scaleX,
+        height: frame.geometry.height * scaleY
+      })
+    }))
+  }
+  const frame = drag.frames[0]
+  return [{
+    frameId: frame.frameId,
+    geometry: snapGeometryToPixels(
+      resizeGeometry(frame.geometry, drag.handle, deltaX, deltaY)
+    )
+  }]
 }
 
 const sameGeometry = (left: Geometry, right: Geometry): boolean =>
@@ -72,13 +125,12 @@ const releasedOverride = (
   preview: GeometryOverride
 ): GeometryOverride | null => {
   if (!GeometryOverride.$is("submitted")(preview)) return preview
-  const frame = framesById(frames).get(preview.frameId)
-  if (frame === undefined) return null
-  if (
-    sameGeometry(frame.geometry, preview.geometry) ||
-    !sameGeometry(frame.geometry, preview.started)
-  ) return null
-  return preview
+  const currentFrames = framesById(frames)
+  const waiting = preview.entries.some((entry) => {
+    const frame = currentFrames.get(entry.frameId)
+    return frame !== undefined && sameGeometry(frame.geometry, entry.started)
+  })
+  return waiting ? preview : null
 }
 
 export const applyItemGeometry = (
@@ -96,7 +148,7 @@ type DragOps = {
     pointerId: number,
     clientX: number,
     clientY: number
-  ) => { readonly drag: CanvasDrag; readonly geometry: Geometry } | null
+  ) => { readonly drag: CanvasDrag; readonly entries: readonly GeometryEntry[] } | null
   finishPointer: (pointerId: number, clientX: number, clientY: number) => void
   cancel: () => void
 }
@@ -104,6 +156,8 @@ type DragOps = {
 export const useCanvasItemDrag = (args: {
   readonly frames: CanvasProjection["frames"]
   readonly getFrameElement: (frameId: Frame["frameId"]) => HTMLElement | undefined
+  readonly getGroupSelectionElement: () => HTMLElement | null
+  readonly getSelectedFrameIds: () => ReadonlySet<FrameId>
   readonly getZoom: () => number
   readonly onSubmit?: (commands: CanvasCommandBatch) => void
 }) => {
@@ -115,6 +169,14 @@ export const useCanvasItemDrag = (args: {
   const opsRef = useRef<DragOps | null>(null)
   const windowListenersRef = useRef({
     move: (event: PointerEvent) => {
+      if ((event.buttons & 1) === 0) {
+        opsRef.current?.finishPointer(
+          event.pointerId,
+          event.clientX,
+          event.clientY
+        )
+        return
+      }
       opsRef.current?.applyPointer(event.pointerId, event.clientX, event.clientY)
     },
     up: (event: PointerEvent) => {
@@ -133,8 +195,18 @@ export const useCanvasItemDrag = (args: {
 
   const paintPreview = (next: GeometryOverride) => {
     previewRef.current = next
-    const element = argsRef.current.getFrameElement(next.frameId)
-    if (element !== undefined) applyItemGeometry(element, next.geometry)
+    for (const entry of next.entries) {
+      const element = argsRef.current.getFrameElement(entry.frameId)
+      if (element !== undefined) applyItemGeometry(element, entry.geometry)
+    }
+    const group = argsRef.current.getGroupSelectionElement()
+    const first = next.entries[0]
+    if (group !== null && first !== undefined && next.entries.length > 1) {
+      applyItemGeometry(group, geometryBounds([
+        first.geometry,
+        ...next.entries.slice(1).map((entry) => entry.geometry)
+      ]))
+    }
   }
 
   const detachWindow = () => {
@@ -151,17 +223,16 @@ export const useCanvasItemDrag = (args: {
   ) => {
     const drag = dragRef.current
     if (drag === null || drag.pointerId !== pointerId) return null
-    const geometry = dragGeometry(
+    const entries = dragGeometries(
       drag,
       clientX,
       clientY,
       argsRef.current.getZoom()
     )
     paintPreview(GeometryOverride.dragging({
-      frameId: drag.frame.frameId,
-      geometry
+      entries
     }))
-    return { drag, geometry }
+    return { drag, entries }
   }
 
   const finishPointer = (
@@ -174,24 +245,40 @@ export const useCanvasItemDrag = (args: {
     dragRef.current = null
     detachWindow()
     const onSubmit = argsRef.current.onSubmit
-    if (
-      onSubmit === undefined ||
-      sameGeometry(next.geometry, next.drag.frame.geometry)
-    ) {
+    const originalFrames = framesById(next.drag.frames)
+    const changed = next.entries.filter((entry) => {
+      const frame = originalFrames.get(entry.frameId)
+      return frame !== undefined && !sameGeometry(entry.geometry, frame.geometry)
+    })
+    if (onSubmit === undefined || changed.length === 0) {
       publishPreview(null)
       return
     }
     publishPreview(GeometryOverride.submitted({
-      frameId: next.drag.frame.frameId,
-      geometry: next.geometry,
-      started: next.drag.frame.geometry
+      entries: changed.flatMap((entry) => {
+        const frame = originalFrames.get(entry.frameId)
+        return frame === undefined ? [] : [{ ...entry, started: frame.geometry }]
+      })
     }))
     try {
-      onSubmit([proposeSetFrameGeometry(next.drag.frame, next.geometry)])
+      const commands = changed.flatMap((entry) => {
+        const frame = originalFrames.get(entry.frameId)
+        return frame === undefined
+          ? []
+          : [proposeSetFrameGeometry(frame, entry.geometry)]
+      })
+      const first = commands[0]
+      if (first === undefined) {
+        publishPreview(null)
+        return
+      }
+      onSubmit([first, ...commands.slice(1)])
     } catch {
       paintPreview(GeometryOverride.dragging({
-        frameId: next.drag.frame.frameId,
-        geometry: next.drag.frame.geometry
+        entries: next.drag.frames.map((frame) => ({
+          frameId: frame.frameId,
+          geometry: frame.geometry
+        }))
       }))
       publishPreview(null)
     }
@@ -202,13 +289,15 @@ export const useCanvasItemDrag = (args: {
     dragRef.current = null
     detachWindow()
     if (preview !== null) {
-      const frame = framesById(argsRef.current.frames).get(preview.frameId)
-      if (frame !== undefined) {
-        paintPreview(GeometryOverride.dragging({
-          frameId: preview.frameId,
-          geometry: frame.geometry
-        }))
-      }
+      const currentFrames = framesById(argsRef.current.frames)
+      paintPreview(GeometryOverride.dragging({
+        entries: preview.entries.flatMap((entry) => {
+          const frame = currentFrames.get(entry.frameId)
+          return frame === undefined
+            ? []
+            : [{ frameId: frame.frameId, geometry: frame.geometry }]
+        })
+      }))
     }
     publishPreview(null)
   }
@@ -226,24 +315,88 @@ export const useCanvasItemDrag = (args: {
 
   const begin = (
     frame: Frame,
-    mode: DragMode,
+    mode: "move" | "resize",
     event: ReactPointerEvent<HTMLElement>,
     handle?: ResizeHandlePosition
   ) => {
     if (argsRef.current.onSubmit === undefined) return
     event.preventDefault()
     event.currentTarget.setPointerCapture?.(event.pointerId)
+    const selectedFrameIds = argsRef.current.getSelectedFrameIds()
+    const moveFrames = mode === "move" && selectedFrameIds.has(frame.frameId)
+      ? [
+        frame,
+        ...argsRef.current.frames.filter((candidate) =>
+          candidate.frameId !== frame.frameId && selectedFrameIds.has(candidate.frameId)
+        )
+      ] as const
+      : [frame] as const
+    dragRef.current = mode === "move"
+      ? {
+        frames: moveFrames,
+        mode,
+        handle: undefined,
+        pointerId: event.pointerId,
+        startClientX: event.clientX,
+        startClientY: event.clientY
+      }
+      : {
+        frames: [frame],
+        mode,
+        handle: handle ?? "south-east",
+        pointerId: event.pointerId,
+        startClientX: event.clientX,
+        startClientY: event.clientY
+      }
+    publishPreview(GeometryOverride.dragging({
+      entries: moveFrames.map((candidate) => ({
+        frameId: candidate.frameId,
+        geometry: candidate.geometry
+      }))
+    }))
+    const listeners = windowListenersRef.current
+    window.addEventListener("pointermove", listeners.move)
+    window.addEventListener("pointerup", listeners.up)
+    window.addEventListener("pointercancel", listeners.cancel)
+  }
+
+  const beginGroupResize = (
+    event: ReactPointerEvent<HTMLElement>,
+    handle: ResizeHandlePosition
+  ) => {
+    if (argsRef.current.onSubmit === undefined) return
+    const selectedFrameIds = argsRef.current.getSelectedFrameIds()
+    const selectedFrames = argsRef.current.frames.filter((frame) =>
+      selectedFrameIds.has(frame.frameId)
+    )
+    const first = selectedFrames[0]
+    const second = selectedFrames[1]
+    if (first === undefined || second === undefined) return
+    const frames: readonly [Frame, Frame, ...Frame[]] = [
+      first,
+      second,
+      ...selectedFrames.slice(2)
+    ]
+    event.preventDefault()
+    event.currentTarget.setPointerCapture?.(event.pointerId)
     dragRef.current = {
-      frame,
-      mode,
+      frames,
+      mode: "group-resize",
       handle,
       pointerId: event.pointerId,
       startClientX: event.clientX,
-      startClientY: event.clientY
+      startClientY: event.clientY,
+      startedBounds: geometryBounds([
+        first.geometry,
+        second.geometry,
+        ...selectedFrames.slice(2).map((frame) => frame.geometry)
+      ])
     }
     publishPreview(GeometryOverride.dragging({
-      frameId: frame.frameId,
-      geometry: frame.geometry
+      entries: frames.map((frame) => ({
+        frameId: frame.frameId,
+        geometry: frame.geometry
+      }))
     }))
     const listeners = windowListenersRef.current
     window.addEventListener("pointermove", listeners.move)
@@ -253,9 +406,8 @@ export const useCanvasItemDrag = (args: {
 
   const geometryFor = (frame: Frame): Geometry => {
     const current = previewRef.current
-    return current !== null && current.frameId === frame.frameId
-      ? current.geometry
-      : frame.geometry
+    return current?.entries.find((entry) => entry.frameId === frame.frameId)?.geometry ??
+      frame.geometry
   }
 
   const update = (event: ReactPointerEvent<HTMLElement>) => {
@@ -266,5 +418,5 @@ export const useCanvasItemDrag = (args: {
     finishPointer(event.pointerId, event.clientX, event.clientY)
   }
 
-  return { begin, cancel, finish, geometryFor, update }
+  return { begin, beginGroupResize, cancel, finish, geometryFor, update }
 }

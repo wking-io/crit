@@ -8,7 +8,13 @@ import {
   type ReactNode
 } from "react"
 
-import { type ReviewActionPolicy } from "./review-actions.js"
+import {
+  displayReviewShortcut,
+  ReviewActionAvailability,
+  reviewControlPlatform,
+  type ResolvedReviewAction,
+  type ReviewShortcutPolicy
+} from "./review-actions.js"
 
 export type ReviewHelpDetails = Data.TaggedEnum<{
   readonly action: {
@@ -45,17 +51,24 @@ const helpTarget = (details: ReviewHelpDetails): ReviewHelpAttributes => ({
 })
 
 export const reviewHelpForPolicy = (
-  policy: ReviewActionPolicy
+  policy: ReviewShortcutPolicy | ResolvedReviewAction
 ): Extract<ReviewHelpDetails, { readonly _tag: "action" }> =>
   ReviewHelpDetails.action({
     name: policy.label,
     description: policy.description,
-    shortcut: policy.shortcuts[0] ?? null,
-    availabilityMessage: null
+    shortcut: "shortcut" in policy
+      ? policy.shortcut
+      : policy.shortcuts[0] === undefined
+        ? null
+        : displayReviewShortcut(policy.shortcuts[0], reviewControlPlatform()),
+    availabilityMessage: "availability" in policy &&
+        !ReviewActionAvailability.$is("enabled")(policy.availability)
+      ? policy.availability.message
+      : null
   })
 
 export const reviewActionHelpTarget = (
-  policy: ReviewActionPolicy
+  policy: ReviewShortcutPolicy | ResolvedReviewAction
 ): ReviewHelpAttributes => helpTarget(reviewHelpForPolicy(policy))
 
 export const reviewInformationalHelpTarget = (

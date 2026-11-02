@@ -56,9 +56,11 @@ export type SnapshotRequest = readonly [
 
 export type ReviewClientEffect = Data.TaggedEnum<{
   readonly openUrl: { readonly url: string }
+  readonly openFrame: {}
   readonly fullscreen: { readonly target: "frame" | "exit" }
   readonly copy: { readonly text: string }
   readonly zoomToFit: {}
+  readonly reloadFrame: {}
 }>
 export const ReviewClientEffect = Data.taggedEnum<ReviewClientEffect>()
 
@@ -90,9 +92,11 @@ export interface ReviewActionContext {
 export type ReviewShortcut =
   | "Delete"
   | "Backspace"
+  | "Enter"
   | "Escape"
   | "F"
   | "O"
+  | "R"
   | "S"
   | "1"
   | "2"
@@ -116,11 +120,58 @@ export type ReviewShortcut =
   | "Mod+["
   | "Mod+Shift+C"
 
+export type ReviewActionScope =
+  | "canvas"
+  | "fullscreen"
+  | "new-frame-form"
+  | "canvas-title-edit"
+
+export type ReviewActionAvailability = Data.TaggedEnum<{
+  readonly enabled: {}
+  readonly disabled: {
+    readonly reason: string
+    readonly message: string
+  }
+  readonly hidden: {
+    readonly reason: string
+    readonly message: string
+  }
+}>
+export const ReviewActionAvailability = Data.taggedEnum<ReviewActionAvailability>()
+
+export type ReviewControlPlatform = "macos" | "windows" | "linux" | "unknown"
+
+export interface ResolvedReviewAction<Id extends string = string> {
+  readonly id: Id
+  readonly label: string
+  readonly description: string
+  readonly shortcuts: readonly ReviewShortcut[]
+  readonly shortcut: string | null
+  readonly ariaKeyShortcuts: string | null
+  readonly availability: ReviewActionAvailability
+}
+
+export interface ReviewShortcutPolicy<Id extends string = string> {
+  readonly id: Id
+  readonly label: string
+  readonly description: string
+  readonly shortcuts: readonly ReviewShortcut[]
+  readonly scopes: readonly ReviewActionScope[]
+}
+
+export type ReviewActionControl<Id extends string = string> =
+  | ReviewActionPolicy<Id>
+  | ResolvedReviewAction<Id>
+
 export interface ReviewActionPolicy<Id extends string = string> {
   readonly id: Id
   readonly label: string
   readonly description: string
   readonly shortcuts: readonly ReviewShortcut[]
+  readonly scopes: readonly ReviewActionScope[]
+  readonly unavailableReason: string
+  readonly unavailableMessage: string
+  readonly unavailableState: "disabled" | "hidden"
   readonly available: (
     selection: ReviewSelection,
     projection: CanvasProjection
@@ -128,9 +179,26 @@ export interface ReviewActionPolicy<Id extends string = string> {
   readonly run: (context: ReviewActionContext) => ReviewAction | null
 }
 
+type ReviewActionDeclaration<Id extends string> = Omit<
+  ReviewActionPolicy<Id>,
+  "scopes" | "unavailableReason" | "unavailableMessage" | "unavailableState"
+> & {
+  readonly scopes?: readonly ReviewActionScope[]
+  readonly unavailableReason?: string
+  readonly unavailableMessage?: string
+  readonly unavailableState?: "disabled" | "hidden"
+}
+
 const policy = <const Id extends string>(
-  value: ReviewActionPolicy<Id>
-): ReviewActionPolicy<Id> => value
+  value: ReviewActionDeclaration<Id>
+): ReviewActionPolicy<Id> => ({
+  ...value,
+  scopes: value.scopes ?? ["canvas"],
+  unavailableReason: value.unavailableReason ?? "action-unavailable",
+  unavailableMessage: value.unavailableMessage ??
+    "This action is not available for the current selection.",
+  unavailableState: value.unavailableState ?? "disabled"
+})
 
 const selectedFrames = (
   selection: ReviewSelection,
@@ -260,7 +328,9 @@ const removePolicy = policy({
   id: "remove",
   label: "Remove",
   description: "Remove the selected Frames from the canvas.",
-  shortcuts: ["Delete", "Backspace"],
+  shortcuts: ["Backspace", "Delete"],
+  unavailableReason: "selection-required",
+  unavailableMessage: "Select at least one Frame to remove it.",
   available: (selection, projection) =>
     selectedFrames(selection, projection).length > 0,
   run: ({ projection, selection }) =>
@@ -272,6 +342,8 @@ const snapshotPolicy = policy({
   label: "Snapshot",
   description: "Capture the selected live Frames into new artifact Frames.",
   shortcuts: ["S"],
+  unavailableReason: "live-frame-selection-required",
+  unavailableMessage: "Select at least one live Frame to take a snapshot.",
   available: (selection, projection) =>
     snapshotSources(selection, projection).length > 0,
   run: ({ projection, selection }) => {
@@ -287,6 +359,8 @@ const bringToFrontPolicy = policy({
   label: "Bring to front",
   description: "Place this Frame above every other canvas item.",
   shortcuts: ["Mod+]"],
+  unavailableReason: "single-frame-required",
+  unavailableMessage: "Select one Frame to bring it to front.",
   available: (selection, projection) =>
     selectedFrame(selection, projection) !== undefined,
   run: ({ projection, selection }) => {
@@ -302,6 +376,8 @@ const sendToBackPolicy = policy({
   label: "Send to back",
   description: "Place this Frame behind every other canvas item.",
   shortcuts: ["Mod+["],
+  unavailableReason: "single-frame-required",
+  unavailableMessage: "Select one Frame to send it to back.",
   available: (selection, projection) =>
     selectedFrame(selection, projection) !== undefined,
   run: ({ projection, selection }) => {
@@ -317,6 +393,8 @@ const setFrameTitlePolicy = policy({
   label: "Set frame title",
   description: "Rename this Frame.",
   shortcuts: [],
+  unavailableReason: "single-frame-required",
+  unavailableMessage: "Select one Frame to rename it.",
   available: (selection, projection) =>
     selectedFrame(selection, projection) !== undefined,
   run: ({ input, projection, selection }) => {
@@ -338,6 +416,8 @@ const frameStatusPolicies = ([
   label: `Set status to ${status}`,
   description: `Set this Frame's review status to ${status}.`,
   shortcuts: statusShortcuts[status],
+  unavailableReason: "status-already-set-or-selection-required",
+  unavailableMessage: `Select a Frame whose status is not ${status}.`,
   available: (selection, projection) =>
     selectedFrames(selection, projection).some((frame) => frame.status !== status),
   run: ({ projection, selection }) =>
@@ -382,6 +462,8 @@ const alignmentPolicy = (alignment: CanvasAlignment) => policy({
   label: `Align ${alignment}`,
   description: alignmentDescription[alignment],
   shortcuts: alignmentShortcuts[alignment],
+  unavailableReason: "multiple-frame-selection-required",
+  unavailableMessage: "Select at least two Frames to align them.",
   available: (selection, projection) =>
     selectedFrames(selection, projection).length >= 2,
   run: (context) => arrangementAction(context, Align.make({ alignment }))
@@ -392,6 +474,8 @@ const distributionPolicy = (axis: "horizontal" | "vertical") => policy({
   label: `Distribute ${axis}`,
   description: `Equalize the ${axis} gaps between the selected Frames.`,
   shortcuts: axis === "horizontal" ? ["Control+Alt+H"] : ["Control+Alt+V"],
+  unavailableReason: "three-frame-selection-required",
+  unavailableMessage: "Select at least three Frames to distribute them.",
   available: (selection, projection) =>
     selectedFrames(selection, projection).length >= 3,
   run: (context) => arrangementAction(context, Distribute.make({ axis }))
@@ -402,6 +486,8 @@ const arrangeGridPolicy = policy({
   label: "Arrange grid",
   description: "Arrange the selected Frames into a grid.",
   shortcuts: ["Alt+G"],
+  unavailableReason: "multiple-frame-selection-required",
+  unavailableMessage: "Select at least two Frames to arrange them.",
   available: (selection, projection) =>
     selectedFrames(selection, projection).length >= 2,
   run: (context) => arrangementAction(context, ArrangeGrid.make({}))
@@ -423,6 +509,8 @@ const framePresetPolicies = FRAME_SIZE_PRESETS.map((preset) => policy({
   label: `Resize to ${preset.label}`,
   description: `Resize this Frame to the ${preset.label.toLowerCase()} preset.`,
   shortcuts: presetShortcuts[preset.id],
+  unavailableReason: "single-resizable-frame-required",
+  unavailableMessage: "Select one Frame at a different size to resize it.",
   available: (selection, projection) => {
     const frame = selectedFrame(selection, projection)
     return frame !== undefined &&
@@ -441,19 +529,45 @@ const framePresetPolicies = FRAME_SIZE_PRESETS.map((preset) => policy({
   }
 }))
 
+const reloadFramePolicy = policy({
+  id: "reload-frame",
+  label: "Reload frame",
+  description: "Reload the selected Frame's page.",
+  shortcuts: ["R"],
+  unavailableReason: "single-live-frame-required",
+  unavailableMessage: "Select one live Frame to reload it.",
+  available: (selection, projection) => {
+    const frame = selectedFrame(selection, projection)
+    return frame !== undefined && isLiveFrame(frame)
+  },
+  run: ({ selection, projection }) => {
+    const frame = selectedFrame(selection, projection)
+    return frame === undefined || !isLiveFrame(frame)
+      ? null
+      : ReviewAction.effect({ effect: ReviewClientEffect.reloadFrame() })
+  }
+})
+
 const openUrlPolicy = policy({
   id: "open-url",
   label: "Open in new tab",
   description: "Open this Frame's page in a new browser tab.",
   shortcuts: ["O"],
-  available: (selection, projection) =>
-    Predicate.isTagged(selectedFrame(selection, projection)?.representation, "webUrl"),
+  unavailableReason: "web-frame-required",
+  unavailableMessage: "Select one live web Frame to open it.",
+  available: (selection, projection) => {
+    const frame = selectedFrame(selection, projection)
+    return frame !== undefined && isLiveFrame(frame)
+  },
   run: ({ projection, selection }) => {
     const frame = selectedFrame(selection, projection)
     if (frame === undefined) return null
     return Match.value(frame.representation).pipe(
       Match.tag("webUrl", ({ url }) => ReviewAction.effect({
         effect: ReviewClientEffect.openUrl({ url })
+      })),
+      Match.tag("applicationRoute", () => ReviewAction.effect({
+        effect: ReviewClientEffect.openFrame()
       })),
       Match.orElse(() => null)
     )
@@ -465,6 +579,8 @@ const enterFullscreenPolicy = policy({
   label: "Enter fullscreen",
   description: "Expand this Frame to fill the screen.",
   shortcuts: ["F"],
+  unavailableReason: "single-frame-required",
+  unavailableMessage: "Select one Frame to enter fullscreen.",
   available: (selection, projection) =>
     selectedFrame(selection, projection) !== undefined,
   run: ({ fullscreen }) => fullscreen
@@ -479,6 +595,9 @@ const exitFullscreenPolicy = policy({
   label: "Exit fullscreen",
   description: "Return this Frame to the canvas.",
   shortcuts: ["Escape"],
+  scopes: ["fullscreen"],
+  unavailableReason: "fullscreen-required",
+  unavailableMessage: "Enter fullscreen before using this action.",
   available: (selection, projection) =>
     selectedFrame(selection, projection) !== undefined,
   run: ({ fullscreen }) => fullscreen
@@ -493,6 +612,8 @@ const copyNodeIdPolicy = policy({
   label: "Copy node ID",
   description: "Copy this Frame's stable ID.",
   shortcuts: ["Mod+Shift+C"],
+  unavailableReason: "single-frame-required",
+  unavailableMessage: "Select one Frame to copy its ID.",
   available: (selection, projection) =>
     selectedFrame(selection, projection) !== undefined,
   run: ({ projection, selection }) => {
@@ -534,6 +655,8 @@ const zoomToFitPolicy = policy({
   label: "Zoom to fit",
   description: "Adjust the view so every Frame is visible.",
   shortcuts: [],
+  unavailableReason: "canvas-empty",
+  unavailableMessage: "Add a Frame before zooming to fit.",
   available: (_selection, projection) => projection.frames.length > 0,
   run: () => ReviewAction.effect({
     effect: ReviewClientEffect.zoomToFit()
@@ -545,6 +668,8 @@ const fitFrameContentPolicy = policy({
   label: "Fit frame content",
   description: "Resize the Frame height to fit its same-origin page content.",
   shortcuts: [],
+  unavailableReason: "live-frame-required",
+  unavailableMessage: "Select one live Frame to fit its content.",
   available: (selection, projection) => {
     const frame = selectedFrame(selection, projection)
     return frame !== undefined && isLiveFrame(frame)
@@ -561,12 +686,50 @@ const fitFrameContentPolicy = policy({
   }
 })
 
-const frameDuplicatePolicies = FRAME_SIZE_PRESETS.map((preset) => policy({
-  id: `duplicate-frame-${preset.id}` as const,
-  label: `Duplicate at ${preset.label}`,
-  description:
-    `Duplicate this live Frame at the ${preset.label.toLowerCase()} preset.`,
+const duplicateFrame = (
+  frame: Frame,
+  size: { readonly width: number; readonly height: number }
+): ReviewAction | null => reviewBatch([proposeAddFrame({
+  frameId: mintFrameId(),
+  title: frame.title,
+  representation: frame.representation,
+  status: frame.status,
+  geometry: {
+    x: frame.geometry.x - size.width - DUPLICATE_FRAME_GAP,
+    y: frame.geometry.y,
+    width: size.width,
+    height: size.height
+  }
+})])
+
+const duplicateFrameCurrentPolicy = policy({
+  id: "duplicate-frame-current",
+  label: "Duplicate at current size",
+  description: "Duplicate this live Frame at its current viewport size.",
   shortcuts: [],
+  unavailableReason: "live-frame-required",
+  unavailableMessage: "Select one live Frame to duplicate it.",
+  unavailableState: "hidden",
+  available: (selection, projection) => {
+    const frame = selectedFrame(selection, projection)
+    return frame !== undefined && isLiveFrame(frame)
+  },
+  run: ({ projection, selection }) => {
+    const frame = selectedFrame(selection, projection)
+    return frame === undefined || !isLiveFrame(frame)
+      ? null
+      : duplicateFrame(frame, frame.geometry)
+  }
+})
+
+const duplicateFrameAllBreakpointsPolicy = policy({
+  id: "duplicate-frame-all-breakpoints",
+  label: "Duplicate at all breakpoints",
+  description: "Duplicate this live Frame at every standard viewport size.",
+  shortcuts: [],
+  unavailableReason: "live-frame-required",
+  unavailableMessage: "Select one live Frame to duplicate it.",
+  unavailableState: "hidden",
   available: (selection, projection) => {
     const frame = selectedFrame(selection, projection)
     return frame !== undefined && isLiveFrame(frame)
@@ -574,18 +737,44 @@ const frameDuplicatePolicies = FRAME_SIZE_PRESETS.map((preset) => policy({
   run: ({ projection, selection }) => {
     const frame = selectedFrame(selection, projection)
     if (frame === undefined || !isLiveFrame(frame)) return null
-    return reviewBatch([proposeAddFrame({
-      frameId: mintFrameId(),
-      title: frame.title,
-      representation: frame.representation,
-      status: frame.status,
-      geometry: {
-        x: frame.geometry.x - preset.width - DUPLICATE_FRAME_GAP,
-        y: frame.geometry.y,
-        width: preset.width,
-        height: preset.height
-      }
-    })])
+    let right = frame.geometry.x - DUPLICATE_FRAME_GAP
+    return reviewBatch(FRAME_SIZE_PRESETS.map((preset) => {
+      const x = right - preset.width
+      right = x - DUPLICATE_FRAME_GAP
+      return proposeAddFrame({
+        frameId: mintFrameId(),
+        title: frame.title,
+        representation: frame.representation,
+        status: frame.status,
+        geometry: {
+          x,
+          y: frame.geometry.y,
+          width: preset.width,
+          height: preset.height
+        }
+      })
+    }))
+  }
+})
+
+const frameDuplicatePolicies = FRAME_SIZE_PRESETS.map((preset) => policy({
+  id: `duplicate-frame-${preset.id}` as const,
+  label: `Duplicate at ${preset.label}`,
+  description:
+    `Duplicate this live Frame at the ${preset.label.toLowerCase()} preset.`,
+  shortcuts: [],
+  unavailableReason: "live-frame-required",
+  unavailableMessage: "Select one live Frame to duplicate it.",
+  unavailableState: "hidden",
+  available: (selection, projection) => {
+    const frame = selectedFrame(selection, projection)
+    return frame !== undefined && isLiveFrame(frame)
+  },
+  run: ({ projection, selection }) => {
+    const frame = selectedFrame(selection, projection)
+    return frame === undefined || !isLiveFrame(frame)
+      ? null
+      : duplicateFrame(frame, preset)
   }
 }))
 
@@ -609,13 +798,202 @@ export const reviewActionPolicies = [
   distributionPolicy("vertical"),
   arrangeGridPolicy,
   ...framePresetPolicies,
+  duplicateFrameCurrentPolicy,
+  duplicateFrameAllBreakpointsPolicy,
   ...frameDuplicatePolicies,
   fitFrameContentPolicy,
   openUrlPolicy,
+  reloadFramePolicy,
   enterFullscreenPolicy,
   exitFullscreenPolicy,
   copyNodeIdPolicy
 ] as const satisfies readonly ReviewActionPolicy[]
+
+const activeReviewScopeSets: readonly (readonly ReviewActionScope[])[] = [
+  ["canvas"],
+  ["fullscreen"],
+  ["canvas", "new-frame-form"],
+  ["canvas", "canvas-title-edit"]
+]
+
+const shortcutKey = (shortcut: ReviewShortcut): string => shortcut.toLowerCase()
+
+export const validateReviewActionPolicies = (
+  policies: readonly ReviewShortcutPolicy[]
+): void => {
+  const ids = new Set<string>()
+  for (const declaration of policies) {
+    if (ids.has(declaration.id)) {
+      throw new TypeError(`Review action ${declaration.id} has multiple policy declarations`)
+    }
+    ids.add(declaration.id)
+  }
+  for (const activeScopes of activeReviewScopeSets) {
+    const shortcuts = new Map<string, string>()
+    for (const declaration of policies) {
+      if (!declaration.scopes.some((scope) => activeScopes.includes(scope))) continue
+      for (const shortcut of declaration.shortcuts) {
+        const key = shortcutKey(shortcut)
+        const previous = shortcuts.get(key)
+        if (previous !== undefined && previous !== declaration.id) {
+          throw new TypeError(
+            `Review shortcut conflict in ${activeScopes.join("+")}: ` +
+            `${previous} and ${declaration.id} use ${shortcut}`
+          )
+        }
+        shortcuts.set(key, declaration.id)
+      }
+    }
+  }
+}
+
+export const reviewNativeActionPolicies = [
+  {
+    id: "create-frame",
+    label: "Add frame",
+    description: "Create a live Frame using the entered URL and title.",
+    shortcuts: ["Enter"],
+    scopes: ["new-frame-form"]
+  },
+  {
+    id: "cancel-new-frame",
+    label: "Cancel adding frame",
+    description: "Close the dialog without adding a Frame.",
+    shortcuts: ["Escape"],
+    scopes: ["new-frame-form"]
+  },
+  {
+    id: "save-canvas-title",
+    label: "Save title",
+    description: "Save the edited canvas title.",
+    shortcuts: ["Enter"],
+    scopes: ["canvas-title-edit"]
+  },
+  {
+    id: "cancel-canvas-title",
+    label: "Cancel",
+    description: "Discard the edited canvas title.",
+    shortcuts: ["Escape"],
+    scopes: ["canvas-title-edit"]
+  }
+] as const satisfies readonly ReviewShortcutPolicy[]
+
+export type ReviewNativeActionId = (typeof reviewNativeActionPolicies)[number]["id"]
+
+export const reviewNativeActionPolicy = (
+  id: ReviewNativeActionId
+): ReviewShortcutPolicy<ReviewNativeActionId> => {
+  const declaration = reviewNativeActionPolicies.find((entry) => entry.id === id)
+  if (declaration === undefined) throw new Error(`Missing native review policy: ${id}`)
+  return declaration
+}
+
+validateReviewActionPolicies([
+  ...reviewActionPolicies,
+  ...reviewNativeActionPolicies
+])
+
+export const reviewControlPlatform = (
+  raw: string | undefined = globalThis.navigator?.platform
+): ReviewControlPlatform => {
+  if (raw === undefined) return "unknown"
+  if (/Mac/i.test(raw)) return "macos"
+  if (/Win/i.test(raw)) return "windows"
+  if (/Linux/i.test(raw)) return "linux"
+  return "unknown"
+}
+
+const actualPlatform = (platform: ReviewControlPlatform) =>
+  platform === "unknown" ? "macos" : platform
+
+export const displayReviewShortcut = (
+  shortcut: ReviewShortcut,
+  platform: ReviewControlPlatform
+): string => {
+  const resolved = actualPlatform(platform)
+  const parts = shortcut.split("+")
+  const key = parts.pop() ?? shortcut
+  const modifiers = parts.map((part) => {
+    if (part === "Mod") return resolved === "macos" ? "⌘" : "Ctrl"
+    if (part === "Control") return resolved === "macos" ? "⌃" : "Ctrl"
+    if (part === "Alt") return resolved === "macos" ? "⌥" : "Alt"
+    if (part === "Shift") return resolved === "macos" ? "⇧" : "Shift"
+    return part
+  })
+  const displayKey = key === "Backspace"
+    ? resolved === "macos" ? "⌫" : "Backspace"
+    : key === "Escape" ? "Esc" : key
+  return resolved === "macos"
+    ? `${modifiers.join("")}${displayKey}`
+    : [...modifiers, displayKey].join("+")
+}
+
+export const displayReviewShortcuts = (
+  shortcuts: readonly ReviewShortcut[],
+  platform: ReviewControlPlatform = reviewControlPlatform()
+): readonly string[] =>
+  shortcuts.includes("Delete") && shortcuts.includes("Backspace")
+    ? ["⌫"]
+    : shortcuts.map((shortcut) => displayReviewShortcut(shortcut, platform))
+
+const ariaReviewShortcut = (
+  shortcut: ReviewShortcut,
+  platform: ReviewControlPlatform
+): string => {
+  const resolved = actualPlatform(platform)
+  return shortcut.split("+").map((part) =>
+    part === "Mod" ? resolved === "macos" ? "Meta" : "Control" : part
+  ).join("+")
+}
+
+export const reviewActionAriaKeyShortcuts = (
+  action: ReviewShortcutPolicy | ResolvedReviewAction,
+  platform: ReviewControlPlatform = reviewControlPlatform()
+): string | undefined => {
+  if ("ariaKeyShortcuts" in action) return action.ariaKeyShortcuts ?? undefined
+  return action.shortcuts.length === 0
+    ? undefined
+    : action.shortcuts.map((shortcut) =>
+        ariaReviewShortcut(shortcut, platform)
+      ).join(" ")
+}
+
+export const resolveReviewActionPolicy = <Id extends string>(
+  declaration: ReviewActionPolicy<Id>,
+  input: {
+    readonly selection: ReviewSelection
+    readonly projection: CanvasProjection
+    readonly platform?: ReviewControlPlatform
+    readonly available?: boolean
+    readonly unavailableReason?: string
+    readonly unavailableMessage?: string
+    readonly unavailableState?: "disabled" | "hidden"
+  }
+): ResolvedReviewAction<Id> => {
+  const platform = input.platform ?? reviewControlPlatform()
+  const available = input.available ??
+    declaration.available(input.selection, input.projection)
+  return {
+    id: declaration.id,
+    label: declaration.label,
+    description: declaration.description,
+    shortcuts: declaration.shortcuts,
+    shortcut: declaration.shortcuts[0] === undefined
+      ? null
+      : displayReviewShortcut(declaration.shortcuts[0], platform),
+    ariaKeyShortcuts: declaration.shortcuts.length === 0
+      ? null
+      : declaration.shortcuts.map((shortcut) =>
+          ariaReviewShortcut(shortcut, platform)
+        ).join(" "),
+    availability: available
+      ? ReviewActionAvailability.enabled()
+      : ReviewActionAvailability[input.unavailableState ?? declaration.unavailableState]({
+          reason: input.unavailableReason ?? declaration.unavailableReason,
+          message: input.unavailableMessage ?? declaration.unavailableMessage
+        })
+  }
+}
 
 export type ReviewActionId = (typeof reviewActionPolicies)[number]["id"]
 
@@ -644,4 +1022,3 @@ export const resolveReviewAction = (
     ? null
     : candidate.run(context)
 }
-

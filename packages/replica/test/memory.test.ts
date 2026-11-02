@@ -123,6 +123,28 @@ describe("MemoryCanvasReplica", () => {
     expect(result).toMatchObject({ _tag: "Failure", failure: { _tag: "ReplicaNotOpen" } })
   })
 
+  it("stays silent when sync finds no replica changes", async () => {
+    const program = Effect.gen(function*() {
+      const authority = yield* CanvasAuthority
+      const replica = yield* CanvasReplica
+      const canvasId = Id.canvas("canvas_notifications_empty_sync")
+      yield* authority.create(
+        AuthorityModel.createCanvas({ canvasId, title: "Idle" }),
+        person
+      )
+      yield* replica.open(canvasId)
+      const notifications = yield* replica.subscribe(canvasId)
+      const pull = yield* Stream.toPull(notifications)
+
+      yield* replica.sync(canvasId)
+
+      expect(Option.isNone(
+        yield* pull.pipe(Effect.timeoutOption("10 millis"))
+      )).toBe(true)
+    }).pipe(Effect.provide(makeLayer()))
+    await Effect.runPromise(Effect.scoped(program))
+  })
+
   it("owns input and invocation before a suspended ID allocation", async () => {
     await Effect.runPromise(Effect.gen(function*() {
       const gate = yield* Deferred.make<ReturnType<typeof Id.change>>()

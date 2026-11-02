@@ -139,6 +139,10 @@ const makeCanvasReplica = Effect.gen(function*() {
           reason: "authority page promised more changes without advancing its cursor"
         }))
       }
+      if (page.changes.length === 0) {
+        more = false
+        continue
+      }
       const counts = yield* modify<{ readonly pulled: number; readonly acknowledged: number }, ReplicaSyncFailure>(canvasId, (current): Result.Result<readonly [{ readonly pulled: number; readonly acknowledged: number }, ReplicaState], ReplicaSyncFailure> => {
         if (current === undefined) return Result.fail(new ReplicaNotOpen({ canvasId }))
         const result = ReplicaPolicy.incorporatePage(current, page)

@@ -3,7 +3,7 @@ import { Data, Schema } from "effect"
 
 export const BrowserOrigin = Schema.String.check(
   Schema.isPattern(
-    /^http:\/\/127\.0\.0\.1:(?:[1-9][0-9]{0,3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5])$/
+    /^https?:\/\/(?:127\.0\.0\.1|(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)*localhost)(?::(?:[1-9][0-9]{0,3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5]))?$/
   )
 ).pipe(Schema.brand("BrowserOrigin"))
 export type BrowserOrigin = typeof BrowserOrigin.Type

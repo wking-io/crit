@@ -1,5 +1,9 @@
-import { StrictMode, Suspense, lazy } from "react"
+import { Profiler, StrictMode, Suspense, lazy } from "react"
 import { createRoot } from "react-dom/client"
+import {
+  installCanvasPerformanceProbe,
+  recordCanvasReactCommit
+} from "../../packages/react/src/canvas-performance-probe.js"
 import { GlyphProvider } from "../../src/react/glyph.js"
 import { FramePage, frameRouteUrl, frameVariantFromUrl } from "./frame-page.js"
 import "./styles.css"
@@ -20,6 +24,13 @@ function App() {
   return variant === undefined ? null : <FramePage variant={variant} />
 }
 
+installCanvasPerformanceProbe()
 createRoot(document.getElementById("root")!).render(
-  <StrictMode><GlyphProvider><App /></GlyphProvider></StrictMode>
+  <StrictMode>
+    <Profiler id="crit-alpha" onRender={(_id, _phase, duration) => {
+      recordCanvasReactCommit(duration)
+    }}>
+      <GlyphProvider><App /></GlyphProvider>
+    </Profiler>
+  </StrictMode>
 )

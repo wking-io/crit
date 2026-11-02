@@ -53,6 +53,7 @@ export const critStyles = String.raw`
 .crit-canvas, .crit-canvas * { box-sizing: border-box; }
 .crit-canvas button, .crit-canvas input, .crit-canvas textarea { font: inherit; }
 .crit-canvas:focus-visible { outline: 2px solid var(--crit-ink); outline-offset: -2px; }
+.crit-canvas[data-zoom-marquee-ready] { cursor: zoom-in; }
 
 .crit-canvas__plane {
   height: 0;
@@ -258,7 +259,7 @@ button.crit-toolbar__title:focus-visible { border-radius: 2px; outline: 2px soli
 
 .crit-toolbar__action {
   border-radius: 6px;
-  font: 500 12px/16px ${INTER};
+  font: 400 12px/16px ${INTER};
   ${INTER_LOCK};
   height: 28px;
   padding: 0 8px;
@@ -334,7 +335,7 @@ button.crit-toolbar__title:focus-visible { border-radius: 2px; outline: 2px soli
   align-items: center;
   color: var(--crit-muted);
   display: flex;
-  font: 500 12px/16px ${INTER};
+  font: 400 12px/16px ${INTER};
   ${INTER_LOCK};
   gap: 6px;
 }
@@ -634,6 +635,9 @@ button.crit-toolbar__title:focus-visible { border-radius: 2px; outline: 2px soli
   position: absolute;
   z-index: 2;
 }
+.crit-canvas[data-canvas-capture] .crit-frame__viewport iframe { pointer-events: none; }
+.crit-canvas[data-canvas-capture] { cursor: grab; }
+.crit-canvas__navigation-mode { position: absolute; bottom: 20px; left: 20px; z-index: 10000; padding: 8px 12px; border: 1px solid var(--crit-line); border-radius: 6px; background: var(--crit-frame-viewport-surface, white); color: inherit; cursor: pointer; font: inherit; }
 .crit-frame__viewport iframe { background: var(--crit-frame-viewport-surface, oklch(99% 0 none)); border: 0; height: 100%; inset: 0; position: absolute; width: 100%; }
 .crit-frame[data-offscreen] .crit-frame__viewport iframe,
 .crit-frame__viewport iframe[data-paused="true"] { content-visibility: hidden; pointer-events: none; visibility: hidden; }
@@ -707,6 +711,25 @@ button.crit-toolbar__title:focus-visible { border-radius: 2px; outline: 2px soli
   position: absolute;
   z-index: 30;
 }
+.crit-group-selection {
+  cursor: move;
+  pointer-events: auto;
+  position: absolute;
+  touch-action: none;
+}
+.crit-group-selection__tools {
+  background: oklch(97% 0.001 106.4);
+  border-radius: 4px;
+  bottom: 100%;
+  box-shadow: oklch(14.7% 0.004 49.3 / 20%) 0 0 0 .5px;
+  color: oklch(26.9% 0 0);
+  cursor: default;
+  left: 0;
+  pointer-events: auto;
+  position: absolute;
+  transform-origin: bottom left;
+  z-index: 31;
+}
 .crit-selection__handle {
   background: transparent;
   border: 0;
@@ -733,6 +756,7 @@ button.crit-toolbar__title:focus-visible { border-radius: 2px; outline: 2px soli
 .crit-selection__handle[data-resize-handle="south-east"] { bottom: calc(var(--selection-handle-offset) * var(--selection-ui) * -1px); cursor: ${resizeCursors.nwse}; right: calc(var(--selection-handle-offset) * var(--selection-ui) * -1px); }
 .crit-selection__handle[data-resize-handle="south-west"] { bottom: calc(var(--selection-handle-offset) * var(--selection-ui) * -1px); cursor: ${resizeCursors.nesw}; left: calc(var(--selection-handle-offset) * var(--selection-ui) * -1px); }
 
+.crit-review-help-surface { display: contents; }
 .crit-help {
   align-content: start;
   background: var(--crit-help-surface, var(--crit-color-s2, #f5f5f4));
@@ -786,16 +810,13 @@ button.crit-toolbar__title:focus-visible { border-radius: 2px; outline: 2px soli
   text-wrap: pretty;
 }
 
-.crit-frame:fullscreen {
+.crit-canvas__plane:has(.crit-frame[data-fullscreen]) { z-index: 4901; }
+.crit-frame[data-fullscreen] {
   --crit-frame-chrome-height: 36px;
-  --crit-ui: 1 !important;
   border-radius: 0;
-  height: 100vh !important;
-  left: 0 !important;
-  top: 0 !important;
-  width: 100vw !important;
 }
-.crit-frame:fullscreen .crit-frame__viewport { border-radius: 0; }
+.crit-frame[data-fullscreen] .crit-frame__surface,
+.crit-frame[data-fullscreen] .crit-frame__viewport { border-radius: 0; }
 
 .crit-save-state {
   background: rgba(25,25,24,.86);
@@ -814,7 +835,7 @@ button.crit-toolbar__title:focus-visible { border-radius: 2px; outline: 2px soli
   z-index: 1100;
 }
 
-.crit-message { background: var(--crit-paper); color: #68655e; font: 500 12px/1.7 ${INTER}; ${INTER_LOCK}; }
+.crit-message { background: var(--crit-paper); color: #68655e; font: 500 12px/1.7 ${INTER}; ${INTER_LOCK}; margin: 0; }
 
 .crit-replica {
   isolation: isolate;
@@ -908,7 +929,7 @@ button.crit-toolbar__title:focus-visible { border-radius: 2px; outline: 2px soli
   box-shadow: oklch(14.7% 0.004 49.3 / 20%) 0 0 0 .5px, oklch(14.7% 0.004 49.3 / 18%) 0 10px 30px;
   color: #191918;
   display: grid;
-  font: 500 12px/16px ${INTER};
+  font: 400 12px/16px ${INTER};
   ${INTER_LOCK};
   gap: 0;
   padding: 4px;
@@ -928,7 +949,7 @@ button.crit-toolbar__title:focus-visible { border-radius: 2px; outline: 2px soli
   color: #191918;
   cursor: pointer;
   display: flex;
-  font: 500 12px/16px ${INTER};
+  font: 400 12px/16px ${INTER};
   ${INTER_LOCK};
   height: 28px;
   justify-content: space-between;

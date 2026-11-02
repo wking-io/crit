@@ -5,10 +5,10 @@ The current playground is the local-only alpha behavior lab. It remains useful w
 Run the existing behavior reference:
 
 ```sh
-npm run dev:portless
+npm run playground:portless
 ```
 
-Open `https://crit.localhost`. If stable HTTPS cannot bind, use `npm run dev` and the URL printed by Vite.
+Open the `crit-frames` URL printed by Portless. For the v1 canvas with these pages embedded, run `npm run dev:portless` from the repository root.
 
 Use the playground to observe Canvas camera behavior, Frame and Note geometry, stacking, attachment, review states, snapshots, iframe lifecycle, shortcuts, input relay, and comment anchors. Record accepted behavior as target-system tests.
 

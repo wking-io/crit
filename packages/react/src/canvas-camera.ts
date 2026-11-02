@@ -146,6 +146,23 @@ type CameraFitBox = {
   readonly height: number
 }
 
+export const fitCameraToBox = (
+  box: CameraFitBox,
+  viewport: { readonly width: number; readonly height: number }
+): CanvasCamera => {
+  if (viewport.width <= 0 || viewport.height <= 0) {
+    return CanvasCamera.make({ x: 0, y: 0, zoom: 1 })
+  }
+  const widthZoom = box.width <= 0 ? MAX_ZOOM : viewport.width / box.width
+  const heightZoom = box.height <= 0 ? MAX_ZOOM : viewport.height / box.height
+  const zoom = clampZoom(Math.min(widthZoom, heightZoom))
+  return CanvasCamera.make({
+    zoom,
+    x: (viewport.width - box.width * zoom) / 2 - box.x * zoom,
+    y: (viewport.height - box.height * zoom) / 2 - box.y * zoom
+  })
+}
+
 export const fitCameraToFrames = (
   geometries: ReadonlyArray<CameraFitBox>,
   viewport: { readonly width: number; readonly height: number }
@@ -186,6 +203,7 @@ export const applyCanvasCameraIntent = (
       pinch: (pinchIntent) => applyPinch(camera, pinchIntent, origin),
       select: () => camera,
       delete: () => camera,
+      "clear-selection": () => camera,
       tool: () => camera,
       "zoom-step": (zoomIntent) => applyZoomStep(camera, zoomIntent, origin)
     })

@@ -142,12 +142,14 @@ const seedSession = <A, E>(
 
 const makeReplica = (initial: ReadonlyArray<ReplicaView>) => {
   const views = new Map(initial.map((view) => [view.canvasId, view]))
+  let openCalls = 0
   const listeners = new Map<
     CanvasId,
     Set<(event: ReplicaSubscriptionEvent) => void>
   >()
   const ports: ReplicaSessionPorts = {
     open: (canvasId) => {
+      openCalls += 1
       const view = views.get(canvasId)
       return view === undefined
         ? Effect.fail(new ReplicaSessionUnavailable({ canvasId, reason: "replica missing" }))
@@ -179,7 +181,8 @@ const makeReplica = (initial: ReadonlyArray<ReplicaView>) => {
     ) => {
       for (const listener of listeners.get(canvasId) ?? []) listener(event)
     },
-    activeSubscriptions: (canvasId: CanvasId) => listeners.get(canvasId)?.size ?? 0
+    activeSubscriptions: (canvasId: CanvasId) => listeners.get(canvasId)?.size ?? 0,
+    openCalls: () => openCalls
   }
 }
 
@@ -527,8 +530,11 @@ describe("useReplicaSession", () => {
       <Probe canvasId={canvasB} ports={replica.ports}  />
     ))
 
-    expect(replica.activeSubscriptions(canvasA)).toBe(0)
     expect(replica.activeSubscriptions(canvasB)).toBe(1)
+    await act(async() => vi.waitFor(
+      () => expect(replica.activeSubscriptions(canvasA)).toBe(0),
+      { timeout: 2_500 }
+    ))
     await waitFor(() =>
       expect(latest?.session).toEqual({
         _tag: "ready",
@@ -569,6 +575,51 @@ describe("useReplicaSession", () => {
       camera: savedCamera,
       selection: savedSelection
     })
+  })
+
+  it("never returns to loading while a submitted change notification refreshes", async() => {
+    const replica = makeReplica([viewOne])
+    const rendered: string[] = []
+    const SessionProbe = (): ReactElement => {
+      const handle = useReplicaSession({ canvasId: canvasA, ports: replica.ports })
+      const tag = handle.session._tag
+      rendered.push(tag)
+      latest = handle
+      return <output>{tag}</output>
+    }
+
+    await act(async() => render(<SessionProbe />))
+    await waitFor(() => expect(ReplicaSession.$is("ready")(latest?.session)).toBe(true))
+    const manipulationStart = rendered.length
+    replica.views.set(canvasA, viewAfterAdd)
+
+    await act(async() => {
+      await latest?.submit(addFrame)
+      replica.notify(canvasA)
+    })
+    await waitFor(() => expect(replica.openCalls()).toBe(2))
+
+    expect(rendered.slice(manipulationStart)).not.toContain("loading")
+    expect(replica.activeSubscriptions(canvasA)).toBe(1)
+  })
+
+  it("keeps the ready session across transient React subscription churn", async() => {
+    const replica = makeReplica([viewOne])
+
+    await act(async() => render(
+      <Probe canvasId={canvasA} ports={replica.ports} />
+    ))
+    await waitFor(() => expect(ReplicaSession.$is("ready")(latest?.session)).toBe(true))
+    expect(replica.openCalls()).toBe(1)
+
+    await act(async() => render(<></>))
+    await act(async() => render(
+      <Probe canvasId={canvasA} ports={replica.ports} />
+    ))
+
+    expect(container.querySelector("output")?.textContent).toBe("ready")
+    expect(replica.openCalls()).toBe(1)
+    expect(replica.activeSubscriptions(canvasA)).toBe(1)
   })
 
   it("sets a rejection notice and clears it after the next successful submit", async() => {

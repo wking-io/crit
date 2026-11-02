@@ -1,7 +1,8 @@
 import {
   type CanvasCommandBatch,
   type CanvasItemRef,
-  type CanvasProjection
+  type CanvasProjection,
+  type Frame
 } from "@crit/domain"
 import {
   connectCanvasInput,
@@ -25,17 +26,19 @@ import {
 
 import {
   applyCanvasCameraIntent,
+  fitCameraToBox,
   fitCameraToFrames,
-  type CanvasCamera
+  CanvasCamera
 } from "./canvas-camera.js"
 import {
   applyCanvasPlaneCamera,
   camerasEqual,
-  canvasCameraSnapshotKind,
   canvasCameraStyle
 } from "./canvas-camera-presentation.js"
 import { CritContextMenuDismissalScope } from "./canvas-context-menu.js"
+import { useCanvasClipboard } from "./canvas-clipboard.js"
 import { useCanvasItemDrag } from "./canvas-item-drag.js"
+import { CanvasGroupSelection } from "./canvas-group-selection.js"
 import {
   applyMarqueeBox,
   MARQUEE_DRAG_THRESHOLD,
@@ -58,12 +61,13 @@ import {
   FrameRenderer,
   type FrameRepresentationResolver
 } from "./frame-renderer.js"
+import { frameMountQueueFor } from "./frame-mount-queue.js"
 import type { FrameSnapshotter } from "./frame-snapshot.js"
 import { framesById } from "./projection-index.js"
 import { GlyphProvider } from "./glyph.js"
 import { CritOverlayProvider } from "./overlay-container.js"
 import { shortIdForIndex } from "./frame-status-chrome.js"
-import { ReviewCanvasSurface, canvasCenterPlacement } from "./review-canvas-surface.js"
+import { ReviewCanvasSurface } from "./review-canvas-surface.js"
 import { ReviewChrome } from "./review-chrome.js"
 import { ReviewFrame, canvasUiScale } from "./review-frame.js"
 import {
@@ -122,6 +126,8 @@ export const CanvasBoard = memo(function CanvasBoard({
   const rootRef = useRef<HTMLElement>(null)
   const planeRef = useRef<HTMLDivElement>(null)
   const selectedFrameRef = useRef<HTMLDivElement>(null)
+  const canvasCaptureRef = useRef(false)
+  const [canvasCapture, setCanvasCapture] = useState(false)
   const frameElementsRef = useRef(new Map<string, HTMLDivElement>())
   const cameraRef = useRef(camera)
   const lastNotifiedCameraRef = useRef(camera)
@@ -135,18 +141,17 @@ export const CanvasBoard = memo(function CanvasBoard({
   const lastPropSelectionRef = useRef(selection)
   const lastPropCameraRef = useRef(camera)
   const marqueeRef = useRef<HTMLDivElement>(null)
+  const zoomMarqueeReadyRef = useRef(false)
+  const groupSelectionRef = useRef<HTMLDivElement>(null)
 
   const commitCamera = useCallback((next: CanvasCamera) => {
-    const previous = cameraRef.current
+    const previousZoom = cameraRef.current.zoom
+    const root = rootRef.current
+    if (root !== null) frameMountQueueFor(root).postpone()
     cameraRef.current = next
     const plane = planeRef.current
     if (plane !== null) applyCanvasPlaneCamera(plane, next)
-    if (canvasCameraSnapshotKind(previous, next) === "zoom") {
-      setZoom(next.zoom)
-      lastNotifiedCameraRef.current = next
-      onCameraChangeRef.current(next)
-      return
-    }
+    if (next.zoom !== previousZoom) setZoom(next.zoom)
     window.clearTimeout(persistCameraTimeoutRef.current)
     persistCameraTimeoutRef.current = window.setTimeout(() => {
       lastNotifiedCameraRef.current = cameraRef.current
@@ -177,16 +182,51 @@ export const CanvasBoard = memo(function CanvasBoard({
     }
   }, [])
 
+  useEffect(() => {
+    const setReady = (ready: boolean) => {
+      zoomMarqueeReadyRef.current = ready
+      const root = rootRef.current
+      if (root === null) return
+      if (ready) root.dataset.zoomMarqueeReady = ""
+      else delete root.dataset.zoomMarqueeReady
+    }
+    const keydown = (event: KeyboardEvent) => {
+      if (event.code !== "Space") return
+      setReady(true)
+      if (event.metaKey || event.ctrlKey) event.preventDefault()
+    }
+    const keyup = (event: KeyboardEvent) => {
+      if (event.code === "Space") setReady(false)
+    }
+    const blur = () => setReady(false)
+    window.addEventListener("keydown", keydown, true)
+    window.addEventListener("keyup", keyup, true)
+    window.addEventListener("blur", blur)
+    return () => {
+      window.removeEventListener("keydown", keydown, true)
+      window.removeEventListener("keyup", keyup, true)
+      window.removeEventListener("blur", blur)
+    }
+  }, [])
+
   const itemDrag = useCanvasItemDrag(
     onSubmit === undefined
       ? {
         frames: projection.frames,
         getFrameElement: (frameId) => frameElementsRef.current.get(frameId),
+        getGroupSelectionElement: () => groupSelectionRef.current,
+        getSelectedFrameIds: () => new Set(
+          selectionStore.get().map((item) => item.frameId)
+        ),
         getZoom: () => cameraRef.current.zoom
       }
       : {
         frames: projection.frames,
         getFrameElement: (frameId) => frameElementsRef.current.get(frameId),
+        getGroupSelectionElement: () => groupSelectionRef.current,
+        getSelectedFrameIds: () => new Set(
+          selectionStore.get().map((item) => item.frameId)
+        ),
         getZoom: () => cameraRef.current.zoom,
         onSubmit
       }
@@ -215,12 +255,6 @@ export const CanvasBoard = memo(function CanvasBoard({
     if (ReviewClientEffect.$is("zoomToFit")(effect)) zoomToFit()
     reviewEffects.handle(effect)
   }, [reviewEffects, zoomToFit])
-  const addFramePlacement = useCallback(() => {
-    const root = rootRef.current
-    return root === null
-      ? { x: 0, y: 0 }
-      : canvasCenterPlacement(root, cameraRef.current)
-  }, [])
 
   const syncSelectedFrame = useCallback(() => {
     const target = CanvasSelection.inputTarget(selectionStore.get())
@@ -239,6 +273,14 @@ export const CanvasBoard = memo(function CanvasBoard({
     onSelectionChangeRef.current(next)
   }, [selectionStore])
 
+  useCanvasClipboard({
+    rootRef,
+    frames: projection.frames,
+    selectionStore,
+    onSubmit: allowsMutation ? onSubmit : undefined,
+    onSelectionChange: commitSelection
+  })
+
   const applySelectionCommand = useCallback(
     (command: CanvasSelectionCommandValue) => {
       commitSelection(CanvasSelection.apply(selectionStore.get(), command))
@@ -247,6 +289,22 @@ export const CanvasBoard = memo(function CanvasBoard({
   )
 
   const applyCameraIntent = useCallback((intent: FrameInputIntent) => {
+    if (intent.type === "clear-selection") {
+      if (reviewEffects.fullscreenFrameId !== null) {
+        reviewEffects.handle(ReviewClientEffect.fullscreen({ target: "exit" }))
+      } else {
+        applySelectionCommand(CanvasSelectionCommand.clear())
+      }
+      rootRef.current?.focus({ preventScroll: true })
+      return
+    }
+    if (intent.type === "tool") {
+      const capture = intent.tool === "pan"
+      canvasCaptureRef.current = capture
+      setCanvasCapture(capture)
+      rootRef.current?.focus({ preventScroll: true })
+      return
+    }
     const root = rootRef.current
     if (root === null) return
     const nextCamera = applyCanvasCameraIntent(
@@ -255,7 +313,7 @@ export const CanvasBoard = memo(function CanvasBoard({
       root.getBoundingClientRect()
     )
     if (nextCamera !== cameraRef.current) commitCamera(nextCamera)
-  }, [commitCamera])
+  }, [applySelectionCommand, commitCamera, reviewEffects])
 
   useEffect(() => {
     const root = rootRef.current
@@ -265,6 +323,7 @@ export const CanvasBoard = memo(function CanvasBoard({
       root,
       onIntent: applyCameraIntent,
       ignore: ({ clientX, clientY }) => {
+        if (canvasCaptureRef.current) return false
         const frame = selectedFrameRef.current
         if (frame === null) return false
         const rect = frame.getBoundingClientRect()
@@ -280,10 +339,12 @@ export const CanvasBoard = memo(function CanvasBoard({
   const selectFrame = (
     item: CanvasItemRef,
     event: ReactPointerEvent<HTMLDivElement>
-  ) => applySelectionCommand(CanvasSelectionCommand.item({
-    item,
-    additive: isAdditiveSelection(event)
-  }))
+  ) => {
+    const additive = isAdditiveSelection(event)
+    const current = selectionStore.get()
+    if (!additive && CanvasSelection.has(current, item) && current.length > 1) return
+    applySelectionCommand(CanvasSelectionCommand.item({ item, additive }))
+  }
 
   const startMarquee = (event: ReactPointerEvent<HTMLElement>) => {
     if (event.button !== 0) return
@@ -341,11 +402,90 @@ export const CanvasBoard = memo(function CanvasBoard({
     window.addEventListener("pointercancel", end)
   }
 
+  const startPan = (event: ReactPointerEvent<HTMLElement>) => {
+    if (event.button !== 0) return
+    event.preventDefault()
+    event.stopPropagation()
+    const start = { x: event.clientX, y: event.clientY }
+    const camera = cameraRef.current
+    const move = (next: PointerEvent) => commitCamera(CanvasCamera.make({
+      x: camera.x + next.clientX - start.x,
+      y: camera.y + next.clientY - start.y,
+      zoom: camera.zoom
+    }))
+    const end = () => {
+      window.removeEventListener("pointermove", move)
+      window.removeEventListener("pointerup", end)
+      window.removeEventListener("pointercancel", end)
+    }
+    window.addEventListener("pointermove", move)
+    window.addEventListener("pointerup", end)
+    window.addEventListener("pointercancel", end)
+  }
+
+  const startZoomMarquee = (event: ReactPointerEvent<HTMLElement>) => {
+    if (event.button !== 0) return
+    event.preventDefault()
+    const root = rootRef.current
+    const marquee = marqueeRef.current
+    if (root === null) return
+    const rect = root.getBoundingClientRect()
+    const start = {
+      x: event.clientX - rect.left,
+      y: event.clientY - rect.top
+    }
+    const startCamera = cameraRef.current
+    let current = start
+    const move = (next: PointerEvent) => {
+      current = {
+        x: next.clientX - rect.left,
+        y: next.clientY - rect.top
+      }
+      if (marquee !== null) applyMarqueeBox(
+        marquee,
+        selectionBoxBetween(start, current)
+      )
+    }
+    const cleanup = () => {
+      if (marquee !== null) applyMarqueeBox(marquee, null)
+      window.removeEventListener("pointermove", move)
+      window.removeEventListener("pointerup", finish)
+      window.removeEventListener("pointercancel", cancel)
+    }
+    const finish = () => {
+      cleanup()
+      const worldBox = selectionBoxBetween(
+        screenToWorldPoint(start, startCamera),
+        screenToWorldPoint(current, startCamera)
+      )
+      commitCamera(fitCameraToBox(worldBox, {
+        width: rect.width,
+        height: rect.height
+      }))
+    }
+    const cancel = () => cleanup()
+    window.addEventListener("pointermove", move)
+    window.addEventListener("pointerup", finish)
+    window.addEventListener("pointercancel", cancel)
+  }
+
   const frameEntries = projection.stack.flatMap((item, zIndex) => {
     const frame = frames.get(item.frameId)
     if (frame === undefined) return []
     return [{ frame, item, zIndex }]
   })
+  const fullscreenGeometry = (frameId: Frame["frameId"]): Frame["geometry"] | undefined => {
+    if (reviewEffects.fullscreenFrameId !== frameId) return undefined
+    const root = rootRef.current
+    if (root === null) return undefined
+    const camera = cameraRef.current
+    return {
+      x: -camera.x / camera.zoom,
+      y: -camera.y / camera.zoom,
+      width: root.clientWidth / camera.zoom,
+      height: root.clientHeight / camera.zoom
+    }
+  }
 
   const items = frameEntries.length === 0
     ? (
@@ -353,6 +493,7 @@ export const CanvasBoard = memo(function CanvasBoard({
     )
     : frameEntries.map(({ frame, item, zIndex }) => {
       const { frameId } = item
+      const expandedGeometry = fullscreenGeometry(frameId)
       return (
         <ReviewFrame
           frame={frame}
@@ -361,22 +502,28 @@ export const CanvasBoard = memo(function CanvasBoard({
             else frameElementsRef.current.set(frameId, element)
           }}
           geometry={itemDrag.geometryFor(frame)}
+          fullscreenGeometry={expandedGeometry}
           key={frame.frameId}
           shortId={shortIdForIndex(zIndex)}
           topZIndex={Math.max(0, frameEntries.length - 1)}
           uiScale={canvasUiScale(zoom)}
           zIndex={zIndex}
           onMove={(event) => {
-            if (!allowsMutation) return
+            if (!allowsMutation || expandedGeometry !== undefined) return
             itemDrag.begin(frame, "move", event)
           }}
           onResize={!allowsMutation
             ? undefined
             : (event, handle) => itemDrag.begin(frame, "resize", event, handle)}
           onSelect={(event) => selectFrame(item, event)}
+          onTarget={() => applySelectionCommand(CanvasSelectionCommand.item({
+            item,
+            additive: false
+          }))}
         >
           <FrameRenderer
             frame={frame}
+            onInputIntent={applyCameraIntent}
             resolver={resolver}
           />
         </ReviewFrame>
@@ -388,6 +535,8 @@ export const CanvasBoard = memo(function CanvasBoard({
   return (
     <section
       ref={rootRef}
+      tabIndex={-1}
+      data-canvas-capture={canvasCapture || undefined}
       aria-label={projection.title}
       aria-multiselectable={hasItems ? true : undefined}
       className={boardClassName(className)}
@@ -400,6 +549,25 @@ export const CanvasBoard = memo(function CanvasBoard({
         width: "100%"
       }}
       onPointerCancel={itemDrag.cancel}
+      onPointerDownCapture={(event) => {
+        if (canvasCaptureRef.current) {
+          const target = event.target
+          if (target instanceof Element && target.closest(".crit-toolbar, [role='menu'], [role='dialog'], button") !== null) return
+          startPan(event)
+          return
+        }
+        if (
+          !zoomMarqueeReadyRef.current ||
+          (!event.metaKey && !event.ctrlKey)
+        ) return
+        const target = event.target
+        if (
+          target instanceof Element &&
+          target.closest(".crit-toolbar, [role='menu'], [role='dialog']") !== null
+        ) return
+        event.stopPropagation()
+        startZoomMarquee(event)
+      }}
       onPointerDown={(event) => {
         const target = event.target
         if (
@@ -412,6 +580,13 @@ export const CanvasBoard = memo(function CanvasBoard({
       onPointerUp={itemDrag.finish}
     >
       <style data-crit-styles="">{critStyles}</style>
+      {canvasCapture ? (
+        <button
+          type="button"
+          className="crit-canvas__navigation-mode"
+          onClick={() => applyCameraIntent({ type: "tool", tool: "select" })}
+        >Canvas navigation · V to interact</button>
+      ) : null}
       <GlyphProvider>
         <CritOverlayProvider>
           <CanvasSelectionStoreProvider store={selectionStore}>
@@ -446,7 +621,6 @@ export const CanvasBoard = memo(function CanvasBoard({
                           ? (
                             <ReviewChrome
                               fullscreen={reviewEffects.fullscreen}
-                              onAddFramePlacement={addFramePlacement}
                               onEffect={handleEffect}
                               onSubmit={onSubmit}
                               projection={projection}
@@ -465,6 +639,19 @@ export const CanvasBoard = memo(function CanvasBoard({
                                 ref={planeRef}
                                 style={canvasCameraStyle(cameraRef.current)}
                               >
+                                <CanvasGroupSelection
+                                  allowsMutation={allowsMutation}
+                                  frames={projection.frames}
+                                  geometryFor={itemDrag.geometryFor}
+                                  groupRef={(element) => {
+                                    groupSelectionRef.current = element
+                                  }}
+                                  onMove={(frame, event) => {
+                                    itemDrag.begin(frame, "move", event)
+                                  }}
+                                  onResize={itemDrag.beginGroupResize}
+                                  uiScale={canvasUiScale(zoom)}
+                                />
                                 {items}
                               </div>
                             )

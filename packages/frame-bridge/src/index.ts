@@ -10,6 +10,7 @@ import {
 
 import {
   createFrameInputRelay,
+  frameInputOffset,
   offsetFrameInputIntent
 } from "./input-relay.js"
 import { isTrustedFrameBridgeEvent } from "./origin.js"
@@ -53,7 +54,7 @@ export const connectBridgedFrameInput = (input: {
     input.onIntent(
       offsetFrameInputIntent(
         decoded.value.intent,
-        input.frameElement.getBoundingClientRect()
+        frameInputOffset(input.frameElement)
       )
     )
   }
@@ -73,6 +74,7 @@ export const critFrameInputBridgeScript = (input: {
   const send = (intent) => window.parent.postMessage({ source, schemaVersion, intent }, parentOrigin)
   const isSelectorTarget = (target) => target !== null && "matches" in target
   window.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") return
     const target = event.target
     const input = isSelectorTarget(target) && (
       target.isContentEditable ||
@@ -90,6 +92,12 @@ export const critFrameInputBridgeScript = (input: {
     event.stopImmediatePropagation()
     send(intent)
   }, { capture: true })
+  window.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape" || event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) return
+    event.preventDefault()
+    event.stopPropagation()
+    send({ type: "clear-selection" })
+  })
   window.addEventListener("pointerdown", (event) => {
     send(relay.select(event))
   }, { capture: true })

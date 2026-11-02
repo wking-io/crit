@@ -83,6 +83,15 @@ export const useItemSelected = (
   )
 }
 
+export const useMultipleItemsSelected = (): boolean => {
+  const store = useOptionalSelectionStore()
+  return useSyncExternalStore(
+    store?.subscribe ?? subscribeNever,
+    () => (store?.get().length ?? 0) > 1,
+    () => (store?.get().length ?? 0) > 1
+  )
+}
+
 export const useFrameIsInputTarget = (
   frameId: FrameId,
   fallback: boolean

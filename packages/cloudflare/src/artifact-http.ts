@@ -12,11 +12,11 @@ import { R2ArtifactStore } from "./r2-artifact-store.js"
 
 const emptyResponse = (status: number) => new Response(null, { status })
 
-const encodedJson = <A>(
+const encodedJson = <S extends Schema.ConstraintEncoder<unknown>>(
   status: number,
-  schema: Schema.Schema<A>,
-  value: A
-) => new Response(JSON.stringify(Schema.encodeSync(schema)(value)), {
+  schema: S,
+  value: S["Type"]
+) => new Response(JSON.stringify(Schema.encodeUnknownSync(schema)(value)), {
   status,
   headers: { "content-type": "application/json" }
 })

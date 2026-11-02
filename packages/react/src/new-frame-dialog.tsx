@@ -5,8 +5,14 @@ import { Schema } from "effect"
 import { useState, type FormEvent, type ReactElement } from "react"
 
 import { useCritOverlayContainer } from "./overlay-container.js"
-import { reviewActionPolicy } from "./review-actions.js"
-import { reviewInformationalHelpTarget } from "./review-help.js"
+import {
+  reviewActionAriaKeyShortcuts,
+  reviewNativeActionPolicy
+} from "./review-actions.js"
+import {
+  reviewActionHelpTarget,
+  reviewInformationalHelpTarget
+} from "./review-help.js"
 
 const parsedFrameUrl = (value: string): URL | undefined => {
   try {
@@ -32,7 +38,8 @@ export function NewFrameDialog({
   readonly open: boolean
 }): ReactElement {
   const overlayContainer = useCritOverlayContainer()
-  const create = reviewActionPolicy("add-frame")
+  const create = reviewNativeActionPolicy("create-frame")
+  const cancel = reviewNativeActionPolicy("cancel-new-frame")
   const [error, setError] = useState<string | null>(null)
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
@@ -106,8 +113,19 @@ export function NewFrameDialog({
               ? null
               : <p role="alert">{error}</p>}
             <div className="crit-new-frame-dialog__actions">
-              <Dialog.Close type="button">Cancel</Dialog.Close>
-              <Button data-primary="" type="submit">
+              <Dialog.Close
+                aria-keyshortcuts={reviewActionAriaKeyShortcuts(cancel)}
+                {...reviewActionHelpTarget(cancel)}
+                type="button"
+              >
+                {cancel.label}
+              </Dialog.Close>
+              <Button
+                aria-keyshortcuts={reviewActionAriaKeyShortcuts(create)}
+                data-primary=""
+                {...reviewActionHelpTarget(create)}
+                type="submit"
+              >
                 {create.label}
               </Button>
             </div>

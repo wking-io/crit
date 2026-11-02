@@ -252,16 +252,29 @@ const runAsync = (dataRoot: string, args: ReadonlyArray<string>, environment: No
     child.once("exit", (code) => resolve({ code, stdout, stderr }))
   })
 
-const startDefault = (dataRoot: string) => new Promise<{
+const startDefault = async(dataRoot: string) => {
+  const port = await new Promise<number>((resolve, reject) => {
+    const server = createServer()
+    server.once("error", reject)
+    server.listen(0, "127.0.0.1", () => {
+      const address = Schema.decodeUnknownSync(TcpAddress)(server.address())
+      server.close(() => resolve(address.port))
+    })
+  })
+  return new Promise<{
   readonly child: ReturnType<typeof spawn>
   readonly output: string
+  readonly listenOrigin: string
 }>((resolve, reject) => {
   const child = spawn(process.execPath, [
     join(import.meta.dirname, "..", "dist", "main.js"),
     "dev",
     "--data-root",
     dataRoot
-  ], { stdio: ["ignore", "pipe", "pipe"] })
+  ], {
+    stdio: ["ignore", "pipe", "pipe"],
+    env: { ...process.env, PORT: String(port), PORTLESS_URL: "https://crit-test.localhost" }
+  })
   children.push(child)
   let output = ""
   const timeout = setTimeout(() => {
@@ -269,9 +282,9 @@ const startDefault = (dataRoot: string) => new Promise<{
     reject(new Error(`Timed out waiting for integrated host: ${output}`))
   }, 20_000)
   const settle = () => {
-    if (!output.includes("Crit is at http://127.0.0.1:5173")) return
+    if (!output.includes("Crit is at https://crit-test.localhost")) return
     clearTimeout(timeout)
-    setImmediate(() => resolve({ child, output }))
+    setImmediate(() => resolve({ child, output, listenOrigin: `http://127.0.0.1:${port}` }))
   }
   child.stdout.on("data", (chunk: Uint8Array) => {
     output += Buffer.from(chunk).toString("utf8")
@@ -286,41 +299,69 @@ const startDefault = (dataRoot: string) => new Promise<{
   })
 })
 
+}
+
 describe("built crit-target dev", () => {
-  it("starts the host and prints the Crit origin", async() => {
+  it("uses the assigned port and public origin, proxies HTTP and WebSockets, and restarts", async() => {
     const directory = mkdtempSync(join(tmpdir(), "crit-cli-loop-"))
     directories.push(directory)
     const dataRoot = join(directory, ".crit", "v1")
     const started = await startDefault(dataRoot)
-    expect(started.output).toContain("Crit is at http://127.0.0.1:5173")
+    expect(started.output).toContain("Crit is at https://crit-test.localhost")
     expect(started.output).not.toMatch(/\/browser\/[0-9a-f]{32}\/#/)
     expect(started.output).not.toContain("Open Crit in your browser")
-    const page = await fetch("http://127.0.0.1:5173/")
+    const page = await fetch(`${started.listenOrigin}/`)
     expect(page.status).toBe(200)
     const pageText = await page.text()
     expect(pageText).toContain("id=\"root\"")
     expect(pageText).toContain("id=\"crit-host-runtime\"")
     expect(pageText).toContain("\"kind\":\"integrated\"")
-    const connection = await fetch("http://127.0.0.1:5173/__crit/connection")
+    const connection = await fetch(`${started.listenOrigin}/__crit/connection`)
     expect(connection.status).toBe(200)
     expect(connection.headers.get("cache-control")).toBe("no-store")
     expect(await connection.json()).toEqual({ kind: "integrated", apiBase: "/__crit/" })
-    const canvasPage = await fetch("http://127.0.0.1:5173/canvas/canvas_shop")
+    const canvasPage = await fetch(`${started.listenOrigin}/canvas/canvas_shop`)
     expect(canvasPage.status).toBe(200)
     expect(await canvasPage.text()).toContain("id=\"root\"")
-    const listed = await fetch("http://127.0.0.1:5173/__crit/api/v1/canvas", {
+    const listed = await fetch(`${started.listenOrigin}/__crit/api/v1/canvas`, {
       headers: { "x-crit-api-version": "1" }
     })
     expect(listed.status).toBe(200)
     expect(Array.isArray(await listed.json())).toBe(true)
+    const created = run(dataRoot, ["create", "canvas_integrated_socket", "--title", "Socket test"])
+    expect(created.status, created.stderr).toBe(0)
+    const socket = new WebSocket(
+      `${started.listenOrigin.replace("http:", "ws:")}/__crit/api/v1/subscribe/canvas_integrated_socket`
+    )
+    const socketFrame = await new Promise<string>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        socket.close()
+        reject(new Error("Timed out waiting for integrated subscription readiness"))
+      }, 5_000)
+      socket.addEventListener("message", (event) => {
+        clearTimeout(timeout)
+        resolve(String(event.data))
+      }, { once: true })
+      socket.addEventListener("error", () => {
+        clearTimeout(timeout)
+        reject(new Error("Integrated subscription WebSocket failed"))
+      }, { once: true })
+    })
+    expect(JSON.parse(socketFrame)).toMatchObject({
+      kind: "subscription-ready",
+      canvasId: "canvas_integrated_socket"
+    })
+    const shutdownStarted = Date.now()
     await stop(started.child)
+    expect(Date.now() - shutdownStarted).toBeLessThan(3_000)
+    socket.close()
 
     const restarted = await startDefault(dataRoot)
-    expect(restarted.output).toContain("Crit is at http://127.0.0.1:5173")
+    expect(restarted.output).toContain("Crit is at https://crit-test.localhost")
     expect(restarted.output).not.toMatch(/\/browser\/[0-9a-f]{32}\/#/)
-    const refreshed = await fetch("http://127.0.0.1:5173/")
+    const refreshed = await fetch(`${restarted.listenOrigin}/`)
     expect(refreshed.status).toBe(200)
-    const relisted = await fetch("http://127.0.0.1:5173/__crit/api/v1/canvas", {
+    const relisted = await fetch(`${restarted.listenOrigin}/__crit/api/v1/canvas`, {
       headers: { "x-crit-api-version": "1" }
     })
     expect(relisted.status).toBe(200)
@@ -641,7 +682,25 @@ describe("built crit-target dev", () => {
     expect(existsSync(join(directory, ".crit", "v1"))).toBe(false)
   })
 
-  it("releases its stable port and descriptor on interrupt", async () => {
+  it("releases project ownership after a killed process and preserves saved canvases", async() => {
+    const directory = mkdtempSync(join(tmpdir(), "crit-cli-crash-"))
+    directories.push(directory)
+    const dataRoot = join(directory, ".crit", "v1")
+    const first = await startWithoutBrowser(dataRoot)
+    const created = run(dataRoot, ["create", "canvas_after_crash", "--title", "Survives crash", "--json"])
+    expect(created.status, created.stderr).toBe(0)
+    await new Promise<void>((resolve) => {
+      first.child.once("exit", () => resolve())
+      first.child.kill("SIGKILL")
+    })
+    const restarted = await startWithoutBrowser(dataRoot)
+    const reopened = run(dataRoot, ["open", "canvas_after_crash", "--json"])
+    expect(reopened.status, reopened.stderr).toBe(0)
+    expect(JSON.parse(reopened.stdout).projection.title).toBe("Survives crash")
+    await stop(restarted.child)
+  })
+
+  it("releases its listener and descriptor on interrupt and rediscovers the restarted daemon", async () => {
     const directory = mkdtempSync(join(tmpdir(), "crit-cli-dev-"))
     directories.push(directory)
     const dataRoot = join(directory, ".crit", "v1")
@@ -683,7 +742,7 @@ describe("built crit-target dev", () => {
     expect(readFileSync(descriptorPath, "utf8")).toBe(firstDescriptor)
 
     const restarted = await start(dataRoot)
-    expect(restarted.baseUrl).toBe(first.baseUrl)
+    expect(JSON.parse(readFileSync(descriptorPath, "utf8")).baseUrl).toBe(restarted.baseUrl)
     expect(restarted.browserBootstrapUrl).not.toBe(first.browserBootstrapUrl)
     const reopened = run(dataRoot, ["open", "canvas_cli_flow", "--json"])
     expect(reopened.status, reopened.stderr).toBe(0)

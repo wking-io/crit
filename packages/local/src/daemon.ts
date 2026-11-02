@@ -815,16 +815,23 @@ const integratedRepresentationRoutes = (plane: IntegratedHostPlane) =>
     }))
   }))
 
+export const daemonHttpServer = (port = 0) => NodeHttpServer.layer(createServer, {
+  host: "127.0.0.1",
+  port,
+  websocket: { maxPayload: 512 }
+})
+
 const daemonLayer = (
   options: LocalDaemonOptions,
-  attachment: BrowserAttachment
+  attachment: BrowserAttachment,
+  serverLayer = daemonHttpServer(options.port)
 ): Layer.Layer<
   import("effect/unstable/http/Etag").Generator |
     import("effect/unstable/http/HttpPlatform").HttpPlatform |
     import("effect/unstable/http/HttpServer").HttpServer |
     import("@effect/platform-node/NodeServices").NodeServices,
   LocalDatabaseOpenFailure | import("effect/unstable/http/HttpServerError").ServeError,
-  RepresentationRuntime
+  RepresentationRuntime | LocalApplicationAnnouncements
 > => {
     const sqliteAuthority = SqliteCanvasAuthority.layer({ path: options.databasePath }).pipe(
       Layer.provide(AuthorityClockLive)
@@ -893,11 +900,7 @@ const daemonLayer = (
     })
     const routes = routeDefinitions.pipe(Layer.provide(services), Layer.provide(sessions))
     return HttpRouter.serve(routes).pipe(
-      Layer.provideMerge(NodeHttpServer.layer(createServer, {
-        host: "127.0.0.1",
-        port: options.port ?? 0,
-        websocket: { maxPayload: 512 }
-      }))
+      Layer.provideMerge(serverLayer)
     )
 }
 
